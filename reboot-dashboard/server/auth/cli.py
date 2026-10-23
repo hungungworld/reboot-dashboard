@@ -73,7 +73,7 @@ def register_cli(app):
     @app.cli.command("gmail-login")
     def gmail_login():
         """로컬 PC에서 Gmail(CS) 로그인 — 브라우저가 열림. DATA_DIR/google/credentials.json 필요."""
-        from ..cs import gmail
+        from tabs.cs import gmail
         try:
             svc = gmail.service(interactive=True)
         except gmail.LoginRequired as e:

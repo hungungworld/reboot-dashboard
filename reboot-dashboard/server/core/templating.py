@@ -7,7 +7,7 @@ from flask import current_app, url_for
 from markupsafe import Markup, escape
 
 from ..config import ROOT
-from ..registry import PARTS, nav_parts
+from ..registry import PARTS, nav_parts, static_dir
 
 # 디자인 시안(REBOOT Marketing Workspace)의 선 아이콘. core/core.js의 ICONS와 같은 목록
 ICONS = {
@@ -60,7 +60,8 @@ def asset(kind, path):
     if kind == "core":
         return url_for("static", filename=path, v=_mtime(ROOT / "core" / path))
     override = Path(current_app.config["DATA_DIR"]) / "parts_override" / path
-    v = _mtime(override) if override.is_file() else _mtime(ROOT / "parts" / path)
+    pid, _, name = path.partition("/")
+    v = _mtime(override) if override.is_file() else _mtime(static_dir(pid) / name)
     return url_for("core.part_file", filename=path, v=v)
 
 

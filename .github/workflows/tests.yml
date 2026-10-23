@@ -24,7 +24,7 @@ jobs:
         run: python -m pytest
       - name: JS 문법 확인
         run: |
-          for f in core/core.js parts/*/*.js; do node --check "$f" || exit 1; done
-      - name: JS 단위 확인 (tests/*.test.js)
+          for f in core/core.js tabs/*/static/*.js; do node --check "$f" || exit 1; done
+      - name: JS 단위 확인 (tests/*.test.js · tabs/*/tests/*.test.js)
         run: |
-          for f in tests/*.test.js; do [ -e "$f" ] || continue; node "$f" || exit 1; done
+          for f in tests/*.test.js tabs/*/tests/*.test.js; do [ -e "$f" ] || continue; node "$f" || exit 1; done

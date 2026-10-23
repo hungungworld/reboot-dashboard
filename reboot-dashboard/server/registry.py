@@ -65,7 +65,12 @@ PARTS = (
 LOAD_ORDER = ("settings", "compliance", "cs", "home", "insights", "content", "partners", "performance")
 
 _BY_ID = {p.id: p for p in PARTS}
-PARTS_DIR = ROOT / "parts"
+TABS_DIR = ROOT / "tabs"
+
+
+def static_dir(part_id):
+    """파트 화면 파일(JS·CSS) 폴더: tabs/<파트ID>/static/ — 주소는 그대로 /parts/<파트ID>/<파일>."""
+    return TABS_DIR / part_id / "static"
 
 
 def get_part(part_id):
@@ -82,9 +87,9 @@ def assets():
     for pid in LOAD_ORDER:
         p = _BY_ID[pid]
         for f in p.styles:
-            if (PARTS_DIR / pid / f).is_file():
+            if (static_dir(pid) / f).is_file():
                 css.append(f"{pid}/{f}")
         for f in p.scripts:
-            if (PARTS_DIR / pid / f).is_file():
+            if (static_dir(pid) / f).is_file():
                 js.append(f"{pid}/{f}")
     return css, js
