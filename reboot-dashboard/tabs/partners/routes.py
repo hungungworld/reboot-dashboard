@@ -803,7 +803,8 @@ def replies_check():
         return jsonify(checked=0, replies=0, bounces=0, items=[])
     sender, password = mailer.credentials()
     try:
-        found = mailer.check(records, sender, password)
+        own_ids = {m for (m,) in db.session.query(PartnerHistory.message_id).filter(PartnerHistory.message_id != "")}
+        found = mailer.check(records, sender, password, own_ids)
     except mailer.MailError as e:
         worklog.add("partners", "수집", "Gmail 답장 확인", status="실패", detail={"error": str(e)})
         raise ApiError(str(e), 502)
