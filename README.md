@@ -219,8 +219,8 @@ reboot/
 ## 7. 설치 및 실행
 
 ```cmd
-git clone https://github.com/hungungworld/reboot-us-dashboard.git
-cd reboot-us-dashboard
+git clone https://github.com/hungungworld/reboot-dashboard.git
+cd reboot-dashboard
 pip install -r requirements-dev.txt
 copy .env.example .env
 python -m server
