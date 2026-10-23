@@ -17,7 +17,7 @@
   const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
   const DAY = 86400000;
 
-  const S = { root: null, view: '', briefing: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: false, poll: null, calMonth: '', watching: false };
+  const S = { root: null, view: '', briefing: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: {}, poll: null, calMonth: '', watching: false };
   const ref = name => S.root && S.root.querySelector(`[data-ref="${name}"]`);
 
   /* ───────── 날짜 (YYYY-MM-DD 문자열, UTC로 계산) ───────── */
@@ -408,12 +408,13 @@
     return `<div class="home-signals" aria-label="보도량 급증">${up.map(s =>
       `<span class="home-signal" title="최근 7일 기사 ${esc(s.recent)}건 · 그 전 7일 ${esc(s.previous)}건">${icon('up')} ${esc(s.label)} ${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '새로 등장'}</span>`).join('')}</div>`;
   }
-  // 뉴스 카드는 처음 3개만, 나머지는 '더보기'로 펼침
+  // 뉴스 카드는 칸마다 처음 3개(트렌드는 2개)만, 나머지는 '더보기'로 펼침
   const NEWS_SHOW = 3;
-  function newsList(list) {
-    if (list.length <= NEWS_SHOW) return list.join('');
-    return `${list.slice(0, NEWS_SHOW).join('')}<div ${S.newsOpen ? '' : 'hidden'}>${list.slice(NEWS_SHOW).join('')}</div>
-      <button type="button" class="btn small home-news-more" data-act="news-more" aria-expanded="${S.newsOpen}">${S.newsOpen ? '접기' : `더보기 (${list.length - NEWS_SHOW}개)`}</button>`;
+  function newsList(list, key = 'news', show = NEWS_SHOW) {
+    if (list.length <= show) return list.join('');
+    const open = !!S.newsOpen[key];
+    return `${list.slice(0, show).join('')}<div ${open ? '' : 'hidden'}>${list.slice(show).join('')}</div>
+      <button type="button" class="btn small home-news-more" data-act="news-more" data-key="${key}" aria-expanded="${open}">${open ? '접기' : `더보기 (${list.length - show}개)`}</button>`;
   }
 
   // 검색어 점검 (최근 60일): 찾은 기사 · 규칙 통과 · 카드로 고른 수 · 교체 후보
@@ -421,12 +422,12 @@
     if (!list.length) return '';
     const flagged = list.filter(q => q.replace).length;
     const rows = list.map(q => `<tr><td>${esc(q.areaLabel)}${q.kind === 'signal' ? ' ' + badge('자리 보장', 'lime') : ''}</td>
-      <td><code>${esc(q.query)}</code></td><td class="num">${fmt.num(q.found)}</td><td class="num">${fmt.num(q.kept)}</td>
+      <td>${q.feed ? `${badge('RSS')} ${esc(q.label)}` : `<code>${esc(q.query)}</code>`}</td><td class="num">${fmt.num(q.found)}</td><td class="num">${fmt.num(q.kept)}</td>
       <td class="num">${fmt.num(q.picked)}</td><td>${q.replace ? badge('교체 후보', 'orange') : ''}</td></tr>`).join('');
     return `<details class="home-qstats"><summary>검색어 점검 (최근 60일)${flagged ? ` · 교체 후보 ${flagged}개` : ''}</summary>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th></th></tr></thead>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어 · 피드</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-      <p class="panel-note">30일 넘게 돌렸는데 카드로 고른 기사가 0개면 교체 후보예요. 검색어는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
+      <p class="panel-note">30일 넘게 돌렸는데 카드로 고른 기사가 0개면 교체 후보예요. 검색어 · 업계지 피드는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
   }
 
   function paintNews() {
@@ -443,14 +444,19 @@
       body.innerHTML = ui.empty(msg, 'globe');
     } else if (n.ai) {
       // 기사 카드: 기존 동향 카드와 같은 모양 (한국어 제목 · 한 줄 요약 · 주제/보도 급증 · 매체 · 날짜 · 영어 원제목)
-      const items = (n.ai.items || []).map(a => `
-        <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon(a.surge ? 'up' : 'globe')}</div>
+      // 업계 뉴스와 트렌드(마케팅 · 소비자 매체)는 칸을 나눠 보여 줌
+      const card = a => `
+        <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon(a.surge ? 'up' : a.kind === 'trend' ? 'spark' : 'globe')}</div>
           <div><p>${articleLink(a, a.titleKo || a.title)}</p><small>${esc(a.summaryKo)}</small>
-          ${a.whyKo ? `<small class="home-why"><b>왜 중요</b> ${esc(a.whyKo)}</small>` : ''}
+          ${a.whyKo ? `<small class="home-why"><b>${a.kind === 'trend' ? '적용점' : '왜 중요'}</b> ${esc(a.whyKo)}</small>` : ''}
           <small class="home-links">${[a.areaLabel || a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
-          <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`);
+          <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`;
+      const all = n.ai.items || [];
+      const items = all.filter(a => a.kind !== 'trend').map(card);
+      const trends = all.filter(a => a.kind === 'trend').map(card);
       body.innerHTML = `${n.ai.headline ? `<div class="home-headline">${icon('spark')}<span>${esc(n.ai.headline)}</span></div>` : ''}
-        ${signalsHtml(n)}${items.length ? newsList(items) : '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}`;
+        ${signalsHtml(n)}${items.length ? newsList(items) : '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}
+        ${trends.length ? `<p class="eyebrow mt-8">트렌드 · 마케팅 · 소비자 매체</p>${newsList(trends, 'trend', 2)}` : ''}`;
     } else {
       const arts = (n.articles || []).map(a => `
         <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon('globe')}</div>
@@ -461,7 +467,7 @@
     }
     const last = n.lastRun;
     const bits = [];
-    if (n.running) bits.push('구글 뉴스에서 수집 중… 끝나면 자동으로 바뀝니다');
+    if (n.running) bits.push('구글 뉴스 · 업계지에서 수집 중… 끝나면 자동으로 바뀝니다');
     else if (last) {
       bits.push(`수집 ${fmt.datetime(last.finishedAt || last.startedAt)}${last.trigger === 'daily' ? ' (자동)' : ''}`);
       if (n.status === 'failed' && n.lastSuccessAt) bits.push(`마지막 성공 ${fmt.datetime(n.lastSuccessAt)}`);
@@ -679,7 +685,7 @@
       else if (act === 'todo-add') { const f = ref('todo-form'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('[name="title"]').focus(); }
       else if (act === 'todo-cancel') { ref('todo-form').hidden = true; }
       else if (act === 'news-collect') collectNews(b);
-      else if (act === 'news-more') { S.newsOpen = !S.newsOpen; paintNews(); }
+      else if (act === 'news-more') { const k = b.dataset.key || 'news'; S.newsOpen[k] = !S.newsOpen[k]; paintNews(); }
       else if (act === 'cal-prev') moveMonth(-1);
       else if (act === 'cal-next') moveMonth(1);
       else if (act === 'cal-today') { S.calMonth = ''; paintCalendar(); }

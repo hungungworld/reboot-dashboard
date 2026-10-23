@@ -1,10 +1,12 @@
-"""미국 주류 업계 뉴스 (README 2장) — 구글 뉴스 RSS 수집 → 규칙 거르기 → 저장(URL·제목 중복 제거) → 보도 급증 → AI 점수·기사별 한국어 요약.
+"""미국 주류 업계 뉴스 · 트렌드 (README 2장) — 구글 뉴스 RSS · 업계지 RSS 수집 → 규칙 거르기 → 저장(URL·제목 중복 제거) → 보도 급증 → AI 점수·기사별 한국어 요약.
 
 - 화면을 열 때는 구글 뉴스를 부르지 않음 (저장된 결과만). 수집은 '지금 수집' 버튼(뒤에서 실행) · 하루 1회 작업
-- 검색어: tabs/home/data/queries.json (분야 7개 · 검색어 9개 · signal/flow)
+- 검색어: tabs/home/data/queries.json (분야 8개 · 검색어 9개 + 업계지 피드 6개 · signal/flow/trend)
+- 업계지 피드는 검색어 없이 사이트 기사를 다 받으므로 14일 안 기사만 남기고, 보도 급증 계산에서는 뺌
 - 규칙 거르기 (무료): 사고 · 범죄 단어 · 비유 hangover(AI hangover 등) · 인사 소식 · 미국 밖 시장 · 한국어 제목(K-푸드만 허용)
 - AI(OpenAI 키가 있을 때만): 관련 기사마다 점수(REBOOT와의 거리 · 실행 가능성 · 출처 · 새로움) + '왜 중요한가'
-  → 최대 8개: signal 분야(숙취 · 경쟁사 · 규제)는 2개씩 자리 보장, 한 분야는 3개까지, 나머지는 점수순
+  → 업계 뉴스 최대 8개: signal 분야(숙취 · 경쟁사 · 규제)는 2개씩 자리 보장, 한 분야는 3개까지, 나머지는 점수순
+  → 트렌드(trend 분야: 마케팅 · 소비자 매체)는 따로 점수순 최대 4개
   제목만 보고 씀 (본문 추측 금지)
 - 실패하면 마지막 결과를 그대로 두고 화면에 '업데이트 실패' 표시
 """
@@ -25,18 +27,19 @@ from .models import HomeNewsArticle, HomeNewsRun
 QUERIES_PATH = ROOT / "tabs" / "home" / "data" / "queries.json"
 RETENTION_DAYS = 90
 STALE_RUN = timedelta(minutes=30)
-MAX_FAILS_IN_ROW = 3  # 구글 뉴스가 계속 실패하면 나머지 검색어는 건너뜀
-AI_MAX_ARTICLES = 150
+MAX_FAILS_IN_ROW = 3  # 구글 뉴스가 계속 실패하면 나머지 검색어는 건너뜀 (업계지 피드는 사이트가 달라 따로)
+AI_MAX_ARTICLES = 220
 AI_PER_GROUP = 20  # 검색어마다 최신 20개까지 → 기사가 많은 분야가 AI 입력을 다 차지하지 않게
 MAX_ITEMS = 8
-AI_CANDIDATES = 15
+TREND_ITEMS = 4    # 트렌드 칸 최대
+AI_CANDIDATES = 20
 SIGNAL_SLOTS = 2   # signal 분야마다 자리 보장
 AREA_CAP = 3       # 한 분야 최대
 STATS_DAYS = 60    # 검색어 점검 기간 (이 기간 동안 고른 카드가 0개면 교체 후보)
 AREAS = (("category", "숙취 카테고리"), ("competitor", "경쟁사"), ("regulation", "규제"), ("behavior", "음주 행태"),
-         ("nonalc", "무알코올 · 기능성"), ("sales", "주류 판매"), ("kfood", "K-푸드"))
+         ("nonalc", "무알코올 · 기능성"), ("sales", "주류 판매"), ("kfood", "K-푸드"), ("trend", "트렌드"))
 TOPICS = ("판매 동향", "소비 트렌드", "규제·정책", "경쟁·신제품", "업계 일반")
-LIMIT_NOTE = "구글 뉴스 제목 기준 요약이라 기사 본문은 보지 않았어요. 판매량·가격은 인사이트 탭에서 봅니다."
+LIMIT_NOTE = "구글 뉴스 · 업계지 RSS 제목 기준 요약이라 기사 본문은 보지 않았어요. 판매량·가격은 인사이트 탭에서 봅니다."
 
 AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·음료 브랜드 REBOOT(일반 식품)의 마케팅 리서처입니다.
 미국 매체 기사 목록(제목 · 매체 · 날짜 · 검색어 묶음)만 보고, 마케터가 이번 주에 알아야 할 업계 뉴스를 고르고 한국어로 정리합니다.
@@ -44,14 +47,19 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
 규칙
 - 기사 제목과 매체에 있는 내용만 근거로 씁니다. 본문을 읽은 것처럼 쓰거나, 주어지지 않은 숫자·사실을 만들지 않습니다.
 - 기사마다 검색한 분야(area)가 붙어 있지만, 기사 내용에 맞는 분야를 다시 고릅니다 (area: category 숙취 카테고리 · competitor 경쟁사 ·
-  regulation 규제 · behavior 음주 행태 · nonalc 무알코올·기능성 · sales 주류 판매 · kfood K-푸드). 예: FDA로 찾았어도 Z세대 음주 기사면 behavior.
+  regulation 규제 · behavior 음주 행태 · nonalc 무알코올·기능성 · sales 주류 판매 · kfood K-푸드 · trend 트렌드). 예: FDA로 찾았어도 Z세대 음주 기사면 behavior.
 - 고를 기사 (넓게 고르고 점수로 가립니다): 숙취 제품 · 성분(DHM · 전해질 등), 경쟁 브랜드 소식(Liquid I.V. · ZBiotics 등의 협찬 · 신제품 · 캠페인),
   식품 · 영양제 규제(FDA 신규 성분 신고 · 표시 지침 등), 음주 행태 변화(절주 · Z세대 · GLP-1), 무알코올 · 기능성 음료, 미국 주류 판매, 미국 안의 K-푸드.
+- 트렌드(area trend): 마케팅 · 소비자 트렌드 매체(Marketing Dive · Modern Retail · Mintel · NOSH 등) 기사 중
+  브랜드 마케팅 방식(캠페인 · 인플루언서 · 틱톡샵 · 아마존 · D2C), 채널 · 유통 변화, 식음료 · 건강 소비 흐름처럼 REBOOT 마케팅에 옮겨 쓸 수 있는 것.
+  주류와 직접 관련이 없어도 고릅니다. 다른 분야에 더 맞는 기사(예: 경쟁 브랜드 신제품)는 그 분야로 보냅니다.
+  트렌드 기사의 why_ko는 'REBOOT에 적용할 점' 한 줄 (예: "브랜드들이 틱톡샵 라이브로 첫 구매 유도 — 우리 런칭 채널에 라이브 판매 검토").
+  업계 일반 기사(인수합병 · 실적 · 공장 · B2B 솔루션 광고)는 트렌드로 고르지 않습니다.
 - 미국 밖 시장만 다룬 기사(필리핀 · 영국 등 매출)는 관련 기사로 치지 않습니다.
 - 버릴 기사: 'hangover'를 비유로 쓴 기사(예: AI hangover, tariff hangover, DOGE hangover, post-election hangover — 술과 무관하면 모두 뺌),
   음주 사고·범죄, 주가·인물 가십, 인사 소식, 미국 밖 시장만 다룬 기사, 무관한 산업.
 - relevant_ids: 관련 있는 기사 id 전부.
-- articles: 관련 기사 중 후보 10~15개. 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
+- articles: 관련 기사 중 후보 15~20개 (그중 트렌드는 6개까지). 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
   (특히 숙취 카테고리 · 경쟁사 · 규제는 기사 수가 적어도 꼭 확인). 기사마다 점수를 매깁니다 (점수 합으로 서버가 최종 8개를 고름).
   distance(REBOOT와의 거리): 2 = 숙취 제품·성분 · 경쟁 브랜드 · 영양제/식품 규제, 1 = 음주 행태 · 무알코올·기능성 음료 · K-푸드, 0 = 주류 업계 일반
   action(실행 가능성): 2 = 이번 주 카피·캠페인·채널에 바로 반영할 수 있음, 1 = 참고, 0 = 없음
@@ -115,7 +123,7 @@ def _loads(text, default):
 def load_queries():
     cfg = json.loads(QUERIES_PATH.read_text(encoding="utf-8"))
     areas = {a["id"]: a for a in cfg.get("areas", []) if isinstance(a, dict) and a.get("id")}
-    groups = [g for g in cfg.get("groups", []) if isinstance(g, dict) and g.get("id") and g.get("query")]
+    groups = [g for g in cfg.get("groups", []) if isinstance(g, dict) and g.get("id") and (g.get("query") or g.get("feed"))]
     for g in groups:
         a = areas.get(g.get("area")) or {}
         g["area"], g["areaLabel"], g["kind"] = a.get("id", g["id"]), a.get("label", g.get("label") or g["id"]), a.get("kind", "flow")
@@ -168,7 +176,7 @@ def groups_public(cfg=None):
     except (OSError, ValueError):
         return []
     return [{"id": g["id"], "label": g.get("label") or g["id"], "area": g["area"], "areaLabel": g["areaLabel"], "kind": g["kind"],
-             "query": g["query"]} for g in cfg["groups"]]
+             "query": g.get("query", ""), "feed": g.get("feed", "")} for g in cfg["groups"]]
 
 
 def make_client():
@@ -264,9 +272,12 @@ def score_of(it):
     return int(it.get("distance") or 0) + int(it.get("action") or 0) + int(it.get("source") or 0) + int(it.get("novelty") or 0)
 
 
-def pick(cands, kind_of, limit=MAX_ITEMS):
-    """점수순 후보 → signal 분야는 SIGNAL_SLOTS개씩 먼저, 한 분야는 AREA_CAP개까지, 나머지는 점수순 (최대 limit개)."""
+def pick(cands, kind_of, limit=MAX_ITEMS, trend_limit=TREND_ITEMS):
+    """점수순 후보 → 업계 뉴스: signal 분야는 SIGNAL_SLOTS개씩 먼저, 한 분야는 AREA_CAP개까지, 나머지는 점수순 (최대 limit개)
+    + 트렌드(kind trend): 점수순 최대 trend_limit개 (업계 뉴스 뒤에 붙임)."""
     cands = sorted(cands, key=lambda c: -c["score"])
+    trends = [c for c in cands if kind_of(c["area"]) == "trend"][:trend_limit]
+    cands = [c for c in cands if kind_of(c["area"]) != "trend"]
     out, per = [], {}
 
     def take(c):
@@ -278,7 +289,7 @@ def pick(cands, kind_of, limit=MAX_ITEMS):
     for c in cands:
         if len(out) < limit and c not in out and per.get(c["area"], 0) < AREA_CAP:
             take(c)
-    return sorted(out, key=lambda c: -c["score"])
+    return sorted(out, key=lambda c: -c["score"]) + trends
 
 
 def summarize(articles, signals, cfg):
@@ -294,8 +305,8 @@ def summarize(articles, signals, cfg):
         "signals": [{"group": s["group"], "label": s["label"], "recent": s.get("recent"), "previous": s.get("previous"),
                      "surge": s.get("surge")} for s in signals],
     }
-    raw = openai_json(AI_SYSTEM, data, schema=AI_SCHEMA, schema_name="news_items", max_tokens=5000,
-                      part="home", action="미국 주류 업계 뉴스 필터링·요약")
+    raw = openai_json(AI_SYSTEM, data, schema=AI_SCHEMA, schema_name="news_items", max_tokens=6500,
+                      part="home", action="미국 주류 업계 뉴스 · 트렌드 필터링·요약")
     relevant = {i for i in (raw.get("relevant_ids") or []) if isinstance(i, int) and i in ids}
     cands, used = [], set()
     titles = {a.id: a.title for a in articles}
@@ -357,7 +368,7 @@ def collect(run_id=None, trigger="daily", user_name="시스템", client=None):
                 current_app.logger.exception("뉴스 수집 실패")
                 run = db.session.get(HomeNewsRun, rid)
                 _finish_failed(run, "수집 중 서버 오류")
-                worklog.add("home", "수집", "미국 주류 업계 뉴스 수집 (구글 뉴스)", status="실패",
+                worklog.add("home", "수집", "미국 주류 업계 뉴스 수집 (구글 뉴스 · 업계지)", status="실패",
                             detail={"error": "서버 오류"}, user_name=user_name)
                 return run
     except jobs.Busy:
@@ -375,21 +386,32 @@ def _collect(run, client, user_name):
     ok_groups, fails = 0, 0
     now = utcnow()
     drop = make_filter(cfg)
+    when_days = int(str(cfg.get("when", "14d")).rstrip("d") or 14)
     for g in cfg["groups"]:
         label = g.get("label") or g["id"]
-        if fails >= MAX_FAILS_IN_ROW:
+        if g.get("feed"):
+            try:
+                arts = client.feed(g["feed"], g.get("source") or label)
+            except rss.RssError as e:
+                counts[g["id"]] = {"found": 0, "new": 0, "error": str(e)}
+                errors.append(f"{label}: {e}")
+                continue
+            ok_groups += 1
+            arts = [a for a in arts if a.get("date") and a["date"] >= now - timedelta(days=when_days)]
+        elif fails >= MAX_FAILS_IN_ROW:
             counts[g["id"]] = {"found": 0, "new": 0, "error": "건너뜀"}
             errors.append(f"{label}: 구글 뉴스 응답이 연달아 실패해 건너뜀")
             continue
-        try:
-            arts = client.articles(build_query(cfg, g), cfg.get("when", "14d"))
-        except rss.RssError as e:
-            counts[g["id"]] = {"found": 0, "new": 0, "error": str(e)}
-            errors.append(f"{label}: {e}")
-            fails += 1
-            continue
-        fails = 0
-        ok_groups += 1
+        else:
+            try:
+                arts = client.articles(build_query(cfg, g), cfg.get("when", "14d"))
+            except rss.RssError as e:
+                counts[g["id"]] = {"found": 0, "new": 0, "error": str(e)}
+                errors.append(f"{label}: {e}")
+                fails += 1
+                continue
+            fails = 0
+            ok_groups += 1
         found, kept, dropped = len(arts), [], {}
         for a in arts:
             why = drop(a.get("title"), g)
@@ -398,8 +420,8 @@ def _collect(run, client, user_name):
             else:
                 kept.append(a)
         arts = kept
-        sig = rss.surge([a.get("date") for a in arts], now, float(cfg.get("surgeRatio", 1.5)),
-                        int(cfg.get("surgeMinRecent", 5)))
+        sig = None if g.get("feed") else rss.surge([a.get("date") for a in arts], now, float(cfg.get("surgeRatio", 1.5)),
+                                                   int(cfg.get("surgeMinRecent", 5)))  # 피드 기사 수는 사이트 게시 속도라 급증으로 보지 않음
         if sig:
             signals.append(dict(sig, group=g["id"], label=label))
         counts[g["id"]] = {"found": found, "kept": len(arts), "dropped": dropped, "new": store_articles(arts, g["id"], run.id)}
@@ -427,7 +449,7 @@ def _collect(run, client, user_name):
     run.finished_at = utcnow()
     db.session.commit()
     new = sum(c.get("new", 0) for c in counts.values())
-    worklog.add("home", "수집", "미국 주류 업계 뉴스 수집 (구글 뉴스)", status="실패" if status == "failed" else "완료",
+    worklog.add("home", "수집", "미국 주류 업계 뉴스 수집 (구글 뉴스 · 업계지)", status="실패" if status == "failed" else "완료",
                 detail={"trigger": run.trigger, "new": new, "groups": {k: v.get("found", 0) for k, v in counts.items()},
                         "errors": errors[:10], "requests": client.calls, "rateLimited": client.rate_limited, "ai": run.ai_status,
                         "surges": [s["label"] for s in signals if s.get("surge")]}, user_name=user_name)
@@ -451,6 +473,7 @@ def payload():
     cfg_groups = groups_public()
     labels = {g["id"]: g["label"] for g in cfg_groups}
     areas = {g["area"]: g["areaLabel"] for g in cfg_groups}
+    kinds = {g["area"]: g["kind"] for g in cfg_groups}
     latest = HomeNewsRun.query.order_by(HomeNewsRun.id.desc()).first()
     running = running_run()
     last_ok = HomeNewsRun.query.filter(HomeNewsRun.status.in_(("ok", "partial"))).order_by(HomeNewsRun.id.desc()).first()
@@ -479,7 +502,7 @@ def payload():
             d = a.to_dict()
             items.append(dict(d, titleKo=it.get("title_ko", ""), summaryKo=it.get("summary_ko", ""),
                               whyKo=it.get("why_ko", ""), score=it.get("score"), areaLabel=areas.get(it.get("area"), ""),
-                              topic=it.get("topic", ""), groupLabel=labels.get(a.group_id, ""),
+                              topic=it.get("topic", ""), kind=kinds.get(it.get("area"), "flow"), groupLabel=labels.get(a.group_id, ""),
                               surge=bool(surging & set(d["groups"]))))
         ai = {"headline": s.get("headline", ""), "items": items, "at": iso(ai_run.finished_at), "model": ai_run.model}
 
