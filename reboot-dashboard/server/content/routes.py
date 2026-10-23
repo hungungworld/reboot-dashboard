@@ -1,0 +1,509 @@
+"""콘텐츠 제작 API (담당: 나원). 모두 로그인 필요 · 쓰기는 CSRF (core.js가 자동).
+
+  GET    /api/content/meta                          모델·연결 상태 · 선택지
+  GET    /api/content/campaigns?q=&status=          내 캠페인 목록 (+ 상태별 개수)
+  POST   /api/content/campaigns                     시트로 캠페인 시작 {content_type, channels, brand_focus, product_ids, goal, extra_request}
+  GET    /api/content/campaigns/<id>                복원: 시트 · 결정 · 대화 · 버전 · 작업 · 제품 근거
+  PATCH  /api/content/campaigns/<id>                {expected_revision, sheet?, title?, status?, settings?, reference_text?} (다르면 409)
+  DELETE /api/content/campaigns/<id>                만든 사람·관리자만
+  POST   /api/content/campaigns/<id>/decisions      {expected_revision, changes:[{field, value, status}], source} 후보 선택·직접 입력·되돌리기
+  POST   /api/content/campaigns/<id>/chat           {message, expected_revision, base_version_id?, client_request_id?, force_action?, kickoff?}
+  POST   /api/content/campaigns/<id>/versions       직접 작성 {kind, body, label?, title?, parent_id?}
+  POST   /api/content/campaigns/<id>/select         {version_id|null} 기준 결과물
+  GET    /api/content/campaigns/<id>/export         ZIP (?version=<id> 한 버전만)
+  POST   /api/content/suggest                       {field: goal|extra, sheet} → 후보 3개 (키 없으면 예시 추천)
+  POST   /api/content/versions/<id>/final           {final: true|false}
+  POST   /api/content/versions/<id>/review          컴플라이언스(화면에서 판정한 결과) 기록
+  POST   /api/content/versions/<id>/ai-review       AI 보조 검토 (review_v2)
+  GET    /api/content/jobs/<id>                     이미지 작업 상태
+  GET    /api/content/files/<이름>.png              생성 이미지 (로그인 필요)
+"""
+from flask import Blueprint, Response, jsonify, request, send_from_directory
+from flask_login import current_user
+
+from .. import envkeys, worklog
+from ..core.ai import AIError
+from ..extensions import db
+from ..models import iso, utcnow
+from ..security import ApiError, clip, json_body
+from . import conversation, media, prompts, providers, repository, review, schemas
+from . import options as O
+from .export import build_zip
+from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
+
+bp = Blueprint("content", __name__, url_prefix="/api/content")
+
+
+def _who():
+    return current_user.name or current_user.email.split("@")[0]
+
+
+def _campaign(cid):
+    c = db.session.get(ContentCampaign, cid)
+    if c is None:
+        raise ApiError("없는 캠페인입니다.", 404)
+    return c
+
+
+def _version(vid):
+    v = db.session.get(ContentVersion, vid)
+    if v is None:
+        raise ApiError("없는 버전입니다.", 404)
+    return v
+
+
+def _state(cid, status=200, **extra):
+    c = db.session.get(ContentCampaign, cid)
+    return jsonify(campaign=repository.campaign_state(c), **extra), status
+
+
+@bp.errorhandler(repository.Conflict)
+def _conflict(e):
+    db.session.rollback()
+    c = db.session.get(ContentCampaign, e.campaign_id)
+    if c is None:
+        return jsonify(error="캠페인이 삭제되었습니다."), 404
+    return jsonify(error="다른 곳에서 먼저 바뀌었어요. 최신 상태를 불러왔으니 확인 후 다시 시도하세요.",
+                   conflict=True, revision=c.revision, campaign=repository.campaign_state(c)), 409
+
+
+@bp.errorhandler(repository.Duplicate)
+def _duplicate(e):
+    db.session.rollback()
+    c = db.session.get(ContentCampaign, e.campaign_id)
+    body = {"error": "같은 요청을 이미 처리했어요. 최신 대화를 불러왔어요.", "duplicate": True}
+    if c is not None:
+        body["campaign"] = repository.campaign_state(c)
+    return jsonify(body), 409
+
+
+# ───────── 기준 정보 ─────────
+
+@bp.get("/meta")
+def meta():
+    return jsonify(
+        textModel=providers.text_model(), textReady=providers.ready(),
+        imageModel=providers.image_model(), imageReady=providers.ready(), imageEdit=providers.image_supports_edit(),
+        video={"mode": "plan_only", "label": "구성안만 (실제 영상 생성은 Higgsfield 연동 예정)",
+               "higgsfieldKey": envkeys.has("HIGGSFIELD_API_KEY")},
+        defaults=O.DEFAULT_SETTINGS, answerLengths=O.ANSWER_LENGTHS, promptVersion=prompts.PROMPT_BUNDLE_VERSION,
+        contentTypes=[{"id": k, "label": v["label"], "kind": v["kind"]} for k, v in O.CONTENT_TYPES.items()],
+        channels=[{"id": k, "label": v["label"]} for k, v in O.CHANNELS.items()], statuses=list(O.STATUSES),
+        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS)
+
+
+# ───────── 캠페인 ─────────
+
+@bp.get("/campaigns")
+def campaigns_list():
+    q = (request.args.get("q") or "").strip().lower()[:100]
+    status = (request.args.get("status") or "").strip()
+    rows = ContentCampaign.query.order_by(ContentCampaign.updated_at.desc()).limit(500).all()
+    products = repository.products_index()
+    counts = {s: 0 for s in O.STATUSES}
+    for c in rows:
+        counts[c.status] = counts.get(c.status, 0) + 1
+    if q:
+        terms = q.split()
+        rows = [c for c in rows if all(t in repository.search_text(c, products) for t in terms)]
+    if status and status != "전체":
+        rows = [c for c in rows if c.status == status]
+    ids = [c.id for c in rows]
+    vcount, covers = {}, {}
+    if ids:
+        for cid, n in (db.session.query(ContentVersion.campaign_id, db.func.count(ContentVersion.id))
+                       .filter(ContentVersion.campaign_id.in_(ids)).group_by(ContentVersion.campaign_id)):
+            vcount[cid] = n
+        finals = {c.id: c.final_version_id for c in rows}
+        for vid, cid, name in (db.session.query(ContentVersion.id, ContentVersion.campaign_id, ContentVersion.image_file)
+                               .filter(ContentVersion.campaign_id.in_(ids), ContentVersion.image_file.isnot(None))
+                               .order_by(ContentVersion.id.desc())):
+            if finals.get(cid) == vid or cid not in covers:  # 최종본 이미지 우선, 없으면 가장 최근 이미지
+                covers[cid] = name
+    items = [repository.campaign_summary(c, vcount.get(c.id, 0), covers.get(c.id), products) for c in rows]
+    total_all = sum(counts.values())
+    return jsonify(items=items, total=total_all, counts=counts, active=counts.get("제작 중", 0) + counts.get("검토 중", 0))
+
+
+@bp.post("/campaigns")
+def campaigns_create():
+    data = json_body()
+    products = repository.products_index()
+    try:
+        sheet = repository.build_sheet(data, products)
+    except ValueError as e:
+        raise ApiError(str(e))
+    try:  # 브라우저에 저장된 새 캠페인 기본값 — 이상하면 기본값으로
+        settings = repository.norm_settings(data["settings"]) if isinstance(data.get("settings"), dict) else dict(O.DEFAULT_SETTINGS)
+    except ValueError:
+        settings = dict(O.DEFAULT_SETTINGS)
+    user = _who()
+    title = clip(data.get("title"), 80).strip() or repository.auto_title(sheet)
+    c = ContentCampaign(title=title, content_type=sheet["content_type"], brand_focus=sheet["brand_focus"],
+                        goal=sheet["goal"], extra_request=sheet["extra_request"],
+                        reference_text=repository.clip_text(data.get("reference_text"), repository.REFERENCE_MAX),
+                        status="제작 중", revision=1, created_by=user, created_by_id=current_user.id, updated_by=user)
+    c.channels, c.product_ids = sheet["channels"], sheet["product_ids"]
+    c.settings = settings
+    # 소비자용 결과물 언어는 영어를 '초기 제안'으로 (README 5.4) — 사용자 확정이 아님
+    c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
+                                "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    db.session.add(c)
+    db.session.flush()
+    lab = repository.labels_of(sheet, products)
+    summary = f"{lab['contentType']} · {', '.join(lab['channels'])} · {lab['target']}"
+    if sheet["goal"]:
+        summary += f" · 목적: {sheet['goal']}"
+    repository.add_event(c, f"기본 정보 시트로 시작했어요 — {summary}", {"kind": "created"}, user=user)
+    db.session.commit()
+    worklog.add("content", "기타", f"캠페인 생성: {c.title}", detail={
+        "campaign": c.id, "content_type": sheet["content_type"], "channels": sheet["channels"],
+        "brand_focus": sheet["brand_focus"], "product_ids": sheet["product_ids"]})
+    return _state(c.id, 201)
+
+
+@bp.get("/campaigns/<int:cid>")
+def campaigns_get(cid):
+    c = _campaign(cid)
+    return jsonify(campaign=repository.campaign_state(c))
+
+
+@bp.patch("/campaigns/<int:cid>")
+def campaigns_patch(cid):
+    c = _campaign(cid)
+    data = json_body()
+    expected = conversation.parse_revision(data)
+    if expected != c.revision:
+        raise repository.Conflict(cid)
+    user = _who()
+    changed = False
+    plan = None
+    sheet_in = data.get("sheet") if isinstance(data.get("sheet"), dict) else {}
+    if sheet_in:
+        changes = [{"field": f"sheet.{k}", "value": v, "status": "confirmed"} for k, v in sheet_in.items()
+                   if k in repository.SHEET_FIELDS]
+        if "channel" in sheet_in and "channels" not in sheet_in:
+            changes.append({"field": "sheet.channels", "value": [sheet_in["channel"]], "status": "confirmed"})
+        plan = repository.plan_changes(repository.sheet_of(c), c.decisions, changes, user=user, source="sheet",
+                                       revision=c.revision)
+        if plan["rejected"]:
+            raise ApiError(plan["rejected"][0]["reason"])
+        if plan["applied"]:
+            repository.commit_changes(c, plan, source="sheet", user=user)
+            changed = True
+    if "title" in data:
+        title = clip(data.get("title"), 80).strip()
+        if not title:
+            raise ApiError("캠페인명을 입력하세요.")
+        if title != c.title:
+            c.title, changed = title, True
+    if "status" in data:
+        if data["status"] not in O.STATUSES:
+            raise ApiError("상태는 제작 중 · 검토 중 · 완료 중 하나입니다.")
+        if data["status"] != c.status:
+            c.status, changed = data["status"], True
+    if isinstance(data.get("settings"), dict):
+        try:
+            s = repository.norm_settings(data["settings"], repository.settings_of(c))
+        except ValueError as e:
+            raise ApiError(str(e))
+        if s != repository.settings_of(c):
+            c.settings, changed = s, True
+    if "reference_text" in data:
+        ref = repository.clip_text(data.get("reference_text"), repository.REFERENCE_MAX)
+        if ref != (c.reference_text or ""):
+            c.reference_text, changed = ref, True
+    if not changed:
+        return jsonify(campaign=repository.campaign_state(c), unchanged=True)
+    if plan and plan["applied"]:
+        repository.add_event(c, "기본 정보 시트를 바꿨어요 — " + repository.describe_applied(plan["applied"]),
+                             {"kind": "sheet_changed", "applied": plan["applied"]}, user=user)
+    c.updated_by, c.updated_at = user, utcnow()
+    repository.guarded_bump(cid, expected)
+    db.session.commit()
+    return _state(cid)
+
+
+@bp.delete("/campaigns/<int:cid>")
+def campaigns_delete(cid):
+    c = _campaign(cid)
+    if not (current_user.is_admin or (c.created_by_id and c.created_by_id == current_user.id)):
+        raise ApiError("캠페인을 만든 사람이나 관리자만 삭제할 수 있어요.", 403)
+    files = [n for (n,) in db.session.query(ContentVersion.image_file).filter(
+        ContentVersion.campaign_id == cid, ContentVersion.image_file.isnot(None))]
+    title = c.title
+    for model in (ContentVersion, ContentMessage, ContentDecisionEvent, ContentJob):
+        model.query.filter_by(campaign_id=cid).delete()
+    db.session.delete(c)
+    db.session.commit()
+    media.delete_files(files)
+    worklog.add("content", "기타", f"캠페인 삭제: {title}", detail={"campaign": cid, "files": len(files)})
+    return jsonify(ok=True)
+
+
+@bp.post("/campaigns/<int:cid>/decisions")
+def campaigns_decisions(cid):
+    c = _campaign(cid)
+    data = json_body()
+    expected = conversation.parse_revision(data)
+    if expected != c.revision:
+        raise repository.Conflict(cid)
+    changes = data.get("changes")
+    if not isinstance(changes, list) or not changes:
+        raise ApiError("바꿀 항목이 없습니다.")
+    source = data.get("source") if data.get("source") in ("candidate", "manual", "undo") else "manual"
+    user = _who()
+    try:
+        message_id = int(data["message_id"]) if data.get("message_id") is not None else None
+    except (TypeError, ValueError):
+        message_id = None
+    plan = repository.plan_changes(repository.sheet_of(c), c.decisions, changes[:10], user=user, source=source,
+                                   revision=c.revision)
+    if plan["rejected"]:
+        raise ApiError(plan["rejected"][0]["reason"])
+    if not plan["applied"]:
+        return jsonify(campaign=repository.campaign_state(c), unchanged=True)
+    repository.commit_changes(c, plan, source=source, user=user, message_id=message_id)
+    verb = {"candidate": "후보를 골랐어요", "undo": "되돌렸어요", "manual": "결정 사항을 바꿨어요"}[source]
+    repository.add_event(c, f"{verb} — {repository.describe_applied(plan['applied'])}",
+                         {"kind": "decision_changed", "source": source, "applied": plan["applied"]}, user=user)
+    c.updated_by, c.updated_at = user, utcnow()
+    repository.guarded_bump(cid, expected)
+    db.session.commit()
+    return _state(cid, applied=plan["applied"])
+
+
+@bp.post("/campaigns/<int:cid>/chat")
+def campaigns_chat(cid):
+    c = _campaign(cid)
+    data = json_body(max_bytes=64 * 1024)
+    out = conversation.run_turn(c, data, _who())
+    return jsonify(out)
+
+
+@bp.post("/campaigns/<int:cid>/versions")
+def versions_create(cid):
+    """직접 작성 (키 없이도). 결과 수정은 항상 새 버전 (README 9장)."""
+    c = _campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    kind = data.get("kind")
+    if kind not in O.TEXT_KINDS:
+        raise ApiError("결과물 종류를 고르세요 (카피 · 카드뉴스 · 숏폼 구성안 · 상품 설명 · CRM 메시지 · 기획서).")
+    body = repository.clip_text(data.get("body"), 20000)
+    if not body:
+        raise ApiError("본문을 입력하세요.")
+    parent = None
+    if data.get("parent_id") not in (None, ""):
+        try:
+            parent = db.session.get(ContentVersion, int(data["parent_id"]))
+        except (TypeError, ValueError):
+            parent = None
+        if parent is None or parent.campaign_id != cid:
+            raise ApiError("기준 버전을 찾지 못했습니다.")
+    user = _who()
+    label = clip(data.get("label"), 30).strip() or (parent.label if parent else "직접 작성")
+    sheet = repository.sheet_of(c)
+    from ..catalog import service as catalog
+    facts = catalog.product_facts(sheet["product_ids"])
+    snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
+                                           model=None, mode="manual")
+    v = ContentVersion(campaign_id=cid, seq=repository.next_seq(cid), kind=kind, label=label,
+                       title=clip(data.get("title"), 200).strip(), body=body, parent_id=parent.id if parent else None,
+                       source="manual", note="직접 작성" + (f" · {parent.label} v{parent.seq}에서 수정" if parent else ""),
+                       facts_version=facts.get("facts_version") or "", snapshot_hash=shash, created_by=user)
+    v.snapshot = snap
+    v.review = {"keyword": review.keyword_check(body, kind, sheet, facts)}
+    db.session.add(v)
+    db.session.flush()
+    c.selected_version_id = v.id
+    c.updated_by, c.updated_at = user, utcnow()
+    repository.add_event(c, f"초안을 직접 작성했어요 — {v.label} (v{v.seq})", {"kind": "manual_version", "versionId": v.id}, user=user)
+    db.session.commit()
+    return _state(cid, 201, versionId=v.id)
+
+
+@bp.post("/campaigns/<int:cid>/select")
+def campaigns_select(cid):
+    c = _campaign(cid)
+    data = json_body()
+    vid = data.get("version_id", data.get("versionId"))
+    if vid is not None:
+        v = db.session.get(ContentVersion, int(vid)) if str(vid).isdigit() else None
+        if v is None or v.campaign_id != cid:
+            raise ApiError("이 캠페인의 버전이 아닙니다.")
+        vid = v.id
+    c.selected_version_id = vid
+    db.session.commit()
+    return _state(cid)
+
+
+@bp.get("/campaigns/<int:cid>/export")
+def campaigns_export(cid):
+    c = _campaign(cid)
+    only = request.args.get("version")
+    only_id = None
+    if only:
+        if not only.isdigit():
+            raise ApiError("버전 번호가 올바르지 않습니다.")
+        v = db.session.get(ContentVersion, int(only))
+        if v is None or v.campaign_id != cid:
+            raise ApiError("이 캠페인의 버전이 아닙니다.", 404)
+        only_id = v.id
+    data, filename = build_zip(c, only_id)
+    worklog.add("content", "기타", f"내보내기: {c.title}", detail={"campaign": cid, "version": only_id, "bytes": len(data)})
+    return Response(data, mimetype="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+# ───────── 시트 추천 ─────────
+
+@bp.post("/suggest")
+def suggest():
+    data = json_body()
+    field = data.get("field")
+    if field not in ("goal", "extra"):
+        raise ApiError("추천할 항목은 목적(goal) 또는 추가 요청(extra)입니다.")
+    raw = data.get("sheet") if isinstance(data.get("sheet"), dict) else {}
+    products = repository.products_index()
+    sheet = dict(repository.EMPTY_SHEET)
+    try:
+        for k in repository.SHEET_FIELDS:
+            if raw.get(k) not in (None, "", []):
+                sheet[k] = repository.norm_sheet_value(k, raw[k], products)
+    except ValueError as e:
+        raise ApiError(str(e))
+    if not sheet["content_type"]:
+        raise ApiError("만들 콘텐츠를 먼저 골라 주세요.")
+    basis = {k: sheet[k] for k in ("content_type", "channels", "brand_focus", "product_ids")}
+    if not providers.ready():
+        return jsonify(field=field, items=O.example_suggestions(field, sheet), source="example", basis=basis,
+                       note="OpenAI 키가 없어 예시 추천을 보여 드려요. 설정 › 연결에서 키를 넣으면 AI 추천을 받을 수 있어요.")
+    from ..catalog import service as catalog
+    facts = catalog.product_facts(sheet["product_ids"])
+    lab = repository.labels_of(sheet, products)
+    user = {"field": field, "sheet": {"content_type": lab["contentType"], "channels": lab["channels"], "target": lab["target"],
+                                      "brand_focus": sheet["brand_focus"], "goal": sheet["goal"] or None,
+                                      "extra_request": sheet["extra_request"] or None},
+            "brand_facts": {k: (facts.get("brand") or {}).get(k) for k in ("name", "slogan", "colors", "character", "cm_song")},
+            "product_facts": facts.get("products"),
+            "upcoming_seasons": [{"name": s["name"], "start": s["start"], "dday": s["dday"]} for s in catalog.list_seasons()[:3]]}
+    try:
+        out = providers.call_json(prompts.suggest_system(field), prompts.dumps(user), schema=schemas.SUGGEST,
+                                  name="content_suggest", action=f"시트 추천 ({'목적' if field == 'goal' else '추가 요청'})",
+                                  max_tokens=800, timeout=60)
+    except AIError as e:
+        return jsonify(field=field, items=O.example_suggestions(field, sheet), source="example", basis=basis,
+                       note=f"AI 추천을 받지 못해 예시를 보여 드려요 ({e})")
+    items = []
+    for it in out.get("items") or []:
+        if isinstance(it, dict) and str(it.get("value") or "").strip():
+            items.append({"value": clip(it["value"], 120).strip(), "reason": clip(it.get("reason"), 160).strip()})
+        if len(items) >= 3:
+            break
+    if not items:
+        return jsonify(field=field, items=O.example_suggestions(field, sheet), source="example", basis=basis,
+                       note="AI가 후보를 돌려주지 않아 예시를 보여 드려요.")
+    return jsonify(field=field, items=items, source="ai", basis=basis, model=providers.text_model())
+
+
+# ───────── 버전 ─────────
+
+@bp.post("/versions/<int:vid>/final")
+def versions_final(vid):
+    v = _version(vid)
+    c = _campaign(v.campaign_id)
+    data = json_body()
+    final = data.get("final", True) is not False
+    user = _who()
+    if final:
+        c.final_version_id = v.id
+        text = f"최종본으로 지정했어요 — {v.label} (v{v.seq}) · 승인·사실 확인 완료를 뜻하지 않아요"
+    else:
+        if c.final_version_id != v.id:
+            return _state(c.id)
+        c.final_version_id = None
+        text = f"최종본 지정을 해제했어요 — {v.label} (v{v.seq})"
+    repository.add_event(c, text, {"kind": "final", "versionId": v.id, "final": final}, user=user)
+    c.updated_by, c.updated_at = user, utcnow()
+    db.session.commit()
+    worklog.add("content", "승인 · 선정", f"최종본 {'지정' if final else '해제'}: {c.title} · {v.label} v{v.seq}",
+                detail={"campaign": c.id, "version": v.id, "kind": v.kind, "note": "최종본 지정은 법적 승인이 아님"})
+    return _state(c.id)
+
+
+@bp.post("/versions/<int:vid>/review")
+def versions_review(vid):
+    """화면(컴플라이언스 파트 규칙 판정) 결과를 버전에 기록 — 판정은 1차 참고용."""
+    v = _version(vid)
+    data = json_body()
+    verdict = str(data.get("verdict") or "")
+    if verdict not in ("BLOCK", "REVISE", "COND", "REVIEW", "PASS", "UNAVAILABLE", "ERROR"):
+        raise ApiError("판정 값이 올바르지 않습니다.")
+    findings = []
+    for f in (data.get("findings") or [])[:30]:
+        if isinstance(f, dict):
+            findings.append({"code": clip(f.get("code"), 10), "name": clip(f.get("name"), 80), "verdict": clip(f.get("verdict"), 10),
+                             "terms": [clip(t, 60) for t in (f.get("terms") or [])[:8]]})
+    r = v.review
+    r["compliance"] = {"verdict": verdict, "label": clip(data.get("label"), 30), "findings": findings,
+                       "channel": clip(data.get("channel"), 20), "products": [clip(p, 20) for p in (data.get("products") or [])[:4]],
+                       "by": _who(), "at": iso(utcnow()), "note": "컴플라이언스 규칙 1차 판정 · 법적 승인 아님"}
+    v.review = r
+    db.session.commit()
+    return _state(v.campaign_id)
+
+
+@bp.post("/versions/<int:vid>/ai-review")
+def versions_ai_review(vid):
+    v = _version(vid)
+    c = _campaign(v.campaign_id)
+    if v.kind == "image":
+        raise ApiError("이미지는 AI 보조 검토 대상이 아닙니다 (텍스트 레이어만 키워드 확인).")
+    if not providers.ready():
+        raise ApiError(conversation.NO_KEY, 503)
+    from ..catalog import service as catalog
+    sheet = repository.sheet_of(c)
+    facts = catalog.product_facts(sheet["product_ids"])
+    user = {"version": {"label": v.label, "kind": O.KIND_LABELS.get(v.kind), "body": v.body[:12000]},
+            "sheet": repository.labels_of(sheet), "brand_facts": facts.get("brand"), "product_facts": facts.get("products"),
+            "keyword_check": (v.review or {}).get("keyword")}
+    out = providers.call_json(prompts.REVIEW_V2, prompts.dumps(user), schema=schemas.REVIEW, name="content_review",
+                              action="AI 보조 검토", max_tokens=1800, timeout=90)
+    issues = [{k: clip(i.get(k), 400) for k in ("location", "problem", "suggestion", "basis")}
+              for i in (out.get("issues") or [])[:12] if isinstance(i, dict)]
+    v = db.session.get(ContentVersion, vid)
+    r = v.review
+    r["ai"] = {"summary": clip(out.get("summary"), 600), "issues": issues, "scope": clip(out.get("checked_scope"), 200),
+               "model": providers.text_model(), "at": iso(utcnow()), "by": _who(),
+               "note": "같은 모델의 보조 검토 · 독립적인 사실 검증이나 법적 승인이 아님"}
+    v.review = r
+    db.session.commit()
+    return _state(v.campaign_id)
+
+
+# ───────── 작업 · 파일 ─────────
+
+@bp.get("/jobs/<job_id>")
+def jobs_get(job_id):
+    if not job_id.isalnum() or len(job_id) > 32:
+        raise ApiError("없는 작업입니다.", 404)
+    repository.settle_stale_jobs()
+    j = db.session.get(ContentJob, job_id)
+    if j is None:
+        raise ApiError("없는 작업입니다.", 404)
+    return jsonify(job=repository.job_dict(j))
+
+
+@bp.get("/files/<name>")
+def files(name):
+    if not media.FILE_RE.match(name or ""):
+        raise ApiError("없는 파일입니다.", 404)
+    if ContentVersion.query.filter_by(image_file=name).first() is None:
+        raise ApiError("없는 파일입니다.", 404)
+    folder = media.upload_dir()
+    if not (folder / name).is_file():
+        raise ApiError("파일을 찾지 못했습니다 (서버 저장소 확인).", 404)
+    resp = send_from_directory(str(folder), name, mimetype="image/png", max_age=0)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    resp.headers["Content-Disposition"] = f'inline; filename="reboot-content-{name}"'
+    return resp

@@ -1,0 +1,36 @@
+{
+  "_설명": "홈 · 미국 주류 업계 뉴스 동향 — GDELT DOC 2.0 쿼리 템플릿. OR 조건은 괄호 필수, 구문은 큰따옴표. 실제 쿼리 = query + exclude + common. 수정 후 '지금 수집'으로 확인",
+  "common": "sourcecountry:US sourcelang:english",
+  "exclude": "-\"drunk driving\" -\"drunk driver\" -crash -arrested -killed -murder",
+  "articleTimespan": "7d",
+  "timelineTimespan": "14d",
+  "maxrecords": 75,
+  "surgeRatio": 1.5,
+  "groups": [
+    {
+      "id": "hangover",
+      "label": "숙취 · 회복",
+      "query": "(\"hangover cure\" OR \"hangover relief\" OR \"hangover remedy\" OR \"hangover prevention\" OR \"hangover supplement\")"
+    },
+    {
+      "id": "nonalc",
+      "label": "논알코올 · 소버 큐리어스",
+      "query": "(\"non-alcoholic\" OR \"alcohol-free\" OR \"sober curious\" OR \"zero-proof\" OR mocktail OR \"dry january\")"
+    },
+    {
+      "id": "industry",
+      "label": "주류 판매 · 업계 동향",
+      "query": "(\"alcohol sales\" OR \"spirits sales\" OR \"beer sales\" OR \"wine sales\" OR \"liquor industry\" OR \"alcohol industry\")"
+    },
+    {
+      "id": "rtd",
+      "label": "RTD · 파티 시즌",
+      "query": "(\"ready-to-drink\" OR \"canned cocktail\" OR \"hard seltzer\" OR \"party drinks\" OR \"holiday drinking\" OR \"tailgate drinks\")"
+    },
+    {
+      "id": "policy",
+      "label": "규제 · 건강 가이드라인",
+      "query": "(\"alcohol guidelines\" OR \"alcohol labeling\" OR \"alcohol tariff\" OR \"alcohol tax\" OR \"alcohol warning label\")"
+    }
+  ]
+}
