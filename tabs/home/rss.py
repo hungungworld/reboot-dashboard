@@ -1,7 +1,8 @@
-"""구글 뉴스 RSS 읽기 (키 없음 · 팀 결정: GDELT 대신 구글 뉴스).
+"""구글 뉴스 RSS · 업계지 RSS 읽기 (키 없음 · 팀 결정: GDELT 대신 구글 뉴스, 2026-10-24 업계지 피드 추가).
 
 - 주소: https://news.google.com/rss/search?q={검색어} when:{기간}&hl=en-US&gl=US&ceid=US:en
 - 항목마다 제목 · 매체(source) · 링크 · 날짜(pubDate)만 읽음 (본문 없음). 제목 끝의 " - 매체명"은 뗌
+- 업계지 피드(feed): 사이트 RSS 주소를 그대로 읽음. <source>가 없으니 매체 이름은 설정의 이름을 씀
 - 요청 사이 잠깐 쉬고, 요청 제한·서버 오류는 한 번만 다시 시도
 - 보도 급증: 받아 온 기사 날짜로 최근 7일 vs 그 전 7일 기사 수를 비교
 """
@@ -17,6 +18,7 @@ import requests
 BASE = "https://news.google.com/rss/search"
 UA = "REBOOT-dashboard/1.0 (home daily briefing)"
 MIN_INTERVAL = 1.0
+DC_DATE = "{http://purl.org/dc/elements/1.1/}date"
 
 
 class RssError(Exception):
@@ -41,11 +43,11 @@ class RssClient:
         if gap < self.interval:
             self.sleep(self.interval - gap)
 
-    def _once(self, params):
+    def _once(self, params, url=BASE):
         """요청 1번 → (XML 루트, None) 또는 (None, (오류, 다시 시도할지))."""
         self._wait()
         try:
-            res = self.session.get(BASE, params=params, timeout=self.timeout, headers={"User-Agent": UA})
+            res = self.session.get(url, params=params, timeout=self.timeout, headers={"User-Agent": UA})
         except requests.RequestException as e:
             return None, (RssError(f"연결 실패 ({type(e).__name__})"), True)
         finally:
@@ -69,10 +71,10 @@ class RssClient:
             return None, (RssError("RSS 형식 오류 (channel 없음)"), False)
         return root, None
 
-    def get(self, params):
+    def get(self, params, url=BASE):
         err = None
         for attempt in range(self.retries + 1):
-            root, fail = self._once(params)
+            root, fail = self._once(params, url)
             if fail is None:
                 return root
             err, retry = fail
@@ -96,13 +98,30 @@ class RssClient:
             })
         return out
 
+    def feed(self, url, source=""):
+        """업계지 RSS 주소 → 기사 목록 (기간 조건이 없으니 날짜는 부르는 쪽에서 거름)."""
+        root = self.get(None, url)
+        out = []
+        for item in root.iter("item"):
+            out.append({
+                "url": (item.findtext("link") or "").strip(),
+                "title": clean_title(item.findtext("title")),
+                "domain": source,
+                "date": parse_date(item.findtext("pubDate") or item.findtext(DC_DATE)),
+            })
+        return out
+
 
 def parse_date(v):
-    """RSS 날짜 'Fri, 23 Oct 2026 08:00:00 GMT' → UTC datetime (시간대 정보 없음)."""
+    """RSS 날짜 'Fri, 23 Oct 2026 08:00:00 GMT'(또는 dc:date '2026-10-23T08:00:00Z') → UTC datetime (시간대 정보 없음)."""
+    v = str(v or "").strip()
     try:
-        d = parsedate_to_datetime(str(v or "").strip())
+        d = parsedate_to_datetime(v)
     except (TypeError, ValueError, IndexError):
-        return None
+        try:
+            d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     if d is None:
         return None
     if d.tzinfo is not None:

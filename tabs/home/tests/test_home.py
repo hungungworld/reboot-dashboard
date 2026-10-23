@@ -71,8 +71,9 @@ def make_session(monkeypatch, responder):
 
     class FakeSession:
         def get(self, url, params=None, timeout=None, headers=None):
-            calls.append(dict(params))
-            assert url == rss.BASE and timeout == 30
+            assert timeout == 30 and (url == rss.BASE) == (params is not None)
+            params = dict(params) if params else {"feed": url}   # 업계지 피드는 주소를 그대로 부름
+            calls.append(params)
             return responder(params)
 
     monkeypatch.setattr("tabs.home.rss.requests.Session", FakeSession)
@@ -80,9 +81,11 @@ def make_session(monkeypatch, responder):
 
 
 def group_of(params):
-    q = params["q"]
+    q = params.get("q")
     for g in news.load_queries()["groups"]:
-        if q == f"{g['query']} when:14d":
+        if params.get("feed") and params["feed"] == g.get("feed"):
+            return g["id"]
+        if q and q == f"{g.get('query')} when:14d":
             return g["id"]
     raise AssertionError(q)
 
@@ -95,10 +98,17 @@ def good_responder(params):
 
 def test_queries_are_plain_search_terms():
     cfg = news.load_queries()
-    assert len(cfg["groups"]) == 9  # 2026-10-24 팀 결정 (분야 7개 · 검색어 9개)
-    for g in cfg["groups"]:
+    queries = [g for g in cfg["groups"] if not g.get("feed")]
+    feeds = [g for g in cfg["groups"] if g.get("feed")]
+    assert len(queries) == 9  # 2026-10-24 팀 결정 (분야 7개 · 검색어 9개)
+    assert len(feeds) == 6 and "trend" in {g["area"] for g in feeds}   # 업계지 · 트렌드 피드 (같은 날 추가)
+    for g in queries:
         assert g.get("label") and news.build_query(cfg, g) == g["query"]
-        assert g["kind"] in ("signal", "flow") and g["areaLabel"]
+    for g in cfg["groups"]:
+        assert g["kind"] in ("signal", "flow", "trend") and g["areaLabel"]
+    for g in feeds:
+        assert g["feed"].startswith("https://") and g.get("source") and not g.get("query")
+    assert {a for a, _ in news.AREAS} == {g["area"] for g in cfg["groups"]}
     assert {g["area"] for g in cfg["groups"] if g["kind"] == "signal"} == {"category", "competitor", "regulation"}
     assert {"DUI", "drunk driving", "crash"} <= set(cfg["exclude"])
 
@@ -143,6 +153,15 @@ def test_pick_guarantees_signal_slots_and_area_cap():
     assert [c["score"] for c in out] == sorted((c["score"] for c in out), reverse=True)
 
 
+def test_pick_keeps_trends_in_their_own_slots():
+    kinds = {"behavior": "flow", "trend": "trend"}.get
+    cands = ([{"id": i, "area": "behavior", "score": 5} for i in range(3)]
+             + [{"id": 10 + i, "area": "trend", "score": 9 - i} for i in range(6)])
+    out = news.pick(cands, kinds)
+    assert [c["area"] for c in out] == ["behavior"] * 3 + ["trend"] * news.TREND_ITEMS   # 트렌드는 뒤에 따로 · 점수순 4개
+    assert [c["id"] for c in out[3:]] == [10, 11, 12, 13]
+
+
 def test_client_parses_rss_and_retries(monkeypatch):
     slept = []
     now = _now().replace(microsecond=0)
@@ -172,6 +191,30 @@ def test_client_rejects_non_rss_without_retry():
     with pytest.raises(rss.RssError) as e:
         c.articles("x")
     assert "RSS" in str(e.value) and S.n == 1
+
+
+def test_feed_reads_site_rss():
+    now = _now().replace(microsecond=0)
+    body = ('<?xml version="1.0"?><rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><title>BevNET</title>'
+            f"<item><title>Brand launches &amp; more</title><link>https://bev.example.com/a</link>"
+            f"<pubDate>{format_datetime(now.replace(tzinfo=timezone.utc), usegmt=True)}</pubDate></item>"
+            f"<item><title>Dated by dc</title><link>https://bev.example.com/b</link><dc:date>{now.isoformat()}Z</dc:date></item>"
+            "</channel></rss>")
+    seen = []
+
+    class S:
+        def get(self, url, params=None, timeout=None, headers=None):
+            seen.append((url, params))
+            return FakeRes(body=body) if url.endswith("/feed") else FakeRes(403, "<html>Just a moment")
+
+    c = rss.RssClient(interval=0, sleep=lambda s: None, session=S())
+    arts = c.feed("https://bev.example.com/feed", "BevNET")
+    assert seen == [("https://bev.example.com/feed", None)]
+    assert arts == [{"url": "https://bev.example.com/a", "title": "Brand launches & more", "domain": "BevNET", "date": now},
+                    {"url": "https://bev.example.com/b", "title": "Dated by dc", "domain": "BevNET", "date": now}]
+    with pytest.raises(rss.RssError) as e:      # 봇 차단(403)은 다시 시도하지 않음
+        c.feed("https://blocked.example.com/rss")
+    assert "403" in str(e.value) and len(seen) == 2
 
 
 def test_noise_and_title_cleanup():
@@ -205,7 +248,7 @@ def test_news_before_first_collection(auth_client):
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False
     assert len(j["groups"]) >= 3 and "판매량" in j["limitNote"]
-    assert len(j["queryStats"]) == 9 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
+    assert len(j["queryStats"]) == 15 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
 
 
 def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
@@ -215,7 +258,8 @@ def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
     with fast.app_context():
         run = news.collect(trigger="manual", user_name="테스터")
         assert run.status == "ok" and run.ai_status == "no_key"
-        assert len(calls) == len(groups)                       # 검색어마다 RSS 1번
+        assert len(calls) == len(groups)                       # 검색어 · 피드마다 RSS 1번
+        assert len([c for c in calls if "feed" in c]) == 6
         assert HomeNewsArticle.query.count() == expected        # 같은 기사 한 번만, 노이즈·javascript: 주소는 버림
         shared = HomeNewsArticle.query.filter_by(url="https://www.example-news.com/shared-story").one()
         assert len(shared.groups.split(",")) == len(groups) and shared.domain == "Example News"
@@ -233,6 +277,9 @@ def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
     hang = next(q for q in j["queryStats"] if q["id"] == "category")
     assert hang["runs"] == 2 and hang["found"] > hang["kept"] > 0 and hang["picked"] == 0 and hang["replace"] is False
     assert not any(s["surge"] for s in j["signals"][1:])
+    feed_ids = {g["id"] for g in news.load_queries()["groups"] if g.get("feed")}
+    assert not feed_ids & {s["group"] for s in j["signals"]}             # 피드는 보도 급증 계산에서 뺌
+    assert {q["id"]: q["feed"] for q in j["queryStats"]}["bevnet"].startswith("https://")
     logs = auth_client.get("/api/worklog?part=home&kind=수집").get_json()["items"]
     assert logs and logs[0]["status"] == "완료" and logs[0]["user"] == "테스터"
 
@@ -247,7 +294,8 @@ def test_failure_keeps_last_results(fast, auth_client, monkeypatch):
         assert run.status == "failed" and run.ai_status == "skipped"
         errs = json.loads(run.errors)
         assert any("RSS" in e for e in errs)
-        assert len(calls) == news.MAX_FAILS_IN_ROW and any("건너뜀" in e for e in errs)  # 연달아 실패하면 더 부르지 않음
+        assert len([c for c in calls if "q" in c]) == news.MAX_FAILS_IN_ROW and any("건너뜀" in e for e in errs)  # 연달아 실패하면 더 부르지 않음
+        assert len([c for c in calls if "feed" in c]) == 6     # 업계지 피드는 사이트가 달라 따로 시도
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "failed" and j["lastSuccessAt"] and j["articles"]  # 마지막 결과 유지
     assert j["signals"]
@@ -300,6 +348,38 @@ def test_ai_filter_and_korean_items(fast, auth_client, monkeypatch):
     with fast.app_context():
         b = news.brief()
     assert b["trends"][0]["title"] == "숙취 관련 보도 증가" and any(s["surge"] for s in b["signals"])
+
+
+def test_feed_drops_old_articles_and_ai_trend_slot(fast, auth_client, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+
+    def responder(p):
+        if p.get("feed", "").startswith("https://www.marketingdive.com"):
+            now = _now()
+            return FakeRes(body=rss_xml([{"url": "https://md.example.com/tiktok-shop", "title": "Brands bet on TikTok Shop live sales",
+                                          "source": "x", "date": now - timedelta(days=1)},
+                                         {"url": "https://md.example.com/old", "title": "Old campaign recap", "source": "x",
+                                          "date": now - timedelta(days=40)}]))
+        return good_responder(p)
+
+    make_session(monkeypatch, responder)
+
+    def fake_openai_json(system, user, **kw):
+        tid = next(a["id"] for a in user["articles"] if a["title"].startswith("Brands bet"))
+        return {"relevant_ids": [tid], "headline": "h",
+                "articles": [{"id": tid, "title_en": "Brands bet on TikTok Shop live sales", "title_ko": "틱톡샵 라이브 판매 확대",
+                              "summary_ko": "s", "why_ko": "런칭 채널에 라이브 판매 검토", "area": "trend", "topic": "소비 트렌드",
+                              "distance": 1, "action": 2, "source": 1, "novelty": 1}]}
+
+    monkeypatch.setattr("tabs.home.news.openai_json", fake_openai_json)
+    with fast.app_context():
+        run = news.collect()
+        assert json.loads(run.counts)["marketingdive"]["found"] == 1        # 14일 넘은 피드 기사는 버림
+        md = HomeNewsArticle.query.filter_by(url="https://md.example.com/tiktok-shop").one()
+        assert md.domain == "Marketing Dive" and md.group_id == "marketingdive"
+        assert HomeNewsArticle.query.filter_by(url="https://md.example.com/old").count() == 0
+    it = auth_client.get("/api/home/news").get_json()["ai"]["items"][0]
+    assert it["kind"] == "trend" and it["areaLabel"] == "트렌드" and it["whyKo"].startswith("런칭")
 
 
 def test_ai_error_keeps_articles(fast, auth_client, monkeypatch):

@@ -51,7 +51,11 @@
                   GET  /api/home/news/status   수집 상태
   외부 출처     : 구글 뉴스 RSS (키 필요 없음)
                   https://news.google.com/rss/search?q={검색어} when:{기간}&hl=en-US&gl=US&ceid=US:en
-  검색어·제외어 : tabs/home/data/queries.json
+                  업계지 RSS 6곳 (2026-10-24 추가 · robots.txt 확인 · 키 필요 없음)
+                    업계 뉴스: BevNET, NutraIngredients-USA
+                    트렌드 칸: Marketing Dive, Modern Retail, Mintel, NOSH
+                  (Beverage Industry 등은 봇 차단 403이라 뺌)
+  검색어·제외어 : tabs/home/data/queries.json (피드 주소도 여기)
   저장          : DB 표 home_news_articles, home_news_runs (90일 보관)
   AI            : OpenAI (OPENAI_API_KEY 있을 때만) — 관련 기사 고르기 + 한국어 요약
 
