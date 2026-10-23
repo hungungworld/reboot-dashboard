@@ -30,7 +30,7 @@
     'search_sets.A': { label: '검색어 세트 A · 제품 리뷰', ph: '예) hangover jelly review', max: 10 },
     'search_sets.B': { label: '검색어 세트 B · 숙취 일반', ph: '예) hangover remedy', max: 10 },
     'search_sets.K': { label: '검색어 세트 K · 한국 숙취해소제', ph: '예) korean hangover drink', max: 10 },
-    amazon_queries: { label: 'Amazon 검색어', ph: '예) korean hangover', max: 10 },
+    amazon_queries: { label: 'Amazon 검색어', ph: '예) korean hangover', max: 15 },
     trend_keywords: { label: '트렌드 키워드', ph: '예) hangover drink', max: 10 },
     own_terms: { label: '자사 상품 표시 단어', ph: '예) aldicom', max: 10, len: 60 },
     weee_urls: { label: 'Weee! 주소', ph: 'https://www.sayweee.com/en/…', max: 15, len: 500, url: true },

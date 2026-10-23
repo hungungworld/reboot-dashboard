@@ -40,7 +40,7 @@ DEFAULTS = {
     "exclude_terms": ["soup", "해장국", "haejang"],
 }
 
-LIMITS = {"search_set": 10, "amazon_queries": 10, "trend_keywords": 10, "own_terms": 10, "weee_urls": 15,
+LIMITS = {"search_set": 10, "amazon_queries": 15, "trend_keywords": 10, "own_terms": 10, "weee_urls": 15,
           "exclude_terms": 20, "tracked_asins": 30}
 
 
