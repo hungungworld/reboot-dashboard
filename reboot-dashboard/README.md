@@ -41,9 +41,9 @@ python -m server              # → http://127.0.0.1:5000
 
 ## 2. Render 배포
 
-1. **GitHub 저장소 만들기** — 상위 `REBOOT/` 폴더가 저장소입니다 (팀 README들 + `reboot-dashboard/`). `.env` · `instance/` · `dev/`는 `.gitignore`로 제외됩니다.
+1. **GitHub 저장소** — https://github.com/hungungworld/reboot-us-dashboard (맨 위에 규칙 문서 + `reboot-dashboard/`). `.env` · `instance/` · `dev/`는 `.gitignore`로 제외됩니다.
    저장소 맨 위의 `render.yaml`(Blueprint)과 `.github/workflows/`가 `reboot-dashboard/` 폴더를 가리킵니다 (`rootDir: reboot-dashboard`).
-2. **Render → New → Blueprint** → 저장소 선택 → `render.yaml`이 인식됩니다. 파이썬 버전은 `PYTHON_VERSION`(3.14.8)으로 고정되어 있습니다.
+2. **Render → New → Blueprint** → 저장소 선택 → **브랜치는 `main`** (저장소 기본 브랜치 `pre_main`이 골라져 있으면 바꿈) → `render.yaml`이 인식됩니다. 파이썬 버전은 `PYTHON_VERSION`(3.14.8)으로 고정되어 있습니다.
 3. 처음 만들 때 묻는 값 입력: `ADMIN_EMAIL`, `ADMIN_PASSWORD`(8자 이상), `ADMIN_NAME` — 나머지 키는 비워도 됩니다 (배포 후 화면에서 입력 가능).
    `SECRET_KEY` · `APP_SECRET_KEY` · `CRON_TOKEN`은 Render가 자동으로 만듭니다.
 4. **Deploy** → 발급된 주소(`https://<서비스이름>.onrender.com`)로 접속 → 관리자 계정으로 로그인
@@ -72,14 +72,14 @@ python -m server              # → http://127.0.0.1:5000
 
 | 메뉴 | 파트 ID | 담당 | 구현된 것 | 실제 키·파일로 확인할 것 |
 |---|---|---|---|---|
-| 로그인 | `auth` | 강현서 | 로그인 README 명세 그대로 (테스트 체크리스트 11개 통과) · 계정 관리 | — |
-| 홈 · 데일리 브리핑 | `home` | 강현서 | 화면 3개: 시작하기 · 데일리 브리핑(히어로 · 시즌 카드 · KPI 4 · 이번 주 성과 차트 · To-Do(AI/규칙, 근거 표시) · 미국 주류 업계 뉴스(GDELT 배치 → AI 요약·급증 신호) · 최근 활동) · 콘텐츠 캘린더(시즌·준비 시작일) | GDELT 실수집 (이 PC에서는 429 제한) · OpenAI 요약 |
+| 로그인 | `auth` | 이현경 | 로그인 README 명세 그대로 (테스트 체크리스트 11개 통과) · 계정 관리 | — |
+| 홈 · 데일리 브리핑 | `home` | 이현경 | 화면 3개: 시작하기 · 데일리 브리핑(히어로 · 시즌 카드 · KPI 4 · 이번 주 성과 차트 · To-Do(AI/규칙, 근거 표시) · 미국 주류 업계 뉴스(GDELT 배치 → AI 요약·급증 신호) · 최근 활동) · 콘텐츠 캘린더(시즌·준비 시작일) | GDELT 실수집 (이 PC에서는 429 제한) · OpenAI 요약 |
 | 시장 · 고객 인사이트 | `insights` | 이현경 | 주간 리뷰(규칙 6개로 이번 주 액션) · 월간 리뷰 · 데이터 6탭 · 수집기(SerpApi Amazon·Trends · YouTube · Firecrawl Weee!) · 1회분 단가 · Word/Excel | 각 API 실제 응답 형식 · Weee! 주소·알디콤 ASIN 입력 · 정확도 검증 탭은 자리만 |
 | 콘텐츠 제작 | `content` | 나원 | 5항목 시트 · AI 대화(서버가 변경안 검증) · 확정/제안/미정 · A/B/C 버전·부분 수정 · 이미지 작업 · 컴플라이언스 점검 · 내 캠페인 · ZIP | OpenAI 실호출(JSON 스키마·이미지 모델) · LangGraph 대신 순수 Python 흐름 · 영상은 구성안만 |
 | 컴플라이언스 | `compliance` | 소준희 | 기존 `parts/compliance` + 서버 API(AI 2차 판정 · 한글 요약 · 모니터링 수집) · 시연본 경고장 원문 53개 · 안전 문구 7개 이관 | Claude 키 · 규칙 검증에서 PASS로 나오는 경고장 문구 5개 → 규칙 보강(파트 할 일 2단계) |
 | 고객 응대 (CS) | `cs` | 소준희 | 기존 `parts/cs` 그대로 + Gmail 문의·답장 초안 · AI 초안 API · 웹 Google 로그인 | Google OAuth 클라이언트 · 테스트 Gmail |
-| 인플루언서 · 파트너 | `partners` | 혁주 · 효선 | 업체 파일 가져오기 · 업체 컨택 · 협업 메일(AI·번역·문구 점검·Gmail 발송) · 협업 가이드(Word) · 협업 이력(IMAP 답장 확인·AI 요약) · 판매 실적(🧪 더미) | 실제 업체 CSV·XLSX · Gmail 앱 비밀번호 (유료 플랜) |
-| 성과분석 | `performance` | 강현서 | 샘플 CSV(표시됨) · 업로드(합치기/바꾸기·백업) · 기간 비교 · KPI 6 · 채널 표(원/달러·환율) · 차트 · AI 예산 제안(±20%) · A4 보고서 | 실제 성과 CSV · KEXIM 키 · OpenAI |
+| 인플루언서 · 파트너 | `partners` | 혁주 | 업체 파일 가져오기 · 업체 컨택 · 협업 메일(AI·번역·문구 점검·Gmail 발송) · 협업 가이드(Word) · 협업 이력(IMAP 답장 확인·AI 요약) · 판매 실적(🧪 더미) | 실제 업체 CSV·XLSX · Gmail 앱 비밀번호 (유료 플랜) |
+| 성과분석 | `performance` | 혁주 | 샘플 CSV(표시됨) · 업로드(합치기/바꾸기·백업) · 기간 비교 · KPI 6 · 채널 표(원/달러·환율) · 차트 · AI 예산 제안(±20%) · A4 보고서 | 실제 성과 CSV · KEXIM 키 · OpenAI |
 | 설정 및 브랜드 관리 | `settings` | 이현경 | 브랜드·제품 팩트시트 · 수집 설정(시즌 편집 포함) · 연결(키 입력·연결 테스트·Google 로그인) · 작업 로그(CSV/Excel) · 계정 | 각 서비스 연결 테스트 |
 
 공용 데이터(공통 담당): 시즌 캘린더 `/api/seasons` (`data/seasons.csv`로 시작) · 브랜드·제품 팩트시트 `/api/facts` (`data/products.json`, 콘텐츠 README 3장의 2026-10-23 기준) · 작업 로그 `/api/worklog` · 계정 `/api/users`
@@ -108,11 +108,12 @@ reboot-dashboard/
 ├─ tests/                  pytest · node 단위 확인
 └─ gunicorn.conf.py · wsgi.py · requirements.txt · .python-version · .env.example
 
-REBOOT/ (저장소 맨 위)
+저장소 맨 위
 ├─ render.yaml             Render Blueprint (rootDir: reboot-dashboard)
 ├─ .github/workflows/      tests.yml(PR 자동 확인) · daily-jobs.yml(하루 1회 수집)
 ├─ .gitignore              어느 폴더의 .env도 올리지 않음
-└─ *README*.md             팀·파트 README 원본
+├─ README.md · RULE.md · AI_RULES.md · AGENTS/CLAUDE/GEMINI.md   프로젝트 소개 · 협업 규칙 · AI 규칙
+└─ docs/원본/              팀·파트 README 원본
 ```
 
 ---
@@ -132,7 +133,8 @@ REBOOT/ (저장소 맨 위)
 
 - 개발 규칙: **[docs/DEV_GUIDE.md](docs/DEV_GUIDE.md)** (파트 모양 · 서버 규칙 · 디자인 클래스 · 파트 간 공개 기능 표)
 - Claude Code 규칙: [CLAUDE.md](CLAUDE.md)
-- Git: `git pull` → 브랜치 `<파트ID>/<할일>` → 자기 폴더만 수정 → `python -m pytest` → PR (GitHub Actions가 테스트 자동 실행)
+- 저장소 공통 규칙: [RULE.md](../RULE.md) (브랜치·PR·담당) · [AI_RULES.md](../AI_RULES.md) (AI 도구 사용)
+- Git: 개인 이니셜 브랜치(예: `NW`) → **Update from pre_main** → 자기 폴더만 수정 → `python -m pytest` → 커밋 `feat:`/`fix:` → `pre_main`으로 PR (GitHub Actions가 테스트 자동 실행)
 
 ---
 

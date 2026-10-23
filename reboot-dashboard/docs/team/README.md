@@ -51,9 +51,9 @@
 | 판매 시장 | 국내 + 미국 수출 |
 | 미국 제품 분류 | **일반식품(Conventional Food)** · 건강기능식품 아님 |
 | 사용자 | 미국 마케팅 실무자 |
-| 팀 | 3조 · **이현경 (총괄 대표 PM)** · **강현서 (PM · 홈페이지)** · 소준희 · 나원 · 혁주 · 효선 |
+| 팀 | 3조 · **소준희 (팀장)** · **이현경 (PM)** · **강현서 (PM)** · 나원 · 혁주 · 양효선 (역할·담당은 저장소 맨 위 `RULE.md` §1·§5.3) |
 | 기술 | HTML · CSS · JavaScript (빌드·npm 없음) · 크롤링·Gmail·키가 필요한 API만 Python 서버(선택) |
-| 협업 | VS Code + GitHub · 파트별 폴더 분리 · HTML 코드는 main 브랜치로 Pull Request 후 합치기 |
+| 협업 | VS Code · GitHub Desktop + GitHub · 파트별 폴더 분리 · 개인 이니셜 브랜치에서 `pre_main`으로 Pull Request 후 합치기 (저장소 맨 위 `RULE.md` §3·§4) |
 | 확인 방식 | 각 담당이 HTML을 직접 열어 구현을 확인하고 검토 |
 | 기준 날짜 | 시연 데이터는 2026년 10월 22일 기준 |
 
@@ -91,9 +91,9 @@ python app.py              # 실행 주소는 터미널에 표시됨
 ```text
 📊 REBOOT US 마케팅 대시보드
 │
-├── 🔐 로그인 (강현서)
+├── 🔐 로그인 (이현경)
 │
-├── 🏠 홈 · 데일리 브리핑 (강현서)                                      [P1]
+├── 🏠 홈 · 데일리 브리핑 (이현경)                                      [P1]
 │   ├── 시즌 캘린더 ─────────────── 수동   미국 음주 시즌 날짜 CSV (핼러윈·추수감사절 전날·새해·슈퍼볼 등)
 │   ├── 미국 시장 트렌드 동향 ───── API    → AI 요약
 │   ├── 검색 트렌드 ※ ───────────── 인사이트 파트 데이터를 불러와 표시 (5장)
@@ -138,14 +138,14 @@ python app.py              # 실행 주소는 터미널에 표시됨
 │   ├── 답변 초안 ───────────────── AI     → 컴플라이언스 자동 재검사
 │   └── 에스컬레이션 ────────────── 자동   환불·불만·건강 문의 분기
 │
-├── 🤝 인플루언서 · 파트너 (혁주 · 효선)                                [P1]
+├── 🤝 인플루언서 · 파트너 (혁주)                                [P1]
 │   ├── (함께) 인플루언서·케이터링 외주업체 컨택 ── CSV
 │   ├── (함께) 협업 제안 메일 ───── AI
 │   ├── (함께) 인플루언서·케이터링 가이드 ── AI + 컴플라이언스 금지 표현 목록
 │   ├── 협업 이력 ───────────────── 더미 + 입력  샘플 기록 + 새로 입력한 기록 저장
 │   └── 크리에이터별 판매 실적 ──── 더미   할인코드별 주문 샘플 (Shopify 쓰면 → API)
 │
-├── 📈 성과분석 · 비용 대비 매출 (강현서)
+├── 📈 성과분석 · 비용 대비 매출 (혁주)
 │   └── 성과 보고서 자동화
 │
 └── ⚙️ 설정 (이현경)
@@ -160,14 +160,14 @@ python app.py              # 실행 주소는 터미널에 표시됨
 
 | 메뉴 | 파트 ID | 담당 | 우선순위 | 지금 확인 가능한 기능 |
 |---|---|---|---|---|
-| 로그인 | `login` | 강현서 | — | 없음 (새로 만들 예정) |
-| 홈 · 데일리 브리핑 | `home` | 강현서 | P1 | 샘플 지표, 시즌 일정, To-Do 체크, 브리핑 다운로드 |
+| 로그인 | `login` | 이현경 | — | 없음 (새로 만들 예정) |
+| 홈 · 데일리 브리핑 | `home` | 이현경 | P1 | 샘플 지표, 시즌 일정, To-Do 체크, 브리핑 다운로드 |
 | 시장 · 고객 인사이트 | `insights` | 이현경 | P1 | 샘플 VOC, 페르소나 가설, 경쟁사 비교 틀 |
 | 컴플라이언스 | `compliance` | 소준희 | P0 | R1~R10 단건·일괄 심의, 사례집 53개, 표현 매핑 10쌍, 규칙 검증, 심의 이력(승인·반려), openFDA 리콜 (8장) |
 | 콘텐츠 제작 | `content` | 나원 | P0 | 채널별 템플릿 생성, 텍스트 다운로드 |
 | 고객 응대 (CS) | `cs` | 소준희 | P1 | 더미 문의 12건, C1~C10 분류, 답변 초안 + 재검사, 발송 차단, 부작용 접수 (9장) |
-| 인플루언서 · 파트너 | `partners` | 혁주 · 효선 | P1 | 가상 크리에이터 검색, 제안서 예시, 협업 기록 저장 |
-| 성과분석 | `performance` | 강현서 | — | 기존 '세일즈 · 운영'의 마진 계산기·샘플 지표 (이관 예정) |
+| 인플루언서 · 파트너 | `partners` | 혁주 | P1 | 가상 크리에이터 검색, 제안서 예시, 협업 기록 저장 |
+| 성과분석 | `performance` | 혁주 | — | 기존 '세일즈 · 운영'의 마진 계산기·샘플 지표 (이관 예정) |
 | 설정 | `settings` | 이현경 | — | 제품 정보 저장, 연결 상태 안내, 작업 로그 |
 
 P0·P1·P2는 개발 우선순위이며, 기능이 얼마나 완성됐는지를 뜻하지 않습니다.
@@ -189,8 +189,8 @@ reboot-dashboard/
 │   └─ ui.js                  #   card · row · stat · toast · download · esc
 │
 ├─ parts/                     # 파트별 폴더 · 자기 폴더만 수정
-│   ├─ login/        login.js        login.css                    (강현서)
-│   ├─ home/         home.js         home.css     data.js         (강현서)
+│   ├─ login/        login.js        login.css                    (이현경)
+│   ├─ home/         home.js         home.css     data.js         (이현경)
 │   ├─ insights/     insights.js     insights.css data.js         (이현경)
 │   ├─ compliance/   compliance.js   compliance.css data.js       (소준희)
 │   │                monitor-data.js   ← (예정) 서버가 만든 규제 모니터링 결과 (10장)
@@ -199,7 +199,7 @@ reboot-dashboard/
 │   ├─ partners/     partners.js  partners.css                    (대표 1명 · 틀만)
 │   │                outreach.js  data-outreach.js                (외주 컨택·제안 메일·가이드)
 │   │                records.js   data-records.js                 (협업 이력·판매 실적)
-│   ├─ performance/  performance.js  performance.css              (강현서)
+│   ├─ performance/  performance.js  performance.css              (혁주)
 │   └─ settings/     settings.js     settings.css                 (이현경)
 │
 ├─ server/                    # (선택) Python 서버 · HTML이 못 하는 일만
@@ -227,7 +227,7 @@ reboot-dashboard/
 - `<script type="module">`과 `import`는 쓰지 않습니다 (더블클릭으로 열면 동작하지 않음)
 - 데이터는 `.json` 대신 `data.js`에 담습니다 (로컬 JSON을 `fetch`로 읽으면 막힘). 원본 CSV는 `docs/<파트ID>/`에 보관
 - npm, React, 빌드 도구는 쓰지 않습니다
-- main 브랜치에 올리는 것은 `index.html`·`core/`·`parts/`·`server/`(키 제외)·`docs/`·`tools/`입니다. `dev/`, `_incoming/`, `.env`, 키가 들어간 HTML은 올리지 않습니다
+- 저장소에 올리는 것은 `index.html`·`core/`·`parts/`·`server/`(키 제외)·`docs/`·`tools/`입니다. `dev/`, `_incoming/`, `.env`, 키가 들어간 HTML은 올리지 않습니다
 
 ---
 
@@ -237,51 +237,46 @@ reboot-dashboard/
 
 | 역할 | 이름 | 주로 하는 일 (제안 · 팀 확인 필요) |
 |---|---|---|
-| **총괄 대표 PM** | 이현경 | 전체 일정·회의 안건 결정, '확정된 결정'(16장) 승인, 합치기(Merge) 전 최종 확인 |
-| **PM · 홈페이지** | 강현서 | 홈페이지 전체 화면 흐름(로그인 → 홈 → 각 메뉴), 메뉴 순서·디자인 일관성 확인 |
+| **팀장** | 소준희 (JH) | 일정 관리, 이슈 우선순위 조정, 파트 분담 확정, PR 리뷰 |
+| **PM** | 이현경 (HK) | PR 최종 리뷰, `pre_main` 병합, `pre_main → main` 승인·병합 |
+| **PM** | 강현서 (KHS) | PR 최종 리뷰, `pre_main` 병합, `pre_main → main` 승인·병합 (개발 파트 없음) |
 
 ### 파트 담당
 
 | 담당 | 파트 | 수정할 수 있는 파일 |
 |---|---|---|
-| **강현서** | 로그인 · 홈 · 성과분석 | `parts/login/` · `parts/home/` · `parts/performance/` · `docs/home/` · `docs/performance/` |
-| **이현경** | 시장·고객 인사이트 · 설정 | `parts/insights/` · `parts/settings/` · `server/insights/` · `docs/insights/` |
+| **이현경** | 로그인 · 홈 · 시장·고객 인사이트 · 설정 | `parts/home/` · `parts/insights/` · `parts/settings/` · `server/home/` · `server/insights/` · `server/settings/` · `docs/login/` · `docs/home/` · `docs/insights/` · `docs/settings/` (로그인 서버 `server/auth/`는 공통) |
 | **소준희** | 컴플라이언스 · 고객 응대(CS) | `parts/compliance/` · `parts/cs/` · `server/compliance/` · `server/cs/` · `docs/compliance/` · `docs/cs/` |
 | **나원** | 콘텐츠 제작 | `parts/content/` · `server/content/` · `docs/content/` |
-| **혁주 · 효선** | 인플루언서 · 파트너 | `parts/partners/` 안에서 **자기가 맡은 파일만** · `server/partners/` · `docs/partners/` |
-| {공통 담당 · 팀에서 지정} | 뼈대·통합 | `index.html` · `core/` · `server/app.py` · `README.md` · `CLAUDE.md` · `.gitignore` · `.github/` |
+| **혁주** | 인플루언서 · 파트너 · 성과분석 | `parts/partners/` · `parts/performance/` · `server/partners/` · `server/performance/` · `docs/partners/` · `docs/performance/` |
+| 공통 (팀장·PM 협의) | 뼈대·통합 | `core/` · `server/` 바로 아래 파일 · `server/core·auth·catalog·templates/` · `requirements.txt` · `README.md` · `CLAUDE.md` · 저장소 맨 위 `render.yaml`·`.github/` (저장소 `RULE.md` §5.2) |
 
 - **한 폴더는 한 사람만** 수정합니다. 두 명이 맡은 파트(인플루언서 · 파트너)는 **한 파일은 한 사람만** 수정합니다
-- 공통 담당이 정해지기 전까지 `index.html`·`core/` 변경은 팀 단톡에 먼저 알리고 PR로만 올립니다
+- 강현서·양효선은 개발 파트 없이 다른 업무를 맡습니다
+- 공통 파일 변경은 팀 단톡에 먼저 알리고 PR로만 올립니다
 
-### 초안 → 수정 인계 (담당이 바뀌는 파트)
+### 초안 → 수정 인계 (2026-10-23 완료)
 
-강현서·나원이 만든 **초안**을 이후 이현경·소준희·혁주가 이어받아 **수정·완성**합니다. 한 파일을 두 사람이 동시에 고치지 않도록, 넘겨주는 순간을 분명히 정합니다.
+강현서·나원이 만든 **초안**을 담당자가 이어받았습니다. 지금 담당은 위 표와 같습니다. 이후 담당이 바뀌면 이 표, `DEV_GUIDE.md` §1, `server/registry.py`(공통), 저장소 `RULE.md` §5.3을 같은 PR로 고칩니다.
 
 | 파트 | 초안 작성 | 이어서 수정·완성 | 인계 상태 |
 |---|---|---|---|
-| 로그인 (`parts/login/`) | 강현서 | {이현경 · 소준희 · 혁주 중} | 초안 작업 중 |
-| 홈 · 데일리 브리핑 (`parts/home/`) | 강현서 | {이현경 · 소준희 · 혁주 중} | 초안 작업 중 |
-| 성과분석 (`parts/performance/`) | 강현서 | {이현경 · 소준희 · 혁주 중} | 초안 작업 중 |
-| 콘텐츠 제작 (`parts/content/`) | 나원 | {이현경 · 소준희 · 혁주 중} | 초안 작업 중 |
+| 로그인 | 강현서 | 이현경 | 인계 완료 |
+| 홈 · 데일리 브리핑 | 강현서 | 이현경 | 인계 완료 |
+| 성과분석 | 강현서 | 혁주 | 인계 완료 |
+| 콘텐츠 제작 | 나원 | 나원 | 계속 담당 |
 
-**인계 순서**
-1. 초안 작성자가 자기 브랜치(예: `home/draft`)에서 초안을 마치고 PR → 합치기
-2. PR 설명에 **인계 메모**를 남김: 만든 것 / 안 된 것 / 쓰는 데이터 / 다른 파트와 연결된 곳(5장)
-3. 초안 작성자는 합친 뒤 그 폴더를 **더 이상 고치지 않음** (고칠 게 보이면 새 담당에게 Issue로 전달)
-4. 새 담당이 `git pull` 후 새 브랜치(예: `home/revise-…`)를 만들어 수정 시작
-5. 이 표의 '인계 상태'를 `인계 완료`로 바꾸고, 담당 표와 CODEOWNERS의 담당을 새 담당으로 바꿈 (PR 1개)
+- 인계 후에는 새 담당만 그 폴더를 수정합니다
 
-- 인계 전에는 초안 작성자만, 인계 후에는 새 담당만 그 폴더를 수정합니다
-- 초안 PR이 합쳐지기 전에 새 담당이 미리 고치기 시작하지 않습니다
+### 파트너 파트 파일 나누기 (인플루언서 · 파트너)
 
-### 두 명이 한 파트를 맡을 때 (인플루언서 · 파트너)
+> 2026-10-23부터 혁주 단독 담당입니다. 파일을 나눈 구조는 그대로 둡니다.
 
 | 파일 | 하는 일 | 담당 |
 |---|---|---|
-| `parts/partners/partners.js` · `partners.css` | 메뉴 등록, 탭 틀, 공통 스타일만 (기능 코드 넣지 않음) | {혁주 또는 효선 · 대표 1명} |
-| `parts/partners/outreach.js` · `data-outreach.js` | (함께) 외주업체 컨택 CSV, 협업 제안 메일, 인플루언서·케이터링 가이드 | {혁주 또는 효선} |
-| `parts/partners/records.js` · `data-records.js` | 협업 이력, 크리에이터별 판매 실적 | {혁주 또는 효선} |
+| `parts/partners/partners.js` · `partners.css` | 메뉴 등록, 탭 틀, 공통 스타일만 (기능 코드 넣지 않음) | 혁주 |
+| `parts/partners/outreach.js` · `data-outreach.js` | (함께) 외주업체 컨택 CSV, 협업 제안 메일, 인플루언서·케이터링 가이드 | 혁주 |
+| `parts/partners/records.js` · `data-records.js` | 협업 이력, 크리에이터별 판매 실적 | 혁주 |
 
 - 기능 파일은 화면을 직접 등록하지 않고, 대표 파일이 불러 씁니다
   ```js
@@ -296,7 +291,7 @@ reboot-dashboard/
 - CSS 접두사도 파일별로 나눕니다: 대표 `ptn-`, outreach `ptn-out-`, records `ptn-rec-`
 - 저장 키는 `REBOOT.store('partners')`를 같이 쓰되, 키 이름 앞에 파일 이름을 붙입니다 (예: `records.list`, `outreach.contacts`)
 - 대표 파일(`partners.js`)을 고칠 때는 다른 한 명에게 먼저 알립니다
-- 브랜치도 파일 기준으로 나눕니다: `partners/outreach-…`, `partners/records-…`
+- 브랜치는 개인 이니셜 브랜치(`HJ`) 하나를 쓰고, PR 하나에는 파일 하나의 작업만 담습니다
 
 ### 공통 파일 수정이 필요할 때
 `index.html`, `core/`, `base.css`를 바꿔야 하면 직접 고치지 않습니다.
@@ -307,24 +302,7 @@ reboot-dashboard/
 
 ### CODEOWNERS (GitHub 자동 검토 지정)
 
-```text
-# 기본: 공통 담당
-*                       @{공통담당_ID}
-/parts/login/           @{강현서_ID}
-/parts/home/            @{강현서_ID}
-/parts/performance/     @{강현서_ID}
-/parts/insights/        @{이현경_ID}
-/parts/settings/        @{이현경_ID}
-/server/insights/       @{이현경_ID}
-/parts/compliance/      @{소준희_ID}
-/parts/cs/              @{소준희_ID}
-/server/compliance/     @{소준희_ID}
-/server/cs/             @{소준희_ID}
-/parts/content/         @{나원_ID}
-/server/content/        @{나원_ID}
-/parts/partners/        @{혁주_ID} @{효선_ID}
-/server/partners/       @{혁주_ID} @{효선_ID}
-```
+저장소의 `.github/CODEOWNERS`는 **PM 두 명**(이현경 `@hungungworld`, 강현서 `@hyxxns0131`)을 모든 파일의 검토자로 지정합니다. `main`으로 가는 PR은 PM 1명의 승인이 있어야 합쳐집니다 (저장소 `RULE.md` §4.4 · §10). 파트별 검토자는 따로 지정하지 않고, `pre_main`으로 가는 PR은 작성자가 아닌 팀원 1명이 승인합니다.
 
 ---
 
@@ -334,17 +312,17 @@ reboot-dashboard/
 
 | 데이터 | 만드는 파트 (원본) | 불러 쓰는 파트 | 불러 쓰는 방법 |
 |---|---|---|---|
-| 검색 트렌드 · 이번 주 검색량 (SerpApi) | **인사이트 (이현경)** ※ 확정 필요 | 홈 (강현서) | `REBOOT.use('insights').searchTrend()` |
+| 검색 트렌드 · 이번 주 검색량 (SerpApi) | **인사이트 (이현경)** ※ 확정 필요 | 홈 (이현경) | `REBOOT.use('insights').searchTrend()` |
 | 고객 페르소나 | 인사이트 (이현경) | 콘텐츠 (나원) | `REBOOT.use('insights').personas()` |
-| 시즌 캘린더 | 홈 (강현서) | 콘텐츠 (나원) | `REBOOT.use('home').seasons()` |
+| 시즌 캘린더 | 홈 (이현경) | 콘텐츠 (나원) | `REBOOT.use('home').seasons()` |
 | 제품 팩트시트 | 설정 (이현경) | 콘텐츠 · CS · 컴플라이언스 | `REBOOT.use('settings').facts()` |
 | 광고 문구 판정 · 금지 표현 목록 | 컴플라이언스 (소준희) | CS 답변 재검사 · 파트너 가이드 · 콘텐츠 카피 | `REBOOT.use('compliance').review(text)` · `.bannedTerms()` |
 | CS 문의 현황 | CS (소준희) | 홈 To-Do | `REBOOT.use('cs').stats()` |
-| 크리에이터별 판매 실적 | 파트너 (records.js 담당) | 성과분석 (강현서) | `REBOOT.use('partners').creatorSales()` |
-| 주문·재구매 샘플 | 인사이트 (이현경) | 성과분석 (강현서) | `REBOOT.use('insights').orders()` |
-| 로그인한 사용자 | 로그인 (강현서) | 전체 (작업 로그 작성자 표시) | `REBOOT.user()` (공통 기능으로 제공) |
+| 크리에이터별 판매 실적 | 파트너 (records.js 담당) | 성과분석 (혁주) | `REBOOT.use('partners').creatorSales()` |
+| 주문·재구매 샘플 | 인사이트 (이현경) | 성과분석 (혁주) | `REBOOT.use('insights').orders()` |
+| 로그인한 사용자 | 로그인 (이현경) | 전체 (작업 로그 작성자 표시) | `REBOOT.user()` (공통 기능으로 제공) |
 | 작업 로그 | 공통 (`core/`) | 설정 (이현경)이 화면에 표시 | `REBOOT.log('내용')` |
-| 이번 주 To-Do | 홈 (강현서) | — | 각 파트의 `summary()`를 모아서 생성 |
+| 이번 주 To-Do | 홈 (이현경) | — | 각 파트의 `summary()`를 모아서 생성 |
 
 > 불러 쓰는 함수 이름은 만드는 파트 담당이 정하고, 이 표에 적어서 PR로 올립니다. 이름을 바꿀 때는 쓰는 파트 담당에게 먼저 알립니다.
 
@@ -412,9 +390,9 @@ const result = REBOOT.use('compliance').review(draftText, { channel: 'cs' });
 
 | 파트 | 접두사 | 담당 | 파트 | 접두사 | 담당 |
 |---|---|---|---|---|---|
-| login | `lgn-` | 강현서 | content | `cnt-` | 나원 |
-| home | `home-` | 강현서 | cs | `cs-` | 소준희 |
-| performance | `perf-` | 강현서 | partners | `ptn-` (+ `ptn-out-` · `ptn-rec-`) | 혁주 · 효선 |
+| login | `lgn-` | 이현경 | content | `cnt-` | 나원 |
+| home | `home-` | 이현경 | cs | `cs-` | 소준희 |
+| performance | `perf-` | 혁주 | partners | `ptn-` (+ `ptn-out-` · `ptn-rec-`) | 혁주 |
 | insights | `ins-` | 이현경 | settings | `set-` | 이현경 |
 | compliance | `cmp-` | 소준희 | | | |
 
@@ -422,24 +400,26 @@ const result = REBOOT.use('compliance').review(draftText, { channel: 'cs' });
 
 ### 6-3. Git 작업 순서
 
+자세한 규칙은 저장소 맨 위 `RULE.md` §3·§4를 따릅니다.
+
 ```text
-① 작업 시작 전   git pull (또는 VS Code 소스 제어 → 동기화)
-② 브랜치 만들기  <파트ID>/<할일>      예) compliance/rules-r1-r10, cs/approval, home/season-csv
-③ 작업 · 저장    자기 폴더 파일만 · HTML을 직접 열어 동작 확인
-④ 커밋          [파트ID] 무엇을 했는지   예) [compliance] 규제 단어 57개 R1~R10 통합
-⑤ 푸시 → GitHub에서 main 브랜치로 Pull Request 만들기
-⑥ 검토          CODEOWNERS 담당 + 공통 담당 확인
-⑦ 합치기(Merge)  공통 담당이 진행 → 모두 git pull
+① 처음 한 번     pre_main에서 내 이니셜 브랜치 만들기 → Publish branch     예) NW, JH, HJ, HK
+② 작업 시작 전   내 브랜치에서 Fetch origin → Branch › Update from pre_main
+③ 작업 · 저장    자기 파트 폴더만 · python -m pytest · python -m server 로 화면 확인
+④ 커밋           feat:/fix:/docs: 무엇을 했는지     예) feat: 규제 단어 57개 R1~R10 통합
+⑤ 푸시 → GitHub에서 pre_main으로 Pull Request (base가 main이 아닌지 확인)
+⑥ 검토           작성자가 아닌 팀원 1명 승인 + GitHub Actions 테스트 통과
+⑦ 합치기(Merge)  PM이 Create a merge commit → 개인 브랜치는 지우지 않음
 ```
 
 **하지 않는 것**
-- `main` 브랜치에 바로 push
+- `main`·`pre_main` 브랜치에 바로 push
 - 다른 파트 폴더나 공통 파일 수정 (필요하면 Issue로 요청)
 - 저장할 때 자동 정렬(포맷터)로 **파일 전체를** 바꾸기. 바뀐 줄이 많아져 충돌이 생김
-- 큰 작업을 PR 하나에 몰아넣기. PR 하나에는 한 가지 일만
-- 충돌이 났을 때 혼자 판단해서 남의 코드 지우기. 공통 담당과 같이 해결
+- 큰 작업을 PR 하나에 몰아넣기. PR 하나에는 한 가지 일만 (두 파트 담당은 한 파트씩)
+- 충돌이 났을 때 혼자 판단해서 남의 코드 지우기. 팀장·PM과 같이 해결
 
-**충돌이 났을 때**: VS Code에서 충돌 파일을 열면 '현재 변경 / 들어오는 변경'이 보입니다. 내 파트 파일이면 내가 고르고, 공통 파일이면 공통 담당에게 알립니다.
+**충돌이 났을 때**: VS Code에서 충돌 파일을 열면 '현재 변경 / 들어오는 변경'이 보입니다. 내 파트 파일이면 내가 고르고, 공통 파일이면 팀장·PM에게 알립니다.
 
 ### 6-4. Claude Code로 작업할 때
 
@@ -591,7 +571,7 @@ dev/
 
 | 함수 | 돌려주는 것 | 쓰는 파트 |
 |---|---|---|
-| `review(text, { channel, category })` | `{ verdict, findings[], codes }` · 기본 `b2c` / `FOOD` | CS · 콘텐츠 (나원) · 파트너 가이드 (혁주·효선) |
+| `review(text, { channel, category })` | `{ verdict, findings[], codes }` · 기본 `b2c` / `FOOD` | CS · 콘텐츠 (나원) · 파트너 가이드 (혁주) |
 | `bannedTerms()` | 금지 표현 `[{ term, code, verdict, ko[] }]` | 인플루언서·파트너 가이드 |
 | `rules()` | R1~R10 코드·이름·판정·근거 구분·이유·대체 방향 | 화면 안내용 |
 | `summary()` | 홈 카드용 한 줄 요약 | 홈 |
@@ -648,7 +628,7 @@ dev/
 | C7 | 가격·프로모션 | 🟢 자동 초안 | CS 담당 | 24시간 | 가격 |
 | C8 | 리뷰·평점 (불만) | 🟠 담당자 필수 | CS 리드 | 24시간 | 불만 |
 | C9 | B2B·대량 구매 | 🔵 영업 전달 | 해외영업 {확인 필요} | 48시간 | — |
-| C10 | 기타·협업 제안 | ⚪ 다른 파트 전달 | 인플루언서·파트너 (혁주·효선) | 72시간 | — |
+| C10 | 기타·협업 제안 | ⚪ 다른 파트 전달 | 인플루언서·파트너 (혁주) | 72시간 | — |
 
 - 분류 순서: C1 → C9 → C8 → C10 → C2 → C3 → C4 → C5 → C7 → C6. 아무것도 안 걸리면 C10
 - '자동 초안'은 초안을 자동으로 만든다는 뜻이며, 최종 승인은 다른 유형과 똑같이 사람이 합니다
@@ -692,7 +672,7 @@ dev/
 | 공개 | `classify(text)` → `'C1'`~`'C10'` | 분류 테스트 · 다른 파트 참고용 |
 | 불러 씀 | `REBOOT.use('compliance').review(text, { channel: 'cs' })` | 컴플라이언스 |
 | 불러 씀 | `REBOOT.use('settings').facts()` → 제품명·맛·성분으로 템플릿 빈칸 채우기 | 설정 (이현경) |
-| 넘김 | C10 협업 제안 | 인플루언서·파트너 (혁주 · 효선) |
+| 넘김 | C10 협업 제안 | 인플루언서·파트너 (혁주) |
 | 넘김 | C9 B2B·대량 구매 | 해외영업 담당 {확인 필요: 팀 내 담당} |
 
 ### 부작용 접수
@@ -956,6 +936,9 @@ Prevents hangovers.
 | 2026-10-22 | 단일 HTML을 `core/` + `parts/<파트ID>/` 구조로 나눠서 작업 | 전체 |
 | 2026-10-22 | **기준 구현은 HTML 대시보드** · HTML 코드를 main 브랜치에 Pull Request로 합침 (Python Streamlit 방식은 보류) | 전체 |
 | 2026-10-22 | 컴플라이언스·CS를 먼저 완성하고, 나머지 파트는 각자 정리 후 브랜치 커밋으로 취합 | 전체 |
+| 2026-10-23 | 담당 확정: 이현경(로그인·홈·인사이트·설정) · 소준희(컴플라이언스·CS) · 나원(콘텐츠) · 혁주(파트너·성과분석). 강현서·양효선은 다른 업무 | 전체 |
+| 2026-10-23 | 역할: 팀장 소준희 · PM 이현경·강현서 | 전체 |
+| 2026-10-23 | 기준 구현은 Flask 대시보드(`reboot-dashboard/`). Git은 개인 이니셜 브랜치 → `pre_main` PR, 모든 병합은 Merge commit (저장소 `RULE.md`) | 전체 |
 | 2026-10-22 | CS Gmail 연동은 우선 개인 메일 계정으로 | cs |
 
 ### 정할 것 (회의 안건)
@@ -1046,6 +1029,7 @@ Prevents hangovers.
 | 2026-10-22 | v0.2.2 | 프로젝트 역할(총괄 대표 PM·홈페이지 PM), 초안 → 수정 인계 규칙 | 소준희 |
 | 2026-10-22 | v0.3 | 팀 README와 컴플라이언스·CS README를 **HTML 기준 하나로 통합** · 규제 조사 요약, 규제 모니터링 출처, 기술 구현 가능성 점검, 실행 기록 추가 · 키 발급 가이드와 취합 프롬프트를 부록으로 합쳐 **md 파일 1개**로 관리 | 소준희 |
 | (예정) | v0.4 | 컴플라이언스·CS `parts/` 이관 + 최소 `core/` | 소준희 |
+| 2026-10-23 | v0.5 | 담당·역할 확정, Git 규칙을 저장소 `RULE.md`(개인 이니셜 브랜치 → pre_main)에 맞춤 | HK |
 | (예정) | v0.5 | 나머지 파트 브랜치 취합 | 각 파트 담당 |
 
 ---

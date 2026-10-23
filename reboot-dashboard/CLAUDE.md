@@ -7,6 +7,7 @@
 - 구조: Flask 서버(`server/`) + 공통 화면(`core/`) + 파트 화면(`parts/<파트ID>/`) · Render에 배포 (저장소 맨 위 `../render.yaml`, `rootDir: reboot-dashboard`)
 - 작업자는 코딩 비전공자 → **설명은 쉬운 말로, 짧게** (바뀐 점 3줄 + 표)
 - 자세한 개발 규칙: `docs/DEV_GUIDE.md` · 파트별 설명서: `docs/<파트ID>/README.md`
+- 저장소 공통 규칙(브랜치·PR·AI 사용·담당)은 저장소 맨 위 `CLAUDE.md`·`RULE.md`·`AI_RULES.md`를 따름. 담당: home·insights·settings·로그인 = 이현경 · content = 나원 · compliance·cs = 소준희 · partners·performance = 혁주
 
 ## 이미 정한 것 (바꾸지 않음)
 - 미국 제품 분류는 **일반식품(Conventional Food)**. 건강기능식품은 비교용 옵션
@@ -19,7 +20,7 @@
 - **자기 파트 폴더만 수정**: `parts/<파트ID>/` · `server/<파트ID>/` · `tests/test_<파트ID>.py` · `docs/<파트ID>/` · `data/<파트ID>/`
 - 공통 파일(`core/`, `server/` 바로 아래 파일, `server/core|auth|catalog/`, `server/templates/`, `requirements.txt`, 저장소 맨 위의 `render.yaml`·`.github/`)은 공통 담당만. 필요하면 고치지 말고 **"공통 요청 Issue 문안"**으로 써 줌
 - 다른 파트 데이터는 `REBOOT.use('<파트ID>')`(화면) 또는 공용 API(`/api/seasons` · `/api/facts` …)로만
-- 고치기 전에 **바꿀 파일과 이유를 먼저 보여 주고 허락받기**. 한 번에 한 가지 작업, 작업마다 새 브랜치 `<파트ID>/<할일>`
+- 고치기 전에 **바꿀 파일과 이유를 먼저 보여 주고 허락받기**. 한 번에 한 가지 작업. 브랜치는 **개인 이니셜 브랜치**(예: `NW`)를 계속 쓰고 `pre_main`으로 PR, 작업 종류는 커밋 타입(`feat:`·`fix:`)으로 구분 (저장소 맨 위 `RULE.md` §3·§4)
 
 ## 하지 않는 것
 - npm · React · 빌드 도구 도입, `type="module"`·`import` (팀 README 3장)
