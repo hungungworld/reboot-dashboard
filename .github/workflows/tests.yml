@@ -1,13 +1,10 @@
 # PR마다 자동 확인: 서버 테스트(pytest) + 파트 JS 문법 (node --check)
-# 대시보드 코드는 reboot-dashboard/ 폴더에 있어 모든 명령을 그 폴더에서 실행합니다.
+# 대시보드 코드는 저장소 맨 위에 있습니다.
 name: tests
 on:
   pull_request:
   push:
     branches: [main]
-defaults:
-  run:
-    working-directory: reboot-dashboard
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -15,9 +12,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version-file: reboot-dashboard/.python-version
+          python-version-file: .python-version
           cache: pip
-          cache-dependency-path: reboot-dashboard/requirements*.txt
+          cache-dependency-path: requirements*.txt
       - name: 의존성 설치
         run: pip install -r requirements-dev.txt
       - name: 서버 테스트

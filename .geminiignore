@@ -1,4 +1,4 @@
-# Gemini CLI가 읽지 않을 파일 (AI_RULES.md §10.4, 공통 영역)
+# Gemini CLI가 읽지 않을 파일 (RULE.md §10.2, 공통 영역)
 .env
 .env.*
 !.env.example
