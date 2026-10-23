@@ -17,6 +17,18 @@ def test_ko_requires_items(auth_client):
     assert auth_client.post("/api/compliance/ko", json={"items": []}).status_code == 400
 
 
+def test_translate_without_key(auth_client):
+    res = auth_client.post("/api/compliance/translate", json={"text": "파티 전에 가볍게 챙기는 젤리"})
+    assert res.status_code == 503
+    assert "ANTHROPIC_API_KEY" in res.get_json()["error"]
+
+
+def test_translate_input_checks(auth_client):
+    assert auth_client.post("/api/compliance/translate", json={"text": "  "}).status_code == 400
+    assert auth_client.post("/api/compliance/translate", json={"text": "가" * 2001}).status_code == 400
+    assert auth_client.post("/api/compliance/translate", data="x", content_type="text/plain").status_code == 415
+
+
 def test_cs_draft_blocks_todo_placeholders(auth_client):
     res = auth_client.post("/api/cs/gmail/draft", json={"message_id": "abc12345", "body": "Hi [확인 필요: 주문번호]"})
     assert res.status_code == 400 and "확인 필요" in res.get_json()["error"]

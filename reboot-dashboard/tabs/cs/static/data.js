@@ -12,17 +12,16 @@
     version: '2026-10-23',
 
     // 판매 제품 4종 (2026-10-23 팀 표 기준). 답변 템플릿의 {product}·{flavor}·{pack}을 채웁니다.
-    // en이 null이거나 flavorsFinal이 false면 [확인 필요]로 남아 최종 승인이 막힙니다 (내부 제품명 미정 · 맛은 임시).
-    // 저당 제품 영문 표기는 컴플라이언스 R11('low sugar' 금지)·R12(당 강조 표시 조건) 확인 후 정합니다.
+    // en은 2026-10-23 팀 제품표의 내부 제품명. flavorsFinal이 false면 맛이 [확인 필요]로 남아 최종 승인이 막힙니다 (맛은 임시).
     brand: { name: 'REBOOT', slogan: 'Restart Your Day' },
     products: [
-      { id: 'jelly', ko: '젤리', en: 'REBOOT jelly sticks', form: 'stick jelly', flavors: ['lime', 'cherry', 'peach', 'lemon'], flavorsFinal: false,
+      { id: 'jelly', ko: '젤리', en: 'Reboot Jelly Original', form: 'stick jelly', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
         pack: 'individually wrapped sticks in one pack', unit: 'stick', sugarReduced: false },
-      { id: 'jelly-ls', ko: '저당 젤리', en: null, form: 'stick jelly', flavors: ['lemon-lime'], flavorsFinal: false,
+      { id: 'jelly-ls', ko: '저당 젤리', en: 'Reboot Jelly Balance', form: 'stick jelly', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
         pack: 'individually wrapped sticks in one pack', unit: 'stick', sugarReduced: true },
-      { id: 'drink', ko: '음료', en: 'REBOOT drink', form: 'non-carbonated drink', flavors: ['lemon-lime'], flavorsFinal: false,
+      { id: 'drink', ko: '음료', en: 'Reboot Drink Original', form: 'non-carbonated drink', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
         pack: '6 small bottles per box', unit: 'bottle', sugarReduced: false },
-      { id: 'drink-ls', ko: '저당 음료', en: null, form: 'non-carbonated drink', flavors: ['lemon-lime'], flavorsFinal: false,
+      { id: 'drink-ls', ko: '저당 음료', en: 'Reboot Drink Balance', form: 'non-carbonated drink', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
         pack: '6 small bottles per box', unit: 'bottle', sugarReduced: true }
     ],
     // 문의 본문으로 제품 추정 (순서대로 검사, 못 찾으면 '' → 담당자가 선택)
