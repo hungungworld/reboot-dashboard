@@ -24,7 +24,7 @@
 ## 1. 내 PC에서 실행 (Windows)
 
 ```powershell
-cd reboot-us-dashboard
+cd reboot-dashboard
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
@@ -41,7 +41,7 @@ python -m server              # → http://127.0.0.1:5000
 
 ## 2. Render 배포
 
-1. **GitHub 저장소** — https://github.com/hungungworld/reboot-us-dashboard (대시보드 코드가 저장소 맨 위에 있음). `.env` · `instance/` · `dev/`는 `.gitignore`로 제외됩니다.
+1. **GitHub 저장소** — https://github.com/hungungworld/reboot-dashboard (대시보드 코드가 저장소 맨 위에 있음). `.env` · `instance/` · `dev/`는 `.gitignore`로 제외됩니다.
    저장소 맨 위의 `render.yaml`(Blueprint)과 `.github/workflows/`를 그대로 씁니다.
 2. **Render → New → Blueprint** → 저장소 선택 → **브랜치는 `main`** (저장소 기본 브랜치 `pre_main`이 골라져 있으면 바꿈) → `render.yaml`이 인식됩니다. 파이썬 버전은 `PYTHON_VERSION`(3.14.8)으로 고정되어 있습니다.
 3. 처음 만들 때 묻는 값 입력: `ADMIN_EMAIL`, `ADMIN_PASSWORD`(8자 이상), `ADMIN_NAME` — 나머지 키는 비워도 됩니다 (배포 후 화면에서 입력 가능).

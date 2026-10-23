@@ -76,8 +76,8 @@ reboot/                       ← 저장소 맨 위
 ## 3. 처음 설정 (Windows · 한 번만)
 
 ```cmd
-git clone https://github.com/hungungworld/reboot-us-dashboard.git
-cd reboot-us-dashboard
+git clone https://github.com/hungungworld/reboot-dashboard.git
+cd reboot-dashboard
 conda activate myenv          (또는: python -m venv .venv → .venv\Scripts\activate)
 pip install -r requirements-dev.txt
 copy .env.example .env        (메모장으로 .env를 열어 키·관리자 계정 채우기)
