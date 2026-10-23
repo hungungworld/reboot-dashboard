@@ -41,6 +41,7 @@
 .part-home .market-item p a:hover { text-decoration: underline; }
 .part-home .home-links a { color: var(--muted-2); text-decoration: underline; text-underline-offset: 2px; }
 .part-home .home-links a:hover { color: var(--ink); }
+.part-home .home-news-more { margin-top: 10px; }
 .part-home .home-news-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-3); flex-wrap: wrap; }
 .part-home .home-errors { margin-top: 10px; font-size: 11px; color: var(--red); }
 .part-home .home-errors summary { cursor: pointer; }

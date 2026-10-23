@@ -11,17 +11,17 @@
 | KPI 4칸 | 이번 주 매출 · ROAS (`REBOOT.use('performance').weekSummary()`, 샘플이면 "샘플 데이터") · 진행 중인 캠페인 (`content.campaigns()`가 공개되면) 또는 준비 중인 시즌 수 · 검토가 필요한 업무 (CS 미처리 + 컴플라이언스 검토 대기, 출처 표시) |
 | 이번 주 성과 | 최근 7일 / 직전 7일 일별 매출(라임 실선) · 광고비(점선). "자세히 보기" → 성과분석 |
 | 시즌 | 다가오는 미국 시즌 카드 3개(준비 기간이면 강조) · 콘텐츠 캘린더(달 이동 · 오늘 · 다가오는 일정 6개). `REBOOT.expose('home', { seasons })` |
-| 뉴스 동향 | GDELT DOC 2.0 배치 수집 → `home_news_articles`(URL 중복 제거, 90일 보관) → TimelineVol 최근 7일 vs 그 전 7일 (1.5배 이상 = 보도량 급증) → OpenAI 키가 있으면 관련성 필터링 + 동향 3~5개 요약(근거 기사 링크). 키가 없으면 최근 기사 제목 + "AI 요약 미연결". 실패하면 마지막 결과 + "업데이트 실패" |
+| 뉴스 동향 | 구글 뉴스 RSS 수집(검색어 5개, 최근 14일, 제외어가 제목에 있으면 버림) → `home_news_articles`(URL·제목 중복 제거, 90일 보관) → 검색어별 기사 수 최근 7일 vs 그 전 7일 (1.5배 이상 = 보도 급증) → OpenAI 키가 있으면 관련 기사만 골라 최대 8개 한국어 카드(제목 · 한 줄 요약 · 주제). 키가 없으면 최근 기사 제목. 화면은 처음 3개 + '더보기'. 실패하면 마지막 결과 + "업데이트 실패" |
 | 이번 주 To-Do | 주(월~일)마다 처음 열 때 자동 생성 — 키가 있으면 AI(시즌·뉴스·파트 현황 종합), 없거나 실패하면 규칙. 항목마다 근거 · 담당 메뉴 링크 · AI/규칙/직접 배지. 체크 · 직접 추가 · 삭제 · 다시 만들기(완료·직접 항목은 유지) |
 | 기타 | 최근 워크스페이스 활동(작업 로그 5개) · 상단 메뉴 숫자 = 이번 주 남은 할 일 |
 
 ## 쓰는 법
 
-- **뉴스 지금 수집**: 버튼 → 서버가 뒤에서 수집(요청 간격 5초, GDELT 응답이 느려 보통 2~5분) → 화면이 알아서 바뀜. 화면을 열 때는 GDELT를 부르지 않습니다.
+- **뉴스 지금 수집**: 버튼 → 서버가 뒤에서 수집(보통 1분 안팎) → 화면이 알아서 바뀜. 화면을 열 때는 구글 뉴스를 부르지 않습니다.
 - **하루 1회 자동**: `POST /api/jobs/daily` (헤더 `X-Cron-Token`) → 뉴스 수집 → 이번 주 To-Do가 없으면 생성.
-- **쿼리 고치기**: `tabs/home/data/queries.json` — OR는 괄호로, 구문은 큰따옴표, 제외어는 `-"drunk driving"`. 요청 간격은 `GDELT_REQUEST_INTERVAL_SEC`(5초보다 짧게는 안 됨).
+- **검색어 고치기**: `tabs/home/data/queries.json` — `groups`(검색어 묶음) · `exclude`(제목에 있으면 버리는 단어) · `when`(기간) · `surgeRatio`(급증 기준). 고친 뒤 '지금 수집'으로 확인.
 - **API**: `GET /api/home/news` · `POST /api/home/news/collect` · `GET /api/home/news/status` · `GET·POST /api/home/todos` · `POST /api/home/todos/generate` · `PATCH·DELETE /api/home/todos/<id>`
-- **테스트**: `pytest tabs/home/tests/test_home.py` (GDELT·OpenAI는 가짜 응답, 인터넷 없이)
+- **테스트**: `pytest tabs/home/tests/test_home.py` (구글 뉴스·OpenAI는 가짜 응답, 인터넷 없이)
 
 ## 아직 안 됨 · 메모
 
