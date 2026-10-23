@@ -16,7 +16,7 @@
   const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
   const DAY = 86400000;
 
-  const S = { root: null, view: '', briefing: false, resumeLoaded: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, poll: null, calMonth: '', watching: false };
+  const S = { root: null, view: '', briefing: false, resumeLoaded: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: false, poll: null, calMonth: '', watching: false };
   const ref = name => S.root && S.root.querySelector(`[data-ref="${name}"]`);
 
   /* ───────── 날짜 (YYYY-MM-DD 문자열, UTC로 계산) ───────── */
@@ -406,6 +406,14 @@
     return `<div class="home-signals" aria-label="보도량 급증">${up.map(s =>
       `<span class="home-signal" title="최근 7일 기사 ${esc(s.recent)}건 · 그 전 7일 ${esc(s.previous)}건">${icon('up')} ${esc(s.label)} ${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '새로 등장'}</span>`).join('')}</div>`;
   }
+  // 뉴스 카드는 처음 3개만, 나머지는 '더보기'로 펼침
+  const NEWS_SHOW = 3;
+  function newsList(list) {
+    if (list.length <= NEWS_SHOW) return list.join('');
+    return `${list.slice(0, NEWS_SHOW).join('')}<div ${S.newsOpen ? '' : 'hidden'}>${list.slice(NEWS_SHOW).join('')}</div>
+      <button type="button" class="btn small home-news-more" data-act="news-more" aria-expanded="${S.newsOpen}">${S.newsOpen ? '접기' : `더보기 (${list.length - NEWS_SHOW}개)`}</button>`;
+  }
+
   function paintNews() {
     const n = S.news;
     if (!n) return;
@@ -424,14 +432,14 @@
         <div class="market-item"><div class="market-symbol">${icon(a.surge ? 'up' : 'globe')}</div>
           <div><p>${articleLink(a, a.titleKo || a.title)}</p><small>${esc(a.summaryKo)}</small>
           <small class="home-links">${[a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
-          <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`).join('');
+          <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`);
       body.innerHTML = `${n.ai.headline ? `<div class="home-headline">${icon('spark')}<span>${esc(n.ai.headline)}</span></div>` : ''}
-        ${signalsHtml(n)}${items || '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}`;
+        ${signalsHtml(n)}${items.length ? newsList(items) : '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}`;
     } else {
-      const arts = (n.articles || []).slice(0, 5).map(a => `
+      const arts = (n.articles || []).map(a => `
         <div class="market-item"><div class="market-symbol">${icon('globe')}</div>
-          <div><p>${articleLink(a, a.title)}</p><small>${esc(a.domain)}${a.groupLabel ? ` · ${esc(a.groupLabel)}` : ''} · ${esc(fmt.relative(a.date))}</small></div></div>`).join('');
-      body.innerHTML = `${signalsHtml(n)}${arts || '<p class="panel-note">최근 7일 기사가 없습니다.</p>'}
+          <div><p>${articleLink(a, a.title)}</p><small>${esc(a.domain)}${a.groupLabel ? ` · ${esc(a.groupLabel)}` : ''} · ${esc(fmt.relative(a.date))}</small></div></div>`);
+      body.innerHTML = `${signalsHtml(n)}${arts.length ? newsList(arts) : '<p class="panel-note">최근 7일 기사가 없습니다.</p>'}
         ${n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약 실패: ${esc(n.aiError)} — 다음 수집 때 다시 시도합니다.</p>` : '')
           : '<p class="panel-note mt-8">설정 › 연결에서 OPENAI_API_KEY를 넣으면 관련 기사만 골라 최대 8개를 한국어 제목·한 줄 요약으로 정리합니다. 지금은 최근 기사 제목만 보여 줍니다 (관련 없는 기사가 섞일 수 있음).</p>'}`;
     }
@@ -687,6 +695,7 @@
       else if (act === 'todo-add') { const f = ref('todo-form'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('[name="title"]').focus(); }
       else if (act === 'todo-cancel') { ref('todo-form').hidden = true; }
       else if (act === 'news-collect') collectNews(b);
+      else if (act === 'news-more') { S.newsOpen = !S.newsOpen; paintNews(); }
       else if (act === 'cal-prev') moveMonth(-1);
       else if (act === 'cal-next') moveMonth(1);
       else if (act === 'cal-today') { S.calMonth = ''; paintCalendar(); }
