@@ -1,8 +1,7 @@
 # Render Blueprint — Render 대시보드 → New → Blueprint → 이 저장소를 고르면 아래대로 만들어집니다.
 #
-# 저장소 구조: 이 파일은 저장소 맨 위(REBOOT/)에 있고, 대시보드 코드는 reboot-dashboard/ 폴더에 있습니다.
-#   rootDir: reboot-dashboard → 설치·실행 명령을 그 폴더에서 실행하고, 그 폴더 밖(팀 README 등)이 바뀌면 다시 배포하지 않습니다.
-#   reboot-dashboard/ 폴더만 따로 저장소로 올릴 때는 이 파일을 그 폴더로 옮기고 rootDir 줄을 지웁니다.
+# 저장소 구조: 대시보드 코드가 저장소 맨 위에 있어 설치·실행 명령을 맨 위에서 실행합니다.
+# 배포 브랜치는 main입니다 (Blueprint를 만들 때 Branch를 main으로 고름 · RULE.md §11).
 #
 # 비용 주의
 #   plan 0.5c-512mb(유료) + 영구 디스크 1GB 기준입니다. 로그인 계정·이력·업로드가 재배포 후에도 남습니다.
@@ -15,7 +14,6 @@ services:
   - type: web
     name: reboot-dashboard
     runtime: python
-    rootDir: reboot-dashboard
     plan: 0.5c-512mb
     region: singapore
     buildCommand: pip install -r requirements.txt
