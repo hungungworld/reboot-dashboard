@@ -54,7 +54,7 @@ def items_for(group):
                "source": f"{group.title()} Daily", "date": now - timedelta(hours=10 + i)} for i in range(2)]
     items.append({"url": f"https://{group}.example.com/crash", "title": "Two arrested after DUI crash", "source": "Local", "date": now})
     items.append({"url": "javascript:alert(1)", "title": "bad url", "source": "x", "date": now})
-    if group == "hangover":  # 최근 7일 6건 · 그 전 7일 1건 → 보도 급증
+    if group == "category":  # 최근 7일 6건 · 그 전 7일 1건 → 보도 급증
         items += [{"url": f"https://hangover.example.com/new-{i}", "title": f"Hangover trend {i}", "source": "Trend",
                    "date": now - timedelta(days=1, hours=i)} for i in range(3)]
         items.append({"url": "https://hangover.example.com/old", "title": "Old hangover story", "source": "Trend",
@@ -95,10 +95,52 @@ def good_responder(params):
 
 def test_queries_are_plain_search_terms():
     cfg = news.load_queries()
-    assert 3 <= len(cfg["groups"]) <= 5
+    assert len(cfg["groups"]) == 9  # 2026-10-24 팀 결정 (분야 7개 · 검색어 9개)
     for g in cfg["groups"]:
         assert g.get("label") and news.build_query(cfg, g) == g["query"]
+        assert g["kind"] in ("signal", "flow") and g["areaLabel"]
+    assert {g["area"] for g in cfg["groups"] if g["kind"] == "signal"} == {"category", "competitor", "regulation"}
     assert {"DUI", "drunk driving", "crash"} <= set(cfg["exclude"])
+
+
+@pytest.mark.parametrize("title, group, why", [
+    ("The AI hangover is coming for tech", None, "metaphor"),
+    ("Tariff hangovers hit retailers", None, "metaphor"),
+    ("Holiday hangovers: what actually helps", None, None),        # 진짜 숙취 기사는 남김
+    ("Can DHM help with a hangover?", None, None),
+    ("Provi Names Matthew Tucker as Chief Executive Officer", None, "personnel"),
+    ("Liquid I.V. hires agency for new campaign", None, None),      # 직책이 없으면 인사 소식 아님
+    ("Low-and-no consumption rises to 53% in UK", None, "foreign"),
+    ("US vs UK: non-alcoholic beer sales compared", None, None),     # 미국이 함께 나오면 남김
+    ("Two arrested after DUI crash", None, "incident"),
+    ("Police target alcohol sales to minors", None, "incident"),
+    ("숙취해소제 미국 진출", "kfood", None),                           # K-푸드만 한국어 허용
+    ("숙취해소제 미국 진출", "sober", "korean"),
+])
+def test_rule_filter(title, group, why):
+    cfg = news.load_queries()
+    groups = {g["id"]: g for g in cfg["groups"]}
+    assert news.make_filter(cfg)(title, groups.get(group)) == why
+
+
+def test_same_title_catches_mixed_up_ids():
+    assert news.same_title("FDA Finalizes NDI Guidance on Identity", "FDA Finalizes NDI Guidance on Identity and Safety Information")
+    assert not news.same_title("FDA Finalizes NDI Guidance on Identity", "Ads of the Week: 10 Campaigns That Caught Our Eye")
+
+
+def test_pick_guarantees_signal_slots_and_area_cap():
+    kinds = {"category": "signal", "regulation": "signal", "behavior": "flow", "sales": "flow"}.get
+    cands = ([{"id": i, "area": "behavior", "score": 7} for i in range(6)]
+             + [{"id": 10 + i, "area": "sales", "score": 6} for i in range(4)]
+             + [{"id": 20, "area": "category", "score": 2}, {"id": 21, "area": "category", "score": 1},
+                {"id": 22, "area": "category", "score": 1}, {"id": 30, "area": "regulation", "score": 0}])
+    out = news.pick(cands, kinds)
+    by = {}
+    for c in out:
+        by[c["area"]] = by.get(c["area"], 0) + 1
+    assert len(out) == 8
+    assert by == {"category": 2, "regulation": 1, "behavior": 3, "sales": 2}   # signal은 점수가 낮아도 자리 보장 · 분야는 3개까지
+    assert [c["score"] for c in out] == sorted((c["score"] for c in out), reverse=True)
 
 
 def test_client_parses_rss_and_retries(monkeypatch):
@@ -163,6 +205,7 @@ def test_news_before_first_collection(auth_client):
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False
     assert len(j["groups"]) >= 3 and "판매량" in j["limitNote"]
+    assert len(j["queryStats"]) == 9 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
 
 
 def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
@@ -179,12 +222,16 @@ def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
         assert shared.title == "Non-alcoholic drinks surge before Halloween"   # " - 매체명" 뗌
         assert "&amp;" not in HomeNewsArticle.query.filter(HomeNewsArticle.url.like("%story-0")).first().title
         assert HomeNewsArticle.query.filter(HomeNewsArticle.title.like("%DUI%")).count() == 0
+        counts = json.loads(run.counts)["category"]
+        assert counts["dropped"] == {"incident": 1} and counts["kept"] == counts["found"] - 1   # DUI 기사는 규칙으로 버림
         again = news.collect(trigger="manual", user_name="테스터")
         assert sum(c["new"] for c in json.loads(again.counts).values()) == 0
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "ok" and j["running"] is False and j["ai"] is None
     assert 0 < len(j["articles"]) <= 8 and all(a["url"].startswith("https://") for a in j["articles"])
-    assert j["signals"][0]["group"] == "hangover" and j["signals"][0]["surge"] is True
+    assert j["signals"][0]["group"] == "category" and j["signals"][0]["surge"] is True
+    hang = next(q for q in j["queryStats"] if q["id"] == "category")
+    assert hang["runs"] == 2 and hang["found"] > hang["kept"] > 0 and hang["picked"] == 0 and hang["replace"] is False
     assert not any(s["surge"] for s in j["signals"][1:])
     logs = auth_client.get("/api/worklog?part=home&kind=수집").get_json()["items"]
     assert logs and logs[0]["status"] == "완료" and logs[0]["user"] == "테스터"
@@ -244,6 +291,7 @@ def test_ai_filter_and_korean_items(fast, auth_client, monkeypatch):
     assert seen["kw"]["part"] == "home" and seen["user"]["signals"] and seen["user"]["articles"][0]["source"]
     j = auth_client.get("/api/home/news").get_json()
     assert j["aiReady"] is True and j["ai"]["headline"].startswith("핼러윈")
+    assert seen["user"]["articles"][0]["area"] and "why_ko" in seen["kw"]["schema"]["properties"]["articles"]["items"]["required"]
     assert len(j["ai"]["items"]) == 1  # 겹친 기사 · 없는 기사는 버림
     it = j["ai"]["items"][0]
     assert it["titleKo"] == "숙취 관련 보도 증가" and it["topic"] == "소비 트렌드" and it["surge"] is True
