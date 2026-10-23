@@ -577,19 +577,6 @@
       <div data-view-panel="start" role="tabpanel" hidden>
         <div class="intro-greeting"><h1>반가워요, ${esc(userName())}님.</h1>
           <div class="date"><b>${esc(longDate(today))}</b>오늘도 새로운 가능성을 만나보세요.</div></div>
-        <section class="intro-hero">
-          <div class="intro-copy">
-            <div class="intro-eyebrow"><i></i> YOUR NEXT CHAPTER</div>
-            <h2>다음 아이디어를,<br><span>새로운 성장으로.</span></h2>
-            <p>시장을 이해하고, 콘텐츠를 만들고, 좋은 파트너를 만나는 일.<br>리부트의 다음 이야기를 이곳에서 시작하세요.</p>
-            <div><button type="button" class="btn dark pill" data-go-view="briefing">오늘의 브리핑 열기 ${icon('arrow')}</button><a class="quiet-link" href="/dashboard/content">새 콘텐츠 만들기 ↗</a></div>
-          </div>
-          <div class="intro-art" aria-hidden="true">
-            <div class="intro-art-board"><div class="small-heading">GOOD IDEAS START HERE.</div><h3>A fresh start.<br>Every day.</h3>
-              <div class="intro-orbit"></div><div class="art-footer">THINK. CREATE. CONNECT.</div></div>
-            <div class="intro-art-label">${icon('spark')}<div><strong>Make your next move.</strong><small>A LITTLE IDEA. A NEW POSSIBILITY.</small></div></div>
-          </div>
-        </section>
         <div class="intro-section-head"><h2>오늘은 어디서 시작할까요?</h2><span>YOUR WORKSPACE, YOUR FLOW</span></div>
         <div class="launch-grid">${[
           ['01', '/dashboard/insights', 'globe', '시장을 살펴볼까요?', '고객의 목소리와 시장의 변화에서<br>새로운 기회를 발견하세요.'],
