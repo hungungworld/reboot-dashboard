@@ -71,7 +71,7 @@ python -m server              # → http://127.0.0.1:5000
 | 메뉴 | 파트 ID | 담당 | 구현된 것 | 실제 키·파일로 확인할 것 |
 |---|---|---|---|---|
 | 로그인 | `auth` | 이현경 | 로그인 README 명세 그대로 (테스트 체크리스트 11개 통과) · 계정 관리 | — |
-| 홈 · 데일리 브리핑 | `home` | 이현경 | 화면 3개: 시작하기 · 데일리 브리핑(히어로 · 시즌 카드 · KPI 4 · 이번 주 성과 차트 · To-Do(AI/규칙, 근거 표시) · 미국 주류 업계 뉴스(GDELT 배치 → AI 요약·급증 신호) · 최근 활동) · 콘텐츠 캘린더(시즌·준비 시작일) | GDELT 실수집 (이 PC에서는 429 제한) · OpenAI 요약 |
+| 홈 · 데일리 브리핑 | `home` | 이현경 | 화면 3개: 시작하기 · 데일리 브리핑(히어로 · 시즌 카드 · KPI 4 · 이번 주 성과 차트 · To-Do(AI/규칙, 근거 표시) · 미국 주류 업계 뉴스(구글 뉴스 RSS → AI 기사별 한국어 요약·보도 급증) · 최근 활동) · 콘텐츠 캘린더(시즌·준비 시작일) | 구글 뉴스 RSS 실수집 · OpenAI 요약 |
 | 시장 · 고객 인사이트 | `insights` | 이현경 | 주간 리뷰(규칙 6개로 이번 주 액션) · 월간 리뷰 · 데이터 6탭 · 수집기(SerpApi Amazon·Trends · YouTube · Firecrawl Weee!) · 1회분 단가 · Word/Excel | 각 API 실제 응답 형식 · Weee! 주소·알디콤 ASIN 입력 · 정확도 검증 탭은 자리만 |
 | 콘텐츠 제작 | `content` | 나원 | 5항목 시트 · AI 대화(서버가 변경안 검증) · 확정/제안/미정 · A/B/C 버전·부분 수정 · 이미지 작업 · 컴플라이언스 점검 · 내 캠페인 · ZIP | OpenAI 실호출(JSON 스키마·이미지 모델) · LangGraph 대신 순수 Python 흐름 · 영상은 구성안만 |
 | 컴플라이언스 | `compliance` | 소준희 | 기존 `tabs/compliance/static` + 서버 API(AI 2차 판정 · 한글 요약 · 모니터링 수집) · 시연본 경고장 원문 53개 · 안전 문구 7개 이관 | Claude 키 · 규칙 검증에서 PASS로 나오는 경고장 문구 5개 → 규칙 보강(파트 할 일 2단계) |
@@ -83,7 +83,7 @@ python -m server              # → http://127.0.0.1:5000
 공용 데이터(공통 담당): 시즌 캘린더 `/api/seasons` (`data/seasons.csv`로 시작) · 브랜드·제품 팩트시트 `/api/facts` (`data/products.json`, 콘텐츠 README 3장의 2026-10-23 기준) · 작업 로그 `/api/worklog` · 계정 `/api/users`
 
 **확인한 것**: pytest 221개 · JS 문법 18개 파일 · core.js·성과 계산 단위 확인 · 컴플라이언스·CS 점검(소준희 로컬 `node dev/test_parts.js` — 경고장 문구 PASS 5개만 남음) · 8개 메뉴 브라우저 화면(콘솔 오류 0) · 모바일 폭 · 다크 테마 · openFDA 실호출(키 없이 리콜 8건).
-키가 필요한 외부 연동(OpenAI · Claude · SerpApi · YouTube · Firecrawl · KEXIM · Gmail · Regulations.gov · CourtListener)과 GDELT(이 PC에서는 429 제한)는 **가짜 응답으로만 시험**했습니다. 실제 키로 한 번씩 확인이 필요합니다.
+키가 필요한 외부 연동(OpenAI · Claude · SerpApi · YouTube · Firecrawl · KEXIM · Gmail · Regulations.gov · CourtListener)은 **가짜 응답으로만 시험**했습니다. 실제 키로 한 번씩 확인이 필요합니다.
 
 ---
 

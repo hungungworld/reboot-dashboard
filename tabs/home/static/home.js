@@ -1,7 +1,7 @@
 /* 홈 · 데일리 브리핑 (담당: 이현경) — 설명서 tabs/home/docs/README.md · 메모 tabs/home/docs/NOTES.md
    화면 3개 (시안 v3 · 왼쪽 메뉴): 시작하기 · 데일리 브리핑 · 콘텐츠 캘린더
    데일리 브리핑: 히어로(뉴스 신호 · 할 일 · 다음 시즌) → 시즌 카드 3 → KPI 4 → 왼쪽: 성과 차트 · 업계 뉴스 / 오른쪽: To-Do · 최근 활동
-   - 뉴스: 저장된 결과만 읽음 (GDELT는 '지금 수집' 버튼·하루 1회 작업만 부름)
+   - 뉴스: 저장된 결과만 읽음 (구글 뉴스는 '지금 수집' 버튼·하루 1회 작업만 부름)
    - To-Do: 그 주 처음 열면 자동 생성 (OpenAI 키가 없으면 규칙), 항목마다 근거 표시
    다른 파트에 공개: REBOOT.use('home').seasons() — 시즌 캘린더(D-day · 준비 기간 포함) */
 (function (global) {
@@ -404,7 +404,7 @@
     const up = (n.signals || []).filter(s => s.surge);
     if (!up.length) return (n.signals || []).length ? '<p class="panel-note home-signal-none">보도량 급증 키워드 없음 (최근 7일 vs 그 전 7일)</p>' : '';
     return `<div class="home-signals" aria-label="보도량 급증">${up.map(s =>
-      `<span class="home-signal" title="최근 7일 평균 ${esc(s.recent)} · 그 전 7일 ${esc(s.previous)} (전체 기사 대비 %)">${icon('up')} ${esc(s.label)} ${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '새로 등장'}</span>`).join('')}</div>`;
+      `<span class="home-signal" title="최근 7일 기사 ${esc(s.recent)}건 · 그 전 7일 ${esc(s.previous)}건">${icon('up')} ${esc(s.label)} ${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '새로 등장'}</span>`).join('')}</div>`;
   }
   function paintNews() {
     const n = S.news;
@@ -414,28 +414,30 @@
     const btn = ref('news-collect');
     busy(btn, !!n.running);
     if (!n.lastSuccessAt && !(n.articles || []).length) {
-      const msg = n.running ? '처음 수집하는 중이에요 (보통 2~5분).'
-        : n.status === 'never' ? "아직 수집한 뉴스가 없어요. '지금 수집'을 누르면 보통 2~5분 걸립니다."
+      const msg = n.running ? '처음 수집하는 중이에요 (보통 1분 안팎).'
+        : n.status === 'never' ? "아직 수집한 뉴스가 없어요. '지금 수집'을 누르면 보통 1분 안팎 걸립니다."
           : "아직 받은 뉴스가 없어요 (마지막 수집 실패). 잠시 뒤 '지금 수집'을 다시 눌러 주세요.";
       body.innerHTML = ui.empty(msg, 'globe');
     } else if (n.ai) {
-      const trends = (n.ai.trends || []).map(t => `
-        <div class="market-item"><div class="market-symbol">${icon((n.signals || []).some(s => s.surge && s.group === t.group) ? 'up' : 'globe')}</div>
-          <div><p>${esc(t.title)}</p><small>${esc(t.summary)}</small>
-          <small class="home-links">${t.groupLabel ? `${esc(t.groupLabel)} · ` : ''}${t.articles.slice(0, 3).map(a => articleLink(a, a.domain || '원문')).join(' · ')}</small></div></div>`).join('');
+      // 기사 카드: 기존 동향 카드와 같은 모양 (한국어 제목 · 한 줄 요약 · 주제/보도 급증 · 매체 · 날짜 · 영어 원제목)
+      const items = (n.ai.items || []).map(a => `
+        <div class="market-item"><div class="market-symbol">${icon(a.surge ? 'up' : 'globe')}</div>
+          <div><p>${articleLink(a, a.titleKo || a.title)}</p><small>${esc(a.summaryKo)}</small>
+          <small class="home-links">${[a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
+          <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`).join('');
       body.innerHTML = `${n.ai.headline ? `<div class="home-headline">${icon('spark')}<span>${esc(n.ai.headline)}</span></div>` : ''}
-        ${signalsHtml(n)}${trends || '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 동향을 찾지 못했습니다.</p>'}`;
+        ${signalsHtml(n)}${items || '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}`;
     } else {
       const arts = (n.articles || []).slice(0, 5).map(a => `
         <div class="market-item"><div class="market-symbol">${icon('globe')}</div>
           <div><p>${articleLink(a, a.title)}</p><small>${esc(a.domain)}${a.groupLabel ? ` · ${esc(a.groupLabel)}` : ''} · ${esc(fmt.relative(a.date))}</small></div></div>`).join('');
       body.innerHTML = `${signalsHtml(n)}${arts || '<p class="panel-note">최근 7일 기사가 없습니다.</p>'}
         ${n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약 실패: ${esc(n.aiError)} — 다음 수집 때 다시 시도합니다.</p>` : '')
-          : '<p class="panel-note mt-8">설정 › 연결에서 OPENAI_API_KEY를 넣으면 관련 기사만 골라 핵심 동향 3~5개로 요약합니다. 지금은 최근 기사 제목만 보여 줍니다 (관련 없는 기사가 섞일 수 있음).</p>'}`;
+          : '<p class="panel-note mt-8">설정 › 연결에서 OPENAI_API_KEY를 넣으면 관련 기사만 골라 최대 8개를 한국어 제목·한 줄 요약으로 정리합니다. 지금은 최근 기사 제목만 보여 줍니다 (관련 없는 기사가 섞일 수 있음).</p>'}`;
     }
     const last = n.lastRun;
     const bits = [];
-    if (n.running) bits.push('GDELT에서 수집 중… 끝나면 자동으로 바뀝니다');
+    if (n.running) bits.push('구글 뉴스에서 수집 중… 끝나면 자동으로 바뀝니다');
     else if (last) {
       bits.push(`수집 ${fmt.datetime(last.finishedAt || last.startedAt)}${last.trigger === 'daily' ? ' (자동)' : ''}`);
       if (n.status === 'failed' && n.lastSuccessAt) bits.push(`마지막 성공 ${fmt.datetime(n.lastSuccessAt)}`);
@@ -475,7 +477,7 @@
     busy(btn, true);
     try {
       await REBOOT.api('/api/home/news/collect', {});
-      toast('뉴스 수집을 시작했습니다. GDELT 요청 간격 때문에 보통 2~5분 걸립니다.');
+      toast('뉴스 수집을 시작했습니다. 보통 1분 안팎 걸립니다.');
       S.news = Object.assign({}, S.news, { running: true });
       paintNews();
       startPolling();
