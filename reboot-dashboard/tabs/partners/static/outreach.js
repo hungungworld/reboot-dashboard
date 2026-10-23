@@ -207,17 +207,14 @@
     }
     if (!el.isConnected) return;
     const st = { el, data, ov, f: getFilters(), files: {} };
-    el.innerHTML = `${hero(ov)}<div data-ref="note"></div><div data-ref="import"></div><div data-ref="main"></div>`;
+    el.innerHTML = `${hero(ov)}<div data-ref="note"></div><div data-ref="main"></div><div data-ref="import"></div>`;
     if (importNote) {
       el.querySelector('[data-ref="note"]').innerHTML = importNote;
       importNote = null;
     }
     wireContacts(st);
-    if (!data.total) paintImport(st, true);
-    else {
-      paintMain(st);
-      if (wantImport) paintImport(st, false);
-    }
+    if (data.total) paintMain(st);
+    paintImport(st, !data.total, wantImport);
     wantImport = false;
   }
 
@@ -238,19 +235,20 @@
     </section>`;
   }
 
-  /* 업체 파일 가져오기 카드 (비어 있을 때는 빈 상태 화면) */
-  function paintImport(st, empty) {
+  /* 업체 파일 가져오기 (업체 목록 맨 아래 접기/펼치기 · 비어 있거나 scroll이면 펼쳐서 보여 줌) */
+  function paintImport(st, empty, scroll) {
     const box = st.el.querySelector('[data-ref="import"]');
     const im = st.data.imports || {};
-    const now = t => (im[t] && im[t].count ? `${fmt.num(im[t].count)}곳 · ${esc(im[t].file)} · ${esc(fmt.datetime(im[t].at))}` : '아직 없음');
+    const file = s => String(s || '').replace(/ · [0-9a-f]{8}$/, '');   // 기본 파일 표시에서 내용 해시는 뺌
+    const now = t => (im[t] && im[t].count ? `${fmt.num(im[t].count)}곳 · ${esc(file(im[t].file))} · ${esc(fmt.datetime(im[t].at))}` : '아직 없음');
     st.files = {};
-    box.innerHTML = `<section class="card ptn-out-import${empty ? ' is-empty' : ''}">
-      <div class="card-head"><h2>${empty ? '업체 파일을 올려 주세요' : '업체 파일 가져오기'}</h2>
-        ${empty ? badge('업체 0곳', 'orange') : '<button type="button" class="btn small ghost" data-act="import-close">닫기</button>'}</div>
-      <p class="panel-note">케이터링 CSV와 인플루언서 XLSX를 올리면 업체 컨택 · 협업 메일 · 판매 실적(더미)에 쓰입니다. 같은 구분의 파일을 다시 올리면 그 구분 목록만 새 파일로 바뀌고, 협업 이력은 그대로 남습니다.</p>
+    box.innerHTML = `<details class="card ptn-out-import${empty ? ' is-empty' : ''}"${empty || scroll ? ' open' : ''}>
+      <summary class="card-head"><h2>${empty ? '업체 파일을 올려 주세요' : '업체 파일 가져오기'}</h2>
+        ${empty ? badge('업체 0곳', 'orange') : `<span class="small muted">케이터링 ${now('케이터링')} · 인플루언서 ${now('인플루언서')}</span>`}</summary>
+      <p class="panel-note">기본 업체 파일(tabs/partners/data/contacts/)은 따로 올리지 않아도 자동으로 불러옵니다. 케이터링 CSV와 인플루언서 XLSX·CSV를 직접 올리면 그 구분 목록만 새 파일로 바뀌고, 협업 이력은 그대로 남습니다.</p>
       <div class="grid-2 ptn-out-drops mt-16">
         ${dropzone('catering', '🍽️ 케이터링 CSV', D.importHelp.catering, '.csv', now('케이터링'))}
-        ${dropzone('influencer', '📱 인플루언서 XLSX', D.importHelp.influencer, '.xlsx,.csv', now('인플루언서'))}
+        ${dropzone('influencer', '📱 인플루언서 XLSX·CSV', D.importHelp.influencer, '.xlsx,.csv', now('인플루언서'))}
       </div>
       <div class="flex wrap mt-16">
         <button type="button" class="btn lime" data-act="import-upload" disabled>${icon('upload')} 가져오기</button>
@@ -259,8 +257,8 @@
         <a class="link" href="/api/partners/template/influencer.xlsx" download>${icon('download')} 인플루언서 양식</a>
       </div>
       <p class="panel-note mt-8">공개된 업체 연락처만 올립니다. 예시 데이터는 가상 업체(example.com)이며 화면에 '예시' 배지로 표시되고, 판매 실적에는 쓰이지 않습니다.</p>
-    </section>`;
-    if (!empty) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    </details>`;
+    if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function dropzone(key, title, help, accept, current) {
@@ -498,8 +496,7 @@
         if (a === 'compose') {
           const c = st.data.items.find(x => x.id === act.dataset.id);
           if (c) compose(c);
-        } else if (a === 'import-open') paintImport(st, false);
-        else if (a === 'import-close') st.el.querySelector('[data-ref="import"]').innerHTML = '';
+        } else if (a === 'import-open') paintImport(st, !st.data.total, true);
         else if (a === 'import-upload') doImport(st, act);
         else if (a === 'example') loadExample(st, act);
         else if (a === 'reset-filters') {
@@ -1187,7 +1184,7 @@
 
   function freshGuide(type) {
     const g = D.guideDefaults[type] || D.guideDefaults[TYPES[1]];
-    return { v: 1, type, purpose: '', custom: '', schedule: g.schedule, must: g.must, deliverables: g.deliverables,
+    return { v: 1, type, products: [], purpose: '', custom: '', schedule: g.schedule, must: g.must, deliverables: g.deliverables,
       md: '', view: 'preview', ai: false, prev: '', attached: '' };
   }
   function getGuide() {
@@ -1230,6 +1227,8 @@
         <section class="card">
           <div class="card-head"><h2>📘 협업 가이드 초안</h2>
             <div class="seg" role="group" aria-label="협업 유형">${TYPES.slice().reverse().map(t => `<button type="button" data-gtype="${esc(t)}" aria-pressed="${g.type === t}">${D.typeIcon[t]} ${esc(t)}</button>`).join('')}</div></div>
+          <div class="field"><span class="field-label">협업 개요 · 제품 <small class="muted">(여러 개 선택 · 안 고르면 전체)</small></span>
+            <div class="chips" role="group" aria-label="제품">${(cfg.products || []).map(p => `<button type="button" class="chip" data-gproduct="${esc(p.id)}" aria-pressed="${(g.products || []).includes(p.id)}" title="${esc(p.form)}">${esc(p.name)}</button>`).join('') || '<span class="small muted">설정 › 팩트시트에 제품이 없습니다.</span>'}</div></div>
           <div class="field"><span class="field-label">협업 목적</span>
             <div class="chips" role="group" aria-label="협업 목적">${purposes.map(p => `<button type="button" class="chip" data-purpose="${esc(p)}" aria-pressed="${current === p}">${esc(p)}</button>`).join('')}
               <button type="button" class="chip" data-purpose="__custom" aria-pressed="${current === '__custom'}">✏️ 직접 입력</button></div>
@@ -1332,6 +1331,17 @@
       const t = e.target;
       const gt = t.closest('[data-gtype]');
       if (gt) return switchGuideType(st, box, gt.dataset.gtype);
+      const gp = t.closest('[data-gproduct]');
+      if (gp) {
+        const g = getGuide();
+        const id = gp.dataset.gproduct;
+        const set = new Set(Array.isArray(g.products) ? g.products : []);
+        if (set.has(id)) set.delete(id); else set.add(id);
+        g.products = [...set];
+        saveGuide(g);
+        gp.setAttribute('aria-pressed', String(set.has(id)));
+        return;
+      }
       const pp = t.closest('[data-purpose]');
       if (pp) {
         const g = getGuide();
@@ -1401,7 +1411,7 @@
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/guide/generate', {
-        type: g.type, purpose, schedule: g.schedule, must_include: g.must, deliverables: g.deliverables, banned: bannedList()
+        type: g.type, product_ids: g.products || [], purpose, schedule: g.schedule, must_include: g.must, deliverables: g.deliverables, banned: bannedList()
       });
       const gg = getGuide();
       Object.assign(gg, { md: out.markdown, ai: true, prev: '', view: 'preview', attached: '' });

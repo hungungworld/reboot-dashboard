@@ -15,6 +15,15 @@ from tabs.partners import importer, mailer, sales
 
 ROOT = Path(__file__).resolve().parents[3]  # reboot-dashboard/
 
+
+@pytest.fixture(autouse=True)
+def no_bundled_contacts(tmp_path, monkeypatch):
+    """기본 업체 파일(tabs/partners/data/contacts/) 대신 빈 폴더 — 각 테스트는 빈 목록에서 시작."""
+    d = tmp_path / "bundled-contacts"
+    d.mkdir()
+    monkeypatch.setattr(importer, "BUNDLED_DIR", d)
+    return d
+
 CATERING_CSV = (
     "No,Company Name,Contact Email,Phone Number,Official Website URL,Office Location,Category Focus,Why Relevant\n"
     "1,Festival Bar Co,mailto:info@festbar.example.com / backup@festbar.example.com,555-0100,festbar.example.com,"
@@ -180,6 +189,33 @@ def test_import_catering_csv_and_influencer_xlsx(auth_client):
     assert {"agency", "food_bev", "tiktok_dtc"} <= set(i1["tags"])
     assert {"ugc", "platform"} <= set(items["I002"]["tags"]) and items["I002"]["url"] == "https://beta.example.com"
     assert items["IX01"]["example"] is True and items["CX01"]["example"] is True and items["I001"]["example"] is False
+
+
+def test_bundled_files_load_automatically(auth_client, no_bundled_contacts):
+    d = no_bundled_contacts
+    (d / "catering.csv").write_text(CATERING_CSV, encoding="utf-8")
+    data = auth_client.get("/api/partners/contacts").get_json()
+    assert data["total"] == 3 and data["imports"]["케이터링"]["file"].startswith("기본 파일 · catering.csv")
+    assert data["imports"]["인플루언서"]["count"] == 0
+    # 파일 내용이 바뀌면 다시 불러옴 (협업 이력은 그대로)
+    (d / "catering.csv").write_text("".join(CATERING_CSV.splitlines(keepends=True)[:3]), encoding="utf-8")  # 테스트 행 뺌
+    assert auth_client.get("/api/partners/contacts").get_json()["total"] == 2
+    # 화면에서 직접 올린 파일은 기본 파일로 덮어쓰지 않음
+    upload(auth_client, catering=("mine.csv", CATERING_CSV.encode("utf-8")))
+    data = auth_client.get("/api/partners/contacts").get_json()
+    assert data["total"] == 3 and data["imports"]["케이터링"]["file"] == "mine.csv"
+    # 종류를 알 수 없는 파일은 건너뜀
+    (d / "notes.csv").write_text("foo,bar\n1,2\n", encoding="utf-8")
+    assert auth_client.get("/api/partners/overview").status_code == 200
+
+
+def test_repo_bundled_contacts_parse():
+    """저장소에 넣어 둔 기본 업체 파일이 머리글을 찾아 읽히는지 (내용 값은 보지 않음)."""
+    d = ROOT / "tabs" / "partners" / "data" / "contacts"
+    for f in sorted(d.glob("*.csv")):
+        raw = f.read_bytes()
+        recs, _ = importer.parse_file(importer.detect_type(f.name, raw), f.name, raw)
+        assert recs and all(r["name"] for r in recs)
 
 
 def test_xlsx_header_must_be_found(auth_client):
@@ -410,6 +446,21 @@ def test_guide_generate(auth_client, ai):
     assert "hangover cure" in call["user"] and "현장 샘플링" in call["user"]
 
 
+def test_guide_generate_selected_products_only(auth_client, ai):
+    cfg = auth_client.get("/api/partners/config").get_json()
+    ids = [p["id"] for p in cfg["products"]]
+    assert len(ids) >= 2 and all(p["name"] for p in cfg["products"])
+    fake = ai({"title": "가이드", "markdown": "## 1. 한 줄 요약\n> 요약"})
+    auth_client.post("/api/partners/guide/generate", json={"type": "인플루언서", "purpose": "제품 시딩·리뷰",
+                                                           "product_ids": [ids[1]]})
+    sent = json.loads(fake.calls[0]["user"])["brand_and_products"]["products"]
+    assert [p["internal_name"] for p in sent] == [cfg["products"][1]["name"]]
+    assert "Enjoy a brighter day with REBOOT" in fake.calls[0]["system"]
+    # 고르지 않으면 전체
+    auth_client.post("/api/partners/guide/generate", json={"type": "인플루언서", "purpose": "제품 시딩·리뷰"})
+    assert len(json.loads(fake.calls[1]["user"])["brand_and_products"]["products"]) == len(ids)
+
+
 # ───────── 이력 ─────────
 
 def test_history_manual_edit_delete(auth_client):
@@ -636,3 +687,11 @@ def test_partner_js_syntax():
     for f in sorted((ROOT / "tabs" / "partners" / "static").glob("*.js")):
         res = subprocess.run(["node", "--check", str(f)], capture_output=True, text=True, timeout=60)
         assert res.returncode == 0, f"{f.name}: {res.stderr}"
+
+
+def test_guide_prompt_fixed_summary_and_no_age_key_message():
+    from tabs.partners import prompts
+    system, _ = prompts.guide_messages("인플루언서", "제품 시딩·리뷰", "", "", "", [], {}, "", "2026-10-23")
+    assert f"> {prompts.GUIDE_SUMMARY}" in system and "{summary}" not in system
+    assert "never copy the format notes" in system and "must not include an adults-21+" in system
+    assert "hangover" not in prompts.GUIDE_SUMMARY.lower() and "숙취" not in prompts.GUIDE_SUMMARY

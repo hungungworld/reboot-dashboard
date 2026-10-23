@@ -14,6 +14,7 @@
 분류 키워드는 이 파일의 SUBCATEGORIES에서 고칩니다. 영어는 대소문자 무시·단어 앞부분 일치(3글자 이하는 단어 전체 일치), 한국어는 포함 여부.
 """
 import csv
+import hashlib
 import io
 import json
 import re
@@ -339,6 +340,51 @@ def detect_type(filename, raw):
         if "company name" in norm:
             return CATERING
     raise ImportFailed("파일 종류를 알 수 없습니다. 케이터링(Company Name) 또는 인플루언서(업체명) 머리글이 있어야 합니다.")
+
+
+# ───────── 기본 업체 파일 (자동 불러오기) ─────────
+
+BUNDLED_DIR = ROOT / "tabs" / "partners" / "data" / "contacts"
+BUNDLED_PREFIX = "기본 파일 · "
+
+
+def _bundled_label(name, raw):
+    return f"{BUNDLED_PREFIX}{name} · {hashlib.sha1(raw).hexdigest()[:8]}"
+
+
+def bundled_files():
+    """BUNDLED_DIR의 CSV·XLSX → {구분: (파일 이름, 내용)} (구분마다 이름순 첫 파일)"""
+    out = {}
+    if not BUNDLED_DIR.is_dir():
+        return out
+    for f in sorted(BUNDLED_DIR.iterdir()):
+        if f.suffix.lower() not in (".csv", ".xlsx") or not f.is_file():
+            continue
+        raw = f.read_bytes()
+        try:
+            t = detect_type(f.name, raw)
+        except ImportFailed:
+            continue
+        out.setdefault(t, (f.name, raw))
+    return out
+
+
+def sync_bundled():
+    """기본 파일을 DB에 반영: 구분이 비었거나, 기본 파일에서 가져온 목록인데 파일 내용이 바뀌었을 때만.
+    화면에서 직접 올린 파일(출처가 기본 파일이 아님)은 덮어쓰지 않습니다. 반영한 구분 목록을 돌려줌."""
+    loaded = []
+    for t, (name, raw) in bundled_files().items():
+        label = _bundled_label(name, raw)
+        cur = PartnerContact.query.filter_by(ptype=t).first()
+        if cur is not None and (cur.source_file == label or not cur.source_file.startswith(BUNDLED_PREFIX)):
+            continue
+        try:
+            recs, _ = parse_file(t, name, raw)
+        except ImportFailed:
+            continue
+        replace_contacts(t, recs, label, "자동")
+        loaded.append(t)
+    return loaded
 
 
 def replace_contacts(ptype, recs, source_file, user=""):
