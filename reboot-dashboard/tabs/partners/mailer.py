@@ -111,9 +111,10 @@ def send(msg, sender, password):
 
 # ───────── 답장 · 반송 확인 ─────────
 
-def check(records, sender, password):
+def check(records, sender, password, own_ids=()):
     """records: [{id, message_id, to, subject, at(UTC)}] → [{id, status('회신 받음'|'반송'), at, from, subject, body,
-    message_id, first, estimated, failed}] — 찾은 것만."""
+    message_id, first, estimated, failed}] — 찾은 것만.
+    own_ids: 우리가 보낸 메일의 Message-ID 목록 (자기 자신에게 보낸 테스트에서 우리 메일을 회신으로 착각하지 않게)."""
     try:
         imap = connect_imap()
     except (OSError, imaplib.IMAP4.error):
@@ -129,7 +130,7 @@ def check(records, sender, password):
         me = sender.lower()
         found = {}
         for rec in records:
-            hit = _find_reply(imap, rec, me)
+            hit = _find_reply(imap, rec, me, own_ids)
             if hit:
                 found[rec["id"]] = hit
         for hit in _find_bounces(imap, records, found):
@@ -314,8 +315,9 @@ def _result(rec, m, status, estimated):
             "failed": failed_recipients(m) if status == "반송" else []}
 
 
-def _find_reply(imap, rec, me):
+def _find_reply(imap, rec, me, own_ids=()):
     mid = str(rec.get("message_id") or "").strip()
+    to_me = me in {a.lower() for a in _addresses(rec.get("to"))}   # 내 Gmail → 내 Gmail 테스트
     sent_at = rec.get("at") or datetime.now(timezone.utc).replace(tzinfo=None)
     since = _imap_date(sent_at - timedelta(days=1))
     msgs, estimated = [], False
@@ -338,7 +340,9 @@ def _find_reply(imap, rec, me):
                 subj = str(m.get("Subject", "")) if m is not None else ""
                 if m is not None and re.match(r"^\s*(re|답장|회신)\s*:", subj, re.I) and _subject_core(subj) == core:
                     msgs.append(m)
-    msgs = [m for m in msgs if _from_addr(m) != me and _msg_date(m) >= sent_at - timedelta(hours=1)]
+    own = {mid, *own_ids} - {""}
+    msgs = [m for m in msgs if (to_me or _from_addr(m) != me) and str(m.get("Message-ID", "")).strip() not in own
+            and _msg_date(m) >= sent_at - timedelta(hours=1)]
     if not msgs:
         return None
     msgs.sort(key=_msg_date)

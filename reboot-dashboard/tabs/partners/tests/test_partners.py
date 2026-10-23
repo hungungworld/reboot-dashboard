@@ -612,6 +612,28 @@ def test_replies_check_with_fake_imap(auth_client, gmail, monkeypatch):
     assert orig["progress"] == "협의 중"
 
 
+def test_reply_to_self_is_found(auth_client, gmail, monkeypatch):
+    """내 Gmail → 내 Gmail로 보낸 테스트: 같은 주소에서 온 답장도 회신으로 잡고, 대시보드에서 보낸 우리 메일은 빼기."""
+    me = "team@reboot-test.example.com"
+    a = send(auth_client, to=me, partner_id="", partner_name="Self Test").get_json()["history"]
+    later = datetime.now(timezone.utc) + timedelta(minutes=5)
+    sent_copy = raw_msg(f"REBOOT <{me}>", me, a["subject"], "Hello team", msgid=a["messageId"], when=later)
+    reply = raw_msg(f"HJ <{me}>", me, "Re: " + a["subject"], "Got it, thanks!", msgid="<self-reply@reboot-test.example.com>",
+                    in_reply_to=a["messageId"], when=later + timedelta(minutes=1))
+    monkeypatch.setattr(mailer, "connect_imap", lambda: FakeIMAP([sent_copy, reply]))
+    out = auth_client.post("/api/partners/replies/check").get_json()
+    assert out["replies"] == 1
+    h = [x for x in auth_client.get("/api/partners/history").get_json()["items"] if x["id"] == a["id"]][0]
+    assert h["mailStatus"] == "회신 받음" and "Got it, thanks!" in h["reply"]["body"]
+
+    # 다른 업체에 보낸 메일에는 여전히 '내가 보낸 메일'을 회신으로 잡지 않음
+    b = send(auth_client).get_json()["history"]
+    own = raw_msg(f"REBOOT <{me}>", "events@campus.example.com", "Re: x", "our follow-up", in_reply_to=b["messageId"],
+                  when=later + timedelta(minutes=2))
+    monkeypatch.setattr(mailer, "connect_imap", lambda: FakeIMAP([own]))
+    assert auth_client.post("/api/partners/replies/check").get_json()["replies"] == 0
+
+
 def test_replies_check_needs_gmail(auth_client):
     assert auth_client.post("/api/partners/replies/check").status_code == 503
 
