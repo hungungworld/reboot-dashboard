@@ -1,14 +1,35 @@
 {
-  "_설명": "홈 · 미국 주류 업계 뉴스 — 구글 뉴스 RSS 검색어 (팀 결정). 실제 주소 = https://news.google.com/rss/search?q={query} when:{when}&hl=en-US&gl=US&ceid=US:en. exclude 단어가 제목에 있으면 버림. 수정 후 '지금 수집'으로 확인",
+  "_설명": "홈 · 미국 주류 업계 뉴스 — 구글 뉴스 RSS 검색어 (2026-10-24 팀 결정 · 후보 20개를 실제 검색으로 검증 후 9개 고정). 실제 주소 = https://news.google.com/rss/search?q={query} when:{when}&hl=en-US&gl=US&ceid=US:en. kind: signal(적지만 꼭 봐야 함 · 카드 자리 보장) / flow(많음 · AI 점수로 경쟁). area가 같은 검색어는 한 분야로 묶어 카드 3개까지. 수정 후 '지금 수집'으로 확인",
   "when": "14d",
   "surgeRatio": 1.5,
   "surgeMinRecent": 5,
-  "exclude": ["DUI", "drunk driving", "crash", "arrest", "killed", "fatal"],
+  "areas": [
+    {"id": "category", "label": "숙취 카테고리", "kind": "signal"},
+    {"id": "competitor", "label": "경쟁사", "kind": "signal"},
+    {"id": "regulation", "label": "규제", "kind": "signal"},
+    {"id": "behavior", "label": "음주 행태", "kind": "flow"},
+    {"id": "nonalc", "label": "무알코올 · 기능성", "kind": "flow"},
+    {"id": "sales", "label": "주류 판매", "kind": "flow"},
+    {"id": "kfood", "label": "K-푸드", "kind": "flow"}
+  ],
   "groups": [
-    {"id": "hangover", "label": "숙취", "query": "hangover"},
-    {"id": "industry", "label": "주류 업계", "query": "alcohol industry"},
-    {"id": "sales", "label": "주류 판매", "query": "beer wine spirits sales"},
-    {"id": "nonalc", "label": "무알코올 음료", "query": "non-alcoholic drinks"},
-    {"id": "remedy", "label": "숙취 제품 · 보조제", "query": "hangover cure supplement"}
-  ]
+    {"id": "category", "area": "category", "label": "숙취 제품 · 성분", "query": "hangover (supplement OR electrolyte OR DHM OR probiotic)"},
+    {"id": "competitors", "area": "competitor", "label": "경쟁사 (큰 브랜드)", "query": "ZBiotics OR \"Liquid I.V.\" OR DripDrop OR \"Cheers Restore\"", "_메모": "경쟁사 분석 상위 브랜드로 월 1회 갱신"},
+    {"id": "fda", "area": "regulation", "label": "FDA · 영양제 규제", "query": "FDA \"dietary supplement\""},
+    {"id": "sober", "area": "behavior", "label": "절주 · 음주 감소", "query": "\"sober curious\" OR \"drinking less\" OR \"Gen Z drinking\""},
+    {"id": "consumption", "area": "behavior", "label": "음주 조사 · 연구", "query": "\"alcohol consumption\" (survey OR study OR Gallup)"},
+    {"id": "nonalc", "area": "nonalc", "label": "무알코올 음료", "query": "\"non-alcoholic\" (beer OR spirits OR beverage)"},
+    {"id": "functional", "area": "nonalc", "label": "기능성 음료", "query": "\"functional beverage\" OR \"functional drinks\""},
+    {"id": "sales", "area": "sales", "label": "주류 판매", "query": "\"alcohol sales\" OR \"spirits sales\" OR \"beer sales\""},
+    {"id": "kfood", "area": "kfood", "label": "K-푸드 · 한국 숙취해소제", "query": "\"Korean hangover\" OR \"Korean snacks\" OR \"K-food\" (US OR America)", "allowKorean": true}
+  ],
+  "exclude": ["DUI", "drunk driving", "crash", "arrest", "killed", "fatal", "underage", "minors"],
+  "filters": {
+    "_설명": "AI 전에 규칙으로 버림 (무료). metaphor: 앞 단어 + hangover (예: AI hangover). personnel: 인사 동사와 직책이 함께 있으면 인사 소식 (예: names ... CEO). foreign: 제목에 이 나라가 있고 usWords가 없으면 버림 (대소문자 구분). 한국어 제목은 allowKorean 검색어만 남김",
+    "metaphor": ["AI", "tariff", "election", "market", "sugar", "crypto", "stock", "debt", "Fed", "policy", "economic", "political", "pandemic", "deficit", "inflation", "earnings", "tech", "merger", "trade", "budget", "rate", "bitcoin", "post-election", "DOGE", "Wall Street"],
+    "personnel": ["appoints", "appointed", "names", "named", "hires", "hired", "taps", "promotes", "promoted", "steps down", "retires", "to retire"],
+    "roles": ["CEO", "CFO", "COO", "CMO", "CTO", "president", "chief", "VP", "vice president", "director", "head of", "chair", "chairman"],
+    "foreign": ["UK", "U.K.", "Britain", "British", "England", "Scotland", "Ireland", "India", "Indian", "China", "Chinese", "Australia", "Australian", "Canada", "Canadian", "Europe", "European", "EU", "Japan", "Japanese", "Spain", "France", "French", "Germany", "Mexico", "New Zealand", "Singapore", "Philippines", "Vietnam", "Thailand", "Indonesia", "Malaysia", "Taiwan", "Hong Kong", "Brazil", "Italy", "Netherlands", "Russia", "South Africa", "Nigeria", "Kenya", "Dubai", "UAE", "Saudi", "Korea", "Seoul"],
+    "usWords": ["US", "U.S.", "USA", "America", "American", "United States"]
+  }
 }

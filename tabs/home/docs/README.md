@@ -53,22 +53,53 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 ### 데이터 소스: 구글 뉴스 RSS (팀 결정)
 
 - 주소: `https://news.google.com/rss/search?q={검색어} when:14d&hl=en-US&gl=US&ceid=US:en` (키 없음)
-- 검색어 5개: `data/queries.json` — hangover · alcohol industry · beer wine spirits sales · non-alcoholic drinks · hangover cure supplement
+- 검색어: `data/queries.json` — 분야 7개 · 검색어 9개 (2026-10-24 팀 결정 · 후보 20개를 실제 검색해 보고 고름)
+
+| 분야 | 종류 | 검색어 |
+|---|---|---|
+| 숙취 카테고리 | signal | `hangover (supplement OR electrolyte OR DHM OR probiotic)` |
+| 경쟁사 | signal | `ZBiotics OR "Liquid I.V." OR DripDrop OR "Cheers Restore"` (경쟁사 분석 상위 브랜드로 월 1회 갱신) |
+| 규제 | signal | `FDA "dietary supplement"` |
+| 음주 행태 | flow | `"sober curious" OR "drinking less" OR "Gen Z drinking"` · `"alcohol consumption" (survey OR study OR Gallup)` |
+| 무알코올 · 기능성 | flow | `"non-alcoholic" (beer OR spirits OR beverage)` · `"functional beverage" OR "functional drinks"` |
+| 주류 판매 | flow | `"alcohol sales" OR "spirits sales" OR "beer sales"` |
+| K-푸드 | flow | `"Korean hangover" OR "Korean snacks" OR "K-food" (US OR America)` |
+
+  - **signal**: 기사는 적지만 꼭 봐야 하는 분야 → 카드 자리 보장 · **flow**: 기사가 많은 흐름 → AI 점수로 경쟁
 - 항목마다 제목 · 매체 · 링크 · 날짜만 읽고, 제목 끝의 " - 매체명"은 뗍니다
 - 코드: `rss.py` (읽기 · 노이즈 판정 · 급증 계산) · `news.py` (수집 · 저장 · AI · 화면용 데이터)
 
 ### 수집 방식
 
 - **하루 1회 자동**(하루 1회 작업) + 화면의 **"지금 수집"** 버튼. 화면을 열 때는 저장된 결과만 읽습니다
-- 노이즈 단어가 제목에 있으면 버림: DUI · drunk driving · crash · arrest · killed · fatal (`queries.json`의 `exclude`)
+- **규칙으로 먼저 거름 (무료, `queries.json`의 `exclude` · `filters`)**
+  - 사고 · 범죄: DUI · drunk driving · crash · arrest · killed · fatal · underage · minors
+  - 비유 hangover: AI · tariff · election · market … + hangover (진짜 숙취인 holiday hangover는 남김)
+  - 인사 소식: names · appoints · hires … 와 CEO · president · chief … 가 함께 있는 제목
+  - 미국 밖 시장: UK · India · China … 가 있고 US · America가 없는 제목
+  - 한국어 제목: K-푸드 검색어만 허용
 - URL · 제목 기준 중복 제거, 최근 7일 기사로 정리
 - 실패하면 마지막 결과를 그대로 보여 주고 "업데이트 실패" 배지 표시. 연달아 3번 실패하면 남은 검색어는 건너뜀
 
 ### AI 처리 (OpenAI 1회)
 
-1. **관련성 필터링**: 최근 7일 기사 최대 150개의 제목·매체·날짜를 보고 관련 기사만 고름 ('hangover'를 비유로 쓴 기사, 음주 사고 등은 뺌)
-2. **기사별 정리**: 최대 8개 — 한국어 제목 · 한 줄 요약(제목에서 알 수 있는 사실만) · 주제(판매 동향 / 소비 트렌드 / 규제·정책 / 경쟁·신제품 / 업계 일반)
-3. **한 줄 정리**: 전체를 2문장 이내로 — 무엇이 일어나고 REBOOT에 무슨 의미인지
+1. **관련성 필터링**: 최근 7일 기사 최대 150개의 제목 · 매체 · 날짜 · 분야를 보고 관련 기사만 고름
+2. **점수 (후보 최대 15개)**: REBOOT와의 거리 0~2 · 실행 가능성 0~2 · 출처 0~2 · 새로움 0~1
+
+| 기준 | 2점 | 1점 | 0점 |
+|---|---|---|---|
+| REBOOT와의 거리 | 숙취 제품·성분 · 경쟁 브랜드 · 영양제/식품 규제 | 음주 행태 · 무알코올·기능성 · K-푸드 | 주류 업계 일반 |
+| 실행 가능성 | 이번 주 카피·캠페인·채널에 바로 반영 | 참고 | 없음 |
+| 출처 | 공공기관 · 업계지 · 연구·조사 | 주요 언론 | 보도자료 · 블로그 · 쇼핑 추천글 |
+| 새로움 | – | 처음 나온 소식 | 반복 |
+
+3. **최종 8개 (서버가 고름)**: signal 분야는 2개씩 먼저 자리 보장 → 한 분야는 3개까지 → 나머지는 점수순
+4. **기사별 정리**: 한국어 제목 · 한 줄 요약(제목에서 알 수 있는 사실만) · **왜 중요한가** 한 줄 · 주제
+5. **한 줄 정리**: 전체를 2문장 이내로 — 무엇이 일어나고 REBOOT에 무슨 의미인지
+
+### 검색어 점검 (월 1회)
+
+뉴스 카드 아래 **"검색어 점검 (최근 60일)"**: 검색어마다 찾은 기사 · 규칙 통과 · 카드로 고른 수. 30일 넘게 돌렸는데 카드가 0개면 **교체 후보**로 표시합니다. 교체는 `queries.json`을 고치고 '지금 수집'으로 확인합니다.
 
 ### 보도 급증 시그널
 
@@ -76,7 +107,7 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 
 ### 화면
 
-데일리 브리핑의 뉴스 카드: 한 줄 정리 → 보도 급증 검색어 → 기사 카드(한국어 제목 · 요약 · 주제/보도 급증 · 매체 · 날짜 · 영어 원제목, 제목을 누르면 원문). OpenAI 키가 없으면 최근 기사 제목만 보여 줍니다.
+데일리 브리핑의 뉴스 카드: 한 줄 정리 → 보도 급증 검색어 → 기사 카드 3개 + 더보기(한국어 제목 · 요약 · 왜 중요 · 분야/보도 급증 · 매체 · 날짜 · 영어 원제목, 카드를 누르면 원문 새 탭) → 검색어 점검. OpenAI 키가 없으면 규칙을 통과한 최근 기사 제목만 보여 줍니다.
 
 ---
 

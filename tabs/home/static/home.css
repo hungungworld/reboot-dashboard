@@ -93,3 +93,10 @@
 .home-dock-item.done .home-dock-title { text-decoration: line-through; color: var(--faint); }
 .home-dock-go { align-self: flex-start; }
 @media (max-width: 640px) { .home-fab { right: 16px; bottom: 16px; } }
+
+/* 뉴스 카드 '왜 중요' 한 줄 · 검색어 점검 */
+.part-home .home-why { display: block; margin-top: 4px; color: var(--ink-2); }
+.part-home .home-why b { font-weight: 650; color: var(--lime-deep); margin-right: 4px; }
+.part-home .home-qstats { margin-top: 10px; font-size: 11.5px; }
+.part-home .home-qstats summary { cursor: pointer; color: var(--muted); }
+.part-home .home-qstats code { font-size: 10.5px; white-space: normal; }

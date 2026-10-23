@@ -416,6 +416,19 @@
       <button type="button" class="btn small home-news-more" data-act="news-more" aria-expanded="${S.newsOpen}">${S.newsOpen ? '접기' : `더보기 (${list.length - NEWS_SHOW}개)`}</button>`;
   }
 
+  // 검색어 점검 (최근 60일): 찾은 기사 · 규칙 통과 · 카드로 고른 수 · 교체 후보
+  function queryStatsHtml(list) {
+    if (!list.length) return '';
+    const flagged = list.filter(q => q.replace).length;
+    const rows = list.map(q => `<tr><td>${esc(q.areaLabel)}${q.kind === 'signal' ? ' ' + badge('자리 보장', 'lime') : ''}</td>
+      <td><code>${esc(q.query)}</code></td><td class="num">${fmt.num(q.found)}</td><td class="num">${fmt.num(q.kept)}</td>
+      <td class="num">${fmt.num(q.picked)}</td><td>${q.replace ? badge('교체 후보', 'orange') : ''}</td></tr>`).join('');
+    return `<details class="home-qstats"><summary>검색어 점검 (최근 60일)${flagged ? ` · 교체 후보 ${flagged}개` : ''}</summary>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+      <p class="panel-note">30일 넘게 돌렸는데 카드로 고른 기사가 0개면 교체 후보예요. 검색어는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
+  }
+
   function paintNews() {
     const n = S.news;
     if (!n) return;
@@ -433,7 +446,8 @@
       const items = (n.ai.items || []).map(a => `
         <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon(a.surge ? 'up' : 'globe')}</div>
           <div><p>${articleLink(a, a.titleKo || a.title)}</p><small>${esc(a.summaryKo)}</small>
-          <small class="home-links">${[a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
+          ${a.whyKo ? `<small class="home-why"><b>왜 중요</b> ${esc(a.whyKo)}</small>` : ''}
+          <small class="home-links">${[a.areaLabel || a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
           <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`);
       body.innerHTML = `${n.ai.headline ? `<div class="home-headline">${icon('spark')}<span>${esc(n.ai.headline)}</span></div>` : ''}
         ${signalsHtml(n)}${items.length ? newsList(items) : '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}`;
@@ -457,6 +471,7 @@
     const errs = last && !n.running && (n.status === 'failed' || n.status === 'partial') ? (last.errors || []) : [];
     ref('news-errors').innerHTML = errs.length ? `<details class="home-errors"><summary>실패 이유 ${errs.length}건</summary><ul>${errs.slice(0, 6).map(e => `<li>${esc(e)}</li>`).join('')}</ul></details>` : '';
     ref('news-note').textContent = n.limitNote || '';
+    ref('news-stats').innerHTML = queryStatsHtml(n.queryStats || []);
     paintHero();
   }
   async function loadNews() {
@@ -612,6 +627,7 @@
               <div class="between home-news-foot"><span class="panel-note" data-ref="news-meta"></span>
                 <button type="button" class="btn small" data-ref="news-collect" data-act="news-collect">${icon('refresh')} 지금 수집</button></div>
               <p class="panel-note" data-ref="news-note"></p>
+              <div data-ref="news-stats"></div>
             </section>
           </div>
           <aside class="stack">
