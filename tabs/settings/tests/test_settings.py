@@ -86,7 +86,7 @@ def test_collect_save_and_accessor(app, auth_client):
     ({"weee_urls": ["http://example.com/x"]}, "Weee"),
     ({"video_language": "fr"}, "영상 언어"),
     ({"min_views": "많이"}, "조회수"),
-    ({"amazon_queries": ["q"] * 1 + [f"q{i}" for i in range(12)]}, "Amazon 검색어"),
+    ({"amazon_queries": ["q"] * 1 + [f"q{i}" for i in range(16)]}, "Amazon 검색어"),
 ])
 def test_collect_validation(auth_client, patch, word):
     cfg = auth_client.get("/api/settings/collect").get_json()["config"]
