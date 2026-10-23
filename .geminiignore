@@ -8,3 +8,7 @@ instance/
 uploads/
 venv/
 .venv/
+credentials.json
+token.json
+client_secret*.json
+.playwright-mcp/

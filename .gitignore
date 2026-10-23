@@ -1,14 +1,32 @@
-__pycache__/
-*.pyc
-venv/
-.venv/
+# 저장소 전체 공통 — 대시보드 폴더 규칙은 reboot-dashboard/.gitignore (RULE.md §8.4)
+
+# 비밀 정보 — 어느 폴더에 있어도 올리지 않음
 .env
+.env.*
+!.env.example
+credentials.json
+token.json
+client_secret*.json
+
+# 실행 데이터 (DB · 업로드)
 instance/
 *.db
 *.sqlite3
 uploads/
-.vscode/
+
+# 파이썬 · 도구 · 캐시
+__pycache__/
+*.pyc
+venv/
+.venv/
+.playwright-mcp/
+
+# 편집기 · AI 개인 설정
+.vscode/*
+!.vscode/settings.json
 .idea/
 .claude/settings.local.json
+
+# OS
 .DS_Store
 Thumbs.db

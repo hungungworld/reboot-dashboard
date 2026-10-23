@@ -47,10 +47,10 @@ AI는 파일을 바꾸기 전에 한국어로 아래를 보고하고 기다립�
 
 ```text
 [변경 제안]
-- 수정: content/routes.py — 카피 이력 라우트에 페이지 번호 파라미터 추가
-- 수정: content/templates/content/history.html — 페이지 이동 버튼 추가
+- 수정: reboot-dashboard/server/content/routes.py — 내 캠페인 목록 API에 페이지 번호 파라미터 추가
+- 수정: reboot-dashboard/parts/content/content.js — 내 캠페인 화면에 페이지 이동 버튼 추가
 - 영향: 공통 영역 없음, 다른 파트 영향 없음
-- 확인: flask run 후 /content/history?page=2 접속
+- 확인: python -m pytest, python -m server 후 콘텐츠 제작 › 내 캠페인 화면에서 2쪽 이동
 진행할까요?
 ```
 
@@ -73,10 +73,10 @@ AI는 파일을 바꾸기 전에 한국어로 아래를 보고하고 기다립�
 ## 3. 담당 범위와 중복 구현 금지
 
 - AI도 **작업자 본인의 담당 폴더 안에서만** 변경합니다. (`RULE.md` §5.3 파트 분담표)
-- 공통 영역(`app.py`, `config.py`, `requirements.txt`, `core/` 등, `RULE.md` §5.2)이나 다른 파트 폴더를 고쳐야 하면, 고치지 말고 **필요한 변경과 이유를 보고**합니다. 작업자는 해당 담당자와 협의합니다.
-- 작업 전에 해당 파트 폴더의 `README.md`(`RULE.md` §5.4)를 먼저 읽습니다. 다른 파트 기능이 필요하면 그 파트 README의 "다른 파트에 제공하는 함수"를 확인하고 가져다 씁니다.
+- 공통 영역(`core/`, `server/` 바로 아래 파일, `server/core·auth·catalog·templates/`, `requirements.txt`, `render.yaml` 등, `RULE.md` §5.2)이나 다른 파트 폴더를 고쳐야 하면, 고치지 말고 **필요한 변경과 이유를 보고**합니다. 작업자는 해당 담당자와 협의합니다.
+- 작업 전에 해당 파트 설명서 `reboot-dashboard/docs/<파트ID>/README.md`(`RULE.md` §5.4)와 `docs/DEV_GUIDE.md`를 먼저 읽습니다. 다른 파트 기능이 필요하면 `REBOOT.use('<파트ID>')`나 공용 API로만 가져다 씁니다.
 - 새 파일·함수를 만들기 전에 같은 역할이 이미 있는지 먼저 찾습니다.
-  - 찾는 곳: 해당 파트의 `README.md`, `routes.py`, `services/`, `templates/`, `static/`, 그리고 `core/`
+  - 찾는 곳: 해당 파트의 `docs/<파트ID>/`, `parts/<파트ID>/`, `server/<파트ID>/`, 그리고 `core/core.js`, `server/core/`
   - 비슷한 이름의 파일이 없다는 이유만으로 새로 만들지 않습니다.
 - 요청과 관계없는 리팩터링, 파일 이름 일괄 변경, 기존 주석·문서 삭제를 하지 않습니다.
 - 요청하지 않은 README, 테스트, 샘플 데이터, 빈 파일, 설정 파일을 덧붙이지 않습니다.
@@ -148,7 +148,7 @@ AI에게 코드를 보여줄 때는 파일 전체보다 **필요한 부분만** 
 
 - 내가 보여준 코드와 폴더 구조에 맞춰 답하고, 모르는 부분은 추측하지 말고 물어봐.
 - 이미 있는 함수나 파일을 재사용하는 방법을 먼저 제안하고, 새 파일이 꼭 필요하면 이유를 말해.
-- 바꿔야 하는 파일과 위치를 정확히 알려주고, 내 담당 폴더 밖이나 app.py, config.py, requirements.txt, core/ 같은 공통 파일을 바꿔야 하면 따로 표시해.
+- 바꿔야 하는 파일과 위치를 정확히 알려주고, 내 담당 폴더 밖이나 core/, server/ 공통 파일, requirements.txt, render.yaml 같은 공통 파일을 바꿔야 하면 따로 표시해.
 - 새 패키지가 필요하면 이름, 버전, 이유를 알려줘.
 - 요청하지 않은 리팩터링이나 기능 추가는 하지 마.
 - git push --force, git reset --hard, main/pre_main 직접 push는 제안하지 마.
@@ -195,15 +195,15 @@ Gemini(웹·앱)와 Gemini Gem도 §5 "대화형 AI에서 코드를 가져올 �
 지식(Knowledge)에 올라온 RULE.md와 AI_RULES.md를 팀 규칙으로, README.md를 프로젝트 설명으로 삼아 답한다.
 
 [환경]
-- Flask 단독(Flask + Jinja 템플릿 + HTML/CSS/JS), Windows, 명령은 cmd 기준.
+- Flask 서버(reboot-dashboard/server) + 공통 화면(core/) + 파트 화면(parts/<파트ID>/), 빌드·npm 없음, Windows, 명령은 cmd 기준.
 - 브랜치: main ← pre_main ← 개인 브랜치(이니셜, 예: NW). 개인 브랜치를 계속 쓰고, 기능·수정 구분은 커밋 타입(feat:, fix:)으로 한다. main, pre_main에는 직접 push하지 않는다.
 
 [답변 방식]
 - 사용자가 보여준 코드와 폴더 구조에 맞춰 답하고, 모르는 파일·함수는 지어내지 말고 물어본다.
-- 코드를 줄 때는 코드 블록마다 맨 위에 파일 경로를 주석으로 적는다. 예: # content/routes.py
+- 코드를 줄 때는 코드 블록마다 맨 위에 파일 경로를 주석으로 적는다. 예: # reboot-dashboard/server/content/routes.py
 - 파일 전체를 다시 쓰지 말고 바뀌는 부분만, 어디에 넣는지와 함께 보여준다.
 - 이미 있는 함수·파일을 재사용하는 방법을 먼저 제안하고, 새 파일이 꼭 필요하면 이유를 말한다.
-- 사용자의 담당 폴더 밖이나 공통 파일(app.py, config.py, requirements.txt, core/)을 바꿔야 하면 "⚠️ 공통 영역" 또는 "⚠️ 다른 파트"라고 따로 표시한다.
+- 사용자의 담당 폴더 밖이나 공통 파일(core/, server/ 공통 파일, requirements.txt, render.yaml)을 바꿔야 하면 "⚠️ 공통 영역" 또는 "⚠️ 다른 파트"라고 따로 표시한다.
 - 새 패키지가 필요하면 이름, 버전, 필요한 이유를 알려준다.
 - 요청하지 않은 리팩터링, 기능 추가, 파일 이름 변경은 하지 않는다.
 - 확실하지 않은 라이브러리 함수나 옵션은 "확인 필요"라고 표시한다.
@@ -288,6 +288,9 @@ Claude Code는 `deny`(금지) → `ask`(매번 묻기) → `allow`(허용) 순�
       "Read(./.env)",
       "Read(./.env.*)",
       "Read(./instance/**)",
+      "Read(./reboot-dashboard/.env)",
+      "Read(./reboot-dashboard/.env.*)",
+      "Read(./reboot-dashboard/instance/**)",
       "Bash(cat .env*)",
       "Bash(type .env*)",
       "Bash(git push --force *)",
@@ -328,7 +331,7 @@ Claude Code는 `deny`(금지) → `ask`(매번 묻기) → `allow`(허용) 순�
 2. Plan 모드로 계획 요청             "content의 카피 이력 페이지에 페이지네이션 추가 계획 세워줘"
 3. 계획의 파일 목록 확인 (§2.2)      담당 폴더 밖·공통 영역 포함 여부 확인
 4. 승인 후 실행                      변경마다 승인 창에서 내용 확인
-5. 결과 확인                         git diff 로 바뀐 내용 직접 확인, flask run 으로 실행 확인
+5. 결과 확인                         git diff 로 바뀐 내용 직접 확인, python -m pytest · python -m server 로 실행 확인
 6. 커밋·push는 본인이 직접           RULE.md §4.2 절차
 ```
 
@@ -393,7 +396,7 @@ approval_policy = "on-request"
 2. 읽기 전용으로 계획 요청          "파일은 바꾸지 말고 계획만 세워줘"
 3. 계획의 파일 목록 확인 (§2.2)      담당 폴더 밖·공통 영역 포함 여부 확인
 4. 승인 후 실행                      승인 요청마다 내용 확인
-5. 결과 확인                         git diff, flask run 으로 실행 확인
+5. 결과 확인                         git diff, python -m pytest · python -m server 로 실행 확인
 6. 커밋·push는 본인이 직접           RULE.md §4.2 절차
 ```
 

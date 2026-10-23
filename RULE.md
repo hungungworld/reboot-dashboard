@@ -137,11 +137,11 @@ git push
 **실행 확인 체크리스트** (PR 본문에 복사해서 체크)
 
 ```markdown
-- [ ] pre_main을 새로 받아서(git pull) 가상환경에 requirements.txt 설치 완료
-- [ ] flask run 으로 앱이 오류 없이 실행됨
+- [ ] pre_main을 새로 받아서(git pull) `reboot-dashboard` 폴더 가상환경에 `requirements-dev.txt` 설치 완료
+- [ ] `.venv\Scripts\python -m server` 로 앱이 오류 없이 실행됨
 - [ ] 이번에 들어간 기능의 화면/라우트를 직접 눌러 확인함
 - [ ] 기존 주요 화면(메인, 로그인 등)이 깨지지 않음
-- [ ] 테스트가 있으면 pytest 통과
+- [ ] `python -m pytest` 통과, PR의 GitHub Actions(tests)도 통과
 - [ ] .env, DB 파일, 업로드 파일 등 올리면 안 되는 파일이 포함되지 않음
 ```
 
@@ -177,78 +177,75 @@ git push
 
 ## 5. 폴더 구조와 담당 범위
 
-### 5.1 기본 폴더 구조 (Flask)
+### 5.1 폴더 구조
 
-파트 분담이 확정되면 파트마다 **Blueprint 폴더 하나**를 만들고, 각자 자기 폴더 안에서 작업합니다.
-이렇게 나누면 서로 같은 파일을 고칠 일이 줄어 충돌이 크게 줄어듭니다.
+대시보드 코드는 `reboot-dashboard/` 폴더에 있습니다. 화면 메뉴(파트)마다 **화면 폴더 · 서버 폴더 · 설명서 폴더**가 하나씩 있고, 각자 자기 파트 폴더 안에서 작업합니다.
+자세한 개발 규칙은 [`reboot-dashboard/docs/DEV_GUIDE.md`](reboot-dashboard/docs/DEV_GUIDE.md)를 따릅니다.
 
 ```text
-project-root/
-├── app.py                  # 앱 생성, Blueprint 등록 (공통)
-├── config.py               # 설정값 (공통)
-├── requirements.txt        # 패키지 목록 (공통)
-├── .env.example            # 환경변수 예시 (공통, 실제 값 없음)
-├── .gitignore / .gitattributes
-├── README.md / RULE.md / AI_RULES.md
-├── AGENTS.md / CLAUDE.md / GEMINI.md / .geminiignore   # AI 도구 설정 (공통, AI_RULES.md §6)
-├── core/                   # 공통 기능: DB 연결, AI 호출, 공통 유틸
-│   ├── services/           # llm.py, db.py 등
-│   ├── templates/          # base.html 등 공통 레이아웃
-│   └── static/             # 공통 CSS/JS
-├── content/                # 파트별 Blueprint 하나 (파트 목록은 README.md §6)
-│   ├── __init__.py         # Blueprint 정의 (url_prefix="/content")
-│   ├── routes.py
-│   ├── services/
-│   ├── models.py           # 이 파트 전용 DB 테이블 (테이블 이름 앞에 파트 이름)
-│   ├── prompts/            # 이 파트의 AI 프롬프트
-│   ├── templates/content/  # 템플릿 이름 충돌 방지를 위해 한 번 더 폴더로 감쌈
-│   ├── static/content/
-│   ├── data/               # 수동 · 더미 데이터
-│   └── README.md           # 파트 README (담당자 작성, §5.4)
-├── home/ insight/ compliance/ cs/ influencer/ performance/   # 나머지 탭 (§5.3)
-├── auth/ settings/         # 탭이 아닌 화면 (로그인, 설정)
-├── tests/                  # 파트별 하위 폴더 (tests/content/ ...)
-└── instance/               # 로컬 DB 등 (Git에 올리지 않음)
+저장소 맨 위/
+├── README.md / RULE.md / AI_RULES.md        # 프로젝트 소개 · 협업 규칙 · AI 사용 규칙 (공통)
+├── AGENTS.md / CLAUDE.md / GEMINI.md        # AI 도구가 자동으로 읽는 규칙 요약 (공통, AI_RULES.md §6)
+├── .gitignore / .gitattributes / .geminiignore / .claude/settings.json
+├── .github/                                 # CODEOWNERS · workflows(tests.yml 자동 테스트, daily-jobs.yml 하루 1회 수집)
+├── render.yaml                              # Render 배포 설정 (rootDir: reboot-dashboard)
+├── docs/원본/                               # 팀·파트 README 원본 (보관용)
+└── reboot-dashboard/                        # ★ 대시보드 코드
+    ├── server/                              # Flask 서버
+    │   ├── __init__.py · config.py · registry.py · …   # 공통 (create_app, 메뉴 목록 등)
+    │   ├── core/ · auth/ · catalog/ · templates/       # 공통 (셸 · 로그인 · 시즌/팩트시트 · 화면 틀)
+    │   └── <파트ID>/                        # 파트 서버 (routes.py · models.py …) ← 파트 담당
+    ├── core/                                # 공통 화면: base.css(디자인) · core.js(REBOOT) · assets · vendor
+    ├── parts/<파트ID>/                      # 파트 화면 (JS · CSS · data.js) ← 파트 담당
+    ├── data/                                # 초기 데이터 (공용 + data/<파트ID>/)
+    ├── docs/<파트ID>/                       # 파트 설명서 README.md · 작업 메모 NOTES.md ← 파트 담당
+    ├── docs/DEV_GUIDE.md · docs/team/        # 개발 규칙 · 팀 README
+    ├── tests/                               # test_<파트ID>.py ← 파트 담당 · *.test.js
+    ├── CLAUDE.md                            # 코드 작업 규칙 (Claude Code가 이 폴더에서 자동으로 읽음)
+    ├── requirements.txt · requirements-dev.txt · .env.example · wsgi.py · gunicorn.conf.py
+    └── instance/                            # 로컬 DB · 업로드 · 캐시 (Git에 올리지 않음)
 ```
 
 ### 5.2 공통 영역
 
-다음 파일·폴더는 여러 사람에게 영향을 주므로 **팀장 또는 PM과 협의 후** 수정하고, PR에 공통 영역 수정임을 표시합니다.
+다음 파일·폴더는 여러 사람에게 영향을 주므로 **팀장 또는 PM과 협의 후** 수정하고, PR에 공통 영역 수정임을 표시합니다. 필요한 변경은 직접 고치지 말고 GitHub Issue에 `[공통 요청]`으로 올려도 됩니다.
 
-- `app.py`, `config.py`, `requirements.txt`, `.env.example`, `.gitignore`, `.gitattributes`
-- `core/` 전체 (특히 DB 구조, 공통 템플릿 `base.html`, 공통 CSS/JS)
-- 루트의 `README.md`, `RULE.md`, `AI_RULES.md` (파트 폴더의 `README.md`는 해당 담당자가 관리, §5.4)
+- `reboot-dashboard/core/` 전체 (디자인 `base.css`, 공통 기능 `core.js`)
+- `reboot-dashboard/server/` 바로 아래 파일 (`__init__.py`, `config.py`, `registry.py`, `models.py` 등), `server/core/`·`server/auth/`·`server/catalog/`·`server/templates/`
+- `reboot-dashboard/requirements.txt`, `requirements-dev.txt`, `.env.example`, `data/`의 공용 파일(`seasons.csv`, `products.json`)
+- 저장소 맨 위 `render.yaml`, `.github/`, `.gitignore`, `.gitattributes`
+- 규칙 문서: 맨 위 `README.md`, `RULE.md`, `AI_RULES.md`, `reboot-dashboard/README.md`, `reboot-dashboard/CLAUDE.md`, `docs/DEV_GUIDE.md`, `docs/team/README.md`
 - AI 도구 설정: `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.geminiignore`, `.claude/settings.json` (그 밖의 도구 규칙 파일은 `AI_RULES.md` §13)
 
 ### 5.3 파트 분담표
 
-화면 상단 탭 하나가 파트 하나입니다. 분담이 바뀌면 **팀장(JH)** 이 이 표와 `README.md` §6·§11을 같은 PR로 고칩니다.
+화면 메뉴 하나가 파트 하나입니다. 분담이 바뀌면 **팀장(JH)** 이 이 표, `README.md` §6·§11, `reboot-dashboard/docs/team/README.md` §4, `docs/DEV_GUIDE.md` §1을 같은 PR로 고칩니다. (화면에 보이는 담당 이름은 `server/registry.py`에 있어 공통 영역 PR로 고칩니다.)
 
-| 탭 (화면 순서) | 전용 폴더 | 담당자 |
-|---|---|---|
-| 🏠 홈 · 데일리 브리핑 | `home/` | HK (현경) |
-| 🔍 시장 · 고객 인사이트 | `insight/` | HK (현경) |
-| ✍️ 콘텐츠 제작 | `content/` | NW (나원) |
-| 🛡️ 컴플라이언스 | `compliance/` | JH (준희) |
-| 💬 고객 응대 (CS) | `cs/` | JH (준희) |
-| 🤝 인플루언서 · 파트너 | `influencer/` | HJ (혁주) |
-| 📊 성과분석 | `performance/` | HJ (혁주) |
-| 🔐 로그인 (탭 아님) | `auth/` | HK (현경) |
-| ⚙️ 설정 (탭 아님) | `settings/` | HK (현경) |
+| 메뉴 (화면 순서) | 파트 ID | 담당자 | 수정하는 폴더 |
+|---|---|---|---|
+| 🏠 홈 · 데일리 브리핑 | `home` | HK (현경) | `parts/home/` · `server/home/` · `docs/home/` · `data/home/` · `tests/test_home.py` |
+| 🔍 시장 · 고객 인사이트 | `insights` | HK (현경) | `parts/insights/` · `server/insights/` · `docs/insights/` · `data/insights/` · `tests/test_insights.py` |
+| ✍️ 콘텐츠 제작 | `content` | NW (나원) | `parts/content/` · `server/content/` · `docs/content/` · `tests/test_content.py` |
+| 🛡️ 컴플라이언스 | `compliance` | JH (준희) | `parts/compliance/` · `server/compliance/` · `docs/compliance/` |
+| 💬 고객 응대 (CS) | `cs` | JH (준희) | `parts/cs/` · `server/cs/` · `tests/test_compliance_cs_api.py` |
+| 🤝 인플루언서 · 파트너 | `partners` | HJ (혁주) | `parts/partners/` · `server/partners/` · `docs/partners/` · `data/partners/` · `tests/test_partners.py` |
+| 📊 성과분석 | `performance` | HJ (혁주) | `parts/performance/` · `server/performance/` · `docs/performance/` · `data/performance/` · `tests/test_performance.py` |
+| 🔐 로그인 (메뉴 아님) | `auth` | HK (현경) | `docs/login/` · `tests/test_auth.py` (로그인 서버 `server/auth/`는 공통 영역) |
+| ⚙️ 설정 및 브랜드 관리 | `settings` | HK (현경) | `parts/settings/` · `server/settings/` · `docs/settings/` · `tests/test_settings.py` |
 
+- 폴더 경로는 모두 `reboot-dashboard/` 기준입니다.
 - KHS(강현서), YHS(양효선)는 개발 파트 없이 다른 업무를 맡습니다. KHS는 PM으로서 PR 리뷰·병합 역할(§1)은 그대로 합니다.
 - 두 파트를 맡은 사람도 브랜치는 개인 브랜치 하나만 쓰고, PR 하나에는 한 파트의 작업만 담습니다. (§3.3)
-
-- 다른 파트의 기능이 필요하면 그 폴더의 파일을 직접 고치지 말고, **담당자에게 함수나 API를 요청**해서 가져다 씁니다.
+- 다른 파트의 기능이 필요하면 그 폴더의 파일을 직접 고치지 말고, 화면은 `REBOOT.use('<파트ID>')`, 서버는 공용 API(`/api/seasons`, `/api/facts` …)로만 가져다 씁니다. (`DEV_GUIDE.md` §3)
 - 파트 사이에 주고받는 데이터(함수 이름, 요청/응답 형식)가 바뀌면 영향을 받는 담당자에게 먼저 알립니다.
 
-### 5.4 파트 README
+### 5.4 파트 설명서 (파트 README)
 
-각 파트(기능 탭) 폴더에는 그 파트 담당자가 관리하는 `README.md`를 둡니다. 공통 영역이 아니므로 담당자가 직접 수정합니다.
+각 파트의 설명서는 `reboot-dashboard/docs/<파트ID>/README.md`, 작업 메모는 같은 폴더의 `NOTES.md`입니다. 공통 영역이 아니므로 그 파트 담당자가 직접 수정합니다.
 
-- 적을 내용: 담당자, 기능(화면), 라우트, 주요 파일, 다른 파트에 제공하는 함수, 사용하는 데이터·외부 API
-- 파트의 기능·라우트·제공 함수가 바뀌면 **같은 PR에서 README도 고칩니다.**
-- 다른 파트 기능이 필요하면 먼저 그 파트 README의 "다른 파트에 제공하는 함수"를 확인합니다.
+- 적을 내용: 담당자, 기능(화면), 쓰는 API, 주요 파일, 다른 파트에 공개하는 기능(`REBOOT.expose`), 사용하는 데이터·외부 API
+- 파트의 기능·API·공개 기능이 바뀌면 **같은 PR에서 설명서도 고칩니다.**
+- 다른 파트 기능이 필요하면 먼저 그 파트 설명서와 `DEV_GUIDE.md` §3의 공개 기능 표를 확인합니다.
 
 ---
 
@@ -257,24 +254,20 @@ project-root/
 ### 6.1 Python
 - 변수·함수: `snake_case` (예: `user_name`, `get_user_data()`)
 - 클래스: `PascalCase` (예: `UserService`)
-- 상수: `UPPER_SNAKE_CASE` (예: `MAX_RETRY_COUNT`), 하드코딩 대신 `config.py` 또는 파트의 `constants.py`에 모음
+- 상수: `UPPER_SNAKE_CASE` (예: `MAX_RETRY_COUNT`), 하드코딩 대신 파트 서버 폴더 안 한 곳에 모음 (공통 설정은 `server/config.py`)
 - 불리언: `is_`, `has_`, `should_` 접두어 (예: `is_valid`)
 - 약어 지양: `usr` ❌ → `user` ✅
 - 파일명: `snake_case.py`
 
-### 6.2 JavaScript (템플릿 안 스크립트, static/js)
-- 변수·함수: `camelCase` (예: `userName`, `loadChart()`)
-- 파일명: `snake_case.js` 또는 `kebab-case.js` 중 파트 안에서 통일
+### 6.2 화면(JS · CSS) · 서버 이름 규칙
 
-### 6.3 템플릿·정적 파일
-- 템플릿: `templates/파트명/페이지명.html` (예: `content/templates/content/detail.html`)
-- 정적 파일: `static/파트명/` (예: `content/static/content/copy_card.js`)
-- 다른 파트와 같은 이름의 템플릿을 쓰지 않도록 반드시 파트 폴더로 감쌉니다.
+화면과 서버의 이름 규칙은 [`reboot-dashboard/docs/DEV_GUIDE.md`](reboot-dashboard/docs/DEV_GUIDE.md) 「이름 규칙」과 `docs/team/README.md` 6-2장을 따릅니다. 핵심만 적으면:
 
-### 6.4 라우트(URL)
-- 화면 라우트: Blueprint 접두어 사용 (예: `/content/`, `/content/detail/<id>`). 파트별 접두어는 README.md §6
-- API 라우트: `/파트명/api/명사-복수형` (예: `/cs/api/inquiries`, `/cs/api/inquiries/<id>`)
-- 동사 대신 명사 사용: `/cs/getInquiry` ❌ → `/cs/api/inquiries/<id>` ✅
+- JS: 변수·함수 `camelCase`, 전역 변수 금지(`REBOOT`만 공통), 즉시실행 함수로 감싸기, `type="module"`·`import`·npm 금지
+- CSS: `.part-<파트ID> .<접두사>-…` 로만 (접두사 예: 홈 `home-`, 인사이트 `ins-`, 콘텐츠 `cnt-`, 컴플라이언스 `cmp-`, CS `cs-`, 파트너 `ptn-`, 성과 `perf-`, 설정 `set-`). `core/base.css` 클래스는 다시 정의하지 않고 가져다 씀
+- 저장: `REBOOT.store('<파트ID>')`만 사용 · 다운로드 파일명 `reboot-<파트ID>-내용.확장자`
+- 서버 API: `/api/<파트ID>/…` (예: `/api/cs/gmail/callback`), 공용 API는 `/api/seasons`·`/api/facts`·`/api/worklog`
+- 키·비밀번호는 JS·HTML에 넣지 않고 서버(`.env` · 설정 › 연결 화면)에서만
 
 ---
 
@@ -345,21 +338,26 @@ project-root/
 ### 8.1 처음 받기
 
 ```cmd
-git clone 저장소주소
-cd 프로젝트폴더
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
+git clone https://github.com/hungungworld/reboot-us-dashboard.git
+cd reboot-us-dashboard\reboot-dashboard
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
 copy .env.example .env
+python -m server
 ```
 
+- 브라우저에서 http://127.0.0.1:5000 접속. 처음 실행할 때 계정이 없으면 `.env`의 `ADMIN_EMAIL`·`ADMIN_PASSWORD`(8자 이상)로 관리자 계정이 만들어집니다. 팀원 계정은 **설정 › 계정**에서 추가합니다.
+- 테스트: `python -m pytest` (인터넷·키 없이 통과해야 함) · JS 문법: `node --check parts\<파트ID>\<파일>.js`
 - `.env`에는 각자 받은 실제 값을 채웁니다. **`.env`는 절대 커밋하지 않습니다.**
-- Python 버전은 팀장이 확정해 README에 적고, 모두 같은 버전을 사용합니다.
+- Python 버전은 `reboot-dashboard/.python-version`(3.14)에 고정되어 있습니다. 모두 같은 버전을 씁니다.
+- clone한 뒤 push 차단 훅(§10.1)을 설치합니다.
 
 ### 8.2 패키지 추가
 
-- 새 패키지가 필요하면 PR에 이유를 적고 `requirements.txt`에 버전과 함께 추가합니다. (예: `pandas==2.2.3`)
+- 새 패키지가 필요하면 PR에 이유를 적고 `reboot-dashboard/requirements.txt`에 버전과 함께 추가합니다. (예: `pandas==2.2.3`) 공통 영역이므로 팀장·PM과 먼저 협의합니다.
 - `pip freeze > requirements.txt`로 파일 전체를 덮어쓰지 않습니다. 개인 환경의 불필요한 패키지까지 섞여 충돌이 생깁니다.
+- npm · React · 빌드 도구는 도입하지 않습니다.
 
 ### 8.3 줄바꿈(CRLF/LF) 설정
 
@@ -378,19 +376,39 @@ Windows에서 줄바꿈 차이 때문에 바꾸지 않은 줄까지 변경된 �
 
 ### 8.4 `.gitignore` 필수 항목
 
+저장소 맨 위 `.gitignore` 내용입니다. `reboot-dashboard/.gitignore`가 대시보드 폴더 규칙(`instance/`, `dev/`, `_incoming/` 등)을 더합니다.
+
 ```gitignore
-__pycache__/
-*.pyc
-venv/
-.venv/
+# 저장소 전체 공통 — 대시보드 폴더 규칙은 reboot-dashboard/.gitignore (RULE.md §8.4)
+
+# 비밀 정보 — 어느 폴더에 있어도 올리지 않음
 .env
+.env.*
+!.env.example
+credentials.json
+token.json
+client_secret*.json
+
+# 실행 데이터 (DB · 업로드)
 instance/
 *.db
 *.sqlite3
 uploads/
-.vscode/
+
+# 파이썬 · 도구 · 캐시
+__pycache__/
+*.pyc
+venv/
+.venv/
+.playwright-mcp/
+
+# 편집기 · AI 개인 설정
+.vscode/*
+!.vscode/settings.json
 .idea/
 .claude/settings.local.json
+
+# OS
 .DS_Store
 Thumbs.db
 ```
@@ -399,15 +417,10 @@ Thumbs.db
 
 ## 9. 코드 스타일
 
-- 들여쓰기: Python 4칸, HTML/CSS/JS 2칸
-- 포매터: `black` (Python). 커밋 전에 **내가 바꾼 파일만** 포맷합니다.
-
-```cmd
-black 내가바꾼파일.py
-```
-
-- `black .`처럼 **프로젝트 전체를 한 번에 포맷하지 않습니다.** 다른 사람 파일까지 바뀌어 대량 충돌이 납니다.
+- 들여쓰기: Python 4칸, HTML/CSS/JS 2칸 (파일에 이미 있는 방식을 따름)
+- **저장할 때 포매터로 파일 전체를 자동 정렬하지 않습니다.** (`black .`, 편집기의 "저장 시 서식 지정" 등) 바뀐 줄이 많아져 다른 사람과 충돌이 납니다. 내가 고친 줄만 손으로 정리합니다.
 - 주석은 "무엇을"보다 "왜"를 적습니다.
+- 사실·숫자·FDA 문구는 지어내지 않습니다. 모르면 `null` · `{확인 필요}` · 빈 상태로 두고, 더미 데이터는 화면에 `예시`·`더미` 배지를 붙입니다.
 
 ---
 
@@ -472,7 +485,7 @@ exit 0
 ## 11. 비밀 정보와 데이터
 
 - `.env`, API 키, 비밀번호, DB 파일, 사용자 업로드 파일은 **커밋·메신저·AI 채팅에 올리지 않습니다.**
-- 새 환경변수가 필요하면 `.env.example`에 **이름만** 추가하고(값은 비움), PR에 적습니다.
+- 새 환경변수가 필요하면 `reboot-dashboard/.env.example`에 **이름만** 추가하고(값은 비움), PR에 적습니다. 키는 `.env` · Render Environment · 대시보드 **설정 › 연결** 화면에만 넣습니다.
 - 실수로 비밀 정보를 push했다면 즉시 팀장·PM에게 알리고 해당 키를 **폐기 후 재발급**합니다. (커밋을 지워도 기록에 남기 때문)
 - 테스트에는 실제 사용자 데이터가 아닌 가짜(합성) 데이터를 사용합니다.
 
