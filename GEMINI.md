@@ -6,7 +6,8 @@
 - 사용자의 담당 폴더 밖과 공통 영역(app.py, config.py, requirements.txt, .env.example, core/, 규칙 문서, AI 도구 설정 파일)은 수정하지 않고 보고만 한다.
 - 작업할 파트 폴더의 `README.md`를 먼저 읽는다. 다른 파트 기능은 그 파트 README의 "다른 파트에 제공하는 함수"를 확인하고 가져다 쓴다. (`RULE.md` §5.4)
 - 새 함수·파일을 만들기 전에 해당 파트의 README.md, routes.py, services/, templates/, static/와 core/에서 같은 역할이 있는지 먼저 찾는다.
-- main, pre_main 브랜치에서 작업하지 않으며, Git 쓰기 명령은 매번 허가를 받는다. force push, reset --hard, rebase는 하지 않는다.
+- 작업은 사용자의 이니셜 브랜치(예: `NW`)에서 하고, main·pre_main에서는 작업하지 않는다. 시작 전에 pre_main 최신 내용을 merge했는지 확인한다.
+- 기능 추가·수정 구분은 커밋 메시지 타입(`feat:`, `fix:`, `docs:` 등)으로 한다. Git 쓰기 명령은 매번 허가를 받는다. force push, reset --hard, rebase는 하지 않는다.
 - 명령은 Windows cmd 기준으로 작성한다. (예: `venv\Scripts\activate`, `copy`)
 - .env, API 키, DB 파일(instance/, *.db)의 내용을 출력하거나 복사하지 않는다.
 - `AGENTS.md`(Codex 등)·`CLAUDE.md`(Claude Code)·`GEMINI.md`(Gemini) 세 파일은 내용이 같다. 고칠 때는 세 파일을 함께 고친다. (`AI_RULES.md` §6)
