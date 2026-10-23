@@ -1,5 +1,6 @@
 /* 홈 · 데일리 브리핑 (담당: 이현경) — 설명서 tabs/home/docs/README.md · 메모 tabs/home/docs/NOTES.md
-   화면 3개 (시안 v3 · 왼쪽 메뉴): 시작하기 · 데일리 브리핑 · 콘텐츠 캘린더
+   화면 2개 (왼쪽 메뉴): 데일리 브리핑 · 콘텐츠 캘린더 (시작하기는 2026-10-24 삭제)
+   모든 화면 오른쪽 아래: 이번 주 To-Do 버튼 → 사이드 패널 (home.js가 모든 페이지에서 불리므로 여기서 붙임)
    데일리 브리핑: 히어로(뉴스 신호 · 할 일 · 다음 시즌) → 시즌 카드 3 → KPI 4 → 왼쪽: 성과 차트 · 업계 뉴스 / 오른쪽: To-Do · 최근 활동
    - 뉴스: 저장된 결과만 읽음 (구글 뉴스는 '지금 수집' 버튼·하루 1회 작업만 부름)
    - To-Do: 그 주 처음 열면 자동 생성 (OpenAI 키가 없으면 규칙), 항목마다 근거 표시
@@ -16,7 +17,7 @@
   const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
   const DAY = 86400000;
 
-  const S = { root: null, view: '', briefing: false, resumeLoaded: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: false, poll: null, calMonth: '', watching: false };
+  const S = { root: null, view: '', briefing: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: false, poll: null, calMonth: '', watching: false };
   const ref = name => S.root && S.root.querySelector(`[data-ref="${name}"]`);
 
   /* ───────── 날짜 (YYYY-MM-DD 문자열, UTC로 계산) ───────── */
@@ -298,6 +299,7 @@
     if (!old || old.week !== v.week || old.open !== v.open) store.set('todoBadge', v);
     const el = doc.querySelector('[data-count="home"]');
     if (el) { el.textContent = v.open > 99 ? '99+' : String(v.open); el.hidden = v.open <= 0; }
+    dock.sync(t);
   }
   function todoHtml(t) {
     const tag = t.origin === 'ai' ? badge('AI', 'purple') : t.origin === 'rule' ? badge('규칙') : badge('직접', 'blue');
@@ -429,7 +431,7 @@
     } else if (n.ai) {
       // 기사 카드: 기존 동향 카드와 같은 모양 (한국어 제목 · 한 줄 요약 · 주제/보도 급증 · 매체 · 날짜 · 영어 원제목)
       const items = (n.ai.items || []).map(a => `
-        <div class="market-item"><div class="market-symbol">${icon(a.surge ? 'up' : 'globe')}</div>
+        <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon(a.surge ? 'up' : 'globe')}</div>
           <div><p>${articleLink(a, a.titleKo || a.title)}</p><small>${esc(a.summaryKo)}</small>
           <small class="home-links">${[a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
           <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`);
@@ -437,7 +439,7 @@
         ${signalsHtml(n)}${items.length ? newsList(items) : '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}`;
     } else {
       const arts = (n.articles || []).map(a => `
-        <div class="market-item"><div class="market-symbol">${icon('globe')}</div>
+        <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon('globe')}</div>
           <div><p>${articleLink(a, a.title)}</p><small>${esc(a.domain)}${a.groupLabel ? ` · ${esc(a.groupLabel)}` : ''} · ${esc(fmt.relative(a.date))}</small></div></div>`);
       body.innerHTML = `${signalsHtml(n)}${arts.length ? newsList(arts) : '<p class="panel-note">최근 7일 기사가 없습니다.</p>'}
         ${n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약 실패: ${esc(n.aiError)} — 다음 수집 때 다시 시도합니다.</p>` : '')
@@ -508,13 +510,10 @@
     }
   }
 
-  /* 홈의 하위 화면 (시안 v3): 시작하기 · 데일리 브리핑 · 콘텐츠 캘린더
+  /* 홈의 하위 화면: 데일리 브리핑 · 콘텐츠 캘린더
      탭 줄(role="tablist")은 core.js가 왼쪽 메뉴로 옮겨 보여 줍니다. 주소 #briefing · #calendar로 바로 열 수 있음 */
-  const VIEWS = [['start', '시작하기', 'home'], ['briefing', '데일리 브리핑', 'chart'], ['calendar', '콘텐츠 캘린더', 'calendar']];
+  const VIEWS = [['briefing', '데일리 브리핑', 'chart'], ['calendar', '콘텐츠 캘린더', 'calendar']];
   const viewFromHash = () => { const h = (global.location.hash || '').replace('#', ''); return VIEWS.some(v => v[0] === h) ? h : null; };
-  function longDate(iso) {
-    return new Date(toTime(iso)).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }).toUpperCase();
-  }
   const koDate = iso => `${iso.slice(0, 4)}년 ${+iso.slice(5, 7)}월 ${+iso.slice(8, 10)}일 ${WEEKDAY[dow(iso)]}요일`;
   function userName() { const u = REBOOT.user(); return u.name || String(u.email || '').split('@')[0] || ''; }
 
@@ -522,7 +521,7 @@
     const page = REBOOT.page;
     const actions = page.actions();
     const ws = weekStartOf(REBOOT.today());
-    page.heading(id !== 'start');
+    page.heading(true);
     if (id === 'briefing') {
       page.title('오늘의 흐름을 읽고, 다음을 준비해요.');
       page.subtitle(`${koDate(REBOOT.today())} · ${userName()}님을 위한 데일리 브리핑`);
@@ -534,17 +533,6 @@
       if (actions) actions.innerHTML = `<a class="btn" href="/dashboard/settings#collect">${icon('edit')} 시즌 편집</a>
         <button type="button" class="btn lime" data-go-view="briefing">${icon('chart')} 데일리 브리핑</button>`;
     } else if (actions) actions.innerHTML = '';
-  }
-  async function paintStart() {
-    const s = upcomingSeasons()[0];
-    const next = ref('next-text');
-    if (next) next.textContent = s ? `${+s.start.slice(5, 7)}월 ${+s.start.slice(8, 10)}일 · ${s.name} (${s.ongoing ? '진행 중' : fmt.dday(s.start)})` : '등록된 시즌이 없어요 · 설정에서 추가';
-    if (S.resumeLoaded) return;
-    S.resumeLoaded = true;
-    const c = await campaigns();
-    const items = c && Array.isArray(c.items) ? c.items.slice().sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))) : [];
-    const box = ref('resume-text');
-    if (box) box.textContent = items.length ? `${items[0].title || '제목 없는 캠페인'}${items[0].status ? ` · ${items[0].status}` : ''}` : '새 캠페인을 시작해 보세요 · 콘텐츠 제작';
   }
   function paintBriefing() {
     paintHero();
@@ -565,11 +553,10 @@
     });
     S.root.querySelectorAll('[data-view-panel]').forEach(p => { p.hidden = p.dataset.viewPanel !== id; });
     paintHeading(id);
-    if (id === 'start') paintStart();
     if (id === 'briefing' && !S.briefing) { S.briefing = true; paintBriefing(); }
     if (id === 'calendar') paintCalendar();
     if (!opts || opts.hash !== false) {
-      const h = id === 'start' ? '' : `#${id}`;
+      const h = `#${id}`;
       if ((global.location.hash || '') !== h && global.history && global.history.replaceState) {
         global.history.replaceState(null, '', global.location.pathname + global.location.search + h);
       }
@@ -579,30 +566,9 @@
   function render(root) {
     S.root = root;
     root.classList.add('part-home');
-    const today = REBOOT.today();
     root.innerHTML = `
       <div class="subtabs" role="tablist" aria-label="홈 화면">${VIEWS.map(([id, label, ic]) =>
         `<button type="button" role="tab" data-view="${id}" data-icon="${ic}" aria-selected="false">${esc(label)}</button>`).join('')}</div>
-
-      <div data-view-panel="start" role="tabpanel" hidden>
-        <div class="intro-greeting"><h1>반가워요, ${esc(userName())}님.</h1>
-          <div class="date"><b>${esc(longDate(today))}</b>오늘도 새로운 가능성을 만나보세요.</div></div>
-        <div class="intro-section-head"><h2>오늘은 어디서 시작할까요?</h2><span>YOUR WORKSPACE, YOUR FLOW</span></div>
-        <div class="launch-grid">${[
-          ['01', '/dashboard/insights', 'globe', '시장을 살펴볼까요?', '고객의 목소리와 시장의 변화에서<br>새로운 기회를 발견하세요.'],
-          ['02', '/dashboard/content', 'spark', '아이디어를 만들어볼까요?', '짧은 대화로 시작해, 우리다운<br>콘텐츠를 완성해보세요.'],
-          ['03', '/dashboard/partners', 'users', '함께할 파트너를 찾을까요?', '좋은 연결을 시작하고<br>협업의 다음 단계를 준비하세요.']
-        ].map(([n, href, ic, t, d]) => `<a class="launch-card${n === '02' ? ' featured' : ''}" href="${href}">
-          <div class="launch-top"><span class="launch-icon">${icon(ic)}</span><span class="launch-num">${n}</span></div>
-          <h3>${t}<span class="corner-arrow">${icon('up')}</span></h3><p>${d}</p></a>`).join('')}</div>
-        <div class="continue-row">
-          <a class="continue-card" href="/dashboard/content"><span class="continue-icon">${icon('image')}</span>
-            <div><h3>이어서 작업하기</h3><p data-ref="resume-text">콘텐츠 제작 · 내 캠페인</p></div>${icon('arrow')}</a>
-          <button type="button" class="continue-card" data-go-view="calendar"><span class="continue-icon">${icon('calendar')}</span>
-            <div><h3>다가오는 콘텐츠 일정</h3><p data-ref="next-text">—</p></div>${icon('arrow')}</button>
-        </div>
-        <p class="intro-tip">상단에서 업무 영역을 고르고, 왼쪽 메뉴에서 필요한 화면으로 이동하세요.</p>
-      </div>
 
       <div data-view-panel="briefing" role="tabpanel" hidden>
         <section class="brief-hero">
@@ -685,6 +651,8 @@
         paintChart();
         return;
       }
+      const card = e.target.closest('.home-news-card');
+      if (card && !e.target.closest('a, button')) { global.open(card.dataset.href, '_blank', 'noopener'); return; }
       const b = e.target.closest('[data-act]');
       if (!b) return;
       const act = b.dataset.act;
@@ -706,9 +674,95 @@
       if (v) showView(v.dataset.goView);
     });
     ref('todo-form').addEventListener('submit', e => { e.preventDefault(); addTodo(e.currentTarget); });
-    global.addEventListener('hashchange', () => { const v = viewFromHash() || 'start'; if (v !== S.view) showView(v, { hash: false }); });
-    showView(viewFromHash() || 'start', { hash: false });
+    global.addEventListener('hashchange', () => { const v = viewFromHash() || 'briefing'; if (v !== S.view) showView(v, { hash: false }); });
+    showView(viewFromHash() || 'briefing', { hash: false });
   }
+
+  /* ───────── 이번 주 To-Do 버튼 (모든 화면 오른쪽 아래) ─────────
+     버튼 → 오른쪽 사이드 패널: 할 일 확인 · 체크만 (추가 · 삭제 · 다시 만들기는 데일리 브리핑에서)
+     홈 화면이 열려 있으면 브리핑의 To-Do 카드와 같은 목록을 함께 고침 */
+  const dock = (() => {
+    const D = { el: null, todos: null, open: false, loading: false };
+    const q = name => D.el && D.el.querySelector(`[data-dock="${name}"]`);
+
+    function itemHtml(t) {
+      return `<label class="home-dock-item${t.done ? ' done' : ''}" data-id="${esc(t.id)}">
+        <input type="checkbox" data-dock-toggle${t.done ? ' checked' : ''} aria-label="완료 표시: ${esc(t.title)}">
+        <span class="grow"><span class="home-dock-title">${esc(t.title)}</span><span class="home-dock-reason">근거: ${esc(t.reason || '—')}</span></span></label>`;
+    }
+    function paint() {
+      if (!D.el) return;
+      const t = D.todos;
+      const open = t ? t.items.filter(i => !i.done).length : 0;
+      const count = q('count');
+      count.textContent = open > 99 ? '99+' : String(open);
+      count.hidden = !t || open <= 0;
+      q('left').textContent = t && t.items.length ? `${open}개 남음` : '';
+      q('meta').textContent = t ? `${md(t.week.start)} — ${md(t.week.end)}` : '';
+      const list = q('list');
+      if (!t) { list.innerHTML = D.loading ? '<div class="skeleton" style="height:120px"></div>' : ''; return; }
+      list.innerHTML = !t.generated
+        ? ui.empty('이번 주 할 일이 아직 없어요. 데일리 브리핑을 열면 자동으로 만들어져요.', 'check')
+        : t.items.length ? t.items.map(itemHtml).join('') : ui.empty('이번 주 할 일이 없어요.', 'check');
+    }
+    async function load() {
+      D.loading = true;
+      paint();
+      try { D.todos = await REBOOT.api('/api/home/todos'); }
+      catch (e) { const list = q('list'); if (list) list.innerHTML = `<p class="note error">할 일을 불러오지 못했습니다: ${esc(e.message)}</p>`; return; }
+      finally { D.loading = false; }
+      paint();
+    }
+    function setOpen(on) {
+      D.open = on;
+      q('panel').hidden = !on;
+      q('scrim').hidden = !on;
+      q('fab').setAttribute('aria-expanded', String(on));
+      if (on) { load(); q('close').focus(); } else q('fab').focus();
+    }
+    async function toggle(box) {
+      const id = box.closest('[data-id]').dataset.id;
+      const done = box.checked;
+      try {
+        const u = await REBOOT.api(`/api/home/todos/${encodeURIComponent(id)}`, { done }, { method: 'PATCH' });
+        [D.todos, S.todos].forEach(t => {
+          const it = t && t.items.find(i => String(i.id) === String(id));
+          if (it) { Object.assign(it, u); t.items.sort((a, b) => (a.done - b.done)); }
+        });
+        if (S.root && S.todos) paintTodos(); else paint();
+      } catch (e) { box.checked = !done; toast(e.message, 'error'); }
+    }
+    function mount() {
+      if (D.el || !doc.body || !REBOOT.user || !REBOOT.user()) return;
+      D.el = doc.createElement('div');
+      D.el.className = 'home-dock';
+      D.el.innerHTML = `
+        <button type="button" class="home-fab" data-dock="fab" aria-expanded="false" aria-controls="home-dock-panel" aria-label="이번 주 To-Do 열기">
+          ${icon('check')}<span class="home-fab-count" data-dock="count" hidden></span></button>
+        <div class="home-dock-scrim" data-dock="scrim" hidden></div>
+        <aside class="home-dock-panel" id="home-dock-panel" data-dock="panel" role="dialog" aria-modal="true" aria-labelledby="home-dock-title" hidden>
+          <div class="home-dock-head"><h2 id="home-dock-title">이번 주 To-Do <span class="muted small" data-dock="left"></span></h2>
+            <button type="button" class="home-dock-close" data-dock="close" aria-label="닫기">${icon('x')}</button></div>
+          <p class="panel-note" data-dock="meta"></p>
+          <div class="home-dock-list" data-dock="list"></div>
+          <a class="btn small home-dock-go" href="/dashboard#briefing">${icon('chart')} 데일리 브리핑에서 보기 · 추가</a>
+        </aside>`;
+      doc.body.appendChild(D.el);
+      D.el.addEventListener('click', e => {
+        if (e.target.closest('[data-dock="fab"]')) setOpen(!D.open);
+        else if (e.target.closest('[data-dock="close"], [data-dock="scrim"], .home-dock-go')) setOpen(false);
+      });
+      D.el.addEventListener('change', e => { if (e.target.matches('[data-dock-toggle]')) toggle(e.target); });
+      doc.addEventListener('keydown', e => { if (e.key === 'Escape' && D.open) setOpen(false); });
+      const b = store.get('todoBadge', null);
+      if (b && b.week === weekStartOf(REBOOT.today())) { q('count').textContent = b.open > 99 ? '99+' : String(b.open); q('count').hidden = b.open <= 0; }
+    }
+    if (doc) {
+      if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', mount);
+      else mount();
+    }
+    return { sync(t) { D.todos = t; paint(); } };
+  })();
 
   REBOOT.register({
     id: 'home', label: '홈 · 데일리 브리핑', order: 10, render,

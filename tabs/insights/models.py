@@ -169,6 +169,50 @@ class Monthly(db.Model):
     created_by = db.Column(db.String(100), nullable=False, default="")
 
 
+class Competitor(db.Model):
+    """경쟁사 한 곳 — 진열대에서 새 브랜드가 보이면 등록, 분석은 리뷰 상위 15개 브랜드만 (README '경쟁사 분석')."""
+    __tablename__ = "insights_competitors"
+
+    id = db.Column(db.Integer, primary_key=True)
+    brand = db.Column(db.String(120), nullable=False, unique=True)
+    tier = db.Column(db.String(12), nullable=False, default="category")   # direct · category · substitute
+    status = db.Column(db.String(10), nullable=False, default="active")   # active · archived
+    keywords = db.Column(db.Text, nullable=False, default="[]")           # 처음 · 다시 발견된 검색어
+    website = db.Column(db.String(500), nullable=False, default="")
+    analysis = db.Column(db.Text, nullable=False, default="{}")           # 7개 항목 (AI) · 비어 있으면 아직 분석 전
+    sources = db.Column(db.Text, nullable=False, default="[]")            # [{id, type, title, url}]
+    model = db.Column(db.String(80), nullable=False, default="")
+    first_seen = db.Column(db.DateTime, nullable=False, default=utcnow)
+    last_seen = db.Column(db.DateTime, nullable=False, default=utcnow)
+    researched_at = db.Column(db.DateTime)
+
+
+class CompetitorHistory(db.Model):
+    """다시 조사했을 때 바뀌기 전 분석 + 바뀐 항목."""
+    __tablename__ = "insights_competitor_history"
+
+    id = db.Column(db.Integer, primary_key=True)
+    competitor_id = db.Column(db.Integer, nullable=False, index=True)
+    analysis = db.Column(db.Text, nullable=False, default="{}")
+    changed = db.Column(db.Text, nullable=False, default="[]")
+    researched_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class ProductPosition(db.Model):
+    """매트릭스 점 하나 = 상품 하나 — 제형(규칙) · 섭취 타이밍(AI 또는 규칙) · 웰니스."""
+    __tablename__ = "insights_product_positions"
+
+    key = db.Column(db.String(200), primary_key=True)                     # 진열대 key (amazon:<ASIN> …)
+    brand = db.Column(db.String(120), nullable=False, default="")
+    form = db.Column(db.String(10), nullable=False, default="")           # liquid · solid · "" (모름)
+    timing = db.Column(db.String(10), nullable=False, default="")         # pre · post · both · "" (모름)
+    wellness = db.Column(db.Boolean, nullable=False, default=False)
+    classified_by = db.Column(db.String(10), nullable=False, default="rule")
+    sig = db.Column(db.String(40), nullable=False, default="")            # 상품명 · 문구가 바뀌면 다시 분류
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
 class KV(db.Model):
     """작은 상태값: 주시 브랜드 · Weee! 원문 일부 · 아마존 리뷰 요약."""
     __tablename__ = "insights_kv"
