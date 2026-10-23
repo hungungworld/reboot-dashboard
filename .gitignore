@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+.env
+instance/
+*.db
+*.sqlite3
+uploads/
+.vscode/
+.idea/
+.claude/settings.local.json
+.DS_Store
+Thumbs.db
