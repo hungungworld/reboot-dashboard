@@ -165,6 +165,8 @@ def config():
                    prompts=prompts.DEFAULT_PROMPTS, mailSteps=prompts.MAIL_STEPS,
                    guidePurposes=prompts.GUIDE_PURPOSES, guideSections=prompts.GUIDE_SECTIONS,
                    productDesc=prompts.product_desc(catalog.get_brand(), products),
+                   products=[{"id": p.get("id"), "name": p.get("name") or p.get("id"), "form": p.get("form") or ""}
+                             for p in products],
                    attachments={"extensions": list(ALLOWED_EXT), "maxFileMB": MAX_ATTACH_FILE // MB,
                                 "maxTotalMB": MAX_ATTACH_TOTAL // MB})
 
@@ -180,6 +182,14 @@ def _imports_meta():
     return out
 
 
+def _sync_bundled():
+    """tabs/partners/data/contacts/의 기본 업체 파일을 필요할 때만 DB에 반영 (importer.sync_bundled)."""
+    loaded = importer.sync_bundled()
+    for t in loaded:
+        worklog.add("partners", "수집", f"기본 업체 파일 자동 불러오기 ({t})", detail={"type": t})
+    return loaded
+
+
 def _haystack(c):
     return " ".join((c["name"], c["location"], c["category"], c["email"])).lower()
 
@@ -187,6 +197,7 @@ def _haystack(c):
 @bp.get("")
 @bp.get("/contacts")
 def contacts():
+    _sync_bundled()
     rows = PartnerContact.query.all()
     rows.sort(key=lambda c: (c.ptype != CATERING, c.sort))
     items = [c.to_dict() for c in rows]
@@ -299,6 +310,7 @@ def _partner_key(h):
 
 @bp.get("/overview")
 def overview():
+    _sync_bundled()
     contacts_all = PartnerContact.query.all()
     hist = PartnerHistory.query.order_by(PartnerHistory.at.asc(), PartnerHistory.id.asc()).all()
     latest, counts, mail_latest = {}, {}, {}
@@ -624,7 +636,10 @@ def guide_generate():
         if isinstance(b, dict) and str(b.get("term") or "").strip():
             banned.append({"dont": clip(b.get("term"), 80), "do_instead": clip(b.get("alt"), 200)})
     sender, _ = mailer.credentials()
-    facts = catalog.product_facts()
+    ids = [str(x) for x in (data.get("product_ids") if isinstance(data.get("product_ids"), list) else [])[:20]]
+    facts = catalog.product_facts(ids or None)
+    if not facts["products"]:   # 고른 제품이 목록에 없으면 전체
+        facts = catalog.product_facts()
     system, user = prompts.guide_messages(
         ptype, purpose, clip(data.get("schedule"), 2000), clip(data.get("must_include"), 3000),
         clip(data.get("deliverables"), 3000), banned,
@@ -875,6 +890,7 @@ def _date_arg(name):
 
 @bp.get("/sales")
 def sales_report():
+    _sync_bundled()
     rows = PartnerContact.query.filter_by(ptype=INFLUENCER).order_by(PartnerContact.sort).all()
     names = [c.name for c in rows if not c.is_example]
     return jsonify(sales.report(names, catalog._today(), _date_arg("start"), _date_arg("end")))

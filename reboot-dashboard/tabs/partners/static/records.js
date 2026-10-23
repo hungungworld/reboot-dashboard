@@ -160,6 +160,7 @@
     wireHistory(st);
     paintFiltersBar(st);
     paintBody(st);
+    if (smtp) autoCheckReplies(st);
   }
 
   function partnerOptions(st) {
@@ -290,7 +291,7 @@
       const ed = t.closest('[data-rec-edit]');
       if (ed) return editRecord(st, st.items.find(h => h.id === Number(ed.dataset.recEdit)));
       const rp = t.closest('[data-rec-reply]');
-      if (rp) return openReplyPanel(st, st.items.find(h => h.id === Number(rp.dataset.recReply)));
+      if (rp) return replyPopover(st, rp, st.items.find(h => h.id === Number(rp.dataset.recReply)));
       const act = t.closest('[data-rec-act]');
       if (!act || act.disabled) return;
       const a = act.dataset.recAct;
@@ -322,6 +323,27 @@
         if (name) { name.hidden = !!t.value; if (!t.value) name.focus(); }
       }
     });
+  }
+
+  /* 📥 협업 이력을 열 때 자동 답장 확인 — 5분에 한 번 (조용히: 갱신이 있을 때만 알림) */
+  const AUTO_CHECK_MS = 5 * 60 * 1000;
+  let lastAutoCheck = 0;
+  async function autoCheckReplies(st) {
+    if (Date.now() - lastAutoCheck < AUTO_CHECK_MS) return;
+    lastAutoCheck = Date.now();
+    const btn = st.el.querySelector('[data-rec-act="check"]');
+    if (btn) ui.busy(btn, true);
+    try {
+      const out = await REBOOT.api('/api/partners/replies/check', {});
+      if (out.replies || out.bounces) {
+        toast(`새 답장 확인 — 회신 ${out.replies}건 · 반송 ${out.bounces}건`);
+        if (st.el.isConnected) await reload(st);
+      }
+    } catch (e) {
+      console.warn('[partners] 자동 답장 확인 실패:', e.message);
+    } finally {
+      if (btn && btn.isConnected) ui.busy(btn, false);
+    }
   }
 
   /* 📥 답장 확인 (Gmail IMAP) */
@@ -501,8 +523,53 @@
     if (v && st.el.isConnected) paintBody(st);
   }
 
+  /* 🟢 회신 받음 클릭 → 작은 미리보기 (보낸 사람 · 제목 · 앞부분) → '답장 내용 전체 보기'로 회신 창 */
+  let popClose = null;
+  function replyPopover(st, anchor, h) {
+    if (popClose) popClose();
+    if (!h || !h.reply) return;
+    const r = h.reply;
+    const text = String(r.body || '').replace(/\s+/g, ' ').trim();
+    const pop = doc.createElement('div');
+    pop.className = 'card ptn-rec-pop';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', `${h.partnerName || ''} 회신 미리보기`);
+    pop.innerHTML = `
+      <div class="between"><strong>${esc(h.partnerName || '')}</strong>${mailBadge('회신 받음')}</div>
+      <p class="small muted">${esc(r.from || '')} · ${esc(fmt.datetime(r.at))}</p>
+      <p class="small"><b>${esc(r.subject || '(제목 없음)')}</b></p>
+      <p class="small ptn-rec-pop-text">${esc(text.slice(0, 240) || '(본문 없음)')}${text.length > 240 ? '…' : ''}</p>
+      <div class="flex wrap mt-8">
+        <button type="button" class="btn small dark" data-pop="open">📨 답장 내용 전체 보기</button>
+        <button type="button" class="btn small ghost" data-pop="close">닫기</button>
+      </div>`;
+    doc.body.appendChild(pop);
+    const a = anchor.getBoundingClientRect();
+    const w = Math.min(360, window.innerWidth - 32);
+    pop.style.width = w + 'px';
+    pop.style.left = Math.max(16, Math.min(a.left + window.scrollX, window.scrollX + window.innerWidth - w - 16)) + 'px';
+    pop.style.top = (a.bottom + window.scrollY + 6) + 'px';
+    const onDoc = e => { if (!pop.contains(e.target) && !anchor.contains(e.target)) close(); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    function close() {
+      pop.remove();
+      doc.removeEventListener('mousedown', onDoc);
+      doc.removeEventListener('keydown', onKey);
+      popClose = null;
+    }
+    popClose = close;
+    setTimeout(() => { doc.addEventListener('mousedown', onDoc); doc.addEventListener('keydown', onKey); });
+    pop.addEventListener('click', e => {
+      const b = e.target.closest('[data-pop]');
+      if (!b) return;
+      close();
+      if (b.dataset.pop === 'open') openReplyPanel(st, h, { showOriginal: true });
+    });
+    pop.querySelector('[data-pop="open"]').focus();
+  }
+
   /* 🟢 회신 창: AI 요약 · AI 답장 초안 · 같은 대화로 답장 발송 */
-  async function openReplyPanel(st, h) {
+  async function openReplyPanel(st, h, opts = {}) {
     if (!h || !h.reply) return;
     const r = h.reply;
     const s = st.status || {};
@@ -518,7 +585,7 @@
             <p class="small"><b>${esc(r.subject || '')}</b></p>
           </div>
           <div class="ptn-rec-summary mt-16" data-ref="summary">${s.openai ? '<div class="skeleton ptn-skel-sm"></div>' : `<p class="note">${settingsLink}에서 OPENAI_API_KEY를 넣으면 AI 요약(핵심 · 요청사항 · 분위기 · 다음 액션)을 볼 수 있습니다.</p>`}</div>
-          <details class="mt-16"${s.openai ? '' : ' open'}><summary class="small">회신 원문</summary><pre class="ptn-rec-pre">${esc(r.body || '(본문 없음)')}</pre></details>
+          <details class="mt-16"${s.openai && !opts.showOriginal ? '' : ' open'}><summary class="small">회신 원문</summary><pre class="ptn-rec-pre">${esc(r.body || '(본문 없음)')}</pre></details>
           <details class="mt-8"><summary class="small">우리가 보낸 메일</summary><pre class="ptn-rec-pre">${esc(h.subject || '')}\n\n${esc(h.body || '')}</pre></details>
         </div>
         <div>

@@ -57,7 +57,7 @@
     // 업체 파일 형식 안내
     importHelp: {
       catering: 'top50catering.csv 형식 · No · Company Name · Contact Email · Phone Number · Official Website URL · Office Location · Category Focus · Why Relevant',
-      influencer: 'US_Influencer_Public_Contacts_72.xlsx 형식 · 6행 머리글 · 번호 · 업체명 · 공개 이메일 · 공개 전화/문자 · 공식 사이트 URL · 미국 시장 범위 · 서비스 형태 · 서비스/검토 이유 · 주의/연락처 용도'
+      influencer: 'US_Influencer_Public_Contacts_72.xlsx · .csv 형식 · 6행 머리글 · 번호 · 업체명 · 공개 이메일 · 공개 전화/문자 · 공식 사이트 URL · 미국 시장 범위 · 서비스 형태 · 서비스/검토 이유 · 주의/연락처 용도'
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

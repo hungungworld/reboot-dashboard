@@ -4,6 +4,8 @@
 - DEFAULT_PROMPTS   구분별 생성 프롬프트 기본값 (화면 ⚙️ 생성 프롬프트에서 고치고 ↺로 되돌림). 자리표시자 {product} {ideal} {partner}
 - GUIDE_PURPOSES    협업 가이드 목적 선택지 (유형별 6개) — 여기서 고칩니다
 - GUIDE_SECTIONS    협업 가이드 고정 구성
+- GUIDE_SUMMARY     협업 가이드 1번 '한 줄 요약' 고정 문장 (질병·효능 주장 없이 — README §12)
+- GUIDE_KEY_MESSAGE 핵심 메시지에 꼭 넣는 한 줄 (한국어 | English)
 """
 import json
 
@@ -64,11 +66,15 @@ GUIDE_PURPOSES = {
     CATERING: ["현장 샘플링", "바 메뉴 입점", "페스티벌·콘서트 부스", "VIP 파티 웰컴 키트", "브랜드 팝업 공동 개최", "대학·테일게이트 시즌"],
 }
 
+GUIDE_SUMMARY = "REBOOT는 즐거운 밤 다음 날, 가볍게 하루를 다시 시작하는 스틱 젤리·음료입니다."
+
+GUIDE_KEY_MESSAGE = "REBOOT와 함께 더 즐거운 하루를 보내세요. | Enjoy a brighter day with REBOOT."
+
 GUIDE_SECTIONS = [
-    {"title": "한 줄 요약", "how": "인용(>) 한 줄 — 문서 맨 앞 콜아웃"},
+    {"title": "한 줄 요약", "how": f"인용(>) 한 줄 — 1번 섹션 안에만 · 문장 고정: {GUIDE_SUMMARY}"},
     {"title": "협업 개요", "how": "표 | 항목 | 내용 | — 브랜드 · 제품 · 협업 유형 · 목적 · 기간 · 대상(21세 이상)"},
     {"title": "일정", "how": "표 | 단계 | 날짜 | 내용 |"},
-    {"title": "핵심 메시지 (한/영)", "how": "표 | 한국어 | English | — 3개"},
+    {"title": "핵심 메시지 (한/영)", "how": "표 | 한국어 | English | — 3개 · 21세 이상 대상 문구는 넣지 않음 (대상은 협업 개요에만)"},
     {"title": "결과물 및 제출 기준", "how": "표 | 결과물 | 기준 | 제출 방법·기한 |"},
     {"title": "표현 가이드 Do & Don't", "how": "표 | Do | Don't | — 금지 표현과 대신 쓸 표현"},
     {"title": "FTC 광고 표기", "how": "목록 — #ad · Paid partnership 표시, 첫 화면·첫 줄, 무상 제공도 표기"},
@@ -81,6 +87,11 @@ Write the guide in Korean Markdown (key messages also in English). Start with a 
 {sections}
 
 Rules:
+- Each "## " heading is only the number and section title (e.g. "## 1. 한 줄 요약"); never copy the format notes after " - " into headings.
+- Put nothing between the "# " title and section 1. Section 1 is exactly one blockquote line with this sentence, unchanged: "> {summary}"
+- Key messages must not include an adults-21+ / age-target line; the 21+ audience appears only in the collaboration overview table.
+- Key messages are positive lifestyle messages, never "consult a doctor/expert" notices. One of them must be: "{key_message}"
+- In the collaboration overview, the 제품 row lists the internal_name of every product given in brand_and_products (only those).
 - Use Markdown tables with a header row where a table is specified. Keep cells short.
 - Never make medical, disease or health-benefit claims and never use "hangover" in the Do column, key messages or anywhere else except the Don't column as an example of what not to say. Never encourage excessive drinking; the audience is adults 21+.
 - In the Do & Don't table, put the banned expressions provided in the Don't column and safe alternatives in the Do column.
@@ -157,7 +168,7 @@ def guide_messages(ptype, purpose, schedule, must_include, deliverables, banned,
         "banned_expressions": banned or [], "brand_and_products": facts, "contact": contact or "[확인 필요: 담당자 연락처]",
         "issue_date": today,
     }
-    return GUIDE_RULES.replace("{sections}", sections), user
+    return GUIDE_RULES.replace("{sections}", sections).replace("{summary}", GUIDE_SUMMARY).replace("{key_message}", GUIDE_KEY_MESSAGE), user
 
 
 def summary_user(original_subject, original_body, reply_from, reply_subject, reply_body):
