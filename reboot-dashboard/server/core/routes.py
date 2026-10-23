@@ -4,7 +4,7 @@
   GET  /                         → /dashboard
   GET  /dashboard                홈
   GET  /dashboard/<파트ID>        각 메뉴 (셸 + 모든 파트 파일 + 현재 파트 render)
-  GET  /parts/<파일>              파트 JS·CSS (DATA_DIR/parts_override에 같은 이름이 있으면 그 파일)
+  GET  /parts/<파트ID>/<파일>      파트 JS·CSS = tabs/<파트ID>/static/<파일> (DATA_DIR/parts_override에 같은 이름이 있으면 그 파일)
   GET  /healthz                  Render 상태 확인 (로그인 없이)
 
 API (로그인 필요)
@@ -29,10 +29,9 @@ from sqlalchemy import text
 from werkzeug.security import safe_join
 
 from .. import envkeys, jobs, worklog
-from ..config import ROOT
 from ..extensions import csrf, db
 from ..models import StoreItem, WorkLog, iso, utcnow
-from ..registry import PARTS, assets, get_part
+from ..registry import PARTS, assets, get_part, static_dir
 from ..security import ApiError, json_body
 from .templating import greeting, local_now
 
@@ -104,10 +103,14 @@ def _render_part(part_id, extra=None):
 def part_file(filename):
     if Path(filename).suffix.lower() not in PART_FILE_TYPES:
         abort(404)
-    for base in (Path(current_app.config["DATA_DIR"]) / "parts_override", ROOT / "parts"):
-        full = safe_join(str(base), filename)
+    pid, _, name = filename.partition("/")
+    if get_part(pid) is None or not name:
+        abort(404)
+    # 덮어쓴 파일(DATA_DIR/parts_override/<파트ID>/<파일>) → 저장소 기본 파일(tabs/<파트ID>/static/<파일>)
+    for base, rel in ((Path(current_app.config["DATA_DIR"]) / "parts_override", filename), (static_dir(pid), name)):
+        full = safe_join(str(base), rel)
         if full and Path(full).is_file():
-            resp = send_from_directory(str(base), filename, max_age=0 if request.args.get("v") is None else 86400)
+            resp = send_from_directory(str(base), rel, max_age=0 if request.args.get("v") is None else 86400)
             return resp
     abort(404)
 
@@ -125,7 +128,7 @@ def healthz():
 
 def _gmail_ready():
     try:
-        from ..cs import gmail
+        from tabs.cs import gmail
         return gmail.ready()
     except Exception:
         return False

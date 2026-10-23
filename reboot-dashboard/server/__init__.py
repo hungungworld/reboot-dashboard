@@ -5,8 +5,11 @@
 
 구성
   core/                화면 공통 (base.css · core.js) — /core/… 로 제공
-  parts/<파트ID>/      파트 화면 (JS·CSS·data.js)    — /parts/… 로 제공 (로그인 필요)
-  server/<파트ID>/     파트 서버 기능 (routes.py의 bp, models.py) — /api/<파트ID>/…
+  server/              공통 서버 (설정 · 로그인 · 공용 기준 데이터 · 화면 셸)
+  tabs/<파트ID>/       탭 하나의 모든 것
+    *.py               파트 서버 기능 (routes.py의 bp, models.py) — /api/<파트ID>/…
+    static/            파트 화면 (JS·CSS·data.js) — /parts/<파트ID>/… 로 제공 (로그인 필요)
+    docs/ · data/ · tests/
 """
 import importlib
 import logging
@@ -21,8 +24,9 @@ from .extensions import csrf, db, limiter, login_manager
 from .registry import PARTS
 from .security import register_api_guards
 
-# 파트 서버 모듈: server/<이름>/routes.py 에 bp(Blueprint)가 있으면 등록, models.py가 있으면 표를 만듦
-MODULES = ("core", "auth", "catalog") + tuple(p.id for p in PARTS)
+# 서버 모듈: <패키지>/routes.py 에 bp(Blueprint)가 있으면 등록, models.py가 있으면 표를 만듦
+# 공통은 server.<이름>, 탭(파트)은 tabs.<파트ID>
+MODULES = tuple(f"server.{n}" for n in ("core", "auth", "catalog")) + tuple(f"tabs.{p.id}" for p in PARTS)
 
 
 def create_app(test_config=None):
@@ -68,8 +72,8 @@ def create_app(test_config=None):
     register_template_helpers(app)
 
     for name in MODULES:
-        _try_import(app, f"server.{name}.models")
-        mod = _try_import(app, f"server.{name}.routes")
+        _try_import(app, f"{name}.models")
+        mod = _try_import(app, f"{name}.routes")
         bp = getattr(mod, "bp", None) if mod else None
         if bp is not None:
             app.register_blueprint(bp)

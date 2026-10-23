@@ -21,14 +21,14 @@ reboot-dashboard/
 
 | 파트 ID | 메뉴 | 담당 | 화면 폴더 | 서버 폴더 | CSS 접두사 |
 |---|---|---|---|---|---|
-| home | 홈 · 데일리 브리핑 | 이현경 | parts/home | server/home | `home-` |
-| insights | 시장 · 고객 인사이트 | 이현경 | parts/insights | server/insights | `ins-` |
-| content | 콘텐츠 제작 | 나원 | parts/content | server/content | `cnt-` |
-| compliance | 컴플라이언스 | 소준희 | parts/compliance | server/compliance | `cmp-` |
-| cs | 고객 응대 (CS) | 소준희 | parts/cs | server/cs | `cs-` |
-| partners | 인플루언서 · 파트너 | 혁주 | parts/partners | server/partners | `ptn-` · `ptn-out-` · `ptn-rec-` |
-| performance | 성과분석 | 혁주 | parts/performance | server/performance | `perf-` |
-| settings | 설정 및 브랜드 관리 | 이현경 | parts/settings | server/settings | `set-` |
+| home | 홈 · 데일리 브리핑 | 이현경 | tabs/home/static | tabs/home | `home-` |
+| insights | 시장 · 고객 인사이트 | 이현경 | tabs/insights/static | tabs/insights | `ins-` |
+| content | 콘텐츠 제작 | 나원 | tabs/content/static | tabs/content | `cnt-` |
+| compliance | 컴플라이언스 | 소준희 | tabs/compliance/static | tabs/compliance | `cmp-` |
+| cs | 고객 응대 (CS) | 소준희 | tabs/cs/static | tabs/cs | `cs-` |
+| partners | 인플루언서 · 파트너 | 혁주 | tabs/partners/static | tabs/partners | `ptn-` · `ptn-out-` · `ptn-rec-` |
+| performance | 성과분석 | 혁주 | tabs/performance/static | tabs/performance | `perf-` |
+| settings | 설정 및 브랜드 관리 | 이현경 | tabs/settings/static | tabs/settings | `set-` |
 
 불러오는 파일 이름은 `server/registry.py`의 `scripts` · `styles`에 적힌 것만 읽습니다 (없으면 건너뜀).
 
@@ -37,7 +37,7 @@ reboot-dashboard/
 ## 2. 파트 화면 (JS) — 팀 README 6-1 형식 그대로
 
 ```js
-// parts/home/home.js
+// tabs/home/static/home.js
 (function (global) {
   'use strict';
   const REBOOT = global.REBOOT;
@@ -133,7 +133,7 @@ reboot-dashboard/
 ## 4. 파트 서버 (Flask)
 
 ```python
-# server/home/routes.py
+# tabs/home/routes.py
 from flask import Blueprint, jsonify
 from server import envkeys, worklog, jobs
 from server.core.ai import openai_json, openai_ready, AIError

@@ -154,7 +154,7 @@ python app.py              # 실행 주소는 터미널에 표시됨
     └── 작업 로그 ───────────────── 자동   승인 기록 · 프롬프트 로그 (제출용)
 ```
 
-> **(함께)** 표시는 여러 명이 내용을 같이 만드는 항목입니다. 내용은 같이 정하되, **코드는 기능별로 나눈 파일을 각자 맡아서** 수정합니다 (4장). 다른 팀원은 `docs/partners/`에 자료를 올리거나 PR 검토로 참여합니다.
+> **(함께)** 표시는 여러 명이 내용을 같이 만드는 항목입니다. 내용은 같이 정하되, **코드는 기능별로 나눈 파일을 각자 맡아서** 수정합니다 (4장). 다른 팀원은 `tabs/partners/docs/`에 자료를 올리거나 PR 검토로 참여합니다.
 
 ### 현재 구현 상태 (2026-10-22 · 단일 HTML 시연본 기준)
 
@@ -245,10 +245,10 @@ reboot-dashboard/
 
 | 담당 | 파트 | 수정할 수 있는 파일 |
 |---|---|---|
-| **이현경** | 로그인 · 홈 · 시장·고객 인사이트 · 설정 | `parts/home/` · `parts/insights/` · `parts/settings/` · `server/home/` · `server/insights/` · `server/settings/` · `docs/login/` · `docs/home/` · `docs/insights/` · `docs/settings/` (로그인 서버 `server/auth/`는 공통) |
-| **소준희** | 컴플라이언스 · 고객 응대(CS) | `parts/compliance/` · `parts/cs/` · `server/compliance/` · `server/cs/` · `docs/compliance/` · `docs/cs/` |
-| **나원** | 콘텐츠 제작 | `parts/content/` · `server/content/` · `docs/content/` |
-| **혁주** | 인플루언서 · 파트너 · 성과분석 | `parts/partners/` · `parts/performance/` · `server/partners/` · `server/performance/` · `docs/partners/` · `docs/performance/` |
+| **이현경** | 로그인 · 홈 · 시장·고객 인사이트 · 설정 | `tabs/home/static/` · `tabs/insights/static/` · `tabs/settings/static/` · `tabs/home/` · `tabs/insights/` · `tabs/settings/` · `docs/login/` · `tabs/home/docs/` · `tabs/insights/docs/` · `tabs/settings/docs/` (로그인 서버 `server/auth/`는 공통) |
+| **소준희** | 컴플라이언스 · 고객 응대(CS) | `tabs/compliance/static/` · `tabs/cs/static/` · `tabs/compliance/` · `tabs/cs/` · `tabs/compliance/docs/` · `tabs/cs/docs/` |
+| **나원** | 콘텐츠 제작 | `tabs/content/static/` · `tabs/content/` · `tabs/content/docs/` |
+| **혁주** | 인플루언서 · 파트너 · 성과분석 | `tabs/partners/static/` · `tabs/performance/static/` · `tabs/partners/` · `tabs/performance/` · `tabs/partners/docs/` · `tabs/performance/docs/` |
 | 공통 (팀장·PM 협의) | 뼈대·통합 | `core/` · `server/` 바로 아래 파일 · `server/core·auth·catalog·templates/` · `requirements.txt` · `README.md` · `CLAUDE.md` · 저장소 맨 위 `render.yaml`·`.github/` (저장소 `RULE.md` §5.2) |
 
 - **한 폴더는 한 사람만** 수정합니다. 두 명이 맡은 파트(인플루언서 · 파트너)는 **한 파일은 한 사람만** 수정합니다
@@ -274,9 +274,9 @@ reboot-dashboard/
 
 | 파일 | 하는 일 | 담당 |
 |---|---|---|
-| `parts/partners/partners.js` · `partners.css` | 메뉴 등록, 탭 틀, 공통 스타일만 (기능 코드 넣지 않음) | 혁주 |
-| `parts/partners/outreach.js` · `data-outreach.js` | (함께) 외주업체 컨택 CSV, 협업 제안 메일, 인플루언서·케이터링 가이드 | 혁주 |
-| `parts/partners/records.js` · `data-records.js` | 협업 이력, 크리에이터별 판매 실적 | 혁주 |
+| `tabs/partners/static/partners.js` · `partners.css` | 메뉴 등록, 탭 틀, 공통 스타일만 (기능 코드 넣지 않음) | 혁주 |
+| `tabs/partners/static/outreach.js` · `data-outreach.js` | (함께) 외주업체 컨택 CSV, 협업 제안 메일, 인플루언서·케이터링 가이드 | 혁주 |
+| `tabs/partners/static/records.js` · `data-records.js` | 협업 이력, 크리에이터별 판매 실적 | 혁주 |
 
 - 기능 파일은 화면을 직접 등록하지 않고, 대표 파일이 불러 씁니다
   ```js
@@ -335,7 +335,7 @@ reboot-dashboard/
 각 파트는 자기 코드를 `(function(){ ... })();`로 감싸서 **밖으로 이름이 새지 않게** 하고, `REBOOT.register()`로 메뉴에 등록만 합니다.
 
 ```js
-// parts/compliance/compliance.js
+// tabs/compliance/static/compliance.js
 (function () {
   const store = REBOOT.store('compliance');        // 저장 키가 자동으로 reboot:compliance:* 가 됨
   const { card, esc, toast } = REBOOT.ui;
@@ -366,7 +366,7 @@ reboot-dashboard/
 다른 파트의 기능이 필요하면 그 파트 파일을 고치지 않고 공개된 기능만 불러 씁니다.
 
 ```js
-// parts/cs/cs.js 안에서 답변 초안을 컴플라이언스로 재검사
+// tabs/cs/static/cs.js 안에서 답변 초안을 컴플라이언스로 재검사
 const result = REBOOT.use('compliance').review(draftText, { channel: 'cs' });
 // PASS여도 사람의 최종 승인은 따로 받습니다
 ```
@@ -375,7 +375,7 @@ const result = REBOOT.use('compliance').review(draftText, { channel: 'cs' });
 
 | 대상 | 규칙 | 예 (compliance) | 금지 |
 |---|---|---|---|
-| 폴더·파일 | `parts/<파트ID>/<파트ID>.js` | `parts/compliance/compliance.js` | 다른 파트 폴더에 파일 추가 |
+| 폴더·파일 | `parts/<파트ID>/<파트ID>.js` | `tabs/compliance/static/compliance.js` | 다른 파트 폴더에 파일 추가 |
 | JS 전역 이름 | **만들지 않음** (`REBOOT` 하나만 공통) | 함수는 모두 즉시실행 함수 안에 | `function review(){}`를 밖에 선언 |
 | 버튼 동작 | `addEventListener` · `data-act` | `data-act="run"` | `onclick="review()"` (전역 함수 필요) |
 | CSS 클래스 | 파트 접두사 + `-` | `.cmp-input`, `.cmp-badge` | `.input`, `.badge` 새로 정의 |
@@ -729,8 +729,8 @@ HTML(브라우저)은 다른 사이트를 마음대로 읽을 수 없습니다. 
 
 **HTML에서 서버 결과를 보여 주는 방법 (권장 구조)**
 1. 서버(또는 매일 돌아가는 스크립트)가 위 출처를 확인
-2. 결과를 `parts/compliance/monitor-data.js`(예: `window.REBOOT_MONITOR = {...}`)로 저장
-3. HTML은 `<script src="parts/compliance/monitor-data.js">`로 읽기만 함 → 더블클릭 실행 유지, 키는 HTML에 없음
+2. 결과를 `tabs/compliance/static/monitor-data.js`(예: `window.REBOOT_MONITOR = {...}`)로 저장
+3. HTML은 `<script src="tabs/compliance/static/monitor-data.js">`로 읽기만 함 → 더블클릭 실행 유지, 키는 HTML에 없음
 4. 처음 확인은 '기준 저장'만, 두 번째부터 🆕 새 항목 · 🔄 변경으로 표시 (한꺼번에 수백 건이 뜨지 않게)
 
 키 발급·신청·수동 확인 방법은 [부록 A](#부록-a-키-발급--신청--수동-확인)에 단계별로 있습니다.
@@ -826,7 +826,7 @@ HTML 대시보드 기준으로, 이 문서의 '예정' 항목이 실제로 만�
 | 부작용 단계별 일시 기록 | ✅ | 단계 버튼을 누를 때 현재 시각 자동 기록 + 직접 수정 칸 |
 | `REBOOT.use('compliance')` 연동 | 🟡 | 공통 `core/`(register·expose·use)가 먼저 필요. 그 전에는 `dev/core-stub.js`로 확인 |
 | 팩트시트 연결 | 🟡 | 설정 파트(이현경)가 `facts()`를 공개해야 함 |
-| Gmail 연동 | 🟡 | **서버 방식(권장):** `server/cs/gmail.py`, 권한 `gmail.compose`(초안)+읽기 권한, 테스트 모드는 7일마다 재로그인. **브라우저 방식:** 가능하지만 `file://`(더블클릭)에서는 Google 로그인이 안 되고 `http://localhost`(예: VS Code Live Server)에서 열어야 함 |
+| Gmail 연동 | 🟡 | **서버 방식(권장):** `tabs/cs/gmail.py`, 권한 `gmail.compose`(초안)+읽기 권한, 테스트 모드는 7일마다 재로그인. **브라우저 방식:** 가능하지만 `file://`(더블클릭)에서는 Google 로그인이 안 되고 `http://localhost`(예: VS Code Live Server)에서 열어야 함 |
 | AI 분류·초안 | 🟡 | AI 키를 HTML에 넣으면 노출 → 서버 경유 필수 |
 | 팀원 간 이력 공유 | ❌ | 브라우저 저장소는 그 브라우저에만 남음 → 공유하려면 서버 DB 필요 |
 
@@ -971,7 +971,7 @@ Prevents hangovers.
 
 | 단계 | 하는 일 | 담당 | 브랜치 예 |
 |---|---|---|---|
-| **1단계 (지금)** | 컴플라이언스·CS를 `parts/compliance/`, `parts/cs/`에서 먼저 완성 + 필요한 **최소** `core/`(register·store·ui·expose·use)와 `index.html` | 소준희 → 공통 담당이 정해지면 넘김 | `core/minimal` · `compliance/…` · `cs/…` |
+| **1단계 (지금)** | 컴플라이언스·CS를 `tabs/compliance/static/`, `tabs/cs/static/`에서 먼저 완성 + 필요한 **최소** `core/`(register·store·ui·expose·use)와 `index.html` | 소준희 → 공통 담당이 정해지면 넘김 | `core/minimal` · `compliance/…` · `cs/…` |
 | **2단계** | 각 파트 담당이 기존 시연본(`aldicom-dashboard.html`)에서 **자기 메뉴 코드만** 복사해 `parts/<파트ID>/`로 옮기고 6-2 이름 규칙으로 정리. 로그인·성과분석은 새로 만듦 | 강현서 · 이현경 · 나원 · 혁주 · 효선 | `home/move` · `insights/move` · `content/move` · `partners/outreach` · `login/basic` |
 | **2.5단계** | 강현서·나원 초안 PR 합치기 → 인계 메모 → 이현경·소준희·혁주가 이어받아 수정 (4장) | 강현서 · 나원 → 이현경 · 소준희 · 혁주 | `home/draft` → `home/revise-…` |
 | **3단계** | 각자 자기 브랜치에서 커밋 → Push → main으로 Pull Request → 검토 → 합치기 | 각 담당 + 공통 담당 | — |
@@ -987,7 +987,7 @@ Prevents hangovers.
 - [ ] 1단계 · 검토 보고서 (dashboard.html vs FDA 광고 콘솔, 코드 수정 없음)
 - [ ] 2단계 · 규제 단어 57개를 R1~R10에 통합 (패턴 추가 23개, `hang-over` 포함)
 - [ ] 3단계 · 경고장 원문 87개로 사례집 확장, 표현 매핑 20쌍 반영 → 87개 기준 재검증
-- [ ] 4단계 · 경고장 수집을 `server/compliance/`로 이관 (일반식품 기준 필터, 30초 간격)
+- [ ] 4단계 · 경고장 수집을 `tabs/compliance/`로 이관 (일반식품 기준 필터, 30초 간격)
 - [ ] 5단계 · 4인 관점 최종 검토 (마케터·컴플라이언스·개발자·보안) — 같은 AI가 맡은 관점끼리 동의해도 독립 검증이 아니므로, 공통 판단은 별도 사실 확인 후 반영
 - [ ] 6단계 · (선택) 매일 자동 실행 → 결과를 `monitor-data.js`로 만들어 HTML이 읽게 (10장)
 - [ ] R1~R10 근거 구분을 규제 담당과 확정하고 `rules()`에 반영
@@ -1003,7 +1003,7 @@ Prevents hangovers.
 - [ ] 부작용 접수에 단계별 일시(접수·긴급 검토·보고 대상 판단·보고) 기록 항목 추가
 - [ ] 템플릿 서명 브랜드명 정리 (시연본은 `ALDICOM Customer Care`)
 - [ ] 테스트 Gmail 계정 + 가짜 문의 메일 20건 준비
-- [ ] `server/cs/gmail.py` Gmail 연동 (읽기 + 답장 초안)
+- [ ] `tabs/cs/gmail.py` Gmail 연동 (읽기 + 답장 초안)
 - [ ] 환불·배송 정책 확정 후 C3·C5 템플릿 수정
 - [ ] (다음 단계) AI 분류·초안 — 결과는 항상 재검사 + 담당자 확인
 
@@ -1058,17 +1058,17 @@ Prevents hangovers.
 4. (선택) 웹사이트에서 같은 검색어로 **알림(Alert)**을 만들면 새 사건을 이메일로 받음. 하루 평균 30건이 넘는 넓은 검색어는 거절되니 좁게
 
 ### A-3. FDA Data Dashboard (수입 거부 기록) · 파일 다운로드 또는 신청
-- **파일 다운로드 (지금 바로 · 권장):** https://datadashboard.fda.gov/oii/cd/imprefusals.htm → 국가 **Korea (South)**·제품 분류 필터 → **Filtered Data** 다운로드 (매주 갱신) → `docs/compliance/import_refusals/수입거부_YYYYMMDD.csv`로 저장
+- **파일 다운로드 (지금 바로 · 권장):** https://datadashboard.fda.gov/oii/cd/imprefusals.htm → 국가 **Korea (South)**·제품 분류 필터 → **Filtered Data** 다운로드 (매주 갱신) → `tabs/compliance/docs/import_refusals/수입거부_YYYYMMDD.csv`로 저장
 - **API (승인 필요):** 같은 페이지 안내에 따라 **OII Unified Logon**에서 계정 → API 인증키 신청 → 승인 후 `server/.env`에 저장
 
 ### A-4. 수동 확인 출처 (매월 첫째 주)
 
 | 출처 | 홈페이지 | 무엇을 확인 | 기록 위치 |
 |---|---|---|---|
-| CBP CROSS (품목분류 결정) | https://rulings.cbp.gov/ | 검색어 `jelly drink`, `jelly snack`, `2106.90.99`, `hangover` → 비슷한 제품의 HS 코드 결정 | `docs/compliance/cross_rulings.csv` |
-| FTC 건강 광고 가이드 | ftc.gov에서 "Health Products Compliance Guidance" 검색 | 근거 수준, 후기·추천 광고 규칙 → R5·R10 근거 메모 | `docs/compliance/ftc_notes.md` |
-| NAD 광고 심의 결정 | https://bbbprograms.org/ | 검색어 `hangover`, `sugar`, `supplement` → 문제 된 광고 표현 | `docs/compliance/nad_cases.csv` |
-| 캘리포니아 Prop 65 | https://oehha.ca.gov/proposition-65 · 캘리포니아 법무부(oag.ca.gov) 60일 통지 검색 | 원료·젤리·사탕 관련 통지 (특히 **납**) → 경고 문구 필요 여부 | `docs/compliance/prop65.md` |
+| CBP CROSS (품목분류 결정) | https://rulings.cbp.gov/ | 검색어 `jelly drink`, `jelly snack`, `2106.90.99`, `hangover` → 비슷한 제품의 HS 코드 결정 | `tabs/compliance/docs/cross_rulings.csv` |
+| FTC 건강 광고 가이드 | ftc.gov에서 "Health Products Compliance Guidance" 검색 | 근거 수준, 후기·추천 광고 규칙 → R5·R10 근거 메모 | `tabs/compliance/docs/ftc_notes.md` |
+| NAD 광고 심의 결정 | https://bbbprograms.org/ | 검색어 `hangover`, `sugar`, `supplement` → 문제 된 광고 표현 | `tabs/compliance/docs/nad_cases.csv` |
+| 캘리포니아 Prop 65 | https://oehha.ca.gov/proposition-65 · 캘리포니아 법무부(oag.ca.gov) 60일 통지 검색 | 원료·젤리·사탕 관련 통지 (특히 **납**) → 경고 문구 필요 여부 | `tabs/compliance/docs/prop65.md` |
 
 **순서:** 사이트 확인 → 새로 찾은 것만 기록 파일에 한 줄 추가 (날짜·출처·내용·링크·우리 영향) → 규칙·표시를 바꿔야 하면 `data.js` 수정 → 12장 검증 → PR
 
@@ -1103,7 +1103,7 @@ dashboard.html(기준)에 FDA 광고 콘솔 zip의 장점을 합치는 순서입
 ├─ server/                       ← 서버 버전이 있으면 (없어도 됨)
 ├─ _incoming/
 │   └─ fda_ad_console/           ← zip을 풀어서 넣기 (.env 파일은 지우고 넣기!)
-├─ docs/compliance/
+├─ tabs/compliance/docs/
 │   └─ term_mapping_draft.csv    ← 받은 파일 (규제 단어 57개 분류 초안)
 └─ tools/
     └─ cross_check.js            ← 받은 파일 (두 판정 엔진 비교 스크립트)
@@ -1137,7 +1137,7 @@ CLAUDE.md를 먼저 읽고, dashboard.html(기준)과 _incoming/fda_ad_console/(
 - _incoming/fda_ad_console/static/app.js : RULES R0~R12, runEngine
 - _incoming/fda_ad_console/seed/seed.json : 경고장 7건 원문 문구 87개, 매핑 20쌍
 - _incoming/fda_ad_console/crawler.py, refresh.py, db.py, app.py, tests/
-- docs/compliance/term_mapping_draft.csv : 규제 단어 57개를 R1~R10에 붙인 초안
+- tabs/compliance/docs/term_mapping_draft.csv : 규제 단어 57개를 R1~R10에 붙인 초안
 - tools/cross_check.js : 두 엔진 비교 스크립트
   실행: node tools/cross_check.js dashboard.html _incoming/fda_ad_console
 

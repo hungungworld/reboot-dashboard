@@ -1,5 +1,5 @@
 """공용 기준 데이터(시즌 · 팩트시트) · 계정 관리 API."""
-from .conftest import PASSWORD
+from conftest import PASSWORD
 
 
 def test_seasons_seeded_with_dday(auth_client):

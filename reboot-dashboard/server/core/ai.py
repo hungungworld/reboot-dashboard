@@ -1,7 +1,7 @@
 """OpenAI 호출 공통 도우미 (공통 담당).
 
 홈·인사이트·콘텐츠·파트너·성과분석은 README대로 OpenAI를 씁니다.
-(컴플라이언스·CS는 server/compliance · server/cs의 Claude 모듈을 그대로 씁니다.)
+(컴플라이언스·CS는 tabs/compliance · tabs/cs의 Claude 모듈을 그대로 씁니다.)
 
     from server.core.ai import openai_json, AIError, openai_ready
     data = openai_json(system, user, schema=SCHEMA, part="home", action="뉴스 요약")

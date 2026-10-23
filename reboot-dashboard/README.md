@@ -76,8 +76,8 @@ python -m server              # → http://127.0.0.1:5000
 | 홈 · 데일리 브리핑 | `home` | 이현경 | 화면 3개: 시작하기 · 데일리 브리핑(히어로 · 시즌 카드 · KPI 4 · 이번 주 성과 차트 · To-Do(AI/규칙, 근거 표시) · 미국 주류 업계 뉴스(GDELT 배치 → AI 요약·급증 신호) · 최근 활동) · 콘텐츠 캘린더(시즌·준비 시작일) | GDELT 실수집 (이 PC에서는 429 제한) · OpenAI 요약 |
 | 시장 · 고객 인사이트 | `insights` | 이현경 | 주간 리뷰(규칙 6개로 이번 주 액션) · 월간 리뷰 · 데이터 6탭 · 수집기(SerpApi Amazon·Trends · YouTube · Firecrawl Weee!) · 1회분 단가 · Word/Excel | 각 API 실제 응답 형식 · Weee! 주소·알디콤 ASIN 입력 · 정확도 검증 탭은 자리만 |
 | 콘텐츠 제작 | `content` | 나원 | 5항목 시트 · AI 대화(서버가 변경안 검증) · 확정/제안/미정 · A/B/C 버전·부분 수정 · 이미지 작업 · 컴플라이언스 점검 · 내 캠페인 · ZIP | OpenAI 실호출(JSON 스키마·이미지 모델) · LangGraph 대신 순수 Python 흐름 · 영상은 구성안만 |
-| 컴플라이언스 | `compliance` | 소준희 | 기존 `parts/compliance` + 서버 API(AI 2차 판정 · 한글 요약 · 모니터링 수집) · 시연본 경고장 원문 53개 · 안전 문구 7개 이관 | Claude 키 · 규칙 검증에서 PASS로 나오는 경고장 문구 5개 → 규칙 보강(파트 할 일 2단계) |
-| 고객 응대 (CS) | `cs` | 소준희 | 기존 `parts/cs` 그대로 + Gmail 문의·답장 초안 · AI 초안 API · 웹 Google 로그인 | Google OAuth 클라이언트 · 테스트 Gmail |
+| 컴플라이언스 | `compliance` | 소준희 | 기존 `tabs/compliance/static` + 서버 API(AI 2차 판정 · 한글 요약 · 모니터링 수집) · 시연본 경고장 원문 53개 · 안전 문구 7개 이관 | Claude 키 · 규칙 검증에서 PASS로 나오는 경고장 문구 5개 → 규칙 보강(파트 할 일 2단계) |
+| 고객 응대 (CS) | `cs` | 소준희 | 기존 `tabs/cs/static` 그대로 + Gmail 문의·답장 초안 · AI 초안 API · 웹 Google 로그인 | Google OAuth 클라이언트 · 테스트 Gmail |
 | 인플루언서 · 파트너 | `partners` | 혁주 | 업체 파일 가져오기 · 업체 컨택 · 협업 메일(AI·번역·문구 점검·Gmail 발송) · 협업 가이드(Word) · 협업 이력(IMAP 답장 확인·AI 요약) · 판매 실적(🧪 더미) | 실제 업체 CSV·XLSX · Gmail 앱 비밀번호 (유료 플랜) |
 | 성과분석 | `performance` | 혁주 | 샘플 CSV(표시됨) · 업로드(합치기/바꾸기·백업) · 기간 비교 · KPI 6 · 채널 표(원/달러·환율) · 차트 · AI 예산 제안(±20%) · A4 보고서 | 실제 성과 CSV · KEXIM 키 · OpenAI |
 | 설정 및 브랜드 관리 | `settings` | 이현경 | 브랜드·제품 팩트시트 · 수집 설정(시즌 편집 포함) · 연결(키 입력·연결 테스트·Google 로그인) · 작업 로그(CSV/Excel) · 계정 | 각 서비스 연결 테스트 |
