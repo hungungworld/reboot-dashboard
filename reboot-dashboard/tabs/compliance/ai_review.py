@@ -17,8 +17,9 @@ VERDICTS = ["BLOCK", "REVISE", "COND", "REVIEW", "PASS"]
 MAX_TEXT = 2000
 
 SYSTEM = """You review English advertising copy for REBOOT (slogan "Restart Your Day"), a Korean after-party brand sold in the United States.
-The line-up is four conventional foods, not dietary supplements and not drugs: stick jelly (individually wrapped sticks; flavors tentatively lime, cherry, peach, lemon),
-a sugar-reduced stick jelly (lemon-lime), a non-carbonated drink in small bottles (6 per box; lemon-lime) and a sugar-reduced version of that drink.
+The line-up is four conventional foods, not dietary supplements and not drugs: Reboot Jelly Original (stick jelly, individually wrapped sticks),
+Reboot Jelly Balance (a sugar-reduced stick jelly), Reboot Drink Original (a non-carbonated drink in small bottles, 6 per box) and Reboot Drink Balance (a sugar-reduced version of that drink).
+All four come in lime, cherry and lemon (flavors are tentative).
 The request names which product the copy is for.
 
 Assess the copy the way a careful US food-advertising compliance reviewer would:

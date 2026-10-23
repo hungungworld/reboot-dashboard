@@ -1,7 +1,7 @@
 # 🛡️ 컴플라이언스 · 💬 고객 응대(CS)
 
 > 담당 **소준희** · REBOOT US 마케팅 대시보드 (무역 AX2기 2차 미니프로젝트 3조)
-> 이 문서는 소준희 담당 두 파트만 다룹니다. 팀 공통 규칙(전체 메뉴·담당, 폴더, 이름 규칙, Git 순서)은 **팀 README**를 따릅니다.
+> 이 문서는 소준희 담당 두 파트만 다룹니다. 팀 공통 규칙(전체 메뉴·담당, 폴더, 이름 규칙, Git 순서)은 저장소 맨 위 **RULE.md**·**AI_RULES.md**와 팀 README를 따르고, 서로 다르면 **RULE.md**를 따릅니다.
 
 > ⚠️ 판정과 답변 초안은 1차 참고용입니다. FDA 공식 판단이나 법률 자문이 아니며, 최종 사용·발송 여부는 사람이 결정합니다. **PASS(규칙 미탐지)는 법적 승인이 아닙니다.**
 
@@ -13,8 +13,8 @@
 
 | 파트 | 파트 ID | 우선 | 폴더 (수정 가능) | CSS 접두사 | 저장 키 |
 |---|---|---|---|---|---|
-| 🛡️ 컴플라이언스 | `compliance` | **P0** | `tabs/compliance/static/` · `tabs/compliance/` · `tabs/compliance/docs/` | `cmp-` | `reboot:compliance:*` |
-| 💬 고객 응대 (CS) | `cs` | **P1** | `tabs/cs/static/` · `tabs/cs/` · `tabs/cs/docs/` | `cs-` | `reboot:cs:*` |
+| 🛡️ 컴플라이언스 | `compliance` | **P0** | `tabs/compliance/` (서버) · `tabs/compliance/static/` (화면) · `tabs/compliance/docs/` (이 설명서) | `cmp-` | `reboot:compliance:*` |
+| 💬 고객 응대 (CS) | `cs` | **P1** | `tabs/cs/` (서버) · `tabs/cs/static/` (화면) · `tabs/cs/tests/` (테스트) · 설명서는 이 README 하나 | `cs-` | `reboot:cs:*` |
 
 - **제품** REBOOT 숙취해소 젤리 스틱 · 미국 분류 **일반식품(Conventional Food)**, 건강기능식품 아님
 - **두 파트의 관계** CS 답변 초안은 발송 전에 컴플라이언스로 재검사 → **BLOCK이면 발송 불가**, PASS여도 **담당자 최종 승인** 후에만 Gmail 초안으로
@@ -78,9 +78,9 @@
 | 키·비밀번호 | HTML·JS에 넣지 않음 → 서버 `.env` | — |
 
 - **더블클릭 실행 유지** `type="module"`·`import`·npm 금지 · 데이터는 `.json` 대신 `data.js` · 원본 CSV는 `docs/<파트ID>/`
-- **Git** `git pull` → 브랜치 `compliance/<할일>` · `cs/<할일>` (예: `compliance/rules-r1-r10`, `cs/approval`) → 커밋 `[compliance] …` · `[cs] …` → main으로 PR → CODEOWNERS·공통 담당 검토 → 공통 담당이 Merge. `main` 직접 push 금지, PR 하나에 한 가지 일만
-- **main에 올림** `tabs/compliance/static/` · `tabs/cs/static/` · `tabs/compliance/` · `tabs/cs/`(키 제외) · `tabs/compliance/docs/` · `tabs/cs/docs/` / **올리지 않음** `dev/` · `_incoming/` · `.env` · 키가 들어간 HTML
-- **CODEOWNERS** `/parts/compliance/` · `/parts/cs/` · `/server/compliance/` · `/server/cs/` → `@{소준희_ID}`
+- **Git** (RULE.md §3·§4) 개인 브랜치 `JH` 하나를 계속 사용 → 작업 전 GitHub Desktop **Branch → Update from pre_main** → 커밋 메시지는 `feat:` · `fix:` · `docs:`로 시작 → **`pre_main`으로 PR** → 리뷰어 1명 승인 → PM(HK·KHS)이 **Merge commit**으로 병합. `main`·`pre_main` 직접 push 금지, PR 하나에 한 파트(컴플라이언스 또는 CS)만
+- **커밋함** `tabs/compliance/` · `tabs/cs/` (`static/` · `docs/` · `tests/` 포함, 키 제외) / **커밋 안 함** `dev/` · `_incoming/` · `.env` · `instance/` · 키가 들어간 HTML
+- **CODEOWNERS** `.github/CODEOWNERS`는 공통 설정이라 PM이 관리합니다 (RULE.md §10). 이 문서에서 정하지 않습니다
 
 ```text
 tabs/compliance/static/   compliance.js · compliance.css · data.js · monitor-data.js (예정 · 서버가 만든 모니터링 결과, 6장)
@@ -93,16 +93,17 @@ tools/cross_check.js  판정 엔진 비교 (읽기 전용)
 dev/                preview.html · core-stub.js · settings-stub.js · test_parts.js   (로컬 확인 전용 · 커밋 제외)
 ```
 
-**Claude Code 첫 메시지** (팀 README 기준 · `{파트ID}`에 `compliance` 또는 `cs`)
+**Claude Code 첫 메시지** (팀 공지 2번 · `{파트ID}`에 `compliance` 또는 `cs`)
 
 ```text
+RULE.md, AI_RULES.md, 내 파트 폴더의 README.md(tabs/compliance/docs/README.md)를 먼저 읽고 따라줘.
 #작업 범위
-나는 {파트ID} 담당이야. parts/{파트ID}/ 와 server/{파트ID}/, docs/{파트ID}/ 안의 파일만 고쳐줘.
+나는 {파트ID} 담당이야. tabs/{파트ID}/ 안의 파일(서버 · static/ 화면 · docs/ · tests/)만 고쳐줘.
 #반드시
-- index.html, core/, 다른 parts/ 폴더는 읽기만 하고 고치지 마
-- 다른 파트 데이터가 필요하면 README 5장 표의 REBOOT.use()로만 불러 써
+- core/, server/, 다른 tabs/ 폴더는 읽기만 하고 고치지 마
+- 다른 파트 데이터가 필요하면 DEV_GUIDE 3장 표의 REBOOT.use()나 공용 API로만 불러 써
 - 공통 기능이 필요하면 고치지 말고 "공통 요청 Issue 문안"으로 써줘
-- README 6-2 이름 규칙(접두사, REBOOT.store, data-act)을 지켜줘
+- 이름 규칙(접두사, REBOOT.store, data-act)을 지켜줘
 - HTML·JS 안에 API 키를 넣지 마
 - 고치기 전에 바꿀 파일과 줄을 먼저 보여 주고 허락받아
 ```
@@ -120,7 +121,10 @@ dev/                preview.html · core-stub.js · settings-stub.js · test_par
 | 판정 근거 사례집 | 크롤링 → 데이터 | FDA 숙취 제품 경고장 7건 원문 인용, 금지 표현 JSON | 현재 53개 · 87개로 확장 예정 |
 | 한국→미국 표현 매핑 | 수동 | 검토자·검토일 기록 | 현재 10쌍 · 20쌍으로 확장 예정 |
 | 규칙 검증 | 자동 | 경고장 문구는 모두 걸리고, 안전 문구는 모두 통과 | 53개 기준 시연본 완료 · 87개 확장 후 재검증 예정 |
-| 심의 이력 | 자동 저장 | 검토 요청 → 승인·반려. **BLOCK은 승인 불가** | 시연본 완료 |
+| 점검 기록 (예전 '심의 이력') | 자동 저장 | **승인·반려 없음** (마케터가 자기 대시보드에서 사용 · 2026-10-23 결정). [문구 점검하기]를 누를 때마다 문구·채널·제품·판정·시간 저장, 지금 규칙으로 다시 판정해 표시. **BLOCK 문구는 복사 불가**, 나머지는 안내와 함께 복사 가능 | `tabs/` 완료 |
+| 한→영 번역 | 서버 AI (Claude) | 한국어 카피 → 영어 광고 문구 (뜻·주장 그대로) → 문구 칸에 넣고 바로 점검. `POST /api/compliance/translate` · 1회마다 소액 과금 | `tabs/` 완료 |
+| 상단 숫자 카드 | 자동 | 사용 불가 · 수정 필요 · 규칙 미탐지 · 전체 점검 개수. **누르면 점검 기록 탭에서 그 판정만** 보임 (점검 기록의 '판정' 칸으로도 고를 수 있음) | `tabs/` 완료 |
+| 걸린 표현 자세히 보기 | 데이터 | 걸린 표현을 누르면 창(이유·근거·대신 쓸 표현·관련 기관·경고장 사례). 단건 심의 · 일괄 심의 표 · 점검 기록 · 규칙 표 어디서나 | `tabs/` 완료 |
 | FDA 규제 모니터링 | API + 크롤링 + 수동 | openFDA 식품 리콜 조회, 새 경고장 → '사례집 후보' (출처별 가능 여부 6장) | 리콜 조회 시연본 완료 · 경고장 수집은 서버 이관 예정 |
 
 **전제** 미국 **일반식품** (건강기능식품 기준은 비교 옵션) · FDA는 2020년 숙취 제품 경고장에서 숙취 예방·치료·완화 표현을 미승인 의약품 표현으로 취급 · 일반식품도 **영양적 가치에 기반한 구조·기능 표현**은 FDA가 인정 → R8 일괄 수정은 법적 금지가 아니라 **팀의 보수적 기준** · 면책 별표(*)를 붙여도 판정은 그대로
@@ -146,9 +150,9 @@ dev/                preview.html · core-stub.js · settings-stub.js · test_par
 - **R3·R5·R9** 효과·안전성·임상 주장은 FTC 실증 대상. `100% juice`처럼 효과 주장이 아닌 쓰임은 문맥 검토
 - **R4·R6** 직접 금지 조문이 아니라 브랜드·플랫폼 리스크를 줄이는 팀 기준 · **R7** 약처럼 보이는 표현은 '의도된 용도' 판단 요소 (단어 하나로 확정하지 않음)
 - **R8** 근거 자료 확보 전까지 보수적으로 REVISE · **R10** FTC 추천·후기 지침과 소비자 리뷰 규칙 (대가 관계 표시, 긍정 후기 조건 보상 금지)
-- **아직 규칙에 없음:** 당 함량 표시(`Low sugar`·`저당`). 미국은 "Low sugar"를 허용하지 않음 → 규칙 추가 여부 결정 필요 (12장 정할 것 2, 7장)
+- **R11·R12 당 함량 표시 — 사용 안 함 (2026-10-23 결정):** `low sugar`·`zero sugar`·`less sugar`·`저당` 등은 판정하지 않고 PASS. 규칙 내용은 `data.js`에 `off: true`로 남겨 두어 다시 켤 수 있음. ⚠️ FDA 기준(21 CFR 101.60, 7장)은 그대로라 **'low sugar'는 미국 표시 기준에 정의가 없는 표현**이고, sugar free·reduced sugar도 수치 조건이 있음 → 실제 라벨·광고 전에는 사람이 따로 확인
 
-**판정** BLOCK 사용 불가(위법 소지 큼 → 문장 교체) · REVISE 수정 필요(고쳐서 재점검) · COND 조건부(건강기능식품 비교용) · REVIEW 검토 필요(후기 등 사람이 판단) · PASS 규칙 미탐지(**법적 승인 아님** → 담당자 최종 승인 필요)
+**판정** BLOCK 사용 불가(위법 소지 큼 → 문장 교체) · REVISE 수정 필요(고쳐서 재점검) · COND 조건부(건강기능식품 비교용) · REVIEW 검토 필요(후기 등 사람이 판단) · PASS 규칙 미탐지(**법적 승인 아님** → 최종 사용 여부는 문구를 쓰는 사람이 확인)
 
 **채널** `b2c` B2C 광고·SNS · `amazon` 아마존 상세페이지 · `cs` CS 답변 · `b2b` B2B 바이어 자료 (R9만 채널별로 다름)
 
@@ -243,7 +247,9 @@ dev/                preview.html · core-stub.js · settings-stub.js · test_par
 | 공개 | `compliance.rules()` → R1~R10 코드·이름·판정·근거 구분·이유·대체 방향 | 화면 안내 |
 | 공개 | `cs.stats()` → `{ open, urgent, overdue, owner_required }` | 홈 To-Do (강현서) |
 | 공개 | `cs.classify(text)` → `'C1'`~`'C10'` | 분류 테스트 · 참고용 |
-| 공개 | `summary()` (register에 포함) | 홈 카드 |
+| 공개 | `compliance.translate(text)` → 영→한 기기 안 번역 (Promise) | CS |
+| 없앰 | 컴플라이언스 `summary()` (검토 대기 카피 수) — 승인 절차를 없애면서 뺌 (2026-10-23). 홈 '검토가 필요한 업무'에는 CS만 표시 | 홈 (이현경) — 알림 필요 |
+| 공개 | `cs` `summary()` (register에 포함) | 홈 카드 |
 | 불러 씀 | `REBOOT.use('compliance').review(text, { channel: 'cs' })` | CS → 컴플라이언스 |
 | 불러 씀 | `REBOOT.use('settings').facts()` → 제품명·맛·성분으로 템플릿 빈칸 | 설정 (이현경) |
 | 넘김 | C10 협업 제안 | 인플루언서·파트너 (혁주 · 효선) |
@@ -257,7 +263,7 @@ dev/                preview.html · core-stub.js · settings-stub.js · test_par
 
 | 키 | 내용 | 시연본 예전 키 |
 |---|---|---|
-| `reboot:compliance:history` | 심의 이력 (문구·채널·판정·상태·코멘트) | `aldicom-history` · `aldicom-standalone-v1` |
+| `reboot:compliance:history` | 점검 기록 (문구·채널·제품·판정·점검 시간 · 예전 항목은 상태·코멘트도 있음) | `aldicom-history` · `aldicom-standalone-v1` |
 | `reboot:compliance:monitor` | 경고장 확인 결과·사례집 후보 | `aldicom-standalone-v1` |
 | `reboot:compliance:openfda-cache` | openFDA 조회 결과 (1분 캐시) | `aldicom-standalone-v1` |
 | `reboot:compliance:fedreg-cache` | Federal Register 조회 결과 (1분 캐시) | — |
@@ -387,6 +393,7 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-22 | 시연본 `dashboard.html` · 사례집 53 / 취합용 원문 87 / 안전 12 / 템플릿 10 | 53개 중 **0** · 87개 중 **1** | **0** | **0** | Claude (`tools/cross_check.js`) | 87개 중 놓친 1개는 `'Emergency Hang-over Kits'` (하이픈 형태) → 취합 2단계에서 R2 패턴 추가로 해결. 반대로 FDA 광고 콘솔 엔진은 `Nature's Aspirin`을 놓침 |
 | 2026-10-22 | 로컬 `parts/` (`dev/test_parts.js`) · 안전 4 / 템플릿 10 | 실행 안 됨 (0개 · 이관 전) | **0** / 4 | **0** / 10 | Claude Code | 엔진 예문 14개·분류 12건 통과 |
 | 2026-10-23 | 로컬 `parts/` (core 형식 정리 후) · 안전 4 / 템플릿 10 | 실행 안 됨 (0개 · 이관 전) | **0** / 4 | **0** / 10 | Claude Code | 기존 항목 + core 형식·저장 키·금지 패턴·`monitor-data.js` 형식 점검 통과 |
+| 2026-10-23 | `tabs/compliance` (R11·R12 끈 뒤) · 경고장 53 / 안전 15 / 예문 20 | 53개 중 **5** ❗ | **0** / 15 | — | Claude Code (화면 '규칙 검증' + node) | 놓친 5개는 R11·R12를 끄기 전에도 똑같이 PASS (기존 문제): `debauchery … feel better right away` · `formulated for the drinking population` · `a few cocktails … take my Miracoal` · `reduce alcohol's negative effects` · `Milk Thistle helps to protect the liver` → 규칙 보강 필요 (13장) |
 
 ---
 
@@ -406,7 +413,7 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | CS | 팀원 간 이력 공유 | ❌ | 브라우저 저장소는 그 브라우저에만 → 서버 DB 필요 |
 | 컴플라이언스 | 규제 단어 57개 통합 · 87개 확장 · 매핑 20쌍 | ✅ | `data.js` 정규식·데이터 추가 (취합 2·3단계) |
 | 컴플라이언스 | `rules()` 근거 구분 | ✅ | 규칙마다 `basis: ['⚖️','🔍']` 같은 칸 |
-| 컴플라이언스 | 당 함량 표시 규칙 | ✅ | 정규식으로 `low sugar`·`저당` 감지 (정할 것 2 결정 후) |
+| 컴플라이언스 | 당 함량 표시 규칙 | ✅ | R11·R12로 구현했으나 2026-10-23 결정으로 꺼 둠 (`off: true`) |
 | 컴플라이언스 | 경고장 자동 수집 · 수입 경보 · 리콜 RSS | ❌ → 🟡 | 서버에서 수집 후 `monitor-data.js`로 전달 (6장) |
 | 컴플라이언스 | Federal Register · openFDA | ✅ | 브라우저에서 바로 (둘 다 `parts/` 구현 완료) |
 | 컴플라이언스 | eCFR · HTS | 🟡 | 브라우저 허용 확인 후 결정, 막히면 서버 |
@@ -419,7 +426,8 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 
 ## 10. 권장 시연 순서
 
-- **광고 문구 점검:** 컴플라이언스 → 단건 심의 → `Prevents hangovers.` 입력 → **문구 점검하기** → 감지된 표현 확인 → 심의 이력 확인 ('사용 불가'는 승인 불가). 키워드 미발견 ≠ 안전한 문구로 승인
+- **광고 문구 점검:** 컴플라이언스 → 단건 심의 → `Prevents hangovers.` 입력 → **문구 점검하기** → 밑줄 친 표현을 눌러 자세히 창 확인 → '사용 불가'라 복사 버튼이 없음 → 점검 기록 탭에 쌓였는지 확인. 키워드 미발견(PASS) ≠ 법적 승인
+- **한→영 번역:** 한국어 칸에 `숙취를 싹 예방해 주는 상큼한 젤리` → **영어로 번역해 넣기** → 영어 문구가 들어가고 바로 BLOCK (번역은 효능 표현을 걸러 주지 않음)
 - **CSV 일괄 점검:** 첫 행 `copy` 열 CSV 업로드 (최대 1MB · 500행 · UTF-8 권장 · 양식은 화면에서 다운로드)
 
   ```csv
@@ -450,13 +458,16 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-22 | 단일 HTML을 `core/` + `parts/<파트ID>/` 구조로 나눠서 작업 · 기준 구현은 HTML 대시보드, main에 PR로 합침 |
 | 2026-10-22 | 컴플라이언스·CS를 먼저 완성하고, 나머지 파트는 각자 정리 후 취합 |
 | 2026-10-22 | CS Gmail 연동은 우선 개인 메일 계정으로 |
+| 2026-10-23 | 컴플라이언스는 마케터가 자기 대시보드에서 쓰므로 **검토 요청·승인·반려 절차 없음** → 점검 기록만 남김 · BLOCK 문구는 복사 불가 (CS 답장의 최종 승인은 그대로) |
+| 2026-10-23 | **당 함량 표시(R11·R12)는 점검하지 않음** (정할 것 2) — 규칙은 `off: true`로 보관 |
+| 2026-10-23 | 한→영 번역은 서버 Claude (`/api/compliance/translate`), 영→한은 기존 브라우저 내장 번역 유지 |
 
 | # | 정할 것 | 팀 안건 # | 관련 | 제안 · 비고 |
 |---|---|---|---|---|
 | 1 | `before drinking` · `best` 차단 여부, NAC 패턴 포함 여부 | 7 | 소준희 | 경고장은 인용하지만 오탐 위험 · 우리 제품에 NAC가 없으면 제외 |
-| 2 | 당 함량 표시 규칙 추가 | 8 | 소준희 | `Low sugar`·`저당` → 사용 불가, `Sugar free`·`Reduced sugar` → 조건 확인. R11로 할지 기존 규칙에 넣을지 |
+| 2 | ~~당 함량 표시 규칙 추가~~ → **결정 (2026-10-23): 점검하지 않음** | 8 | 소준희 | R11·R12는 만들어 두고 꺼 둠 (`off: true`) |
 | 3 | R8 구조·기능 표현을 계속 일괄 REVISE로 둘지 | 9 | 소준희 | 영양 근거가 있는 표현은 허용 가능 (현재 보수적 정책) |
-| 4 | REVISE·REVIEW 판정이 남은 초안의 승인 조건 | 10 | 소준희 | 수정 후 재검사 필수 / 검토 의견만 남기면 승인 |
+| 4 | ~~REVISE·REVIEW 판정이 남은 초안의 승인 조건~~ → 컴플라이언스 승인 절차가 없어져 해당 없음 (2026-10-23) | 10 | 소준희 | REVISE·REVIEW는 안내와 함께 복사 가능 |
 | 5 | C9 B2B 문의를 팀에서 누가 받을지 | 11 | 전체 | 현재 '해외영업' |
 | 6 | 심각한 부작용 RFR 보고 책임 주체·판단 권한자 | 12 | 전체 | 등록 시설(제조사·수입사) 확정. 24시간은 판단 시점부터 |
 | 7 | 제품 형태 (젤리 / 저당 젤리 / 음료 / 저당 음료) | 13 | 전체 | 규제 부담: 음료 < 저당 음료 < 젤리 < 저당 젤리 (7장) |
@@ -477,7 +488,8 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 - [ ] 5단계 · 4인 관점 최종 검토 (마케터·컴플라이언스·개발자·보안) — 같은 AI가 맡은 관점끼리 동의해도 독립 검증이 아니므로, 공통 판단은 별도 사실 확인 후 반영
 - [ ] 6단계 · (선택) 매일 자동 실행 → 결과를 `monitor-data.js`로 (6장)
 - [ ] R1~R10 근거 구분을 규제 담당과 확정 → `rules()` 반영
-- [ ] 당 함량 표시 규칙 추가 여부 결정 후 반영 (정할 것 2)
+- [x] 당 함량 표시 규칙 추가 여부 결정 후 반영 (정할 것 2 → 점검하지 않음, R11·R12 꺼 둠)
+- [ ] 경고장 원문 중 PASS 5개 규칙 보강 (8장 실행 기록 2026-10-23)
 - [ ] 무료 키 발급 (Regulations.gov · CourtListener) → `server/.env` ([부록 A](#부록-a-키-발급--신청--수동-확인))
 - [ ] 월 1회 수동 확인 시작 (CBP CROSS · FTC · NAD · Prop 65 · FDA 수입 거부 파일)
 
@@ -509,6 +521,12 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-22 | 팀 README(v0.3.1)에서 소준희 담당 두 파트만 분리한 개인 README 작성 |
 | 2026-10-23 | `parts/`를 core 형식(1장)으로 정리 · 규제 모니터링 탭(Federal Register 조회, `monitor-data.js` 기준 저장·🆕/🔄·사례집 후보 승인) · CS 승인 초안 복사·처리 기록 · 부작용 일시 직접 수정 |
 | 2026-10-23 | 대시보드 시안(REBOOT Marketing Workspace) 디자인 적용: 라임 포인트(`#E4FA18`)·흰 카드·알약형 탭 · 두 파트 상단 KPI 카드 4장 · 단건 심의 2단 배치(입력 카드 + 검토 흐름·알아두세요) · CS 2단 문의함(이니셜·초안 상자) · `dev/preview.html`을 시안 껍데기(상단 메뉴·왼쪽 하위 메뉴)로 교체 |
+| 2026-10-23 | 폴더 구조 변경(PR #5, `tabs/`)에 맞춰 0장 폴더 표 정리 · 1장 Git 안내를 RULE.md(`JH` 브랜치 → `pre_main` PR · `feat:`/`fix:`/`docs:`)에 맞춤 · CODEOWNERS 안내 교체 · Claude Code 첫 메시지 갱신 |
+| 2026-10-23 | 컴플라이언스: 검토 요청·승인·반려 삭제 → 4단계 흐름(입력·점검·수정·사용) + 점검 기록 자동 저장 · BLOCK 복사 불가 · KPI를 판정별 개수로 · `summary()` 삭제 · 한→영 번역(`/api/compliance/translate`, Claude) 추가 · 당 함량 규칙 R11·R12 끔 · 걸린 표현 자세히 창을 일괄 심의·점검 기록·규칙 표에서도 열리게 하고 창이 맨 위부터 보이게 수정 · 단건 심의의 '기준(건강기능식품 비교)' 칸 삭제 → 언제나 일반식품 기준 (엔진의 비교 기능은 규칙 검증 예문용으로 유지) · 숫자 카드를 누르면 점검 기록을 그 판정으로 거름 |
+| 2026-10-23 | CS: 문의함 정렬(받은 시간 최신순·오래된 순·처리 우선순위) · 목록에 받은 시간 표시 · 화면을 열 때 Gmail 새 메일 자동 확인 |
+| 2026-10-23 | CS 문의 상세: 문의 머리(제목 24px · 본문 15.5px 상자 · 기한 줄)를 크게 · 아래 처리 단계(① 분류·제품 ② 답변 초안 ③ 재검사 ④ 최종 승인 · 처리 기록)를 접고 펴기, 제목 줄에 상태 요약 · 모두 펼치기/접기 · 기본은 ②④만 펼침 |
+| 2026-10-23 | 긴 단락 접기: 컴플라이언스(단건 심의 '알아두세요' · 규칙·검증 3단락 · 모니터링 사례집 후보·Federal Register·openFDA 조회 · 기관 안내 4단락) · CS(답변 템플릿 페르소나·템플릿 10개 + 모두 펼치기/접기 · 부작용 접수 기록). 접혀도 제목 줄에 개수·상태 요약 · 기관 카드의 공고 조회를 누르면 조회 칸이 자동으로 펼쳐짐 |
+| 2026-10-23 | 제품 정보를 팀 제품표에 맞춤: 4종 맛 라임·체리·레몬(임시) · 영문 제품명 Reboot Jelly/Drink Original·Balance · 캐릭터 리부(Rebu) |
 
 ---
 

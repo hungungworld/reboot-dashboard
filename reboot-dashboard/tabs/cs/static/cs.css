@@ -105,6 +105,43 @@
 .part-cs .cs-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11.5px; color: var(--cs-muted); }
 .part-cs .cs-meta b { color: var(--cs-ink); font-weight: 600; }
 
+/* 문의 상세 머리 — 고객이 보낸 내용을 가장 크게 (제목 · 보낸 사람 · 본문 · 기한) */
+.part-cs .cs-inq { display: grid; gap: 14px; }
+.part-cs .cs-inq .cs-subject { font-size: 24px; line-height: 1.4; }
+.part-cs .cs-inq .cs-from b { font-size: 14px; }
+.part-cs .cs-inq .cs-from small { font-size: 12px; }
+.part-cs .cs-inq .cs-meta { font-size: 12.5px; padding: 10px 14px; background: var(--cs-soft); border-radius: 10px; }
+
+/* 처리 단계 — 접고 펴기 (제목 줄에 상태 요약) */
+.part-cs .cs-secbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding-top: 6px; border-top: 1px solid var(--cs-rule); }
+.part-cs .cs-secbar b { font-size: 13px; font-weight: 680; }
+.part-cs .cs-sec { border: 1px solid var(--cs-rule); border-radius: 12px; background: var(--cs-card); overflow: hidden; }
+.part-cs .cs-sec > summary {
+  list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 14px 16px;
+}
+.part-cs .cs-sec > summary::-webkit-details-marker { display: none; }
+.part-cs .cs-sec > summary::before {
+  content: ""; width: 7px; height: 7px; border-right: 1.6px solid var(--cs-muted); border-bottom: 1.6px solid var(--cs-muted);
+  transform: rotate(-45deg); transition: transform .15s; margin: 0 4px 0 2px; flex-shrink: 0;
+}
+.part-cs .cs-sec[open] > summary::before { transform: rotate(45deg); }
+.part-cs .cs-sec > summary:hover { background: var(--cs-soft); }
+.part-cs .cs-sec > summary:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: -3px; }
+.part-cs .cs-sec[open] > summary { border-bottom: 1px solid var(--cs-rule); }
+.part-cs .cs-sec-title { font-size: 13.5px; font-weight: 680; }
+.part-cs .cs-sec-sum { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.part-cs .cs-sec-body { padding: 16px; display: grid; gap: 12px; }
+.part-cs .cs-sec .cs-approve { border: 0; padding: 0; }
+.part-cs .cs-sec .cs-checkbox { border: 0; padding: 0; background: transparent; }
+.part-cs .cs-chip.cs-chip-warn { background: var(--cs-orange-bg); color: var(--cs-orange); }
+/* 답변 템플릿 탭 — 접힌 페르소나 · 템플릿 */
+.part-cs .cs-avatar.cs-persona-mini { width: 30px; height: 30px; font-size: 11px; }
+.part-cs .cs-persona-body { background: var(--cs-accent-soft); }
+.part-cs .cs-persona-body p { margin: 0; }
+.part-cs [data-panel="templates"] > .cs-sec { margin-bottom: 16px; }
+.part-cs [data-panel="templates"] > .cs-secbar { border-top: 0; padding-top: 0; margin-bottom: 6px; }
+.part-cs [data-panel="templates"] > .cs-muted { margin: 0 0 12px; }
+
 /* 배지 (시안 .badge) */
 .part-cs .cs-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .part-cs .cs-chip, .part-cs .cs-type, .part-cs .cs-badge {
@@ -126,8 +163,9 @@
 
 /* 받은 메일 본문 (시안 .mail) */
 .part-cs .cs-body {
-  margin: 0; padding: 0 0 20px; border-bottom: 1px solid var(--cs-rule); white-space: pre-wrap; overflow-wrap: anywhere;
-  font-size: 12.5px; line-height: 1.9; color: var(--cs-muted);
+  margin: 0; padding: 16px 18px; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-size: 15.5px; line-height: 1.8; color: var(--cs-ink);
+  background: var(--cs-card); border: 1px solid var(--cs-rule); border-left: 3px solid var(--cs-accent); border-radius: 10px;
 }
 
 /* 입력 */

@@ -101,16 +101,18 @@
         ],
         compensatedReason: '긍정 후기를 조건으로 한 보상은 FTC 소비자 리뷰 규칙 위반 소지'
       },
-      // R11·R12: 저당 젤리·저당 음료 출시에 맞춘 당 함량 표시 규칙 (2026-10-23 초안 · 정할 것 #2 → 규제 담당 확정 필요)
+      // R11·R12: 저당 젤리·저당 음료 출시에 맞춘 당 함량 표시 규칙 (2026-10-23 초안)
+      // off: true → 판정에 쓰지 않음. 2026-10-23 담당(소준희) 결정: 당류 함량 표시는 점검하지 않음 (정할 것 #2).
+      // FDA 기준 자체는 그대로이므로 규칙 내용은 지우지 않고 남겨 둠 → 다시 쓰려면 off를 지움
       {
-        code: 'R11', name: "정의 없는 당 표시 ('low sugar')", verdict: 'BLOCK', basis: ['official'],
+        code: 'R11', name: "정의 없는 당 표시 ('low sugar')", verdict: 'BLOCK', basis: ['official'], off: true,
         terms: ['low sugar', 'low in sugar', 'lite sugar', 'light in sugar'],
         ko: ['저당', '당이 낮은', '당 함량이 낮은'],
         reason: "미국 FDA는 'low sugar'를 영양소 함량 강조 표시로 정의하지 않아 쓸 수 없음 (21 CFR 101.60(c)). 저당 제품이라도 영문 판매 문구에 'low sugar'를 쓰면 안 됨",
         alt: '당 함량 수치로 표시: "[N] g of sugar per stick/bottle" · 저감률은 R12 기준 충족 시'
       },
       {
-        code: 'R12', name: '당 함량 강조 표시', verdict: 'COND', basis: ['official', 'context'],
+        code: 'R12', name: '당 함량 강조 표시', verdict: 'COND', basis: ['official', 'context'], off: true,
         terms: ['reduced sugar', 'less sugar', 'lower sugar', 'sugar free', 'zero sugar', 'no sugar', 'sugarless', 'no added sugar', 'without added sugar', 'sugar-reduced'],
         ko: ['무설탕', '설탕 무첨가', '당류 저감', '당을 줄인', '제로 슈거', '당 줄인'],
         reason: "reduced·less sugar는 기준 제품보다 당류 25% 이상 적고 비교 대상·수치를 함께 표시해야 함. sugar free는 1회 제공량당 0.5 g 미만, no added sugar는 별도 조건 (21 CFR 101.60(c)). 기준 충족을 확인한 저당 제품만 조건부, 일반 제품은 사용 불가",
@@ -120,13 +122,14 @@
     ],
 
     // 판매 제품 4종 (2026-10-23 팀 표 기준). 맛은 임시, 내부 제품명은 미정.
-    // sugarReduced: 기본 제품 대비 당류 저감 목표 → R12 당 강조 표시가 '조건부'까지 가능 (일반 제품은 BLOCK)
-    brand: { name: 'REBOOT', slogan: 'Restart Your Day', character: '리부부', colors: '검정 & 네온' },
+    // sugarReduced: 기본 제품 대비 당류 저감 목표 (R12가 켜져 있을 때 당 강조 표시가 '조건부'까지 가능, 일반 제품은 BLOCK)
+    // 2026-10-23 팀 제품표 기준 (내부 제품명 · 맛은 임시 · 4종 모두 라임·체리·레몬)
+    brand: { name: 'REBOOT', slogan: 'Restart Your Day', character: '리부 (Rebu)', cmSong: '니온 앤 리부', colors: '검정 & 네온' },
     products: [
-      { id: 'jelly', ko: '젤리', form: '스틱 젤리', flavors: '라임·체리·복숭아·레몬 (임시)', pack: '개별 포장 스틱 한 팩', sugarReduced: false },
-      { id: 'jelly-ls', ko: '저당 젤리', form: '스틱 젤리', flavors: '레몬·라임 (임시)', pack: '개별 포장 스틱 한 팩', sugarReduced: true },
-      { id: 'drink', ko: '음료', form: '비탄산 음료', flavors: '레몬·라임 (임시)', pack: '6병/박스 · 소형 병', sugarReduced: false },
-      { id: 'drink-ls', ko: '저당 음료', form: '비탄산 음료', flavors: '레몬·라임 (임시)', pack: '6병/박스 · 소형 병', sugarReduced: true }
+      { id: 'jelly', ko: '젤리', name: 'Reboot Jelly Original', form: '스틱 젤리', flavors: '라임·체리·레몬 (임시)', pack: '개별 포장 스틱 한 팩', sugarReduced: false },
+      { id: 'jelly-ls', ko: '저당 젤리', name: 'Reboot Jelly Balance', form: '스틱 젤리', flavors: '라임·체리·레몬 (임시)', pack: '개별 포장 스틱 한 팩', sugarReduced: true },
+      { id: 'drink', ko: '음료', name: 'Reboot Drink Original', form: '비탄산 음료', flavors: '라임·체리·레몬 (임시)', pack: '6병/박스 · 소형 병', sugarReduced: false },
+      { id: 'drink-ls', ko: '저당 음료', name: 'Reboot Drink Balance', form: '비탄산 음료', flavors: '라임·체리·레몬 (임시)', pack: '6병/박스 · 소형 병', sugarReduced: true }
     ],
 
     // FDA 숙취 제품 경고장 원문 인용 문구 — 원문 그대로(대괄호·말줄임 포함).
@@ -197,16 +200,17 @@
     ],
 
     // 모두 PASS여야 하는 문구
-    // 시연본 안전 문구 8개 중 7개 이관 (2026-10-23). 'Low sugar. Pocket-sized. Made in Korea.'는
-    // R11(당 함량 표시 · 2026-10-23 추가) 이후 BLOCK이라 넣지 않음 → 정할 것 #2 결정 뒤 다시 판단
+    // 시연본 안전 문구 8개 이관 (2026-10-23). 'Low sugar. Pocket-sized. Made in Korea.'는
+    // 당 함량 규칙(R11·R12)을 끈 뒤(정할 것 #2 결정) PASS라 다시 넣음
     safePhrases: [
+      { text: 'Low sugar. Pocket-sized. Made in Korea.', kind: '시연본 안전 문구' },
       { text: 'Contains Hovenia dulcis extract.', kind: '오탐 확인' },
       { text: 'Before the first toast.', kind: '오탐 확인' },
       { text: 'Best served chilled.', kind: '오탐 확인' },
       { text: '10 sticks per box.', kind: '오탐 확인' },
       { text: 'Restart Your Day.', kind: '브랜드 슬로건' },
-      { text: 'Lime, cherry, peach and lemon jelly sticks.', kind: '제품 사실' },
-      { text: 'Non-carbonated lemon-lime drink, 6 small bottles per box.', kind: '제품 사실' },
+      { text: 'Lime, cherry and lemon jelly sticks.', kind: '제품 사실' },
+      { text: 'Non-carbonated lime, cherry and lemon drinks, 6 small bottles per box.', kind: '제품 사실' },
       { text: "Korea's favorite after-party ritual.", kind: '안전 문구' },
       { text: 'A grab-and-go jelly stick with a bright citrus flavor.', kind: '안전 문구' },
       { text: 'Before the first toast, raise a different kind of glass.', kind: '안전 문구' },
@@ -232,11 +236,13 @@
       { text: 'Get a free box for a 5-star review!', expect: 'BLOCK' },
       { text: 'Mango flavor jelly stick, 10 sticks per box.', expect: 'PASS' },
       { text: '숙취 해소에 좋은 젤리', expect: 'BLOCK' },
-      { text: 'Low sugar lemon-lime jelly.', expect: 'BLOCK', product: 'jelly-ls' },
-      { text: 'Reduced sugar lemon-lime drink.', expect: 'COND', product: 'drink-ls' },
-      { text: 'Reduced sugar lemon-lime drink.', expect: 'BLOCK', product: 'drink' },
-      { text: 'Sugar-free jelly sticks.', expect: 'BLOCK', product: 'jelly' },
-      { text: '저당 젤리로 가볍게', expect: 'BLOCK', product: 'jelly-ls' }
+      // 당 함량 규칙(R11·R12)은 꺼져 있으므로 당류 표시만 있는 문장은 PASS
+      { text: 'Low sugar lemon-lime jelly.', expect: 'PASS', product: 'jelly-ls' },
+      { text: 'Reduced sugar lemon-lime drink.', expect: 'PASS', product: 'drink-ls' },
+      { text: 'Reduced sugar lemon-lime drink.', expect: 'PASS', product: 'drink' },
+      { text: 'Sugar-free jelly sticks.', expect: 'PASS', product: 'jelly' },
+      { text: 'Zero sugar, less sugar, low sugar.', expect: 'PASS', product: 'drink-ls' },
+      { text: '저당 젤리로 가볍게', expect: 'PASS', product: 'jelly-ls' }
     ],
 
     // 한국 표현 → 미국 대안 20쌍 (R1~R12 기준). reviewer·reviewedAt은 규제 담당 검토 후 기록합니다.

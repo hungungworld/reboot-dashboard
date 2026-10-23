@@ -52,6 +52,13 @@
 .part-compliance .cmp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .part-compliance .cmp-kpi { background: var(--cmp-card); border: 1px solid var(--cmp-rule); border-radius: 14px; padding: 20px 21px; min-height: 132px; display: grid; align-content: start; }
 .part-compliance .cmp-kpi.is-featured { background: var(--cmp-accent); border-color: var(--cmp-accent); color: var(--cmp-accent-ink); }
+/* 카드는 버튼 (누르면 점검 기록에서 그 판정만 보기) — 모양은 카드 그대로 */
+.part-compliance button.cmp-kpi { font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.part-compliance button.cmp-kpi.is-featured { color: var(--cmp-accent-ink); }
+.part-compliance button.cmp-kpi:hover { border-color: var(--cmp-rule-strong); box-shadow: 0 6px 18px rgba(32, 32, 48, .06); }
+.part-compliance button.cmp-kpi:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: 2px; }
+.part-compliance .cmp-kpi > span { display: block; }
+.part-compliance .cmp-kpi > .cmp-kpi-top { display: flex; }
 .part-compliance .cmp-kpi-top { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--cmp-muted); }
 .part-compliance .cmp-kpi.is-featured .cmp-kpi-top, .part-compliance .cmp-kpi.is-featured .cmp-kpi-sub { color: #4F5A12; }
 .part-compliance .cmp-kpi-icon { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--cmp-rule-strong); display: grid; place-items: center; }
@@ -102,6 +109,10 @@
   border: 1px solid var(--cmp-rule-strong); border-radius: 8px; padding: 11px 12px; width: 100%; letter-spacing: normal;
 }
 .part-compliance .cmp-input::placeholder { color: var(--cmp-faint); }
+/* 한 줄 입력칸·선택칸·같은 줄의 버튼 높이를 맞춰 라벨과 버튼이 어긋나지 않게 */
+.part-compliance input.cmp-input, .part-compliance select.cmp-input { height: 44px; }
+.part-compliance .cmp-row .cmp-btn:not(.cmp-btn-sm) { height: 44px; }
+.part-compliance .cmp-row > .cmp-muted { padding-bottom: 12px; }
 .part-compliance textarea.cmp-input { resize: vertical; line-height: 1.7; min-height: 130px; }
 .part-compliance .cmp-input[type="file"] { padding: 8px 10px; }
 .part-compliance .cmp-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -166,6 +177,13 @@
 .part-compliance .cmp-table td { color: var(--cmp-ink); }
 .part-compliance .cmp-table tr:last-child td { border-bottom: 0; }
 .part-compliance .cmp-table tbody tr:hover td { background: var(--cmp-soft); }
+/* 칸 맨 앞의 배지는 위아래 여백만큼 올려 옆 칸 글자와 첫 줄을 맞춤 */
+.part-compliance .cmp-table td > .cmp-badge:first-child { margin: -4px 0; }
+
+/* 결과를 그려 넣는 칸(일괄 심의 결과 · 규칙 검증 · 서버 수집 · 조회 결과): 안의 요소 사이 간격 */
+.part-compliance [data-panel="batch"] [data-el="out"], .part-compliance [data-panel="monitor"] [data-el="out"],
+.part-compliance [data-el="validation"], .part-compliance [data-el="server"], .part-compliance [data-el="frout"] { display: grid; gap: 12px; align-content: start; }
+.part-compliance [data-el="validation"]:empty, .part-compliance [data-el="frout"]:empty, .part-compliance [data-el="out"]:empty { display: none; }
 
 /* 규제 모니터링 */
 .part-compliance .cmp-h4 { font-size: 13.5px; font-weight: 650; margin: 10px 0 0; }
@@ -291,6 +309,25 @@
 .part-compliance .cmp-fold-latest { margin-left: auto; font-size: 11px; }
 .part-compliance .cmp-fold[open] > summary { border-bottom: 1px solid var(--cmp-rule); }
 .part-compliance .cmp-fold .cmp-table-wrap { border: 0; border-radius: 0; }
+
+/* 탭 안의 큰 단락을 접고 펴는 칸 (fold) — 제목은 단락 제목 크기, 안쪽은 여백을 두고 표 테두리 유지 */
+.part-compliance .cmp-sec > summary { padding: 15px 18px; }
+.part-compliance .cmp-sec .cmp-fold-title { font-size: 14.5px; }
+.part-compliance .cmp-fold-body { padding: 16px 18px 18px; display: grid; gap: 12px; align-content: start; }
+.part-compliance .cmp-fold-body .cmp-table-wrap { border: 1px solid var(--cmp-rule); border-radius: 12px; }
+
+/* 단건 심의 오른쪽 '알아두세요' — 눌러서 펼침 */
+.part-compliance .cmp-notes-fold > summary { list-style: none; cursor: pointer; }
+.part-compliance .cmp-notes-fold:not([open]) { display: block; }
+.part-compliance .cmp-notes-fold > summary::-webkit-details-marker { display: none; }
+.part-compliance .cmp-notes-fold > summary h3::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 9px 2px 2px; vertical-align: middle;
+  border-right: 1.6px solid var(--cmp-muted); border-bottom: 1.6px solid var(--cmp-muted); transform: rotate(-45deg); transition: transform .15s;
+}
+.part-compliance .cmp-notes-fold[open] > summary h3::before { transform: rotate(45deg); }
+.part-compliance .cmp-notes-fold > summary .cmp-muted { font-size: 11.5px; }
+.part-compliance .cmp-notes-fold[open] > summary .cmp-muted { display: none; }
+.part-compliance .cmp-notes-fold > summary:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: 2px; border-radius: 6px; }
 
 /* 한글 제목·요약 (참고용) — 원문 바로 아래 */
 .part-compliance .cmp-ko { display: block; margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--cmp-accent); color: var(--cmp-muted); font-size: 11.5px; line-height: 1.6; letter-spacing: -0.02em; }
