@@ -56,7 +56,6 @@ SERVICES = [
     Service("GMAIL_QUERY", "CS 문의 메일 조건", "CS 문의함 (Gmail 검색어)", secret=False, group="setting"),
     Service("PRODUCT_DESC", "제품 설명 (AI 프롬프트)", "파트너 메일·가이드", secret=False, group="setting"),
     Service("REGULATION_DB_URL", "규제(검열) DB 주소", "파트너 협업 메일 '규제 DB 연결' 표시 (통합 DB 미정)", group="setting"),
-    Service("GDELT_REQUEST_INTERVAL_SEC", "GDELT 요청 간격 (초)", "홈 뉴스 수집 (최소 5초)", secret=False, group="setting"),
     Service("CONTENT_TEXT_MODEL", "콘텐츠 대화·제작 모델", "콘텐츠 제작 (비우면 OPENAI_MODEL)", secret=False, group="setting"),
     Service("CONTENT_IMAGE_MODEL", "콘텐츠 이미지 모델", "콘텐츠 이미지 생성 (비우면 gpt-image-1)", secret=False, group="setting"),
 ]

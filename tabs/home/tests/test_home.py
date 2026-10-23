@@ -1,13 +1,14 @@
-"""홈 · 데일리 브리핑 API — 뉴스 수집(GDELT는 가짜 응답) · AI 요약 · 이번 주 To-Do (인터넷 · 키 없이)."""
+"""홈 · 데일리 브리핑 API — 뉴스 수집(구글 뉴스 RSS는 가짜 응답) · AI 요약 · 이번 주 To-Do (인터넷 · 키 없이)."""
 import json
 import threading
 from datetime import date, datetime, timedelta, timezone
-from urllib.parse import unquote
+from email.utils import format_datetime
+from xml.sax.saxutils import escape
 
 import pytest
 
 from server.extensions import db
-from tabs.home import gdelt, news, routes, todos
+from tabs.home import news, routes, rss, todos
 from tabs.home.models import HomeNewsArticle, HomeNewsRun
 
 TODAY = date(2026, 10, 23)  # 금요일 → 이번 주 월요일 10-19
@@ -21,12 +22,8 @@ def today(monkeypatch):
 
 @pytest.fixture()
 def fast(app):
-    app.config["HOME_GDELT_INTERVAL"] = 0  # 테스트에서는 5초 간격을 기다리지 않음
+    app.config["HOME_RSS_INTERVAL"] = 0  # 테스트에서는 요청 사이를 기다리지 않음
     return app
-
-
-def _gd(dt):
-    return dt.strftime("%Y%m%dT%H%M%SZ")
 
 
 def _now():
@@ -34,31 +31,39 @@ def _now():
 
 
 class FakeRes:
-    def __init__(self, status=200, text="", payload=None):
+    def __init__(self, status=200, body=b""):
         self.status_code = status
-        self.text = json.dumps(payload) if payload is not None else text
+        self.content = body if isinstance(body, bytes) else body.encode("utf-8")
 
 
-def articles_for(group):
+def rss_xml(items):
+    def one(i):
+        pub = format_datetime(i["date"].replace(tzinfo=timezone.utc), usegmt=True)
+        return (f"<item><title>{escape(i['title'])}</title><link>{escape(i['url'])}</link><pubDate>{pub}</pubDate>"
+                f"<source url=\"https://src.example.com\">{escape(i['source'])}</source></item>")
+    return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss version=\"2.0\"><channel><title>Google News</title>"
+            + "".join(one(i) for i in items) + "</channel></rss>").encode("utf-8")
+
+
+def items_for(group):
+    """검색어별 가짜 기사: 공통 기사 1 + 자기 기사 2 + 노이즈 1 + 잘못된 주소 1 (+ hangover는 급증용 기사)."""
     now = _now()
-    shared = {"url": "https://www.example-news.com/shared-story", "title": "Non-alcoholic drinks surge before Halloween",
-              "domain": "example-news.com", "seendate": _gd(now - timedelta(hours=3)), "language": "English", "sourcecountry": "United States"}
-    own = [{"url": f"https://{group}.example.com/story-{i}", "title": f"{group} story {i} &amp; more",
-            "domain": f"{group}.example.com", "seendate": _gd(now - timedelta(hours=10 + i)),
-            "language": "English", "sourcecountry": "United States"} for i in range(2)]
-    junk = {"url": "javascript:alert(1)", "title": "bad url", "domain": "x", "seendate": _gd(now)}
-    return [shared] + own + [junk]
+    items = [{"url": "https://www.example-news.com/shared-story", "title": "Non-alcoholic drinks surge before Halloween - Example News",
+              "source": "Example News", "date": now - timedelta(hours=3)}]
+    items += [{"url": f"https://{group}.example.com/story-{i}", "title": f"{group} story {i} &amp; more - {group.title()} Daily",
+               "source": f"{group.title()} Daily", "date": now - timedelta(hours=10 + i)} for i in range(2)]
+    items.append({"url": f"https://{group}.example.com/crash", "title": "Two arrested after DUI crash", "source": "Local", "date": now})
+    items.append({"url": "javascript:alert(1)", "title": "bad url", "source": "x", "date": now})
+    if group == "hangover":  # 최근 7일 6건 · 그 전 7일 1건 → 보도 급증
+        items += [{"url": f"https://hangover.example.com/new-{i}", "title": f"Hangover trend {i}", "source": "Trend",
+                   "date": now - timedelta(days=1, hours=i)} for i in range(3)]
+        items.append({"url": "https://hangover.example.com/old", "title": "Old hangover story", "source": "Trend",
+                      "date": now - timedelta(days=10)})
+    return items
 
 
-def timeline_for(group):
-    now = _now().replace(hour=0, minute=0, second=0, microsecond=0)
-    pts = []
-    for d in range(14):
-        day = now - timedelta(days=13 - d)
-        recent = d >= 7
-        v = (0.30 if recent else 0.10) if group == "hangover" else 0.20
-        pts.append({"date": _gd(day), "value": v})
-    return {"timeline": [{"series": "Volume Intensity", "data": pts}]}
+def valid_new(group):
+    return [i for i in items_for(group) if i["url"].startswith("https://") and "DUI" not in i["title"]]
 
 
 def make_session(monkeypatch, responder):
@@ -67,83 +72,82 @@ def make_session(monkeypatch, responder):
     class FakeSession:
         def get(self, url, params=None, timeout=None, headers=None):
             calls.append(dict(params))
-            assert url == gdelt.BASE and timeout == 30
+            assert url == rss.BASE and timeout == 30
             return responder(params)
 
-    monkeypatch.setattr("tabs.home.gdelt.requests.Session", FakeSession)
+    monkeypatch.setattr("tabs.home.rss.requests.Session", FakeSession)
     return calls
 
 
 def group_of(params):
-    q = unquote(params["query"])
+    q = params["q"]
     for g in news.load_queries()["groups"]:
-        if q.startswith(g["query"]):
+        if q == f"{g['query']} when:14d":
             return g["id"]
     raise AssertionError(q)
 
 
 def good_responder(params):
-    g = group_of(params)
-    if params["mode"] == "ArtList":
-        return FakeRes(payload={"articles": articles_for(g)})
-    return FakeRes(payload=timeline_for(g))
+    return FakeRes(body=rss_xml(items_for(group_of(params))))
 
 
-# ───────── 쿼리 템플릿 · GDELT 클라이언트 ─────────
+# ───────── 검색어 · RSS 클라이언트 ─────────
 
-def test_query_templates_follow_gdelt_rules():
+def test_queries_are_plain_search_terms():
     cfg = news.load_queries()
     assert 3 <= len(cfg["groups"]) <= 5
     for g in cfg["groups"]:
-        q = news.build_query(cfg, g)
-        assert "sourcecountry:US" in q and "sourcelang:english" in q
-        assert '-"drunk driving"' in q
-        if " OR " in g["query"]:
-            assert g["query"].startswith("(") and g["query"].endswith(")")  # OR는 괄호 필수
-        assert g.get("label")
+        assert g.get("label") and news.build_query(cfg, g) == g["query"]
+    assert {"DUI", "drunk driving", "crash"} <= set(cfg["exclude"])
 
 
-def test_client_waits_between_requests_and_retries(monkeypatch):
+def test_client_parses_rss_and_retries(monkeypatch):
     slept = []
-    seq = [FakeRes(429, "Please limit requests to one every 5 seconds"), FakeRes(payload={"articles": []}),
-           FakeRes(payload={"articles": [{"url": "https://a.example.com", "title": "x"}]})]
+    now = _now().replace(microsecond=0)
+    seq = [FakeRes(429), FakeRes(body=rss_xml([{"url": "https://a.example.com/x", "title": "Beer sales fall - Reuters",
+                                                "source": "Reuters", "date": now}]))]
 
     class S:
         def get(self, url, params=None, timeout=None, headers=None):
+            assert params["hl"] == "en-US" and params["gl"] == "US" and params["ceid"] == "US:en"
             return seq.pop(0)
 
-    c = gdelt.GdeltClient(interval=5, sleep=slept.append, session=S())
-    assert c.articles("(a OR b)") == []          # 429 → 쉬고 한 번 더
-    assert len(c.articles("(a OR b)")) == 1
-    assert c.calls == 3 and c.rate_limited == 1
-    assert c.interval == 10                        # 요청 제한을 받으면 간격을 늘림
-    assert slept and all(s >= 4.5 for s in slept)  # 요청 사이 5초 이상 (재시도는 간격의 두 배)
+    c = rss.RssClient(interval=1, sleep=slept.append, session=S())
+    arts = c.articles("beer sales")                  # 429 → 쉬고 한 번 더
+    assert c.calls == 2 and c.rate_limited == 1 and slept
+    assert arts == [{"url": "https://a.example.com/x", "title": "Beer sales fall", "domain": "Reuters", "date": now}]
 
 
-def test_client_rejects_non_json_without_retry():
+def test_client_rejects_non_rss_without_retry():
     class S:
         n = 0
 
         def get(self, url, params=None, timeout=None, headers=None):
             S.n += 1
-            return FakeRes(200, "The specified phrase is too short.")
+            return FakeRes(200, "<html>not rss")
 
-    c = gdelt.GdeltClient(interval=0, sleep=lambda s: None, session=S())
-    with pytest.raises(gdelt.GdeltError) as e:
-        c.articles("(ab OR cd)")
-    assert "JSON" in str(e.value) and S.n == 1
-    with pytest.raises(gdelt.GdeltError):
-        gdelt.GdeltClient(interval=0, session=type("E", (), {"get": lambda *a, **k: FakeRes(200, "")})()).timeline("x")
+    c = rss.RssClient(interval=0, sleep=lambda s: None, session=S())
+    with pytest.raises(rss.RssError) as e:
+        c.articles("x")
+    assert "RSS" in str(e.value) and S.n == 1
+
+
+def test_noise_and_title_cleanup():
+    assert rss.is_noise("Driver arrested after crash", ["arrest"]) and rss.is_noise("DUI checkpoint", ["DUI"])
+    assert not rss.is_noise("Non-alcoholic beer sales rise", ["DUI", "crash"])
+    assert rss.clean_title("Heineken warns on GLP-1 - Reuters", "Reuters") == "Heineken warns on GLP-1"
 
 
 def test_surge_signal():
-    base = datetime(2026, 10, 22)
-    pts = [(base - timedelta(days=13 - d), 0.3 if d >= 7 else 0.1) for d in range(14)]
-    s = gdelt.surge(pts)
-    assert s["surge"] is True and s["changePct"] == 200.0 and len(s["daily"]) == 14
-    flat = gdelt.surge([(base - timedelta(days=d), 0.2) for d in range(14)])
+    now = datetime(2026, 10, 22, 12)
+    dates = [now - timedelta(days=1)] * 6 + [now - timedelta(days=10)] * 2
+    s = rss.surge(dates, now)
+    assert s["surge"] is True and s["recent"] == 6 and s["previous"] == 2 and s["changePct"] == 200.0
+    few = rss.surge([now - timedelta(days=1)] * 3, now)            # 5건 미만이면 급증 아님
+    assert few["surge"] is False and few["changePct"] is None
+    flat = rss.surge([now - timedelta(days=1)] * 5 + [now - timedelta(days=9)] * 5, now)
     assert flat["surge"] is False and flat["changePct"] == 0.0
-    assert gdelt.surge([]) is None
+    assert rss.surge([], now) is None
 
 
 # ───────── 수집 ─────────
@@ -163,23 +167,25 @@ def test_news_before_first_collection(auth_client):
 
 def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
     calls = make_session(monkeypatch, good_responder)
+    groups = [g["id"] for g in news.load_queries()["groups"]]
+    expected = len({i["url"] for g in groups for i in valid_new(g)})
     with fast.app_context():
         run = news.collect(trigger="manual", user_name="테스터")
         assert run.status == "ok" and run.ai_status == "no_key"
-        n_groups = len(news.load_queries()["groups"])
-        assert len(calls) == n_groups * 2 and {c["mode"] for c in calls} == {"ArtList", "TimelineVol"}
-        assert all(c["format"] == "json" and c["maxrecords"] == 75 for c in calls if c["mode"] == "ArtList")
-        assert HomeNewsArticle.query.count() == 1 + 2 * n_groups  # 같은 URL은 한 번만, javascript: 주소는 버림
+        assert len(calls) == len(groups)                       # 검색어마다 RSS 1번
+        assert HomeNewsArticle.query.count() == expected        # 같은 기사 한 번만, 노이즈·javascript: 주소는 버림
         shared = HomeNewsArticle.query.filter_by(url="https://www.example-news.com/shared-story").one()
-        assert len(shared.groups.split(",")) == n_groups
+        assert len(shared.groups.split(",")) == len(groups) and shared.domain == "Example News"
+        assert shared.title == "Non-alcoholic drinks surge before Halloween"   # " - 매체명" 뗌
         assert "&amp;" not in HomeNewsArticle.query.filter(HomeNewsArticle.url.like("%story-0")).first().title
+        assert HomeNewsArticle.query.filter(HomeNewsArticle.title.like("%DUI%")).count() == 0
         again = news.collect(trigger="manual", user_name="테스터")
         assert sum(c["new"] for c in json.loads(again.counts).values()) == 0
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "ok" and j["running"] is False and j["ai"] is None
     assert 0 < len(j["articles"]) <= 8 and all(a["url"].startswith("https://") for a in j["articles"])
     assert j["signals"][0]["group"] == "hangover" and j["signals"][0]["surge"] is True
-    assert j["articleCount7d"] == 1 + 2 * len(j["groups"])
+    assert not any(s["surge"] for s in j["signals"][1:])
     logs = auth_client.get("/api/worklog?part=home&kind=수집").get_json()["items"]
     assert logs and logs[0]["status"] == "완료" and logs[0]["user"] == "테스터"
 
@@ -188,12 +194,12 @@ def test_failure_keeps_last_results(fast, auth_client, monkeypatch):
     make_session(monkeypatch, good_responder)
     with fast.app_context():
         news.collect(trigger="manual")
-    calls = make_session(monkeypatch, lambda p: FakeRes(200, "The specified phrase is too short."))
+    calls = make_session(monkeypatch, lambda p: FakeRes(200, "<html>blocked"))
     with fast.app_context():
         run = news.collect(trigger="daily")
         assert run.status == "failed" and run.ai_status == "skipped"
         errs = json.loads(run.errors)
-        assert any("JSON" in e for e in errs)
+        assert any("RSS" in e for e in errs)
         assert len(calls) == news.MAX_FAILS_IN_ROW and any("건너뜀" in e for e in errs)  # 연달아 실패하면 더 부르지 않음
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "failed" and j["lastSuccessAt"] and j["articles"]  # 마지막 결과 유지
@@ -204,8 +210,8 @@ def test_failure_keeps_last_results(fast, auth_client, monkeypatch):
 
 def test_partial_failure(fast, auth_client, monkeypatch):
     def responder(p):
-        if group_of(p) == "policy":
-            return FakeRes(503, "busy")
+        if group_of(p) == "nonalc":
+            return FakeRes(503)
         return good_responder(p)
 
     make_session(monkeypatch, responder)
@@ -215,32 +221,37 @@ def test_partial_failure(fast, auth_client, monkeypatch):
     assert auth_client.get("/api/home/news").get_json()["status"] == "partial"
 
 
-def test_ai_filter_and_summary(fast, auth_client, monkeypatch):
+def test_ai_filter_and_korean_items(fast, auth_client, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     make_session(monkeypatch, good_responder)
     seen = {}
 
     def fake_openai_json(system, user, **kw):
         ids = [a["id"] for a in user["articles"]]
+        hang = next(a["id"] for a in user["articles"] if a["title"].startswith("Hangover trend"))
         seen.update(system=system, user=user, kw=kw)
-        return {"relevant_ids": ids[:3] + [99999], "headline": "핼러윈 앞두고 논알코올 보도 증가",
-                "trends": [{"title": "논알코올 음료 보도 증가", "summary": "보도가 늘었습니다.", "group": "nonalc", "article_ids": [ids[0], 99999]},
-                           {"title": "근거 없는 동향", "summary": "x", "group": "nope", "article_ids": [12345]}]}
+        return {"relevant_ids": ids[:3] + [99999], "headline": "핼러윈 앞두고 무알코올 보도가 늘었습니다.",
+                "articles": [{"id": hang, "title_ko": "숙취 관련 보도 증가", "summary_ko": "숙취 관련 기사가 늘었습니다.", "topic": "소비 트렌드"},
+                             {"id": hang, "title_ko": "중복", "summary_ko": "x", "topic": "업계 일반"},
+                             {"id": 12345, "title_ko": "없는 기사", "summary_ko": "x", "topic": "판매 동향"}]}
 
     monkeypatch.setattr("tabs.home.news.openai_json", fake_openai_json)
     with fast.app_context():
         run = news.collect()
         assert run.ai_status == "ok"
-        relevant = HomeNewsArticle.query.filter(HomeNewsArticle.relevant.is_(True)).count()
-        assert relevant == 3
-    assert "제목과 도메인" in seen["system"] and seen["kw"]["schema"]["additionalProperties"] is False
-    assert seen["kw"]["part"] == "home" and seen["user"]["signals"]
+        assert HomeNewsArticle.query.filter(HomeNewsArticle.relevant.is_(True)).count() == 4
+    assert "본문" in seen["system"] and seen["kw"]["schema"]["additionalProperties"] is False
+    assert seen["kw"]["part"] == "home" and seen["user"]["signals"] and seen["user"]["articles"][0]["source"]
     j = auth_client.get("/api/home/news").get_json()
     assert j["aiReady"] is True and j["ai"]["headline"].startswith("핼러윈")
-    assert len(j["ai"]["trends"]) == 1  # 근거 기사가 없는 동향은 버림
-    t = j["ai"]["trends"][0]
-    assert t["groupLabel"] and len(t["articles"]) == 1 and t["articles"][0]["url"].startswith("https://")
+    assert len(j["ai"]["items"]) == 1  # 겹친 기사 · 없는 기사는 버림
+    it = j["ai"]["items"][0]
+    assert it["titleKo"] == "숙취 관련 보도 증가" and it["topic"] == "소비 트렌드" and it["surge"] is True
+    assert it["url"].startswith("https://") and it["title"].startswith("Hangover trend") and it["domain"] == "Trend"
     assert all(a["relevant"] for a in j["articles"])
+    with fast.app_context():
+        b = news.brief()
+    assert b["trends"][0]["title"] == "숙취 관련 보도 증가" and any(s["surge"] for s in b["signals"])
 
 
 def test_ai_error_keeps_articles(fast, auth_client, monkeypatch):

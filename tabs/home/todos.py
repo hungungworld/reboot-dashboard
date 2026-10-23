@@ -145,7 +145,7 @@ def rule_items(today, ctx, brief):
     for s in surges:
         pct = f"+{s['changePct']:.0f}%" if s.get("changePct") is not None else "새로 등장"
         items.append({"title": f"'{s['label']}' 보도량 급증 기사 확인",
-                      "reason": f"최근 7일 보도량 전주 대비 {pct} (GDELT)", "source": "home"})
+                      "reason": f"최근 7일 보도량 전주 대비 {pct} (구글 뉴스)", "source": "home"})
     if not items:
         items.append({"title": "이번 주 시즌·뉴스 확인", "reason": "준비 기간에 들어온 시즌과 급증 시그널이 없음", "source": "home"})
     return items[:MAX_ITEMS]
