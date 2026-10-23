@@ -427,10 +427,10 @@ black 내가바꾼파일.py
 | Restrict deletions | ✅ | ✅ |
 | 허용 병합 방식 | Merge commit | Merge commit |
 
-**`.github/CODEOWNERS`** — `main`으로 가는 PR은 PM이 승인해야 하도록 지정합니다. (GitHub 아이디로 교체)
+**`.github/CODEOWNERS`** — `main`으로 가는 PR은 PM이 승인해야 하도록 지정합니다. (HK: `hungungworld`, KHS: `hyxxns0131`)
 
 ```text
-* @HK의깃허브아이디 @KHS의깃허브아이디
+* @hungungworld @hyxxns0131
 ```
 
 - GitHub는 PR 작성자가 자기 PR을 승인하는 것을 허용하지 않으므로, "PR을 연 PM은 승인 불가" 규칙은 자동으로 지켜집니다.
