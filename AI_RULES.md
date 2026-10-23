@@ -85,7 +85,8 @@ AI는 파일을 바꾸기 전에 한국어로 아래를 보고하고 기다립�
 
 ## 4. Git·명령 실행 (에이전트형)
 
-- AI는 **`main`, `pre_main` 브랜치에서 작업하지 않습니다.** 작업 전 현재 브랜치가 본인의 `feature/` 또는 `fix/` 브랜치인지 확인합니다.
+- AI는 **`main`, `pre_main` 브랜치에서 작업하지 않습니다.** 작업 전 현재 브랜치가 본인의 **이니셜 브랜치**(예: `NW`, 긴급 수정이면 `hotfix/…`)인지 확인합니다.
+- 작업을 시작하기 전에 `pre_main`의 최신 내용을 가져왔는지 확인하고, 아니면 사용자에게 먼저 가져오도록 안내합니다. (`RULE.md` §4.2)
 - `commit`, `push`, `merge`, `rebase`, `reset`, `checkout -- 파일`, `branch -D` 등 **파일이나 기록을 바꾸는 Git 명령은 매번 사용자의 허가**를 받습니다.
 - `git push --force`, `git reset --hard`, `main`/`pre_main` 직접 push는 **허가 여부와 관계없이 하지 않습니다.**
 - 명령은 **Windows cmd** 기준으로 제안합니다. (예: `venv\Scripts\activate`, `copy`, `del`) 요청 없이 PowerShell 전용 문법이나 Mac/Linux 명령으로 바꾸지 않습니다.
@@ -195,7 +196,7 @@ Gemini(웹·앱)와 Gemini Gem도 §5 "대화형 AI에서 코드를 가져올 �
 
 [환경]
 - Flask 단독(Flask + Jinja 템플릿 + HTML/CSS/JS), Windows, 명령은 cmd 기준.
-- 브랜치: main ← pre_main ← feature/이니셜-기능명. main, pre_main에는 직접 push하지 않는다.
+- 브랜치: main ← pre_main ← 개인 브랜치(이니셜, 예: NW). 개인 브랜치를 계속 쓰고, 기능·수정 구분은 커밋 타입(feat:, fix:)으로 한다. main, pre_main에는 직접 push하지 않는다.
 
 [답변 방식]
 - 사용자가 보여준 코드와 폴더 구조에 맞춰 답하고, 모르는 파일·함수는 지어내지 말고 물어본다.
@@ -322,7 +323,8 @@ Claude Code는 `deny`(금지) → `ask`(매번 묻기) → `allow`(허용) 순�
 ### 11.4 작업 순서
 
 ```text
-1. 내 기능 브랜치인지 확인          git branch --show-current
+1. 내 이니셜 브랜치인지 확인        git branch --show-current
+   pre_main 최신 내용 가져오기      git fetch origin  →  git merge origin/pre_main
 2. Plan 모드로 계획 요청             "content의 카피 이력 페이지에 페이지네이션 추가 계획 세워줘"
 3. 계획의 파일 목록 확인 (§2.2)      담당 폴더 밖·공통 영역 포함 여부 확인
 4. 승인 후 실행                      변경마다 승인 창에서 내용 확인
@@ -376,16 +378,18 @@ approval_policy = "on-request"
 
 - 저장소를 연결하기 전에 PM에게 알립니다.
 - Codex가 만든 브랜치·PR도 팀 규칙을 그대로 따릅니다.
-  - 브랜치 이름: `feature/이니셜-기능명` 또는 `fix/이니셜-버그명`
+  - 가능하면 본인 이니셜 브랜치(예: `NW`)에서 작업하게 합니다. Codex가 새 브랜치를 따로 만들었다면 그 PR이 병합된 뒤 그 브랜치는 삭제합니다.
   - PR base: **`pre_main`** (`main`이 아닌지 꼭 확인)
   - PR 본문: `RULE.md` §7.3 템플릿을 채우고, "AI 도구 사용"에 Codex를 적음
+  - 커밋 메시지에 타입(`feat:`, `fix:` 등)이 들어갔는지 확인
 - 클라우드 환경 설정(환경 변수·비밀 값)에 실제 API 키를 넣지 않습니다. 필요하면 테스트용 가짜 값을 씁니다.
 - 클라우드에서 만든 변경도 **로컬에서 받아 직접 실행해 본 뒤** PR을 리뷰 요청합니다.
 
 ### 12.4 작업 순서
 
 ```text
-1. 내 기능 브랜치인지 확인          git branch --show-current
+1. 내 이니셜 브랜치인지 확인        git branch --show-current
+   pre_main 최신 내용 가져오기      git fetch origin  →  git merge origin/pre_main
 2. 읽기 전용으로 계획 요청          "파일은 바꾸지 말고 계획만 세워줘"
 3. 계획의 파일 목록 확인 (§2.2)      담당 폴더 밖·공통 영역 포함 여부 확인
 4. 승인 후 실행                      승인 요청마다 내용 확인

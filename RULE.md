@@ -5,7 +5,7 @@
 
 - **프레임워크**: Flask 단독 (Flask + Jinja 템플릿 + HTML/CSS/JS)
 - **개발 환경**: Windows (명령어는 `cmd` 기준)
-- **브랜치 구조**: `main` ← `pre_main` ← 개인 기능 브랜치
+- **브랜치 구조**: `main` ← `pre_main` ← 개인 브랜치(이니셜)
 
 ---
 
@@ -21,7 +21,7 @@
 | **HJ** | 혁주 | 팀원 | 기능 개발, PR 생성, 코드 리뷰 참여 |
 
 - PM 두 명(HK, KHS)은 **동등한 권한**을 가집니다.
-- 팀장·PM도 개발할 때는 팀원과 똑같이 기능 브랜치와 PR 절차를 따릅니다.
+- 팀장·PM도 개발할 때는 팀원과 똑같이 개인 브랜치와 PR 절차를 따릅니다.
 - 이니셜은 이름의 이니셜이며, 겹치는 사람은 성까지 넣습니다. (강현서 KHS, 양효선 YHS)
 
 ---
@@ -42,81 +42,83 @@
 
 | 브랜치 | 용도 | 만드는 곳 → 병합하는 곳 |
 |---|---|---|
-| `main` | 언제나 실행되는 최종 안정 버전 | `pre_main`에서만 병합 |
-| `pre_main` | 통합 브랜치. 모든 기능이 모여 함께 검증되는 곳 | 기능 브랜치에서 병합 |
-| `feature/이니셜-기능명` | 새 기능 개발 | `pre_main`에서 생성 → `pre_main`으로 PR |
-| `fix/이니셜-버그명` | 버그 수정 | `pre_main`에서 생성 → `pre_main`으로 PR |
-| `hotfix/이니셜-버그명` | `main`이 고장 났을 때 긴급 수정 (§4.5) | `main`에서 생성 → `main`으로 PR |
+| `main` | 언제나 실행되는 최종 안정 버전. **배포는 `main`에서만** | `pre_main`에서만 병합 |
+| `pre_main` | 통합 브랜치. 모든 사람의 작업이 모여 함께 검증되는 곳 | 개인 브랜치에서 병합 |
+| `이니셜` (예: `NW`) | **개인 작업 브랜치.** 기능 추가·버그 수정 모두 여기서 함 | `pre_main`에서 한 번 생성 → `pre_main`으로 PR, **삭제하지 않고 계속 사용** |
+| `hotfix/이니셜-버그명` | `main`이 고장 났을 때 긴급 수정 (§4.5) | `main`에서 생성 → `main`으로 PR → 병합 후 삭제 |
 
 ### 3.2 브랜치 이름 규칙
 
-- 형식: `종류/이니셜-기능명` — 영어 소문자와 하이픈(`-`)만 사용, 한글·공백 금지
-- 이니셜은 대문자 그대로 씁니다: `JH`, `HK`, `KHS`, `YHS`, `NW`, `HJ`
-- 이슈 번호가 있으면 이니셜 뒤에 붙입니다.
-- 두 파트를 맡은 사람은 기능명 앞에 파트 이름을 붙여 어느 파트 작업인지 드러냅니다. (예: `feature/JH-cs-reply-draft`, `feature/JH-compliance-batch-review`)
+- 개인 브랜치 이름은 **자기 이니셜 그대로**입니다: `JH`, `HK`, `KHS`, `YHS`, `NW`, `HJ`
+- 기능 추가인지 버그 수정인지는 브랜치 이름이 아니라 **커밋 메시지 타입**(`feat:`, `fix:` 등, §7.1)으로 구분합니다.
+- `hotfix/이니셜-버그명`만 예외로 따로 만듭니다. (영어 소문자와 하이픈만 사용, 예: `hotfix/HK-app-start-error`)
 
-```text
-feature/HK-login-page
-feature/NW-12-channel-copy-cards
-fix/HJ-performance-chart-not-showing
-hotfix/HK-app-start-error
-```
+### 3.3 개인 브랜치 사용 규칙
 
-### 3.3 브랜치 수명
-
-- **기능 하나마다 새 브랜치**를 만듭니다. 한 브랜치를 여러 기능에 계속 쓰지 않습니다.
-- PR이 병합되면 해당 브랜치는 삭제합니다. (GitHub의 **Delete branch** 버튼 또는 자동 삭제 설정)
-- 다음 작업은 최신 `pre_main`에서 새 브랜치를 만들어 시작합니다.
+- 개인 브랜치는 **한 사람당 하나**이며, PR이 병합되어도 **지우지 않고 계속 씁니다.**
+- **작업을 시작할 때마다 먼저 `pre_main`의 최신 내용을 내 브랜치로 가져옵니다.** (§4.2) 다른 사람이 병합한 내용과 멀어지면 나중에 큰 충돌이 납니다.
+- 한 브랜치에는 열린 PR이 **하나만** 있을 수 있습니다. PR이 병합되기 전에 같은 브랜치에 커밋을 push하면 그 PR에 같이 들어갑니다. 그래서 **PR 올리기 → 병합 기다리기 → 다음 작업** 순서로 진행합니다.
+- 두 파트를 맡은 사람(JH, HK, HJ)도 브랜치는 하나입니다. 대신 **PR 하나에는 한 파트의 작업만** 담고, 그 PR이 병합된 뒤 다른 파트 작업을 올립니다.
 
 ---
 
 ## 4. 작업 흐름
 
 ```text
-pre_main ──(브랜치 생성)──> feature/YHS-login-page
-                                   │ 개발·커밋·push
-                                   ▼
-                              PR → pre_main  (리뷰어 1명 승인)
-                                   │
-                                   ▼
-                              pre_main ──(실행 확인)──> PR → main  (PM 1명 승인)
+pre_main ──(처음 한 번 생성)──> NW (개인 브랜치, 계속 사용)
+   ▲                              │ ① pre_main 최신 내용 가져오기
+   │                              │ ② 개발 · 커밋(feat:/fix:) · push
+   │                              ▼
+   └──────── 병합 ◀──────── PR → pre_main  (리뷰어 1명 승인)
+
+pre_main ──(실행 확인)──> PR → main  (PM 1명 승인) ──> 배포
 ```
 
-### 4.1 작업 시작 (Windows cmd)
+### 4.1 처음 한 번: 개인 브랜치 만들기 (Windows cmd)
 
 ```cmd
 git switch pre_main
 git pull origin pre_main
-git switch -c feature/YHS-login-page
+git switch -c NW
+git push -u origin NW
 ```
 
-### 4.2 작업 중
+GitHub Desktop: **Current branch**에서 `pre_main` 선택 → **Fetch origin** → **New branch** → 이름에 이니셜 입력 → **Publish branch**
+
+### 4.2 매번 작업할 때
+
+**① 시작: `pre_main` 최신 내용 가져오기** (작업을 시작할 때마다, 하루 이상 걸리면 매일)
 
 ```cmd
-git status
-git add 파일경로
-git commit -m "feat: 로그인 페이지 추가"
-git push -u origin feature/YHS-login-page
-```
-
-- `git add .` 대신 **바꾼 파일을 직접 지정**하는 것을 권장합니다. `.env`, DB 파일 등이 실수로 올라가는 것을 막을 수 있습니다.
-- 작업이 하루 이상 걸리면 매일 시작할 때 `pre_main`의 최신 내용을 가져와 충돌을 미리 줄입니다.
-
-```cmd
+git switch NW
 git fetch origin
 git merge origin/pre_main
 ```
 
+GitHub Desktop: 내 브랜치 선택 → **Fetch origin** → 메뉴 **Branch → Update from pre_main**
+
+**② 작업 · 커밋 · push**
+
+```cmd
+git status
+git add 파일경로
+git commit -m "feat: 채널별 카피 카드 추가"
+git push
+```
+
+- `git add .` 대신 **바꾼 파일을 직접 지정**하는 것을 권장합니다. `.env`, DB 파일 등이 실수로 올라가는 것을 막을 수 있습니다.
+
 > **rebase와 force push는 사용하지 않습니다.** 충돌은 위처럼 `merge`로 해결합니다. 규칙을 단순하게 유지하고, 이미 올린 기록을 덮어쓰는 사고를 막기 위해서입니다.
 
-### 4.3 기능 브랜치 → `pre_main` PR
+### 4.3 개인 브랜치 → `pre_main` PR
 
-1. PR을 올리기 직전에 §4.2의 `git merge origin/pre_main`으로 최신 내용을 반영하고, 로컬에서 앱이 실행되는지 확인합니다.
+1. PR을 올리기 직전에 §4.2 ①로 최신 내용을 반영하고, 로컬에서 앱이 실행되는지 확인합니다.
 2. GitHub에서 **base: `pre_main` ← compare: 내 브랜치**로 PR을 엽니다. (base가 `main`이 아닌지 꼭 확인)
-3. PR 템플릿(§7.3)을 채웁니다.
+3. PR 템플릿(§7.3)을 채웁니다. 제목은 이번 작업의 대표 커밋처럼 씁니다. (예: `feat: 채널별 카피 카드 추가`)
 4. **작성자를 제외한 1명 이상**이 승인하면 병합할 수 있습니다.
-5. 병합은 **PM(HK 또는 KHS)** 이 하며, 방식은 **Squash and merge**로 통일합니다.
+5. 병합은 **PM(HK 또는 KHS)** 이 하며, 방식은 **Create a merge commit**으로 통일합니다. (§4.6)
 6. 본인 PR은 본인이 병합하지 않습니다. (PM이 작성한 PR은 다른 PM이 병합)
+7. 병합 후에도 개인 브랜치는 **삭제하지 않습니다.** GitHub에 **Delete branch** 버튼이 보여도 누르지 않습니다.
 
 ### 4.4 `pre_main` → `main` 병합
 
@@ -150,15 +152,20 @@ git merge origin/pre_main
 1. `main`에서 `hotfix/이니셜-버그명` 브랜치를 만들어 수정합니다.
 2. **base: `main`** 으로 PR → PM 1명 승인(작성자가 PM이면 다른 PM) → 병합
 3. 병합 직후 **`main` → `pre_main` PR**을 만들어 같은 수정을 `pre_main`에도 반영합니다. (빼먹으면 다음 병합 때 문제가 다시 생깁니다)
-   - 이 PR은 **Create a merge commit**으로 병합합니다. Squash하면 `main`과 `pre_main`의 기록이 어긋납니다. (§4.6)
+   - 이 PR은 **Create a merge commit**으로 병합합니다. (§4.6)
+4. hotfix 브랜치는 개인 브랜치가 아니므로, 두 PR이 모두 병합되면 GitHub에서 **Delete branch**로 지웁니다.
 
-### 4.6 병합 방식을 나누는 이유
+### 4.6 모든 병합은 Merge commit으로 하는 이유
 
-| 경로 | 방식 | 이유 |
-|---|---|---|
-| 기능 브랜치 → `pre_main` | **Squash and merge** | 기능 하나가 커밋 하나로 정리되어 기록이 깔끔함 |
-| `pre_main` → `main` | **Create a merge commit** | Squash하면 `main`과 `pre_main`의 기록이 서로 달라져, 다음 병합 때마다 이미 들어간 내용이 충돌로 다시 나타남 |
-| `main` → `pre_main` (hotfix 역반영) | **Create a merge commit** | 위와 같은 이유 |
+| 경로 | 방식 |
+|---|---|
+| 개인 브랜치 → `pre_main` | **Create a merge commit** |
+| `pre_main` → `main` | **Create a merge commit** |
+| `hotfix` → `main`, `main` → `pre_main` (hotfix 역반영) | **Create a merge commit** |
+
+- **Squash**는 내 커밋들을 하나로 **새로** 만들어 넣습니다. 그러면 계속 쓰는 개인 브랜치(또는 `pre_main`)에 남은 원래 커밋과 기록이 서로 달라져, 다음 PR에 **이미 병합된 내용이 다시 나타나거나 충돌**이 납니다.
+- 그래서 GitHub 설정에서 Squash와 Rebase 병합을 꺼 두고 Merge commit만 허용합니다. (§10)
+- 대신 `pre_main`에 작은 커밋이 모두 남으므로, 커밋 메시지 규칙(§7.1)을 꼭 지킵니다.
 
 ### 4.7 충돌 해결
 
@@ -230,7 +237,7 @@ project-root/
 | ⚙️ 설정 (탭 아님) | `settings/` | HK (현경) |
 
 - KHS(강현서), YHS(양효선)는 개발 파트 없이 다른 업무를 맡습니다. KHS는 PM으로서 PR 리뷰·병합 역할(§1)은 그대로 합니다.
-- 두 파트를 맡은 사람도 파트마다 브랜치·PR을 따로 만듭니다.
+- 두 파트를 맡은 사람도 브랜치는 개인 브랜치 하나만 쓰고, PR 하나에는 한 파트의 작업만 담습니다. (§3.3)
 
 - 다른 파트의 기능이 필요하면 그 폴더의 파일을 직접 고치지 말고, **담당자에게 함수나 API를 요청**해서 가져다 씁니다.
 - 파트 사이에 주고받는 데이터(함수 이름, 요청/응답 형식)가 바뀌면 영향을 받는 담당자에게 먼저 알립니다.
@@ -285,6 +292,7 @@ project-root/
 | `docs` | 문서 작성·수정 | `docs: README 실행 방법 추가` |
 | `chore` | 설정, 패키지, 잡무 | `chore: requirements에 pandas 추가` |
 
+- 브랜치 이름은 이니셜뿐이므로, **기능 추가인지 버그 수정인지는 커밋 타입으로만 구분됩니다.** 타입을 빠뜨리지 않습니다.
 - 한 커밋에는 한 가지 목적의 변경만 담습니다.
 - `수정`, `asdf`, `final` 같은 의미 없는 메시지는 쓰지 않습니다.
 
@@ -417,7 +425,7 @@ black 내가바꾼파일.py
 | Dismiss stale approvals when new commits are pushed | ✅ | ✅ |
 | Block force pushes | ✅ | ✅ |
 | Restrict deletions | ✅ | ✅ |
-| 허용 병합 방식 | Merge commit | Squash, Merge commit (hotfix 역반영 전용) |
+| 허용 병합 방식 | Merge commit | Merge commit |
 
 **`.github/CODEOWNERS`** — `main`으로 가는 PR은 PM이 승인해야 하도록 지정합니다. (GitHub 아이디로 교체)
 
@@ -426,8 +434,8 @@ black 내가바꾼파일.py
 ```
 
 - GitHub는 PR 작성자가 자기 PR을 승인하는 것을 허용하지 않으므로, "PR을 연 PM은 승인 불가" 규칙은 자동으로 지켜집니다.
-- **Settings → General → Pull Requests**에서 *Automatically delete head branches*를 켜면 병합된 브랜치가 자동 삭제됩니다.
-  - `pre_main → main`, `main → pre_main` PR에서는 `pre_main`·`main`이 head 브랜치가 됩니다. 위의 *Restrict deletions*로 보호된 브랜치는 삭제되지 않지만, 설정 후 첫 병합 때 두 브랜치가 남아 있는지 확인합니다.
+- **Settings → General → Pull Requests**에서 *Allow merge commits*만 켜고 *Allow squash merging*, *Allow rebase merging*은 끕니다. (§4.6)
+- 같은 화면의 *Automatically delete head branches*는 **끕니다.** 켜 두면 PR이 병합될 때마다 개인 브랜치가 지워집니다. (§3.3)
 - 기본 브랜치(default branch)를 `pre_main`으로 바꿔 두면 PR을 열 때 base가 자동으로 `pre_main`으로 잡혀 실수가 줄어듭니다.
 
 ### 10.1 공개(Public) 저장소로 운영

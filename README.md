@@ -231,9 +231,9 @@ content/
 | URL 접두사 고정 | 파트마다 `/home`, `/insight`, `/content`, `/compliance`, `/cs`, `/influencer`, `/performance`, `/auth`, `/settings`를 사용합니다. |
 | DB 테이블 이름 | 파트 이름을 앞에 붙입니다. (예: `cs_inquiry`, `content_campaign`) |
 | 다른 파트 기능 사용 | 다른 파트의 코드는 **가져다 쓰기만** 하고 수정하지 않습니다. 먼저 그 파트 README의 "다른 파트에 제공하는 함수"를 확인합니다. (예: CS · 콘텐츠 · 인플루언서 → `compliance.services`의 심의 함수 호출) |
-| 브랜치 | `main`·`pre_main`에 직접 push하지 않습니다. 최신 `pre_main`에서 기능마다 `feature/이니셜-기능명` 브랜치를 새로 만들고 `pre_main`으로 PR합니다. (`RULE.md` §3·§4) |
+| 브랜치 | `main`·`pre_main`에 직접 push하지 않습니다. 각자 **이니셜 이름의 개인 브랜치**(예: `NW`) 하나를 계속 쓰고, 작업 시작 전마다 `pre_main` 최신 내용을 가져온 뒤 `pre_main`으로 PR합니다. 기능·수정 구분은 커밋 타입(`feat:`, `fix:`)으로 합니다. (`RULE.md` §3·§4) |
 | 패키지 추가 | 패키지가 필요한 PR에서 `requirements.txt`에 버전을 고정해 직접 추가하고, PR에 이유를 적습니다. `pip freeze`로 파일 전체를 덮어쓰지 않습니다. (`RULE.md` §8.2) |
-| 두 파트 담당 | 두 파트를 맡은 사람도 파트마다 브랜치 · PR을 따로 만듭니다. (예: 준희 — `compliance/`와 `cs/` 변경을 한 PR에 섞지 않음) |
+| 두 파트 담당 | 두 파트를 맡은 사람도 브랜치는 하나지만, PR 하나에는 한 파트의 작업만 담습니다. (예: 준희 — `compliance/`와 `cs/` 변경을 한 PR에 섞지 않음) |
 
 ---
 
@@ -367,7 +367,7 @@ gunicorn -w 2 -b 0.0.0.0:8000 "app:create_app()"
 
 - 🔐 로그인(`auth/`)과 ⚙️ 설정(`settings/`)은 상단 탭이 아닌 화면이며, 현경(HK)이 맡습니다.
 - 강현서(KHS), 양효선(YHS)은 개발 파트 없이 다른 업무를 맡습니다. 강현서는 PM으로서 PR 리뷰·병합은 그대로 합니다.
-- 이니셜은 브랜치 이름에 씁니다. (예: `feature/NW-channel-copy`) 같은 이니셜이 겹치는 사람은 성까지 넣습니다. (KHS, YHS)
+- 이니셜이 곧 개인 브랜치 이름입니다. (예: 나원의 브랜치는 `NW`) 같은 이니셜이 겹치는 사람은 성까지 넣습니다. (KHS, YHS)
 - 역할별 권한은 `RULE.md` §1, 분담 변경 절차는 `RULE.md` §5.3을 따릅니다.
 
 ---
