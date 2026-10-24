@@ -448,8 +448,8 @@
     el.innerHTML = `${demoNote(w.demo)}
       <div class="workbench">
         <div class="stack">
-          <section class="card" data-ref="actions">${head}${stale}${list}${signals}</section>
           ${shelfCard}
+          <section class="card" data-ref="actions">${head}${stale}${list}${signals}</section>
         </div>
         <aside class="stack">
           <section class="card">
