@@ -637,8 +637,8 @@
           ${ui.row('검색어 세트 · 영상 기준', '잠재 고객 (유튜브)')}
           ${ui.row('Amazon 검색어 · 추적 ASIN', '진열대 · 구매자 리뷰')}
           ${ui.row('Weee! 주소', '진열대')}
-          ${ui.row('트렌드 키워드', '검색 수요')}
-          ${ui.row('모니터링 시즌', '주간 리뷰 · 검색 수요')}
+          ${ui.row('트렌드 키워드', '홈 › 콘텐츠 캘린더 (다음 급등 예상)')}
+          ${ui.row('모니터링 시즌', '주간 리뷰 · 다음 급등 예상')}
         </div>
       </section>`;
     drawEstimate();
@@ -774,7 +774,7 @@
           <button type="button" class="btn small lime" data-act="season-add">${icon('plus')}시즌 추가</button>
         </div>
       </div>
-      <p class="panel-note mb-16">모니터링을 켠 시즌만 인사이트의 주간 리뷰 · 검색 수요에 나와요. 시즌은 여기에서만 고쳐요 (홈 · 콘텐츠 캘린더에도 반영돼요).</p>
+      <p class="panel-note mb-16">모니터링을 켠 시즌만 인사이트 주간 리뷰와 홈 › 콘텐츠 캘린더의 다음 급등 예상에 나와요. 시즌은 여기에서만 고쳐요 (홈 · 콘텐츠 캘린더에도 반영돼요).</p>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>시즌</th><th>기간</th><th class="num">D-day</th><th>구분</th><th>우선순위</th><th class="num">준비 기간</th><th>모니터링</th><th></th></tr></thead>
         <tbody>${list.length ? list.map(seasonRow).join('') : `<tr><td colspan="8">${ui.empty('시즌이 없어요. 시즌 추가 또는 CSV 가져오기를 누르세요.', 'calendar')}</td></tr>`}</tbody></table></div>`;
   }
@@ -822,7 +822,7 @@
         ${field('준비 기간 (일 전)', inp('leadDays', s.leadDays, 'type="number" min="0" max="365"'))}
       </div>
       ${field('메모', area('notes', s.notes, 2))}
-      <label class="check mt-16"><input type="checkbox" name="monitor"${s.monitor ? ' checked' : ''}>인사이트에서 모니터링 (주간 리뷰 · 검색 수요)</label>
+      <label class="check mt-16"><input type="checkbox" name="monitor"${s.monitor ? ' checked' : ''}>모니터링 (인사이트 주간 리뷰 · 홈 다음 급등 예상)</label>
     </div>`;
     formModal({
       title: isNew ? '시즌 추가' : `시즌 수정 · ${s.name}`, body,

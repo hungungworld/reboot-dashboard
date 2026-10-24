@@ -59,6 +59,29 @@ class HomeNewsRun(db.Model):
                 "errors": _loads(self.errors, []), "aiStatus": self.ai_status, "aiError": self.ai_error}
 
 
+class HomeNewsSaved(db.Model):
+    """보관한 기사 (책갈피). 원래 기사는 90일 뒤 지워지므로 화면에 보인 내용을 그대로 복사해 둠. 시장·고객 인사이트 › 데이터 › 뉴스 수집에서 봄."""
+    __tablename__ = "home_news_saved"
+
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(1000), nullable=False, unique=True, index=True)
+    title = db.Column(db.String(500), nullable=False, default="")       # 영어 원제목
+    title_ko = db.Column(db.String(300), nullable=False, default="")
+    summary_ko = db.Column(db.String(600), nullable=False, default="")
+    why_ko = db.Column(db.String(600), nullable=False, default="")      # 마케터의 시선 (트렌드는 적용점)
+    kind = db.Column(db.String(10), nullable=False, default="flow")     # flow 업계 뉴스 · trend 트렌드
+    area_label = db.Column(db.String(60), nullable=False, default="")
+    domain = db.Column(db.String(200), nullable=False, default="")
+    published_at = db.Column(db.DateTime, nullable=True)
+    saved_by = db.Column(db.String(100), nullable=False, default="")
+    saved_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+
+    def to_dict(self):
+        return {"id": self.id, "url": self.url, "title": self.title, "titleKo": self.title_ko, "summaryKo": self.summary_ko,
+                "whyKo": self.why_ko, "kind": self.kind, "areaLabel": self.area_label, "domain": self.domain,
+                "date": iso(self.published_at), "savedBy": self.saved_by, "savedAt": iso(self.saved_at)}
+
+
 class HomeTodo(db.Model):
     """이번 주 To-Do 한 줄. origin: ai · rule(키 없을 때 규칙) · manual(직접 추가)."""
     __tablename__ = "home_todos"

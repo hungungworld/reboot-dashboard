@@ -160,7 +160,7 @@ FORM_SCHEMA = {
     "properties": {"items": {"type": "array", "items": {
         "type": "object", "additionalProperties": False, "required": ["id", "form"],
         "properties": {"id": {"type": "string"},
-                       "form": {"type": "string", "enum": ["liquid", "powder", "gummy", "pellet", "tablet", "other"]}}}}},
+                       "form": {"type": "string", "enum": ["liquid", "powder", "stick", "gummy", "pellet", "tablet", "other"]}}}}},
 }
 
 
@@ -169,9 +169,10 @@ def classify_forms(rows):
     data, _ = cache_get("product_forms", rows)
     if data:
         return data.get("items") or {}, True
-    system = ("숙취 관련 상품의 상품명 · 판매 문구를 보고 제형을 하나 골라. liquid = 마시는 액상(샷 · 음료 · 병 · 액상 스틱), "
-              "powder = 분말 · 드링크 믹스 · 과립, gummy = 구미 · 젤리 · 츄어블, pellet = 한국식 환(작은 알갱이를 물과 삼킴), "
-              "tablet = 정제 · 캡슐 · 알약, other = 패치처럼 위 다섯이 아닌 것. 상품명 · 문구에 나온 말로 판단해.")
+    system = ("숙취 관련 상품의 상품명 · 판매 문구를 보고 제형을 하나 골라. liquid = 마시는 액상(샷 · 음료 · 병), "
+              "powder = 분말 · 드링크 믹스 · 과립, stick = 스틱 포장(내용물이 젤리 · 분말 · 액상이어도 스틱), "
+              "gummy = 구미 · 젤리 · 츄어블, pellet = 한국식 환(작은 알갱이를 물과 삼킴), "
+              "tablet = 정제 · 캡슐 · 알약, other = 패치처럼 위 여섯이 아닌 것. 상품명 · 문구에 나온 말로 판단해.")
     out = openai_json(system, {"products": rows}, schema=FORM_SCHEMA, schema_name="product_forms", part=PART,
                       action="경쟁 상품 제형 분류", max_tokens=3000)
     ids = {r["id"] for r in rows}

@@ -758,13 +758,31 @@ Sold by [TOKYO PLAZA](https://www.yami.com/us/en/s/tokyo-plaza/1)
 """
 
 
+def test_item_form_from_amazon_product():
+    from tabs.insights.amazon import _item_form
+    from tabs.insights.competitors import rule_form_of
+    pr = {"variants": [{"title": "Item Form", "items": [{"name": "Liquid"}, {"name": "Tablet", "selected": True}]}]}
+    assert _item_form({}, pr) == "Tablet"
+    assert _item_form({"product_details": {"item_form": "Powder"}}, {}) == "Powder"
+    assert _item_form({"item_specifications": [{"name": "Item Form", "value": "Capsule"}]}, {}) == "Capsule"
+    assert _item_form({}, {"variants": [{"title": "Size", "items": [{"name": "10 Count", "selected": True}]}]}) == ""
+    x = {"title": "Blowfish for Hangovers - Fast Hangover Relief", "message": "Item Form: Tablet / Drink plenty of water"}
+    assert rule_form_of(x) == "tablet"  # 상품명에 없으면 제품 선택 → 판매 문구('Drink')보다 앞
+    assert rule_form_of(dict(x, title="Blowfish Liquid Shot")) == "liquid"  # 상품명이 먼저
+
+
 def test_form_rules_and_yami_parser():
     from tabs.insights.competitors import rule_form
     from tabs.insights.yami import RELEVANT_RE, parse_search
     assert rule_form("Cheers Restore Hangover Liquid Shot 2oz") == "liquid"
-    assert rule_form("Hangover Gummies 30 Count") == "gummy" and rule_form("Aldicom Hangover Jelly Stick") == "gummy"
+    assert rule_form("Hangover Gummies 30 Count") == "gummy" and rule_form("Aldicom Hangover Jelly Stick") == "stick"  # 스틱 포장이면 스틱
     assert rule_form("Electrolyte Drink Mix Powder Packets") == "powder"  # 분말 음료는 분말
     assert rule_form("Flyby Recovery 30 Capsules") == "tablet" and rule_form("Hangover support") == ""
+    assert rule_form("Vitamin C Effervescent 20 Count") == "tablet" and rule_form("Fizzy Hangover Drops") == "tablet"  # 발포정
+    assert rule_form("HANGOVER CURE GINSENG AND PUERARIA 250g/10PCS") == "liquid" and rule_form("홍삼 스틱") == "stick"
+    assert rule_form("Korean Red Ginseng Capsules") == "tablet"  # 다른 제형 단어가 있으면 그쪽
+    assert rule_form("Alpitan Hangover Relief Powder 6 Sticks") == "stick" and rule_form("Hangover Relief Liquid, 5 Sticks") == "stick"
+    assert rule_form("Q.one Herbal Pellets 10 Sticks") == "pellet"  # 환이 먼저
     items = parse_search(YAMI_MD)
     assert [i["id"] for i in items] == ["1026089171", "1174080301", "3030045071"]
     assert items[0]["brand"] == "Morning Is Back" and items[0]["price"] == 18.99 and items[0]["list_price"] == 19.99
@@ -844,7 +862,7 @@ def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today
     cheers = next(c for c in d["table"] if c["brand"] == "Cheers")
     assert [ch["label"] for ch in cheers["channels"]] == ["Amazon", "Yami"]
     assert cheers["channels"][0]["minPrice"] == 15.0 and cheers["channels"][1]["sold"] == "30+ Sold"
-    assert cheers["perServing"] == 1.2 and {f["key"] for f in cheers["forms"]} == {"liquid", "gummy"}
+    assert cheers["perServing"] == 1.2 and {f["key"] for f in cheers["forms"]} == {"liquid", "stick"}  # Jelly Stick은 스틱
     fb = cheers["feedback"]
     assert fb["reviews"] == 3 and fb["praise"]["topic"] == "효과" and fb["praise"]["count"] == 2
     assert fb["complaint"]["topic"] == "가격" and fb["complaint"]["example"] == "요약 Pricey"
@@ -853,6 +871,10 @@ def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today
     assert ("Cheers", "price") in kinds and ("Flyby", "new") in kinds and ("Cheers", "message") in kinds
     price = next(c for c in d["changes"] if c["kind"] == "price")
     assert price["label"] == "가격 인하" and "$18.00 → $15.00" in price["text"]
+    assert price["group"] == "threat" and price["prevPrice"] == 18.0 and price["pct"] == -16.7 and price["impact"]
+    msg = next(c for c in d["changes"] if c["kind"] == "message")  # 문구 비교: 새로 생긴 말 · 사라진 말
+    assert msg["group"] == "watch" and msg["added"] == ["DHM and electrolytes in a shot"] and msg["removed"] == ["DHM shot"]
+    assert next(c for c in d["changes"] if c["kind"] == "new")["group"] == "threat"
     assert not any(c["source"] == "Yami" for c in d["changes"])  # 지난주 Yami 수집이 없으면 비교 안 함
 
 
