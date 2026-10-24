@@ -111,3 +111,5 @@ class Config:
     ENV_LABEL = os.environ.get("ENV_LABEL", "").strip() or ("RENDER" if IS_RENDER else "LOCAL")
     # 외부 크론(GitHub Actions · Render Cron · cron-job.org)이 하루 1회 작업을 부를 때 쓰는 토큰
     CRON_TOKEN = os.environ.get("CRON_TOKEN", "").strip()
+    # 1이면 로그인 화면에 관리자 계정을 미리 채움 (시연용)
+    DEMO_LOGIN = env_bool("DEMO_LOGIN")
