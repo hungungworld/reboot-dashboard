@@ -707,8 +707,8 @@
           <div class="stack">
             <section class="card home-brief" aria-label="미국 시장 브리핑">
               <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="home-brief-sub" data-ref="news-sub"></span></div>
-                <div class="flex home-brief-tools"><div data-ref="news-tabs"></div>
-                  <button type="button" class="icon-btn" data-ref="news-collect" data-act="news-collect" aria-label="지금 받기" title="지금 받기">${icon('refresh')}</button></div></div>
+                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="지금 받기" title="지금 받기">${icon('refresh')}</button></div>
+              <div class="home-brief-tabs" data-ref="news-tabs"></div>
               <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
               <div data-ref="news-errors"></div>
               <div class="home-brief-foot"><span class="home-brief-saved" data-ref="news-saved"></span><span class="flex home-news-badges" data-ref="news-badges"></span>
