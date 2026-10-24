@@ -52,7 +52,16 @@ IMAGE_PLAN = _obj({
     "change": _STR_LIST,
     "text_layers": {"type": "array", "items": _obj({"role": _STR, "text": _STR})},
     "notes_ko": _STR,
-    "character_draft": {"type": "boolean"},
+    "flavors": {"type": "array", "items": {"type": "string", "enum": ["cherry", "lemon", "lime"]}},
+    "include_character": {"type": "boolean"},
+})
+
+# 영상 프롬프트 (video_v1) — Higgsfield Seedance 2.0
+VIDEO_PLAN = _obj({
+    "prompt_en": _STR,
+    "notes_ko": _STR,
+    "flavors": {"type": "array", "items": {"type": "string", "enum": ["cherry", "lemon", "lime"]}},
+    "include_character": {"type": "boolean"},
 })
 
 # 인터뷰 질문 하나 (interview_v1) — 보기는 서버가 정확히 3개만 씀

@@ -95,15 +95,28 @@ def generate_image(prompt, size, model):
     return _png_from(res), _usage(res)
 
 
-def edit_image(path, prompt, size, model):
-    """기준 이미지 파일을 넣어 편집 (GPT 이미지 계열만)."""
+def high_fidelity(model=None):
+    """참고 사진의 제품·캐릭터를 더 충실히 따르게 하는 옵션(input_fidelity)을 받는 모델인가 (gpt-image-1 · mini 제외)."""
+    m = (model or image_model()).lower()
+    return m.startswith("gpt-image-1") and "mini" not in m
+
+
+def edit_image(paths, prompt, size, model):
+    """이미지 파일들(편집 기준 이미지 · 제품·캐릭터 참고 사진)을 넣어 생성·편집 (GPT 이미지 계열만). paths: 경로 하나 또는 목록."""
     if not image_supports_edit(model):
         raise ProviderError(f"이미지 모델 '{model}'은 기준 이미지 편집을 지원하지 않습니다.", 400)
+    paths = [paths] if isinstance(paths, (str, bytes)) or hasattr(paths, "__fspath__") else list(paths)
     client = _client()
+    extra = {"input_fidelity": "high"} if high_fidelity(model) else {}
 
     def call():
-        with open(path, "rb") as f:
-            return client.images.edit(model=model, image=f, prompt=prompt, size=size, n=1)
+        files = [open(p, "rb") for p in paths]
+        try:
+            return client.images.edit(model=model, image=files if len(files) > 1 else files[0], prompt=prompt, size=size,
+                                      n=1, **extra)
+        finally:
+            for f in files:
+                f.close()
     res = _run(call, model)
     return _png_from(res), _usage(res)
 
@@ -140,4 +153,4 @@ def _usage(res):
 
 
 __all__ = ["AIError", "ProviderError", "SubmissionUnknown", "ready", "text_model", "image_model", "image_supports_edit",
-           "call_json", "generate_image", "edit_image", "check_connection"]
+           "call_json", "generate_image", "edit_image", "high_fidelity", "check_connection"]

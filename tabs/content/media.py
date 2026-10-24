@@ -3,28 +3,51 @@
 - 명확한 요청이 있을 때만 대화 턴이 작업을 등록 → 대화 HTTP 요청을 붙잡지 않고 뒤에서 실행 (jobs.run_background)
 - 상태: queued → running → saving → succeeded / failed / submission_unknown (응답 시간 초과 · 자동 재제출 없음)
 - 편집: 기준 이미지 파일을 실제로 넣어 고침 (GPT 이미지 계열). 지원하지 않으면 '새 시안'으로 표시하고 원본 수정이라 하지 않음
-- 글자·로고는 이미지 안에 그리지 않고 텍스트 레이어로 따로 둠 (PL01 · README 7.2)
+- 글자(헤드라인·슬로건·CTA)는 이미지 안에 그리지 않고 텍스트 레이어로 따로 둠 (PL01 · README 7.2)
+- 제품·캐릭터 참고 사진: 선택 제품 · 맛 · 캐릭터 Rebu 사용 여부에 맞는 최종 자료 사진(assets.py)을 함께 넣어 생성
+  → 병·봉지·젤리 모양·라벨을 사진과 같게 (참고 사진을 받지 않는 모델이면 브랜드 키트의 외형 설명으로만 생성)
 - 파일: DATA_DIR/uploads/content/<이름>.png → GET /api/content/files/<이름>.png (로그인 필요)
 - 브라우저 편집기(자르기·밝기·텍스트 레이어)에서 만든 PNG도 같은 곳에 새 버전으로 보관 (AI 호출 없음)
+- 제공사: 이미지는 AI 설정의 image_provider (OpenAI · Higgsfield Marketing Studio), 영상은 Higgsfield Seedance 2.0 720p
+  Higgsfield는 제출 → 상태 확인 → 결과 받기 (higgsfield.py). 요청 ID는 작업 snapshot에 기록 (취소·대조용)
+  키가 없거나 실패해도 다른 제공사로 조용히 바꾸지 않음 (README 8장)
 """
 import re
 import secrets
 import time
 from pathlib import Path
 
+import requests
 from flask import current_app
 
 from server import jobs, worklog
 from server.core.ai import AIError
 from server.extensions import db
 from server.models import utcnow
-from . import prompts, providers, repository, review, schemas
+from . import assets, higgsfield, prompts, providers, repository, review, schemas
 from .models import ContentCampaign, ContentJob, ContentVersion
 
-FILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{5,80}\.png$")
+FILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{5,80}\.(png|jpg|webp|mp4)$")
+MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".mp4": "video/mp4"}
+POLL_EVERY = 5  # Higgsfield 상태 확인 간격(초) — 테스트는 0으로
+WAIT = {"image": 5 * 60, "video": 15 * 60}  # 이 시간 안에 안 끝나면 '결과 확인 불가' (요청 ID로 Higgsfield에서 확인)
 NO_TEXT = ("Do not render any text, letters, numbers, logos, watermarks or labels anywhere in the image; "
            "leave clean negative space for a separate text overlay. Generic unbranded packaging only.")
+REF_TEXT = ("Reproduce the products and the mascot exactly as they appear in the reference images: same shape, colors, "
+            "proportions and printed labels/logo; do not redesign them. Ignore measurement lines, dimension numbers and captions "
+            "in the reference images. Do not add any other text, captions, slogans, numbers or watermarks; leave clean "
+            "negative space for a separate text overlay.")
+VIEW_EN = {"trio": "three bottles, front", "front": "front view", "angle": "lying at an angle", "spec": "product views",
+           "pouch": "pouch, front", "scene": "pouch with wrapped jellies", "wrapped": "individually wrapped jelly"}
+VIDEO_REF_TEXT = ("Keep the products and the mascot exactly as they appear in the reference images: same shape, colors, "
+                  "proportions and printed labels/logo. Ignore measurement lines and captions in the reference images. "
+                  "No on-screen text, subtitles, captions, logos or watermarks. No dialogue or voice-over.")
+VIDEO_NO_TEXT = "No on-screen text, subtitles, captions, logos or watermarks. Generic unbranded packaging only. No dialogue."
 SLOGAN = "Restart Your Day"
+
+
+class Canceled(Exception):
+    """제공사에서 요청이 취소됨."""
 
 
 def upload_dir():
@@ -49,18 +72,41 @@ def has_active_job(campaign_id):
                                    ContentJob.status.in_(repository.ACTIVE_JOB)).first() is not None
 
 
-def new_job(campaign, *, kind, base, instructions, snapshot, request_key, user, message_id=None):
+def new_job(campaign, *, kind, base, instructions, snapshot, request_key, user, message_id=None, provider="openai"):
+    """kind: image · image_edit · video. provider: openai · higgsfield (영상은 항상 higgsfield)."""
     ratio = (snapshot.get("decisions", {}).get("ratio") or {}).get("value")
+    if kind == "video":
+        provider, model = "higgsfield", higgsfield.VIDEO_TEXT
+        size = f"{higgsfield.nearest_ratio(ratio, higgsfield.VIDEO_RATIOS, '9:16')} · {higgsfield.VIDEO_RESOLUTION}"
+    elif provider == "higgsfield":
+        model, size = higgsfield.IMAGE_MODEL, higgsfield.nearest_ratio(ratio, higgsfield.IMAGE_RATIOS, "1:1")
+    else:
+        provider, model, size = "openai", providers.image_model(), image_size(ratio)
     job = ContentJob(id=secrets.token_hex(16), campaign_id=campaign.id, kind=kind, status="queued",
                      request_key=request_key, base_version_id=base.id if base is not None else None,
-                     model=providers.image_model(), size=image_size(ratio), instructions=(instructions or "")[:2000],
+                     model=model, size=size, instructions=(instructions or "")[:2000],
                      created_by=user, message_id=message_id)
-    job.snapshot = snapshot
+    job.snapshot = dict(snapshot, provider=provider)
     return job
 
 
 def launch(app, job_id):
-    jobs.run_background(app, f"content-image-{job_id}", run_image_job, job_id)
+    jobs.run_background(app, f"content-image-{job_id}", run_job, job_id)
+
+
+def run_job(job_id):
+    job = db.session.get(ContentJob, job_id)
+    if job is not None and job.kind == "video":
+        return run_video_job(job_id)
+    return run_image_job(job_id)
+
+
+def _provider(job):
+    return (job.snapshot or {}).get("provider") or "openai"
+
+
+def _what(job):
+    return "영상" if job.kind == "video" else "이미지"
 
 
 # ───────── 실행 (뒤에서) ─────────
@@ -70,14 +116,14 @@ def _fallback_plan(snap, job):
     forms = []
     for p in (snap.get("facts") or {}).get("products") or []:
         pid = p.get("entity_id") or ""
-        forms.append("a few individually wrapped stick jelly pouches" if pid.startswith("jelly")
-                     else "small bottles of a non-carbonated drink")
+        forms.append(p.get("look") or ("a pouch of individually wrapped shaped jellies" if pid.startswith("jelly")
+                                       else "small flask-shaped glass bottles of a non-carbonated drink"))
     bits = ["Marketing key visual for REBOOT, a US food & beverage brand.",
             "Brand palette: deep black with neon lime accents."]
     if dec.get("background"):
         bits.append(f"Background direction (Korean note): {dec['background']}.")
     if forms:
-        bits.append("Show " + " and ".join(forms) + " as generic mockups.")
+        bits.append("Show " + " and ".join(forms) + ".")
     else:
         bits.append("Brand mood image without products.")
     for k in ("concept", "style", "mood", "layout", "composition", "lighting"):
@@ -88,9 +134,12 @@ def _fallback_plan(snap, job):
     layers = [{"role": "slogan", "text": SLOGAN}]
     if dec.get("headline"):
         layers.insert(0, {"role": "headline", "text": dec["headline"][:120]})
+    include = assets.character_choice(snap.get("decisions")) == "사용"
+    if include:
+        bits.append("Include Rebu, the Reboot mascot shown in the reference images.")
     return {"prompt_en": " ".join(bits), "keep": [], "change": [], "text_layers": layers,
-            "notes_ko": "AI 프롬프트 작성에 실패해 결정 사항으로 만든 기본 프롬프트를 썼어요.", "character_draft": False,
-            "fallback": True}
+            "notes_ko": "AI 프롬프트 작성에 실패해 결정 사항으로 만든 기본 프롬프트를 썼어요.", "flavors": [],
+            "include_character": include, "fallback": True}
 
 
 def _plan(snap, job, base):
@@ -100,7 +149,8 @@ def _plan(snap, job, base):
         "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
         "base_version": ({"label": base.label, "notes": base.body[:1500], "image": snap.get("base_image")} if base else None),
         "request": snap.get("request"), "instructions": job.instructions,
-        "size": job.size,
+        "size": job.size, "character_use": assets.character_choice(snap.get("decisions")),
+        "reference_photos": _provider(job) == "higgsfield" or providers.image_supports_edit(job.model),
     }
     try:
         out = providers.call_json(prompts.CREATIVE_EDIT_V2, prompts.dumps(user), schema=schemas.IMAGE_PLAN,
@@ -121,11 +171,56 @@ def _plan(snap, job, base):
             "keep": [str(x)[:120] for x in out.get("keep") or []][:8],
             "change": [str(x)[:120] for x in out.get("change") or []][:8],
             "text_layers": layers[:4], "notes_ko": str(out.get("notes_ko") or "")[:400],
-            "character_draft": bool(out.get("character_draft")), "fallback": False}
+            "flavors": [f for f in out.get("flavors") or [] if f in assets.FLAVORS][:3],
+            "include_character": bool(out.get("include_character")), "fallback": False}
 
 
-def _save_png(data, campaign_id, job_id):
-    name = f"c{campaign_id}-{job_id[:12]}-{secrets.token_hex(4)}.png"
+def _include_character(snap, plan):
+    """시트·결정의 선택이 우선 (사용 · 사용 안 함). AI 판단일 때만 프롬프트 작성 AI의 판단을 따름."""
+    choice = assets.character_choice(snap.get("decisions"))
+    return choice == "사용" or (choice == "AI 판단" and bool(plan.get("include_character")))
+
+
+def _references(snap, job, plan, include_char, has_base):
+    """참고 사진 고르기 — 사용자가 말한 맛이 있으면 그 맛, 없으면 AI가 고른 맛."""
+    if _provider(job) == "openai" and not providers.image_supports_edit(job.model):
+        return []
+    dec = snap.get("decisions") or {}
+    said = assets.flavors_in(snap.get("request"), job.instructions,
+                             *((dec.get(k) or {}).get("value") for k in ("flavor", "featured_product", "concept")))
+    pids = (snap.get("sheet") or {}).get("product_ids") or []
+    return assets.pick_refs(pids, flavors=said or plan.get("flavors") or [], character=include_char,
+                            limit=assets.MAX_REFS - (1 if has_base else 0))
+
+
+def _ref_lines(refs, facts, first_index):
+    names = {p.get("entity_id"): p.get("consumer_name") or p.get("internal_name") for p in facts.get("products") or []}
+    lines = []
+    for i, a in enumerate(refs, start=first_index):
+        if a["type"] == "character":
+            what = "Rebu, the Reboot mascot (character sheet; use the look only, not the layout)"
+        else:
+            what = " · ".join(x for x in (names.get(a.get("product_id")) or "Reboot product", a.get("flavor"),
+                                          VIEW_EN.get(a.get("view"), "")) if x)
+        lines.append(f"Reference image {i}: {what}.")
+    return " ".join(lines)
+
+
+def file_ext(data):
+    """결과 파일 형식 (Higgsfield 이미지는 PNG가 아닐 수 있음)."""
+    if data[:8] == PNG_MAGIC:
+        return ".png"
+    if data[:3] == b"\xff\xd8\xff":
+        return ".jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data[4:8] == b"ftyp":
+        return ".mp4"
+    return None
+
+
+def _save_png(data, campaign_id, job_id, ext=".png"):
+    name = f"c{campaign_id}-{job_id[:12]}-{secrets.token_hex(4)}{ext}"
     path = upload_dir() / name
     last = None
     for wait in (0, 0.5, 1.5):  # 파일 보관만 다시 시도 (새 생성 비용 없음)
@@ -135,7 +230,7 @@ def _save_png(data, campaign_id, job_id):
             return name
         except OSError as e:
             last = e
-    current_app.logger.error("콘텐츠 이미지 저장 실패: %s", type(last).__name__)
+    current_app.logger.error("콘텐츠 결과 파일 저장 실패: %s", type(last).__name__)
     return None
 
 
@@ -150,10 +245,11 @@ def _fail(job, message, status="failed"):
     job.status = status
     job.error = message[:400]
     job.finished_at = utcnow()
-    _event(job, ("이미지 생성 결과를 확인하지 못했어요: " if status == "submission_unknown" else "이미지 생성 실패: ") + message,
-           {"kind": "job_failed", "jobId": job.id, "status": status})
+    what = _what(job)
+    head = {"submission_unknown": f"{what} 생성 결과를 확인하지 못했어요: ", "canceled": f"{what} 생성 취소: "}
+    _event(job, head.get(status, f"{what} 생성 실패: ") + message, {"kind": "job_failed", "jobId": job.id, "status": status})
     db.session.commit()
-    worklog.add("content", "AI 프롬프트", "이미지 생성", status="실패",
+    worklog.add("content", "AI 프롬프트", f"{what} 생성", status="실패",
                 detail={"model": job.model, "size": job.size, "error": message, "campaign": job.campaign_id},
                 user_name=job.created_by)
 
@@ -169,15 +265,30 @@ def run_image_job(job_id):
     started = time.time()
     try:
         plan = _plan(snap, job, base)
-        prompt = plan["prompt_en"] + "\n\n" + NO_TEXT
-        if plan.get("character_draft"):
-            prompt += " Any mascot is an original concept sketch, not an official character."
+        has_base = bool(job.kind == "image_edit" and base is not None and base.image_file)
+        include_char = _include_character(snap, plan)
+        refs = _references(snap, job, plan, include_char, has_base)
+        if refs:
+            prompt = (plan["prompt_en"] + ("\n\nImage 1 is the base image to edit. " if has_base else "\n\n")
+                      + _ref_lines(refs, snap.get("facts") or {}, 2 if has_base else 1) + "\n" + REF_TEXT)
+        else:
+            prompt = plan["prompt_en"] + "\n\n" + NO_TEXT
         job.prompt = prompt
         db.session.commit()
-        if job.kind == "image_edit" and base is not None and base.image_file:
-            png, usage = providers.edit_image(str(upload_dir() / base.image_file), prompt, job.size, job.model)
+        ref_paths = [str(assets.path_of(a)) for a in refs]
+        if _provider(job) == "higgsfield":
+            paths = ([str(upload_dir() / base.image_file)] if has_base else []) + ref_paths
+            body = {"prompt": prompt, "aspect_ratio": job.size, "resolution": higgsfield.IMAGE_RESOLUTION}
+            png, usage = _hf_run(job, higgsfield.IMAGE_MODEL, body, paths)
+        elif has_base:
+            base_path = str(upload_dir() / base.image_file)
+            png, usage = providers.edit_image([base_path] + ref_paths if ref_paths else base_path, prompt, job.size, job.model)
+        elif ref_paths:
+            png, usage = providers.edit_image(ref_paths, prompt, job.size, job.model)
         else:
             png, usage = providers.generate_image(prompt, job.size, job.model)
+    except Canceled as e:
+        return _fail(job, str(e), status="canceled")
     except providers.SubmissionUnknown as e:
         return _fail(job, str(e), status="submission_unknown")
     except providers.ProviderError as e:
@@ -188,7 +299,10 @@ def run_image_job(job_id):
 
     job.status = "saving"
     db.session.commit()
-    name = _save_png(png, job.campaign_id, job.id)
+    ext = file_ext(png)
+    if ext is None or ext == ".mp4":
+        return _fail(job, "이미지 결과 파일 형식을 알 수 없어 저장하지 않았습니다.")
+    name = _save_png(png, job.campaign_id, job.id, ext)
     if not name:
         return _fail(job, "이미지는 생성됐지만 파일을 저장하지 못했습니다 (서버 저장 공간 확인).")
 
@@ -199,21 +313,30 @@ def run_image_job(job_id):
         db.session.commit()
         return
     edit = job.kind == "image_edit" and base is not None
+    hf = _provider(job) == "higgsfield"
     requested_ratio = (snap.get("decisions", {}).get("ratio") or {}).get("value")
-    note_bits = []
-    if edit:
+    note_bits = ["Higgsfield Marketing Studio로 생성"] if hf else []
+    if edit and hf:
+        note_bits.append(f"{base.label} · v{base.seq}을 참고 이미지 1번으로 넣어 다시 생성 (원본 픽셀 보존 아님)")
+    elif edit:
         note_bits.append(f"{base.label} · v{base.seq}을 기준 이미지로 넣어 편집 (모델 편집 — 영역 밖 픽셀 완전 보존은 보장하지 않음)")
     elif job.base_version_id:
         note_bits.append("새 시안 (원본 편집 아님)")
-    if requested_ratio and image_size(requested_ratio) != "1024x1024":
+    if requested_ratio and (not requested_ratio.replace(" ", "").startswith(job.size) if hf
+                            else image_size(requested_ratio) != "1024x1024"):
         note_bits.append(f"요청 비율 {requested_ratio} → {job.size}로 생성 · 게시 전 크롭 필요할 수 있음")
-    if plan.get("character_draft"):
-        note_bits.append("캐릭터 시안 · 공식 외형 아님")
-    note_bits.append("제품 형태는 시안 (실제 패키지 아님)")
+    if refs:
+        note_bits.append(f"최종 패키지·캐릭터 사진 {len(refs)}장을 참고해 생성 · 라벨 글자·모양은 게시 전 확인")
+    elif (snap.get("sheet") or {}).get("product_ids"):
+        note_bits.append("참고 사진 없이 생성 (이 이미지 모델은 참고 사진을 받지 않음) · 제품 모양 확인 필요")
+    if include_char:
+        note_bits.append("캐릭터 Rebu 포함")
     layers_text = "\n".join(t["text"] for t in plan["text_layers"])
-    image_meta = {"model": job.model, "size": job.size, "mode": "edit" if edit else "generate", "prompt": job.prompt[:3000],
+    image_meta = {"model": job.model, "provider": _provider(job), "size": job.size, "mode": "edit" if edit else "generate",
+                  "prompt": job.prompt[:3000],
                   "requested_ratio": requested_ratio, "text_layers": plan["text_layers"], "keep": plan["keep"],
                   "change": plan["change"], "prompt_fallback": plan.get("fallback", False), "usage": usage,
+                  "references": [a["id"] for a in refs], "include_character": bool(include_char),
                   "seconds": round(time.time() - started, 1), "job_id": job.id}
     v = ContentVersion(
         campaign_id=c.id, seq=repository.next_seq(c.id), kind="image",
@@ -238,6 +361,182 @@ def run_image_job(job_id):
     worklog.add("content", "AI 프롬프트", "이미지 편집" if edit else "이미지 생성",
                 detail={"model": job.model, "size": job.size, "prompt": job.prompt[:1500], "campaign": c.id,
                         "version": v.id, "usage": usage, "seconds": image_meta["seconds"]},
+                user_name=job.created_by)
+
+
+# ───────── Higgsfield (제출 → 상태 확인 → 결과 받기) ─────────
+
+def _ctype(path):
+    return MIMES.get(Path(path).suffix.lower(), "image/jpeg")
+
+
+def _hf_run(job, model_path, body, ref_paths):
+    """참고 사진 올리기 → 제출 → 끝날 때까지 상태 확인 → 결과 파일. 반환: (bytes, usage)"""
+    urls = [higgsfield.upload_ref(p, _ctype(p)) for p in ref_paths]
+    if urls:
+        body = dict(body, image_urls=urls)
+    rid = higgsfield.submit(model_path, body)
+    job.snapshot = dict(job.snapshot, request_id=rid, request={k: v for k, v in body.items() if k != "image_urls"})
+    db.session.commit()
+    deadline, misses = time.time() + WAIT["video" if job.kind == "video" else "image"], 0
+    while True:
+        time.sleep(POLL_EVERY)
+        try:
+            st = higgsfield.status(rid)
+            misses = 0
+        except (requests.RequestException, ValueError):
+            misses += 1
+            if misses >= 5:
+                raise providers.SubmissionUnknown(f"Higgsfield 상태를 확인하지 못했습니다. Higgsfield에서 요청 {rid}를 확인하세요 "
+                                                  "(자동으로 다시 제출하지 않음).", 502)
+            continue
+        job.updated_at = utcnow()  # 오래 걸리는 영상이 '멈춘 작업'으로 처리되지 않게
+        db.session.commit()
+        s = st["status"]
+        if s == "completed":
+            if not st["url"]:
+                raise providers.ProviderError("Higgsfield가 완료라고 했지만 결과 주소가 없습니다.")
+            return higgsfield.download(st["url"]), {"request_id": rid, "references": len(urls)}
+        if s == "nsfw":
+            raise providers.ProviderError("Higgsfield 안전 정책에 걸려 만들지 못했습니다. 요청 표현을 바꿔 보세요.", 400)
+        if s == "failed":
+            raise providers.ProviderError("Higgsfield 생성 실패" + (f" ({st['error']})" if st["error"] else "") + ".")
+        if s == "canceled":
+            raise Canceled("Higgsfield에서 요청이 취소됐어요.")
+        if time.time() > deadline:
+            raise providers.SubmissionUnknown(f"정해진 시간 안에 끝나지 않았어요. Higgsfield에서 요청 {rid}를 확인하세요 "
+                                              "(자동으로 다시 제출하지 않음).", 504)
+
+
+def cancel_job(job):
+    """Higgsfield 요청 취소 (시작 전만 가능). 반환: (ok, 메시지)"""
+    rid = (job.snapshot or {}).get("request_id")
+    if job.status not in ("queued", "running") or not rid:
+        return False, "취소할 수 있는 Higgsfield 요청이 없어요 (아직 제출 전이거나 이미 끝났어요)."
+    if not higgsfield.cancel(rid):
+        return False, "이미 생성이 시작돼 취소할 수 없어요. 끝나면 결과가 저장돼요."
+    return True, "취소 요청을 보냈어요. Higgsfield가 취소를 확인하면 작업이 '취소됨'으로 바뀌어요."
+
+
+# ───────── 영상 (Higgsfield Seedance 2.0 · 720p) ─────────
+
+def video_seconds(text):
+    """'15초 세로형' → 15 (4~15초, 없으면 5초)."""
+    m = re.search(r"(\d+)\s*(초|s\b|sec)", str(text or ""), re.I)
+    lo, hi = higgsfield.VIDEO_SECONDS
+    return max(lo, min(hi, int(m.group(1)))) if m else 5
+
+
+def _video_plan(snap, job, base, seconds, ratio):
+    dec = {k: (v or {}).get("value") for k, v in (snap.get("decisions") or {}).items()}
+    user = {"sheet": snap.get("labels"), "decisions": snap.get("decisions"),
+            "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
+            "script": ({"label": base.label, "body": base.body[:4000]} if base is not None else None),
+            "request": snap.get("request"), "instructions": job.instructions, "duration_seconds": seconds,
+            "aspect_ratio": ratio, "character_use": assets.character_choice(snap.get("decisions")), "reference_photos": True}
+    try:
+        out = providers.call_json(prompts.VIDEO_V1, prompts.dumps(user), schema=schemas.VIDEO_PLAN,
+                                  name="content_video_plan", action="영상 프롬프트 작성", max_tokens=1200, timeout=90)
+    except AIError:
+        bits = [f"{seconds}-second short-form video for REBOOT, a US food & beverage brand.",
+                "Deep black background with neon lime accents, smooth camera motion."]
+        if dec.get("concept"):
+            bits.append(f"Concept (Korean note): {dec['concept']}.")
+        if job.instructions:
+            bits.append(f"Direction (Korean): {job.instructions[:300]}")
+        return {"prompt_en": " ".join(bits), "notes_ko": "AI 프롬프트 작성에 실패해 결정 사항으로 만든 기본 프롬프트를 썼어요.",
+                "flavors": [], "include_character": assets.character_choice(snap.get("decisions")) == "사용",
+                "fallback": True}
+    return {"prompt_en": str(out.get("prompt_en") or "").strip()[:2000] or "Short product video for REBOOT on black.",
+            "notes_ko": str(out.get("notes_ko") or "")[:400],
+            "flavors": [f for f in out.get("flavors") or [] if f in assets.FLAVORS][:3],
+            "include_character": bool(out.get("include_character")), "fallback": False}
+
+
+def _next_video_label(campaign_id):
+    return f"영상 {ContentVersion.query.filter_by(campaign_id=campaign_id, kind='video').count() + 1}"
+
+
+def run_video_job(job_id):
+    job = db.session.get(ContentJob, job_id)
+    if job is None or job.status != "queued":
+        return  # 이미 실행했거나 취소 — 다시 제출하지 않음
+    job.status, job.started_at = "running", utcnow()
+    db.session.commit()
+    snap = job.snapshot
+    dec = snap.get("decisions") or {}
+    base = db.session.get(ContentVersion, job.base_version_id) if job.base_version_id else None  # 숏폼 구성안
+    started = time.time()
+    seconds = video_seconds((dec.get("duration") or {}).get("value") or (dec.get("length") or {}).get("value"))
+    ratio = higgsfield.nearest_ratio((dec.get("ratio") or {}).get("value"), higgsfield.VIDEO_RATIOS, "9:16")
+    try:
+        plan = _video_plan(snap, job, base, seconds, ratio)
+        include_char = _include_character(snap, plan)
+        refs = _references(snap, job, plan, include_char, False)
+        prompt = plan["prompt_en"] + "\n\n" + ((_ref_lines(refs, snap.get("facts") or {}, 1) + "\n" + VIDEO_REF_TEXT)
+                                                if refs else VIDEO_NO_TEXT)
+        model_path = higgsfield.VIDEO_REF if refs else higgsfield.VIDEO_TEXT
+        job.prompt, job.model = prompt, model_path
+        job.size = f"{ratio} · {higgsfield.VIDEO_RESOLUTION} · {seconds}초"
+        db.session.commit()
+        body = {"prompt": prompt, "duration": seconds, "resolution": higgsfield.VIDEO_RESOLUTION, "aspect_ratio": ratio,
+                "generate_audio": False}
+        data, usage = _hf_run(job, model_path, body, [str(assets.path_of(a)) for a in refs])
+    except Canceled as e:
+        return _fail(job, str(e), status="canceled")
+    except providers.SubmissionUnknown as e:
+        return _fail(job, str(e), status="submission_unknown")
+    except providers.ProviderError as e:
+        return _fail(job, str(e))
+    except Exception:  # 예상 못 한 오류 — 원문은 서버 로그에만
+        current_app.logger.exception("콘텐츠 영상 작업 실패")
+        return _fail(job, "영상 생성 중 알 수 없는 오류가 났습니다.")
+
+    job.status = "saving"
+    db.session.commit()
+    if file_ext(data) != ".mp4":
+        return _fail(job, "영상 결과 파일 형식(mp4)을 확인하지 못해 저장하지 않았습니다.")
+    name = _save_png(data, job.campaign_id, job.id, ".mp4")
+    if not name:
+        return _fail(job, "영상은 생성됐지만 파일을 저장하지 못했습니다 (서버 저장 공간 확인).")
+    c = db.session.get(ContentCampaign, job.campaign_id)
+    if c is None:  # 작업 중 캠페인이 지워짐
+        (upload_dir() / name).unlink(missing_ok=True)
+        job.status, job.finished_at, job.error = "failed", utcnow(), "캠페인이 삭제되어 결과를 버렸습니다."
+        db.session.commit()
+        return
+    note_bits = [f"Higgsfield Seedance 2.0 · {higgsfield.VIDEO_RESOLUTION} · {seconds}초 · {ratio} · 소리 없음"]
+    if base is not None:
+        note_bits.append(f"{base.label} · v{base.seq} 구성안 기준")
+    if refs:
+        note_bits.append(f"최종 패키지·캐릭터 사진 {len(refs)}장을 참고해 생성 · 라벨·모양은 게시 전 확인")
+    if include_char:
+        note_bits.append("캐릭터 Rebu 포함")
+    video_meta = {"model": model_path, "provider": "higgsfield", "resolution": higgsfield.VIDEO_RESOLUTION,
+                  "duration": seconds, "aspect_ratio": ratio, "prompt": job.prompt[:3000], "usage": usage,
+                  "references": [a["id"] for a in refs], "include_character": bool(include_char),
+                  "prompt_fallback": plan.get("fallback", False), "seconds": round(time.time() - started, 1),
+                  "job_id": job.id, "script_version_id": base.id if base is not None else None}
+    v = ContentVersion(
+        campaign_id=c.id, seq=repository.next_seq(c.id), kind="video", label=_next_video_label(c.id),
+        title=(plan["notes_ko"] or "영상 시안")[:200], body=plan["notes_ko"] or "", image_file=name, parent_id=None,
+        source="ai", approach="", note=" · ".join(note_bits)[:500],
+        facts_version=(snap.get("facts") or {}).get("facts_version") or "", created_by=job.created_by, message_id=job.message_id)
+    v.snapshot = dict(snap.get("snapshot") or {}, video=video_meta, model=model_path)
+    v.snapshot_hash = snap.get("snapshot_hash") or ""
+    v.review = {"videoScope": "영상 속 장면·제품 모양은 자동 검사하지 않음 — 게시 전 사람이 확인"}
+    db.session.add(v)
+    db.session.flush()
+    job.status, job.result_version_id, job.finished_at = "succeeded", v.id, utcnow()
+    if c.selected_version_id in (None, job.base_version_id, snap.get("selected_at_request")):
+        c.selected_version_id = v.id
+    repository.add_event(c, f"영상이 준비됐어요 · {v.label} (v{v.seq})",
+                         {"kind": "job_done", "jobId": job.id, "versionId": v.id}, user=job.created_by)
+    c.updated_at = utcnow()
+    db.session.commit()
+    worklog.add("content", "AI 프롬프트", "영상 생성",
+                detail={"model": model_path, "size": job.size, "prompt": job.prompt[:1500], "campaign": c.id,
+                        "version": v.id, "usage": usage, "seconds": video_meta["seconds"]},
                 user_name=job.created_by)
 
 

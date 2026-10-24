@@ -34,19 +34,27 @@
     statuses: ['제작 중', '검토 중', '완료'],
     statusTone: { '제작 중': 'orange', '검토 중': 'blue', '완료': 'green' },
 
-    kinds: { copy: '카피', cardnews: '카드뉴스', script: '숏폼 구성안', desc: '상품 설명', crm: 'CRM 메시지', plan: '기획서', image: '이미지' },
+    kinds: { copy: '카피', cardnews: '카드뉴스', script: '숏폼 구성안', desc: '상품 설명', crm: 'CRM 메시지', plan: '기획서', image: '이미지', video: '영상' },
     textKinds: ['copy', 'cardnews', 'script', 'desc', 'crm', 'plan'],
 
     sheetLabels: {
       content_type: '콘텐츠', channels: '게시 채널', brand_focus: '브랜드 자체', product_ids: '제작 대상 제품',
-      goal: '목적', extra_request: '추가 요청'
+      goal: '목적', extra_request: '추가 요청', use_character: '캐릭터 Rebu'
+    },
+
+    // 캐릭터 Rebu 사용 여부 — 이미지·카드뉴스·숏폼에서만 시트에 보임 (tabs/content/assets.py와 같은 값)
+    character: {
+      choices: ['사용', '사용 안 함', 'AI 판단'],
+      contentTypes: ['image', 'cardnews', 'shortform'],
+      hints: { '사용': '캐릭터 사진을 참고해 Rebu를 넣어요', '사용 안 함': 'Rebu 없이 만들어요', 'AI 판단': '콘셉트에 어울릴 때만 넣어요' },
+      thumb: '/api/content/assets/rebu-faces.jpg'
     },
     decisionLabels: {
       concept: '콘셉트', background: '배경', tone: '말투·톤', style: '스타일', layout: '제품 배치', ratio: '비율',
       language: '결과물 언어', cta: 'CTA', headline: '헤드라인', message: '핵심 메시지', target: '타깃', length: '길이',
       format: '형식', season: '시즌', accent_color: '포인트 색', featured_product: '메인 제품', slide_count: '장 수',
       duration: '영상 길이', lighting: '조명', composition: '구도', mood: '분위기', caption: '캡션', hashtags: '해시태그',
-      subtitle: '자막'
+      subtitle: '자막', use_character: '캐릭터 Rebu', flavor: '맛'
     },
     // 오른쪽 '현재 결정 사항'에 미정으로 보여 줄 항목 (콘텐츠별)
     decisionHints: {
@@ -102,7 +110,7 @@
 
     jobStatus: {
       queued: '대기 중', running: '생성 중', saving: '파일 저장 중', succeeded: '완료', failed: '실패',
-      submission_unknown: '결과 확인 불가'
+      submission_unknown: '결과 확인 불가', canceled: '취소됨'
     }
   };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -9,8 +9,9 @@ import time
 
 from server.core.ai import AIError
 from . import options as O
-from . import prompts, providers, review, schemas
+from . import assets, brandkit, prompts, providers, review, schemas
 
+ASSET_KINDS = ("copy", "cardnews", "script")  # 장·장면·이미지에 쓸 자산 ID를 적는 결과물
 SLIDE_HEAD_RE = re.compile(r"^#{2,3}\s*S(\d{1,2})\b.*$", re.M)
 SCENE_ROW_RE = re.compile(r"^\|\s*SC\s*(\d{1,2})\s*\|.*$", re.M | re.I)
 
@@ -126,6 +127,8 @@ def build_user(*, kind, mode, n, sheet, decisions, facts, labels, base, request,
                   "extra_request": sheet["extra_request"] or ""},
         "decisions": {k: {"value": v.get("value"), "status": v.get("status")} for k, v in decisions.items()},
         "brand_facts": _brand(facts), "product_facts": facts.get("products") or [], "facts_version": facts.get("facts_version"),
+        "character_use": assets.character_choice(decisions),
+        "brand_assets": assets.catalog_for(sheet["product_ids"], assets.character_choice(decisions)) if kind in ASSET_KINDS else None,
         "base_version": base, "unit_targets": targets if mode == "edit" else None,
         "user_request": request, "instructions": instructions,
         "user_materials": {"reference_text": reference} if reference else None,
@@ -134,8 +137,7 @@ def build_user(*, kind, mode, n, sheet, decisions, facts, labels, base, request,
 
 
 def _brand(facts):
-    b = facts.get("brand") or {}
-    return {k: b.get(k) for k in ("name", "slogan", "colors", "character", "cm_song", "category", "intro", "market")}
+    return brandkit.brand_view(facts)
 
 
 def generate(kind, *, mode, sheet, decisions, settings, facts, labels, base=None, request="", instructions="",
