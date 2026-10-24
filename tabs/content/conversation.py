@@ -4,7 +4,7 @@
   2 맥락   브랜드(항상) + 선택 제품 사실(상태 포함) + 최근 대화 + 서버 신호 + 작업 지침
   3 판단   대화·제작 AI → intent · assistant_text · decision_patch · candidates · questions · action_request
   4 검증   허용 필드 · 제품 ID · 대상 조건 · 확정 조건("좋네"는 확정 아님) · 실행 의도(사용자가 명확히 요청했을 때만)
-  5 실행   텍스트 초안·수정(같은 요청 안) · 이미지(작업 등록 → 뒤에서) · 버전 선택
+  5 실행   텍스트 초안·수정(같은 요청 안) · 이미지·영상(작업 등록 → 뒤에서) · 버전 선택
   6 저장   마지막에 짧은 트랜잭션 한 번 — AI를 부르는 동안에는 DB에 쓰지 않음 (SQLite 잠금 · 실패 시 상태 유지)
 
 재개 지점은 DB 자체입니다. 실패(AI 오류·형식 오류·거절)면 아무것도 저장하지 않고 결정도 바꾸지 않습니다.
@@ -20,7 +20,7 @@ from server.core.ai import AIError
 from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip
-from . import drafts, heuristics, media, prompts, providers, repository, schemas
+from . import assets, brandkit, drafts, heuristics, higgsfield, media, prompts, providers, repository, schemas
 from . import options as O
 from .models import ContentCampaign, ContentMessage, ContentVersion
 
@@ -60,7 +60,6 @@ def _msg_line(m):
 def build_context(c, sheet, decisions, settings, facts, labels, versions, base, message, sig, kickoff):
     recent = (ContentMessage.query.filter_by(campaign_id=c.id).order_by(ContentMessage.id.desc()).limit(12).all())
     total = ContentMessage.query.filter_by(campaign_id=c.id).count()
-    brand = facts.get("brand") or {}
     vlist = sorted(versions, key=lambda v: v.id, reverse=True)[:12]
     upcoming = [{"name": s["name"], "start": s["start"], "dday": s["dday"]} for s in catalog.list_seasons()[:3]]
     return {
@@ -72,9 +71,10 @@ def build_context(c, sheet, decisions, settings, facts, labels, versions, base, 
                   "goal": sheet["goal"] or None, "extra_request": sheet["extra_request"] or None},
         "decisions": {k: {"value": v.get("value"), "status": v.get("status"), "label": O.DECISION_LABELS.get(k, k)}
                       for k, v in decisions.items()},
-        "brand_facts": {k: brand.get(k) for k in ("name", "slogan", "colors", "character", "cm_song", "category", "intro", "market")},
+        "brand_facts": brandkit.brand_view(facts),
         "product_facts": facts.get("products") or [],
         "facts_version": facts.get("facts_version"),
+        "character_use": assets.character_choice(decisions),
         "versions": [{"id": v.id, "label": v.label, "seq": v.seq, "kind": v.kind, "parent_id": v.parent_id, "source": v.source,
                       "excerpt": (v.body or "")[:240], "is_final": v.id == c.final_version_id,
                       "is_selected": v.id == (base.id if base else None)} for v in vlist],
@@ -88,8 +88,10 @@ def build_context(c, sheet, decisions, settings, facts, labels, versions, base, 
         "server_signals": {
             "explicit_request": sig["explicit_request"], "vague_ack": sig["vague_ack"], "question": sig["question"],
             "excluded_media": sig["excluded_media"], "unit_targets": sig["unit_targets"],
-            "image_generation": "가능 (명확한 요청 시)", "image_edit_supported": providers.image_supports_edit(),
-            "video_generation": "미연동 — 숏폼은 구성안(실제 영상 아님)만", "active_image_job": media.has_active_job(c.id),
+            "image_generation": "가능 (명확한 요청 시)", "image_edit_supported": image_edit_supported(settings),
+            "video_generation": ("가능 (명확한 요청 시 · Higgsfield Seedance 2.0 720p · 유료)" if video_ready(settings)
+                                 else "꺼짐 — 숏폼은 구성안(실제 영상 아님)만"),
+            "active_image_job": media.has_active_job(c.id),
         },
         "user_message": None if kickoff else message,
         "task": prompts.KICKOFF_TASK if kickoff else prompts.TURN_TASK,
@@ -165,7 +167,18 @@ def strip_unsupported_claims(text, *, patched, made):
     return out
 
 
-def decide_action(turn, sig, sheet, base, versions, force):
+def video_ready(settings):
+    return (settings or {}).get("video_mode") == "higgsfield" and higgsfield.ready()
+
+
+def image_edit_supported(settings):
+    """Higgsfield는 기준 이미지를 참고 이미지로 넣어 다시 생성 (픽셀 편집은 아님)."""
+    if (settings or {}).get("image_provider") == "higgsfield":
+        return True
+    return providers.image_supports_edit()
+
+
+def decide_action(turn, sig, sheet, base, versions, force, settings=None):
     """모델의 실행 요청안 + 사용자 발화 신호 → 실제로 할 일. 모델 출력만으로는 실행하지 않음 (설명서 5.3)."""
     ar = turn["action_request"]
     t = ar["type"]
@@ -200,16 +213,28 @@ def decide_action(turn, sig, sheet, base, versions, force):
         if "video" in sig["excluded_media"]:
             out.update(status="skipped", note="요청대로 영상 작업은 하지 않았어요.")
             return out
+        if video_ready(settings):
+            # 기준 구성안: 가리킨 버전 → 기준 버전 → 가장 최근 구성안 (없으면 시트·결정만으로)
+            script = next((v for v in (target, base) if v is not None and v.kind == "script"), None)
+            script = script or next((v for v in reversed(versions) if v.kind == "script"), None)
+            out.update(run="video", type=t, target=script, status="queued")
+            return out
         t = "draft_script"
-        out.update(type=t, note="실제 영상 생성은 아직 연결되지 않아(Higgsfield 미연동) 숏폼 구성안(실제 영상 아님)으로 만들어요.")
+        out.update(type=t, note=("Higgsfield 키가 없어 실제 영상 대신 숏폼 구성안(실제 영상 아님)으로 만들어요."
+                                 if (settings or {}).get("video_mode") == "higgsfield"
+                                 else "실제 영상은 AI 설정에서 '실제 영상'을 켜야 만들어요. 지금은 숏폼 구성안(실제 영상 아님)으로 만들어요."))
     if t in ("generate_image", "edit_image"):
         if "image" in sig["excluded_media"]:
             out.update(status="skipped", note="요청대로 이미지는 만들지 않았어요.")
             return out
+        if (settings or {}).get("image_provider") == "higgsfield" and not higgsfield.ready():
+            out.update(status="skipped", note="이미지 AI가 Higgsfield인데 키가 없어 만들지 않았어요. "
+                                              "AI 설정에서 OpenAI로 바꾸거나 HIGGSFIELD_API_KEY를 넣어 주세요.")
+            return out
         img = target if (target is not None and target.kind == "image") else (base if base is not None and base.kind == "image" else None)
         if t == "edit_image" and img is None:
             t, out["note"] = "generate_image", "기준 이미지가 없어 새 시안으로 만들어요."
-        elif t == "edit_image" and not providers.image_supports_edit():
+        elif t == "edit_image" and not image_edit_supported(settings):
             t, out["note"] = "generate_image", "선택한 이미지 모델은 기준 이미지 편집을 지원하지 않아 새 시안으로 만들어요 (원본 수정 아님)."
         out.update(run="image", type=t, target=img if t == "edit_image" else None, status="queued")
         return out
@@ -267,7 +292,7 @@ def run_turn(c, data, user):
     versions = ContentVersion.query.filter_by(campaign_id=cid).order_by(ContentVersion.id).all()
     base = next((v for v in versions if v.id == base_id), None)
     labels = repository.labels_of(sheet, products)
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     sig = heuristics.signals(message, has_base=base is not None, force=force, kickoff=kickoff)
 
     # 2·3 맥락 → 판단
@@ -292,9 +317,9 @@ def run_turn(c, data, user):
         plan["rejected"] = [r for r in plan["rejected"] if not r["field"].startswith("sheet.")]
 
     # 5 실행
-    act = decide_action(turn, sig, new_sheet, base, versions, force)
+    act = decide_action(turn, sig, new_sheet, base, versions, force, settings)
     new_labels = repository.labels_of(new_sheet, products)
-    new_facts = facts if new_sheet["product_ids"] == sheet["product_ids"] else catalog.product_facts(new_sheet["product_ids"])
+    new_facts = facts if new_sheet["product_ids"] == sheet["product_ids"] else brandkit.product_facts(new_sheet["product_ids"])
     drafts_out, draft_meta, job_spec = [], None, None
     if act["run"] == "draft":
         try:
@@ -305,9 +330,9 @@ def run_turn(c, data, user):
             act["status"] = "done"
         except AIError as e:
             act.update(status="failed", note=f"초안을 만들지 못했어요: {e}")
-    elif act["run"] == "image":
+    elif act["run"] in ("image", "video"):
         if media.has_active_job(cid):
-            act.update(run=None, status="skipped", note="이미지 작업이 이미 진행 중이에요. 끝난 뒤 다시 요청해 주세요.")
+            act.update(run=None, status="skipped", note="이미지·영상 작업이 이미 진행 중이에요. 끝난 뒤 다시 요청해 주세요.")
         else:
             job_spec = act
 
@@ -388,8 +413,9 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
     if job_spec is not None:
         jsnap, jhash = repository.make_snapshot(new_sheet, new_dec, settings, facts.get("facts_version"))
         tgt = job_spec["target"]
+        kind = "video" if job_spec["run"] == "video" else "image_edit" if job_spec["type"] == "edit_image" else "image"
         job = media.new_job(
-            c, kind="image_edit" if job_spec["type"] == "edit_image" else "image", base=tgt,
+            c, kind=kind, base=tgt, provider=settings.get("image_provider") or "openai",
             instructions=turn["action_request"]["instructions"] or message,
             snapshot={"sheet": new_sheet, "labels": labels, "decisions": new_dec, "facts": facts,
                       "request": message[:1000], "snapshot": jsnap, "snapshot_hash": jhash,
@@ -472,7 +498,7 @@ EXAMPLE_QUESTIONS = {
     "message": _q("decisions.message", "핵심 메시지", "가장 먼저 전할 메시지는 무엇인가요?",
                   ("슬로건 중심", "슬로건 Restart Your Day 중심", "확인된 브랜드 문구라 안전해요"),
                   ("브랜드 무드 중심", "검정 & 네온 브랜드 무드 중심", "제품 사실 없이도 쓸 수 있어요"),
-                  ("제품 형태 중심", "제품 형태(스틱 젤리·비탄산 음료) 중심", "제공된 제품 정보만 써요")),
+                  ("제품 형태 중심", "제품 형태(모양 젤리·소형 병 음료) 중심", "제공된 제품 정보만 써요")),
     "cta": _q("decisions.cta", "CTA", "마지막 행동 유도 문구는 어떻게 할까요?",
               ("Shop now", "Shop now", "바로 구매로 이어져요"),
               ("Learn more", "Learn more", "부담 없이 더 알아보게 해요"),
@@ -553,13 +579,12 @@ def next_question(sheet, decisions, facts, labels, asked):
     taken = _taken(sheet, decisions, [a["field"] for a in asked])
     intro = ""
     if providers.ready():
-        brand = facts.get("brand") or {}
         ctx = {"first": not asked, "step": len(asked) + 1, "max": INTERVIEW_MAX,
                "sheet": {"content_type": labels["contentType"], "channels": labels["channels"], "target": labels["target"],
                          "brand_focus": sheet["brand_focus"], "goal": sheet["goal"] or None,
                          "extra_request": sheet["extra_request"] or None},
                "decisions": {k: {"value": v.get("value"), "status": v.get("status")} for k, v in decisions.items()},
-               "brand_facts": {k: brand.get(k) for k in ("name", "slogan", "colors", "character", "cm_song")},
+               "brand_facts": brandkit.brand_view(facts), "character_use": assets.character_choice(decisions),
                "product_facts": facts.get("products") or [],
                "asked": [{"field": a["field"], "question": a["question"],
                           "answer": a["answer"] if a["status"] == "answered" else "(건너뜀)"} for a in asked],
@@ -642,7 +667,7 @@ def run_interview(c, data, user):
     nxt, intro = None, ""
     if action != "finish" and len(asked) < INTERVIEW_MAX:
         labels = repository.labels_of(sheet, products)
-        nxt, intro = next_question(sheet, decisions, catalog.product_facts(sheet["product_ids"]), labels, asked)
+        nxt, intro = next_question(sheet, decisions, brandkit.product_facts(sheet["product_ids"]), labels, asked)
 
     # 저장 (짧은 트랜잭션)
     c = db.session.get(ContentCampaign, cid)

@@ -7,11 +7,10 @@ import io
 import json
 import zipfile
 
-from server.catalog import service as catalog
 from server.core.templating import local_now
 from server.models import iso
 from . import options as O
-from . import repository
+from . import brandkit, repository
 from .media import upload_dir
 
 NOTICE = """REBOOT 콘텐츠 제작 — 내보내기 묶음
@@ -21,8 +20,8 @@ NOTICE = """REBOOT 콘텐츠 제작 — 내보내기 묶음
 - '최종본'은 팀이 고른 버전이라는 뜻일 뿐 법적 승인이나 사실 확인 완료를 뜻하지 않습니다.
 - 검토 표시: 키워드 확인(서버 규칙) · 컴플라이언스(1차 규칙 판정, 외부 검토) · AI 보조 검토(같은 모델의 자체 검토)는 서로 다릅니다.
   기록이 없으면 '미검토'입니다. 어떤 결과도 법적 승인이 아닙니다.
-- 맛은 임시 값, Balance의 당류 저감은 개발 목표입니다. 성분·가격·용량은 미제공입니다 (facts.json 참고).
-- 이미지는 시안입니다. 제품 형태·패키지는 실제 자료가 아니며, 글자·로고는 이미지에 그리지 않고 텍스트 레이어로 따로 둡니다.
+- 제품 정보는 브랜드 키트(2026-10-24) 기준입니다. Balance의 Zero Sugar는 표기 조건 충족 가정, 성분 함량·젤리 봉지 안 개수는 미제공입니다 (facts.json 참고).
+- 이미지는 AI 시안입니다. 최종 패키지·캐릭터 사진을 참고해 만들지만 라벨 글자·모양은 게시 전 확인이 필요하며, 헤드라인·슬로건 문구는 이미지에 그리지 않고 텍스트 레이어로 따로 둡니다.
 - 숏폼 구성안은 실제 영상이 아닙니다.
 """
 
@@ -82,7 +81,7 @@ def build_zip(c, only_version_id=None):
     all_versions = ContentVersion.query.filter_by(campaign_id=c.id).order_by(ContentVersion.id).all()
     seq_by_id = {v.id: v.seq for v in all_versions}
     versions = [v for v in all_versions if only_version_id is None or v.id == only_version_id]
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     labels = repository.labels_of(sheet)
     now = local_now()
     buf = io.BytesIO()
@@ -117,9 +116,9 @@ def build_zip(c, only_version_id=None):
             if v.image_file:
                 path = upload_dir() / v.image_file
                 if path.is_file():
-                    z.write(path, stem + ".png")
+                    z.write(path, stem + path.suffix)
                 else:
-                    z.writestr(stem + "-파일없음.txt", "이미지 파일을 찾지 못했습니다 (서버 저장소 확인).")
+                    z.writestr(stem + "-파일없음.txt", "결과 파일을 찾지 못했습니다 (서버 저장소 확인).")
             index.append({"id": v.id, "seq": v.seq, "label": v.label, "kind": v.kind, "final": vd["isFinal"],
                           "stale": vd["stale"], "source": v.source, "facts_version": v.facts_version,
                           "settings": (v.snapshot or {}).get("settings"), "model": (v.snapshot or {}).get("model"),

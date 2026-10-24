@@ -9,11 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from tabs.content import conversation, drafts, heuristics, media, providers, repository
+from tabs.content import assets, brandkit, conversation, drafts, heuristics, higgsfield, media, providers, repository, review
 from tabs.content import options as O
 
 from conftest import PASSWORD
 
+MP4 = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + b"\x00" * 16
+JPG = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 16
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
 ROOT = Path(__file__).resolve().parents[3]  # 저장소 맨 위
 
@@ -57,7 +59,7 @@ class FakeAI:
 
     def __init__(self):
         self.queue = {"content_turn": [], "content_draft": [], "content_image_plan": [], "content_suggest": [],
-                      "content_review": [], "content_interview": []}
+                      "content_review": [], "content_interview": [], "content_video_plan": []}
         self.calls = []
 
     def add(self, name, *items):
@@ -83,8 +85,40 @@ def ai(monkeypatch):
 
 @pytest.fixture()
 def sync_jobs(monkeypatch):
-    """이미지 작업을 요청 안에서 바로 실행 (스레드 없이)."""
-    monkeypatch.setattr(media, "launch", lambda app, job_id: media.run_image_job(job_id))
+    """이미지·영상 작업을 요청 안에서 바로 실행 (스레드 없이 · 상태 확인 대기 없음)."""
+    monkeypatch.setattr(media, "launch", lambda app, job_id: media.run_job(job_id))
+    monkeypatch.setattr(media, "POLL_EVERY", 0)
+
+
+class FakeHiggsfield:
+    """higgsfield 모듈 대역: 올린 사진 · 제출 본문 · 상태 순서를 기록하고 결과 파일을 돌려줌 (인터넷·키·비용 없음)."""
+
+    def __init__(self, monkeypatch, result=MP4, statuses=("in_progress", "completed"), error=""):
+        self.uploads, self.submits, self.result, self.error = [], [], result, error
+        self.statuses = list(statuses)
+        monkeypatch.setattr(higgsfield, "ready", lambda: True)
+        monkeypatch.setattr(higgsfield, "upload_ref", self.upload_ref)
+        monkeypatch.setattr(higgsfield, "submit", self.submit)
+        monkeypatch.setattr(higgsfield, "status", self.status)
+        monkeypatch.setattr(higgsfield, "download", lambda url: self.result)
+
+    def upload_ref(self, path, content_type):
+        self.uploads.append((Path(path).name, content_type))
+        return f"https://files.example/{Path(path).name}"
+
+    def submit(self, model_path, body):
+        self.submits.append((model_path, body))
+        return "11111111-2222-3333-4444-555555555555"
+
+    def status(self, request_id):
+        s = self.statuses.pop(0) if len(self.statuses) > 1 else self.statuses[0]
+        return {"status": s, "url": "https://cdn.example/out" if s == "completed" else None, "error": self.error}
+
+
+def set_settings(client, camp, **settings):
+    res = client.patch(f"/api/content/campaigns/{camp['id']}", json={"expected_revision": camp["revision"], "settings": settings})
+    assert res.status_code == 200, res.get_json()
+    return res.get_json()["campaign"]
 
 
 # ───────── 권한 · 화면 파일 ─────────
@@ -302,7 +336,7 @@ def test_video_request_becomes_plan_only_script(auth_client, ai):
     ai.add("content_draft", {"note": "", "drafts": [draft("| 장면 | 시간 |\n| --- | --- |\n| SC1 | 0-3s |\n")]})
     out = chat(auth_client, camp, "숏폼 영상 만들어줘").get_json()
     act = out["reply"]["payload"]["action"]
-    assert act["type"] == "draft_script" and "실제 영상" in act["note"] and out["job"] is None
+    assert act["type"] == "draft_script" and "AI 설정에서 '실제 영상'" in act["note"] and out["job"] is None
     v = out["campaign"]["versions"][0]
     assert v["kind"] == "script" and v["kindLabel"] == "숏폼 구성안" and "실제 영상 아님" in v["note"]
 
@@ -452,9 +486,10 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
         calls["generate"] = (prompt, size, model)
         return PNG, {"total": 10}
 
-    def fake_edit(path, prompt, size, model):
-        calls["edit"] = (path, prompt, size, model)
-        assert Path(path).is_file()
+    def fake_edit(paths, prompt, size, model):
+        paths = paths if isinstance(paths, list) else [paths]
+        calls.setdefault("edit", []).append((paths, prompt, size, model))
+        assert all(Path(x).is_file() for x in paths)
         return PNG, {}
     monkeypatch.setattr(providers, "generate_image", fake_generate)
     monkeypatch.setattr(providers, "edit_image", fake_edit)
@@ -462,18 +497,22 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
         "expected_revision": 1, "changes": [{"field": "decisions.ratio", "value": "4:5 세로"}]}).get_json()["campaign"]
     ai.add("content_turn", turn(intent="generate_media", action="generate_image", text="이미지 시안을 준비할게요."))
-    ai.add("content_image_plan", {"prompt_en": "Neon lime jelly sticks on black.", "keep": [], "change": ["background"],
+    ai.add("content_image_plan", {"prompt_en": "Neon lime jelly pouch on black.", "keep": [], "change": ["background"],
                                   "text_layers": [{"role": "slogan", "text": "RESTART YOUR DAY!"}, {"role": "headline", "text": "Hello"}],
-                                  "notes_ko": "검정 배경 시안", "character_draft": False})
+                                  "notes_ko": "검정 배경 시안", "flavors": [], "include_character": False})
     out = chat(auth_client, camp, "이미지 만들어줘").get_json()
     assert out["job"]["status"] == "queued"
     c = get(auth_client, camp["id"])
     img = next(v for v in c["versions"] if v["kind"] == "image")
     assert img["label"] == "시안 1" and img["imageUrl"].startswith("/api/content/files/")
-    assert img["image"]["size"] == "1024x1536" and calls["generate"][1] == "1024x1536"
-    assert "Do not render any text" in calls["generate"][0]
+    # 제품을 골랐으니 최종 패키지 사진을 참고 이미지로 넣어 생성 (generate 아님)
+    assert "generate" not in calls and calls["edit"][0][2] == "1024x1536" and img["image"]["size"] == "1024x1536"
+    sent, prompt = calls["edit"][0][0], calls["edit"][0][1]
+    assert img["image"]["references"] == ["jelly-original-pouch-front", "jelly-original-cherry-hat-wrapped"]
+    assert [Path(x).name for x in sent] == ["jelly-original-pouch-front.jpg", "jelly-original-cherry-hat-wrapped.jpg"]
+    assert "Reference image 1: Reboot Jelly Original" in prompt and "exactly as they appear in the reference images" in prompt
     assert {"role": "slogan", "text": "Restart Your Day"} in img["image"]["text_layers"]  # 슬로건 원문 그대로
-    assert "실제 패키지 아님" in img["note"] and c["jobs"][0]["status"] == "succeeded"
+    assert "최종 패키지" in img["note"] and "Rebu" not in img["note"] and c["jobs"][0]["status"] == "succeeded"
     assert any("이미지 시안이 준비됐어요" in m["text"] for m in c["messages"])
     res = auth_client.get(img["imageUrl"])
     assert res.status_code == 200 and res.mimetype == "image/png" and res.data == PNG
@@ -481,13 +520,17 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     assert job["versionId"] == img["id"]
     # 기준 이미지를 넣어 편집 → 새 버전 · 부모 연결 · 원본 보존
     ai.add("content_turn", turn(intent="edit", action="edit_image", text="배경만 바꿔 볼게요."))
-    ai.add("content_image_plan", {"prompt_en": "Same jelly sticks, white background.", "keep": ["products"],
-                                  "change": ["background"], "text_layers": [], "notes_ko": "흰 배경", "character_draft": False})
+    ai.add("content_image_plan", {"prompt_en": "Same jelly pouch, white background.", "keep": ["products"],
+                                  "change": ["background"], "text_layers": [], "notes_ko": "흰 배경", "flavors": ["lime"],
+                                  "include_character": False})
     out = chat(auth_client, c, "배경만 흰색으로", base_version_id=img["id"]).get_json()
     c = get(auth_client, camp["id"])
     edited = next(v for v in c["versions"] if v["kind"] == "image" and v["id"] != img["id"])
     assert edited["parentId"] == img["id"] and edited["label"] == "시안 1" and edited["image"]["mode"] == "edit"
-    assert calls["edit"][0].endswith(img["imageUrl"].rsplit("/", 1)[1])
+    base_sent = calls["edit"][1][0]
+    assert base_sent[0].endswith(img["imageUrl"].rsplit("/", 1)[1])  # 1번 = 편집할 기준 이미지
+    assert [Path(x).name for x in base_sent[1:]] == ["jelly-original-lime-boot-wrapped.jpg", "jelly-original-pouch-front.jpg"]
+    assert "Image 1 is the base image to edit" in calls["edit"][1][1]
     assert auth_client.get(img["imageUrl"]).status_code == 200  # 원본 파일 유지
 
 
@@ -500,7 +543,8 @@ def test_image_timeout_is_submission_unknown_not_retried(auth_client, ai, sync_j
     monkeypatch.setattr(providers, "generate_image", boom)
     camp = create(auth_client)
     ai.add("content_turn", turn(action="generate_image"))
-    ai.add("content_image_plan", {"prompt_en": "x", "keep": [], "change": [], "text_layers": [], "notes_ko": "", "character_draft": False})
+    ai.add("content_image_plan", {"prompt_en": "x", "keep": [], "change": [], "text_layers": [], "notes_ko": "",
+                                  "flavors": [], "include_character": False})
     chat(auth_client, camp, "이미지 만들어줘")
     c = get(auth_client, camp["id"])
     assert n["calls"] == 1 and c["jobs"][0]["status"] == "submission_unknown"
@@ -567,7 +611,7 @@ def test_manual_version_final_and_export(auth_client):
     assert {"00_README.txt", "campaign.md", "facts.json", "versions.json", "settings.json"} <= set(names)
     every = "\n".join(z.read(n).decode("utf-8") for n in names)
     assert "승인본이 아닙니다" in every and "user-2026-10-23" in every and "최종본으로 지정됨 (승인 아님)" in every
-    assert "development_goal" in every  # Balance 당류 저감 = 개발 목표 상태 유지
+    assert '"zero_sugar": true' in every and "+kit-2026-10-24" in every  # 브랜드 키트 값 (Balance = Zero Sugar)
     assert "sk-" not in every and "OPENAI_API_KEY" not in every and "password" not in every.lower()
     one = auth_client.get(f"/api/content/campaigns/{cid}/export?version={v['id']}")
     assert one.status_code == 200
@@ -637,10 +681,12 @@ def test_delete_only_creator_or_admin(app, auth_client):
 
 def test_meta_connections_and_check(auth_client, monkeypatch):
     meta = auth_client.get("/api/content/meta").get_json()
-    assert meta["connections"]["openai"]["key"] is False and meta["connections"]["higgsfield"]["wired"] is False
+    assert meta["connections"]["openai"]["key"] is False and meta["connections"]["higgsfield"]["wired"] is True
+    assert meta["connections"]["higgsfield"]["key"] is False and meta["video"]["resolution"] == "720p"
+    assert set(meta["imageProviders"]) == {"openai", "higgsfield"} and set(meta["video"]["modes"]) == {"plan_only", "higgsfield"}
     out = auth_client.get("/api/content/meta/check").get_json()
     assert out["openai"]["ok"] is False and "키가 없습니다" in out["openai"]["message"]  # 키 없으면 네트워크 호출 없음
-    assert out["higgsfield"]["checked"] is False
+    assert out["higgsfield"]["checked"] is False and out["higgsfield"]["ok"] is False
     monkeypatch.setattr(providers, "check_connection", lambda: {"ok": True, "message": "확인", "models": {"m": True}})
     assert auth_client.get("/api/content/meta/check").get_json()["openai"]["ok"] is True
 
@@ -796,3 +842,263 @@ def test_image_editor_upload_makes_child_version(auth_client, ai, sync_jobs, mon
     assert (h["x"], h["y"], h["size"], h["color"], h["align"]) == (1, 0, 0.2, "#ffffff", "left")  # 범위 밖 값은 잘라냄
     assert "AI 아님" in v["note"] and c["selectedVersionId"] == v["id"]
     assert auth_client.get(v["imageUrl"]).status_code == 200 and auth_client.get(img["imageUrl"]).status_code == 200
+
+
+# ───────── 브랜드 키트 · 자산 · 캐릭터 Rebu (2026-10-24) ─────────
+
+def test_brand_kit_overlays_facts_per_product(auth_client):
+    camp = create(auth_client, brand_focus=False, product_ids=["jelly_balance", "drink_original"])
+    f = camp["facts"]
+    assert f["facts_version"].startswith("user-2026-10-23") and f["facts_version"].endswith("+kit-2026-10-24")
+    assert f["brand"]["character"].startswith("Rebu") and "A-HAT" in f["brand"]["key_ingredient"]
+    jb, do = (next(p for p in f["products"] if p["entity_id"] == pid) for pid in ("jelly_balance", "drink_original"))
+    assert jb["zero_sugar"] is True and do["zero_sugar"] is False  # 제품마다 따로 — Original로 옮기지 않음
+    assert do["volume"] == "100ml" and [x["usd"] for x in do["price"]] == [7, 19] and jb["price"][0]["usd"] == 18
+    assert "올가미" in jb["form"] and "리볼버" not in json.dumps(f, ensure_ascii=False)
+    meta = auth_client.get("/api/content/meta").get_json()
+    assert meta["character"]["choices"] == list(assets.CHARACTER_CHOICES) and "모양 젤리" in meta["productKit"]["jelly_original"]["form"]
+
+
+def test_manifest_files_exist_and_ids_are_valid():
+    kit = brandkit.load()
+    seen = set()
+    for a in assets.all_assets():
+        assert assets.ID_RE.match(a["id"]) and a["id"] not in seen, a["id"]
+        seen.add(a["id"])
+        assert assets.path_of(a).is_file() and assets.path_of(a).suffix == ".jpg", a["file"]
+        if a["type"] == "product":
+            assert a["product_id"] in kit["products"] and a.get("flavor") in (None, *assets.FLAVORS)
+    # 리볼버가 보이는 사진 · 글자 많은 캐릭터 시트는 참고 사진으로 고르지 않음
+    assert not assets.get("jelly-original-pouch-scene")["ref"] and not assets.get("rebu-profile-sheet")["ref"]
+
+
+def test_pick_refs_by_flavor_and_character():
+    ids = lambda refs: [a["id"] for a in refs]
+    assert ids(assets.pick_refs(["drink_original"])) == ["drink-original-trio", "drink-original-cherry-front"]
+    assert ids(assets.pick_refs(["drink_original"], flavors=["lime"])) == ["drink-original-lime-front", "drink-original-trio"]
+    two = assets.pick_refs(["jelly_balance", "drink_balance"], flavors=["lemon"], character=True)
+    assert ids(two) == ["jelly-balance-lemon-lasso-wrapped", "drink-balance-lemon-front", "rebu-poses-fullbody"]
+    many = assets.pick_refs(["jelly_original", "jelly_balance", "drink_original", "drink_balance"], character=True)
+    assert len(many) == assets.MAX_REFS and many[-1]["type"] == "character"
+    assert all(a["ref"] for a in many) and assets.flavors_in("체리 맛으로", "Lime!") == ["cherry", "lime"]
+
+
+def test_assets_require_login(client):
+    assert client.get("/api/content/assets").status_code == 401
+    assert client.get("/api/content/assets/rebu-faces.jpg").status_code == 401
+
+
+def test_assets_endpoints(auth_client):
+    items = auth_client.get("/api/content/assets").get_json()["items"]
+    assert len(items) == len(assets.all_assets()) and all(i["url"].startswith("/api/content/assets/") for i in items)
+    res = auth_client.get("/api/content/assets/rebu-faces.jpg")
+    assert res.status_code == 200 and res.mimetype == "image/jpeg" and res.data[:2] == b"\xff\xd8"
+    for url in ("/api/content/assets/nope.jpg", "/api/content/assets/rebu-faces.png", "/api/content/assets/manifest.json",
+                "/api/content/assets/..%2Fbrand_kit.json", "/api/content/assets/%2e%2e%2f%2e%2e%2froutes.py"):
+        assert auth_client.get(url).status_code == 404, url
+
+
+def test_character_choice_from_sheet_and_patch(auth_client):
+    camp = create(auth_client, use_character="사용")
+    d = camp["decisions"]["use_character"]
+    assert d["value"] == "사용" and d["status"] == "confirmed" and d["source"] == "sheet"
+    assert assets.character_choice(camp["decisions"]) == "사용"
+    res = auth_client.post("/api/content/campaigns", json=sheet(use_character="가끔"))
+    assert res.status_code == 400 and "Rebu" in res.get_json()["error"]
+    crm = create(auth_client, content_type="crm", channels=["crm"], use_character="사용")
+    assert "use_character" not in crm["decisions"]  # 시각 콘텐츠가 아니면 무시
+    res = auth_client.patch(f"/api/content/campaigns/{camp['id']}",
+                            json={"expected_revision": camp["revision"], "sheet": {"use_character": "사용 안 함"}})
+    assert res.status_code == 200
+    c = res.get_json()["campaign"]
+    assert c["decisions"]["use_character"]["value"] == "사용 안 함" and assets.character_choice(c["decisions"]) == "사용 안 함"
+    assert "캐릭터 Rebu" in c["messages"][-1]["text"]
+    assert assets.character_choice({}) == "AI 판단" and assets.character_choice({"use_character": {"value": "아니요"}}) == "사용 안 함"
+
+
+def test_image_character_choice_controls_rebu(auth_client, ai, sync_jobs, monkeypatch):
+    sent = []
+    monkeypatch.setattr(providers, "edit_image", lambda paths, prompt, size, model: (sent.append((paths, prompt)), (PNG, {}))[1])
+    monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (sent.append((None, prompt)), (PNG, {}))[1])
+    plan = {"prompt_en": "Mascot on black.", "keep": [], "change": [], "text_layers": [], "notes_ko": "시안", "flavors": [],
+            "include_character": True}
+    # 사용 안 함 → AI가 넣자고 해도 Rebu 없음 · 브랜드만 골랐으니 참고 사진 없이 생성 (글자 금지 문구)
+    camp = create(auth_client, use_character="사용 안 함")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", dict(plan))
+    chat(auth_client, camp, "이미지 만들어줘")
+    img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
+    assert sent[-1][0] is None and "Do not render any text" in sent[-1][1] and img["image"]["references"] == []
+    assert img["image"]["include_character"] is False
+    # 사용 → 캐릭터 시트를 참고 이미지로
+    camp = create(auth_client, use_character="사용")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", dict(plan, include_character=False))
+    chat(auth_client, camp, "이미지 만들어줘")
+    img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
+    assert [Path(x).name for x in sent[-1][0]] == ["rebu-poses-fullbody.jpg"] and "Rebu, the Reboot mascot" in sent[-1][1]
+    assert img["image"]["references"] == ["rebu-poses-fullbody"] and "캐릭터 Rebu 포함" in img["note"]
+
+
+def test_keyword_check_zero_sugar_rebu_and_known_prices():
+    facts = {"brand": {}, "products": [  # 앱 없이 쓸 수 있게 브랜드 키트 모양만 직접 만듦
+        {"entity_id": "drink_original", "price": [{"usd": 7}, {"usd": 19}], "volume": "100ml", "zero_sugar": False},
+        {"entity_id": "jelly_balance", "price": [{"usd": 18}], "zero_sugar": True}]}
+    s = {"product_ids": ["drink_original", "jelly_balance"]}
+    codes = lambda text: {i["code"]: i for i in review.keyword_check(text, "copy", s, facts)["items"]}
+    assert "sugar" not in codes("Reboot Jelly Balance — Zero Sugar. ZERO-SUGAR fun.")  # 이 탭에서는 경고하지 않음
+    assert codes("Low sugar and sugar free!")["sugar"]["terms"] == ["Low sugar", "sugar free"]
+    assert "number" not in codes("Drink Original $7 · 3-pack $19 · 100 ml bottle")
+    assert codes("Only $5 today")["number"]["terms"] == ["$5"]
+    assert "character" in codes("리부부와 함께") and "cm_song" in codes("니온 앤 리부 노래") and not codes("Meet Rebu!")
+    assert review.fact_value(facts, "jelly_balance", "zero_sugar") is True
+    assert review.fact_value(facts, "drink_original", "zero_sugar") is None  # Original에 Zero Sugar 근거를 달면 맞지 않음
+
+
+# ───────── Higgsfield (영상 · 이미지) ─────────
+
+def test_settings_accept_video_mode_and_image_provider(auth_client):
+    camp = create(auth_client)
+    for bad in ({"video_mode": "sora"}, {"image_provider": "midjourney"}):
+        res = auth_client.patch(f"/api/content/campaigns/{camp['id']}", json={"expected_revision": 1, "settings": bad})
+        assert res.status_code == 400
+    c = set_settings(auth_client, camp, video_mode="higgsfield", image_provider="higgsfield")
+    assert c["settings"]["video_mode"] == "higgsfield" and c["settings"]["image_provider"] == "higgsfield"
+
+
+def test_higgsfield_video_job_uses_script_refs_and_saves_mp4(auth_client, ai, sync_jobs, monkeypatch):
+    hf = FakeHiggsfield(monkeypatch)
+    camp = create(auth_client, content_type="shortform", channels=["tiktok"], brand_focus=False, product_ids=["jelly_original"])
+    camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
+        "expected_revision": camp["revision"], "changes": [{"field": "decisions.duration", "value": "20초 세로형"}]}).get_json()["campaign"]
+    camp = set_settings(auth_client, camp, video_mode="higgsfield")
+    # 먼저 구성안 → 그 구성안 기준으로 실제 영상
+    ai.add("content_turn", turn(intent="draft", action="draft_script"))
+    ai.add("content_draft", {"note": "", "drafts": [draft("| 장면 | 시간 |\n| --- | --- |\n| SC1 | 0-3s |\n")]})
+    camp = chat(auth_client, camp, "숏폼 구성안 만들어줘").get_json()["campaign"]
+    script = camp["versions"][0]
+    ai.add("content_turn", turn(intent="generate_media", action="generate_video", text="영상으로 만들어 볼게요."))
+    ai.add("content_video_plan", {"prompt_en": "Pouch spins on black, neon lime light.", "notes_ko": "검정 배경 회전 컷",
+                                  "flavors": [], "include_character": False})
+    out = chat(auth_client, camp, "이 구성안으로 실제 영상 만들어줘").get_json()
+    assert out["job"]["kind"] == "video" and out["job"]["provider"] == "higgsfield"
+    c = get(auth_client, camp["id"])
+    video = next(v for v in c["versions"] if v["kind"] == "video")
+    model_path, body = hf.submits[0]
+    assert model_path == higgsfield.VIDEO_REF and body["resolution"] == "720p" and body["aspect_ratio"] == "9:16"
+    assert body["duration"] == 15 and body["generate_audio"] is False  # 20초 → 최대 15초
+    assert body["image_urls"] == [f"https://files.example/{n}" for n, _ in hf.uploads] and hf.uploads[0][1] == "image/jpeg"
+    assert "Reference image 1: Reboot Jelly Original" in body["prompt"] and "No on-screen text" in body["prompt"]
+    user = json.loads(ai.calls[-1]["user"])
+    assert ai.calls[-1]["name"] == "content_video_plan" and user["script"]["label"] == script["label"]
+    assert video["label"] == "영상 1" and video["videoUrl"].endswith(".mp4") and video["imageUrl"] is None
+    assert video["video"]["duration"] == 15 and "Seedance 2.0" in video["note"] and "구성안 기준" in video["note"]
+    assert c["jobs"][0]["status"] == "succeeded" and any("영상이 준비됐어요" in m["text"] for m in c["messages"])
+    res = auth_client.get(video["videoUrl"])
+    assert res.status_code == 200 and res.mimetype == "video/mp4" and res.data == MP4
+    z = zipfile.ZipFile(io.BytesIO(auth_client.get(f"/api/content/campaigns/{camp['id']}/export").data))
+    assert any(n.endswith("-video.mp4") for n in z.namelist())
+
+
+def test_higgsfield_video_needs_key_and_setting(auth_client, ai, monkeypatch):
+    camp = create(auth_client, content_type="shortform", channels=["tiktok"])
+    camp = set_settings(auth_client, camp, video_mode="higgsfield")  # 키 없음 → 구성안
+    ai.add("content_turn", turn(intent="generate_media", action="generate_video"))
+    ai.add("content_draft", {"note": "", "drafts": [draft("| 장면 | 시간 |\n| --- | --- |\n| SC1 | 0-3s |\n")]})
+    out = chat(auth_client, camp, "숏폼 영상 만들어줘").get_json()
+    assert out["job"] is None and "Higgsfield 키가 없어" in out["reply"]["payload"]["action"]["note"]
+
+
+def test_higgsfield_image_provider_saves_jpg_and_keeps_provider(auth_client, ai, sync_jobs, monkeypatch):
+    hf = FakeHiggsfield(monkeypatch, result=JPG, statuses=("queued", "in_progress", "completed"))
+    called = []
+    monkeypatch.setattr(providers, "edit_image", lambda *a, **k: called.append(a))
+    monkeypatch.setattr(providers, "generate_image", lambda *a, **k: called.append(a))
+    camp = create(auth_client, brand_focus=False, product_ids=["jelly_original"])
+    camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
+        "expected_revision": camp["revision"], "changes": [{"field": "decisions.ratio", "value": "4:5 세로"}]}).get_json()["campaign"]
+    camp = set_settings(auth_client, camp, image_provider="higgsfield")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Pouch on black.", "keep": [], "change": [], "text_layers": [],
+                                  "notes_ko": "시안", "flavors": [], "include_character": False})
+    chat(auth_client, camp, "이미지 만들어줘")
+    c = get(auth_client, camp["id"])
+    img = next(v for v in c["versions"] if v["kind"] == "image")
+    model_path, body = hf.submits[0]
+    assert called == [] and model_path == higgsfield.IMAGE_MODEL and body["aspect_ratio"] == "3:4"  # 4:5에 가장 가까운 비율
+    assert len(body["image_urls"]) == 2 and img["image"]["provider"] == "higgsfield"
+    assert img["imageUrl"].endswith(".jpg") and "Marketing Studio" in img["note"] and "4:5 세로 → 3:4" in img["note"]
+    res = auth_client.get(img["imageUrl"])
+    assert res.status_code == 200 and res.mimetype == "image/jpeg"
+
+
+def test_higgsfield_image_without_key_is_not_switched_to_openai(auth_client, ai, monkeypatch):
+    monkeypatch.setattr(higgsfield, "ready", lambda: False)
+    camp = set_settings(auth_client, create(auth_client), image_provider="higgsfield")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    out = chat(auth_client, camp, "이미지 만들어줘").get_json()
+    act = out["reply"]["payload"]["action"]
+    assert out["job"] is None and act["status"] == "skipped" and "OpenAI로 바꾸거나" in act["note"]
+
+
+@pytest.mark.parametrize("status,expect,text", [("nsfw", "failed", "안전 정책"), ("failed", "failed", "boom"),
+                                                ("canceled", "canceled", "취소")])
+def test_higgsfield_terminal_failures(auth_client, ai, sync_jobs, monkeypatch, status, expect, text):
+    FakeHiggsfield(monkeypatch, statuses=(status,), error="boom")
+    camp = set_settings(auth_client, create(auth_client, content_type="shortform", channels=["tiktok"]), video_mode="higgsfield")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_video"))
+    ai.add("content_video_plan", {"prompt_en": "x", "notes_ko": "", "flavors": [], "include_character": False})
+    chat(auth_client, camp, "영상 만들어줘")
+    c = get(auth_client, camp["id"])
+    assert c["jobs"][0]["status"] == expect and text in c["jobs"][0]["error"]
+    assert not any(v["kind"] == "video" for v in c["versions"])
+
+
+def test_higgsfield_submit_unknown_is_not_retried(auth_client, ai, sync_jobs, monkeypatch):
+    hf = FakeHiggsfield(monkeypatch)
+
+    def boom(model_path, body):
+        hf.submits.append(body)
+        raise providers.SubmissionUnknown("Higgsfield 응답을 받지 못했습니다.")
+    monkeypatch.setattr(higgsfield, "submit", boom)
+    camp = set_settings(auth_client, create(auth_client, content_type="shortform", channels=["tiktok"]), video_mode="higgsfield")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_video"))
+    ai.add("content_video_plan", {"prompt_en": "x", "notes_ko": "", "flavors": [], "include_character": False})
+    chat(auth_client, camp, "영상 만들어줘")
+    c = get(auth_client, camp["id"])
+    assert len(hf.submits) == 1 and c["jobs"][0]["status"] == "submission_unknown"
+    assert "확인하지 못했어요" in c["messages"][-1]["text"]
+
+
+def test_higgsfield_cancel_route(app, auth_client, monkeypatch):
+    from tabs.content.models import ContentJob
+    from server.extensions import db
+    camp = create(auth_client)
+    with app.app_context():
+        j = ContentJob(id="c" * 32, campaign_id=camp["id"], kind="video", status="running")
+        j.snapshot = {"provider": "higgsfield", "request_id": "11111111-2222-3333-4444-555555555555"}
+        db.session.add(j)
+        db.session.add(ContentJob(id="d" * 32, campaign_id=camp["id"], kind="video", status="queued"))
+        db.session.commit()
+    sent = []
+    monkeypatch.setattr(higgsfield, "cancel", lambda rid: (sent.append(rid), False)[1])
+    out = auth_client.post(f"/api/content/jobs/{'c' * 32}/cancel", json={}).get_json()
+    assert out["ok"] is False and "이미 생성이 시작돼" in out["message"] and sent == ["11111111-2222-3333-4444-555555555555"]
+    monkeypatch.setattr(higgsfield, "cancel", lambda rid: True)
+    out = auth_client.post(f"/api/content/jobs/{'c' * 32}/cancel", json={}).get_json()
+    assert out["ok"] is True and out["job"]["cancelable"] is True
+    out = auth_client.post(f"/api/content/jobs/{'d' * 32}/cancel", json={}).get_json()  # 아직 제출 전
+    assert out["ok"] is False and "제출 전" in out["message"]
+    assert auth_client.post("/api/content/jobs/nope!/cancel", json={}).status_code == 404
+
+
+def test_higgsfield_helpers():
+    assert higgsfield.nearest_ratio("4:5 세로", higgsfield.IMAGE_RATIOS, "1:1") == "3:4"
+    assert higgsfield.nearest_ratio("16:9", higgsfield.VIDEO_RATIOS, "9:16") == "16:9"
+    assert higgsfield.nearest_ratio("릴스", higgsfield.VIDEO_RATIOS, "1:1") == "9:16"
+    assert higgsfield.nearest_ratio("0:0", higgsfield.VIDEO_RATIOS, "9:16") == "9:16"
+    assert higgsfield.nearest_ratio(None, higgsfield.VIDEO_RATIOS, "9:16") == "9:16"
+    assert media.video_seconds("15초 세로형") == 15 and media.video_seconds("2초") == 4 and media.video_seconds("") == 5
+    assert media.file_ext(MP4) == ".mp4" and media.file_ext(JPG) == ".jpg" and media.file_ext(PNG) == ".png"
+    assert media.file_ext(b"nope") is None
+    assert higgsfield.check_connection()["checked"] is False  # 키 없으면 네트워크 호출 없음

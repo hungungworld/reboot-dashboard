@@ -15,6 +15,7 @@ from sqlalchemy import func, update
 from server.catalog import service as catalog
 from server.extensions import db
 from server.models import iso, utcnow
+from . import brandkit
 from . import options as O
 from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
 
@@ -157,8 +158,14 @@ def norm_settings(data, base=None):
             if not lo <= v <= hi:
                 raise ValueError(f"{label}는 {lo}~{hi} 사이입니다.")
             s[key] = v
-    if "video_mode" in data and data["video_mode"] != "plan_only":
-        raise ValueError("실제 영상 생성은 아직 연결되지 않아 '구성안만'으로 둡니다.")
+    if "video_mode" in data:
+        if data["video_mode"] not in O.VIDEO_MODES:
+            raise ValueError("영상 모드는 구성안만 · 실제 영상 중 하나입니다.")
+        s["video_mode"] = data["video_mode"]
+    if "image_provider" in data:
+        if data["image_provider"] not in O.IMAGE_PROVIDERS:
+            raise ValueError("이미지 AI는 OpenAI · Higgsfield 중 하나입니다.")
+        s["image_provider"] = data["image_provider"]
     return s
 
 
@@ -467,7 +474,9 @@ def job_dict(j):
     return {"id": j.id, "campaignId": j.campaign_id, "kind": j.kind, "status": j.status, "model": j.model, "size": j.size,
             "baseVersionId": j.base_version_id, "versionId": j.result_version_id, "error": j.error,
             "instructions": j.instructions[:300], "createdAt": iso(j.created_at), "updatedAt": iso(j.updated_at),
-            "finishedAt": iso(j.finished_at), "createdBy": j.created_by}
+            "finishedAt": iso(j.finished_at), "createdBy": j.created_by,
+            "provider": (j.snapshot or {}).get("provider") or "openai",
+            "cancelable": bool((j.snapshot or {}).get("request_id")) and j.status in ("queued", "running")}
 
 
 def file_url(name):
@@ -479,7 +488,8 @@ def version_dict(v, cur_core=None, final_id=None, selected_id=None):
     stale = stale_fields(snap.get("core"), cur_core) if cur_core is not None else []
     return {
         "id": v.id, "seq": v.seq, "kind": v.kind, "kindLabel": O.KIND_LABELS.get(v.kind, v.kind), "label": v.label,
-        "title": v.title, "body": v.body, "imageUrl": file_url(v.image_file), "parentId": v.parent_id, "source": v.source,
+        "title": v.title, "body": v.body, "imageUrl": file_url(v.image_file) if v.kind != "video" else None,
+        "videoUrl": file_url(v.image_file) if v.kind == "video" else None, "video": snap.get("video"), "parentId": v.parent_id, "source": v.source,
         "approach": v.approach, "note": v.note, "factsVersion": v.facts_version, "review": v.review, "claims": v.claims,
         "needsCheck": v.needs_check, "image": snap.get("image"), "settings": snap.get("settings"), "model": snap.get("model"),
         "createdAt": iso(v.created_at), "createdBy": v.created_by, "isFinal": v.id == final_id,
@@ -519,7 +529,7 @@ def campaign_state(c, *, message_limit=200):
         "versions": [version_dict(v, cur, c.final_version_id, c.selected_version_id) for v in versions],
         "jobs": [job_dict(j) for j in jobs_],
         "recentChanges": [event_dict(e) for e in events],
-        "facts": catalog.product_facts(sheet["product_ids"]),
+        "facts": brandkit.product_facts(sheet["product_ids"]),
         "currentHash": snapshot_hash(cur),
     }
 

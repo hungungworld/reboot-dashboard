@@ -40,7 +40,8 @@
   /* ───────── 작은 도우미 ───────── */
 
   function emptySheet() {
-    return { content_type: '', channels: [], brand_focus: false, product_ids: [], goal: '', extra_request: '', reference_text: '' };
+    return { content_type: '', channels: [], brand_focus: false, product_ids: [], goal: '', extra_request: '', reference_text: '',
+      use_character: 'AI 판단' };
   }
   const rid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   function lsGet(k, d) { try { const v = global.localStorage.getItem(LS + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
@@ -88,8 +89,16 @@
     return out;
   }
   function sheetPayload(s) {
-    return { content_type: s.content_type, channels: s.channels.slice(), brand_focus: !!s.brand_focus,
+    const out = { content_type: s.content_type, channels: s.channels.slice(), brand_focus: !!s.brand_focus,
       product_ids: s.product_ids.slice(), goal: s.goal || '', extra_request: s.extra_request || '' };
+    if (usesCharacter(s.content_type)) out.use_character = s.use_character || 'AI 판단';
+    return out;
+  }
+  const usesCharacter = type => DATA.character.contentTypes.includes(type);
+  // 브랜드 키트(콘텐츠 탭 기준)의 제품 형태 — 없으면 공용 팩트시트 값
+  function productForm(p) {
+    const kit = S.meta && S.meta.productKit && S.meta.productKit[p.id];
+    return (kit && kit.form) || p.form || '';
   }
   // 모달 본문도 .part-content 범위로 (CSS는 .part-content .cnt-… 로만)
   function modal(o) {
@@ -171,13 +180,13 @@
     const hf = con ? con.higgsfield : { key: !!keys.HIGGSFIELD_API_KEY };
     const chk = S.apiCheck;
     const oaSt = !oa.key ? ['off', '키 없음'] : chk ? (chk.openai.ok ? ['on', '연결 확인됨'] : ['bad', '확인 실패']) : ['on', '키 있음'];
-    const hfSt = hf.key ? ['wait', '키 있음 · 앱 연동 전'] : ['off', '키 없음'];
+    const hfSt = !hf.key ? ['off', '키 없음'] : chk && chk.higgsfield.checked ? (chk.higgsfield.ok ? ['on', '연결 확인됨'] : ['bad', '확인 실패']) : ['on', '키 있음'];
     const item = (st, name, sub, title) => `<span class="cnt-api-item ${st[0]}" title="${esc(title)}"><i aria-hidden="true"></i><b>${esc(name)}</b>${sub ? `<span class="cnt-api-sub">${esc(sub)}</span>` : ''}<span class="cnt-api-st">${esc(st[1])}</span></span>`;
     return `<span class="cnt-api-label">API 연결</span>
       ${item(oaSt, 'OpenAI', oa.textModel || '', `대화·제작 ${oa.textModel || '—'} · 이미지 ${oa.imageModel || '—'}${oa.imageEdit ? ' (기준 이미지 편집 가능)' : ''}`)}
-      ${item(hfSt, 'Higgsfield', '', '이미지·영상 — 앱에 연동 코드가 아직 없어 키가 있는지만 보여요')}
+      ${item(hfSt, 'Higgsfield', '', `이미지 ${hf.imageModel || '—'} · 영상 ${hf.videoModel || '—'} (AI 설정에서 선택)`)}
       <button type="button" class="link cnt-api-test" data-act="api-check" ${S.apiChecking ? 'disabled' : ''}>${S.apiChecking ? '확인 중…' : '연결 테스트'}</button>
-      ${chk ? `<span class="cnt-api-msg">${esc(chk.openai.message)}</span>` : ''}`;
+      ${chk ? `<span class="cnt-api-msg">${esc(chk.openai.message)}${chk.higgsfield.key ? ` · ${esc(chk.higgsfield.message)}` : ''}</span>` : ''}`;
   }
   function renderApi() { const el = ref('api'); if (el) el.innerHTML = apiStatusHtml(); }
 
@@ -186,7 +195,8 @@
     renderApi();
     try {
       S.apiCheck = await REBOOT.api(`${API}/meta/check`);
-      toast(S.apiCheck.openai.message + (S.apiCheck.higgsfield.key ? ' · Higgsfield는 키만 확인' : ''), S.apiCheck.openai.ok ? '' : 'error');
+      const hf = S.apiCheck.higgsfield;
+      toast(S.apiCheck.openai.message + (hf.key ? ` · ${hf.message}` : ''), S.apiCheck.openai.ok && (!hf.key || hf.ok) ? '' : 'error');
     } catch (e) { toast(e.message, 'error'); } finally { S.apiChecking = false; renderApi(); }
   }
 
@@ -302,8 +312,9 @@
         <label class="cnt-target${s.brand_focus ? ' on' : ''}"><input type="checkbox" data-sheet-check="brand" ${s.brand_focus ? 'checked' : ''}>
           <span><b>Reboot 브랜드 자체</b><small>브랜드가 주제 · 제품 자동 선택 아님</small></span></label>
         ${products().map(p => { const on = s.product_ids.includes(p.id); return `<label class="cnt-target${on ? ' on' : ''}"><input type="checkbox" data-sheet-check="product" value="${esc(p.id)}" ${on ? 'checked' : ''}>
-          <span><b>${esc(p.ko || p.name)}</b><small>${esc(p.name)} · ${esc(p.form || '')}</small></span></label>`; }).join('')}
+          <span><b>${esc(p.ko || p.name)}</b><small>${esc(p.name)} · ${esc(productForm(p))}</small></span></label>`; }).join('')}
       </div>
+      ${usesCharacter(s.content_type) ? characterFieldHtml(s) : ''}
       <div class="between cnt-q-row"><span class="field-label cnt-q">04 &nbsp; 목적 <span class="cnt-opt">선택</span></span>
         <button type="button" class="link cnt-ai-link" data-act="suggest" data-field="goal">${icon('spark')}AI 추천</button></div>
       <div class="chips" data-ref="goal-chips-${ctx}">${goalChipsHtml(s)}</div>
@@ -318,6 +329,14 @@
       ${ctx === 'edit' ? `<div class="cnt-edit-foot"><span class="panel-note">저장하면 다음 대화부터 새 값이 반영돼요.</span>
         <div class="flex"><button type="button" class="btn small ghost" data-act="sheet-reset">되돌리기</button><button type="button" class="btn small lime" data-act="sheet-save">시트 저장</button></div></div>` : ''}
     </div>`;
+  }
+
+  function characterFieldHtml(s) {
+    const cur = s.use_character || 'AI 판단';
+    return `<div class="field-label cnt-q">캐릭터 Rebu <span class="cnt-opt">이미지 · 카드뉴스 · 숏폼</span></div>
+      <div class="cnt-rebu-row"><span class="cnt-rebu" style="background-image:url('${esc(DATA.character.thumb)}')" aria-hidden="true"></span>
+        <div class="chips">${DATA.character.choices.map(x => `<button type="button" class="chip" data-act="sheet-character" data-value="${esc(x)}" aria-pressed="${cur === x}">${esc(x)}</button>`).join('')}</div></div>
+      <p class="hint">${esc(DATA.character.hints[cur] || '')}</p>`;
   }
 
   function goalChipsHtml(s) {
@@ -336,6 +355,7 @@
       ['추가 요청', s.extra_request || '없음', s.extra_request ? 'confirmed' : ''],
       ['콘셉트 · 세부 표현', '대화에서 함께 정하기', '']
     ];
+    if (usesCharacter(s.content_type)) rows.splice(4, 0, ['캐릭터 Rebu', s.use_character || 'AI 판단', 'confirmed']);
     const missing = sheetMissing(s);
     const step = missing.length ? 0 : 1;
     return `<section class="card" data-ref="decisions"><div class="card-head"><h2>현재 결정 사항</h2>${badge('입력 중', 'green')}</div>
@@ -408,6 +428,8 @@
       const id = b.dataset.value;
       if (s.content_type === 'plan') s.channels = s.channels.includes(id) ? s.channels.filter(x => x !== id) : s.channels.concat(id);
       else s.channels = s.channels.includes(id) ? [] : [id];
+    } else if (act === 'sheet-character') {
+      s.use_character = b.dataset.value;
     } else if (act === 'goal-pick') {
       s.goal = b.dataset.value;
     } else if (act === 'goal-ai') {
@@ -484,7 +506,9 @@
   }
 
   function editCopy(c) {
-    return Object.assign(emptySheet(), JSON.parse(JSON.stringify(c.sheet)), { reference_text: c.referenceText || '' });
+    const ch = c.decisions && c.decisions.use_character;
+    return Object.assign(emptySheet(), JSON.parse(JSON.stringify(c.sheet)), { reference_text: c.referenceText || '',
+      use_character: (ch && ch.value) || 'AI 판단' });
   }
 
   function flashFields(fields) {
@@ -1043,6 +1067,7 @@
         <small>최종본은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</small></div></div>
       <div class="flex wrap cnt-done-btns">
         ${isImg ? `<button type="button" class="btn small lime" data-act="save-image" data-id="${esc(v.id)}">${icon('download')}이미지 저장하기</button>`
+          : v.videoUrl ? `<a class="btn small lime" href="${esc(v.videoUrl)}" download>${icon('download')}영상 저장하기</a>`
           : `<button type="button" class="btn small lime" data-act="export-one" data-id="${esc(v.id)}">${icon('download')}파일 저장하기</button>`}
         <button type="button" class="btn small" data-act="reopen">${icon('edit')}더 수정하기</button>
         <button type="button" class="btn small dark" data-act="new-campaign">${icon('plus')}새 콘텐츠 만들기</button>
@@ -1102,11 +1127,14 @@
   function jobHtml(j) {
     const active = ACTIVE_JOB.includes(j.status);
     const label = DATA.jobStatus[j.status] || j.status;
+    const what = j.kind === 'video' ? '영상 생성' : j.kind === 'image_edit' ? '이미지 편집' : '이미지 생성';
     return `<div class="cnt-job ${active ? 'run' : 'bad'}">${active ? '<span class="spinner"></span>' : icon('x')}
-      <div><b>이미지 ${j.kind === 'image_edit' ? '편집' : '생성'} · ${esc(label)}</b>
-      <small>${esc(j.model)} · ${esc(j.size)} · ${esc(fmt.relative(j.createdAt))}</small>
+      <div><b>${what} · ${esc(label)}</b>
+      <small>${j.provider === 'higgsfield' ? 'Higgsfield · ' : ''}${esc(j.model)} · ${esc(j.size)} · ${esc(fmt.relative(j.createdAt))}</small>
+      ${active && j.kind === 'video' ? '<small>영상은 몇 분 걸릴 수 있어요. 페이지를 닫아도 서버에서 계속 진행돼요.</small>' : ''}
       ${j.error ? `<small class="cnt-job-err">${esc(j.error)}</small>` : ''}
-      ${!active ? `<button type="button" class="link" data-act="retry-image">다시 요청하기</button>` : ''}</div></div>`;
+      ${active && j.cancelable ? `<button type="button" class="link" data-act="cancel-job" data-job="${esc(j.id)}">취소 요청</button>` : ''}
+      ${!active ? `<button type="button" class="link" data-act="retry-image" data-kind="${esc(j.kind)}">다시 요청하기</button>` : ''}</div></div>`;
   }
 
   function seqOf(id) {
@@ -1132,14 +1160,22 @@
   function previewHtml(v) {
     const c = S.camp;
     const img = v.kind === 'image' && v.imageUrl;
+    const vid = v.kind === 'video' && v.videoUrl;
+    const media = v.kind === 'image' || v.kind === 'video';
     const baked = !!(v.image && v.image.baked);  // 편집기에서 글자를 이미지에 합성함 → 겹쳐 그리지 않음
     const layers = baked ? [] : (v.image && v.image.text_layers) || [];
     const body = img
       ? `<div class="cnt-preview${S.showLayers && layers.length ? ' layers' : ''}"><img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 시안" loading="lazy">
           ${layers.length ? `<div class="cnt-layer-box" aria-hidden="${!S.showLayers}">${layers.map(layerHtml).join('')}</div>` : ''}</div>
-         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${baked ? '글자를 이미지에 합성한 버전이에요.' : '글자·로고는 이미지에 그리지 않고 텍스트 레이어로 따로 둬요.'}</span>
+         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${baked ? '글자를 이미지에 합성한 버전이에요.' : '헤드라인·슬로건 문구는 이미지에 그리지 않고 텍스트 레이어로 따로 둬요.'}</span>
           ${layers.length ? `<button type="button" class="link" data-act="toggle-layers">텍스트 레이어 ${S.showLayers ? '숨기기' : '보기'}</button>` : ''}</div>
+         ${referencesHtml(v)}
          ${imageEditHtml(v)}`
+      : vid
+      ? `<div class="cnt-preview cnt-video"><video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 시안"></video></div>
+         <p class="panel-note">${badge('시안')} 자막·로고는 영상에 넣지 않았어요. 제품 모양·라벨·장면은 게시 전에 직접 확인하세요.</p>
+         ${v.body ? `<p class="panel-note">${esc(v.body)}</p>` : ''}
+         ${referencesHtml(v)}`
       : `<div class="prose cnt-doc">${ui.markdown(v.body)}</div>`;
     const cmp = complianceOf(v);
     const ai = v.review && v.review.ai;
@@ -1149,7 +1185,7 @@
         <div class="flex">${v.isFinal ? badge('최종본', 'lime') : ''}${v.source === 'ai' ? badge('AI · 참고용', 'purple') : ''}</div></div>
       ${v.stale ? `<p class="note warn cnt-stale">${icon('refresh')}변경 사항 미반영 — 이 버전을 만든 뒤 바뀐 항목: ${esc(v.staleFields.join(', '))}. 다시 만들면 반영돼요.</p>` : ''}
       ${v.note ? `<p class="panel-note">${esc(v.note)}</p>` : ''}
-      ${v.approach && v.kind !== 'image' ? `<p class="panel-note">접근: ${esc(v.approach)}</p>` : ''}
+      ${v.approach && !media ? `<p class="panel-note">접근: ${esc(v.approach)}</p>` : ''}
       ${body}
       ${(v.needsCheck || []).length ? `<div class="note cnt-check-list"><b>확인 필요</b><ul>${v.needsCheck.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
       <div class="cnt-review">
@@ -1158,22 +1194,30 @@
         <div class="cnt-review-row"><span>컴플라이언스</span>${cmp ? badge(cmp.label || cmp.verdict, DATA.complianceTone[cmp.verdict] || '') : badge('미검토')}
           <button type="button" class="link" data-act="compliance" data-id="${esc(v.id)}">${cmp ? '다시 검사' : '검사하기'}</button></div>
         ${cmp && cmp.findings && cmp.findings.length ? `<ul class="cnt-review-items">${cmp.findings.map(f => `<li class="${f.verdict === 'BLOCK' ? 'error' : 'warn'}">${esc(f.code)} ${esc(f.name)}${f.terms && f.terms.length ? ` <code>${esc(f.terms.join(', '))}</code>` : ''}${f.alt ? ` → ${esc(f.alt)}` : ''}</li>`).join('')}</ul>` : ''}
-        ${v.kind !== 'image' ? `<div class="cnt-review-row"><span>AI 보조 검토</span>${ai ? badge(`${(ai.issues || []).length}건 지적`, (ai.issues || []).length ? 'orange' : '') : badge('미검토')}
+        ${!media ? `<div class="cnt-review-row"><span>AI 보조 검토</span>${ai ? badge(`${(ai.issues || []).length}건 지적`, (ai.issues || []).length ? 'orange' : '') : badge('미검토')}
           <button type="button" class="link" data-act="ai-review" data-id="${esc(v.id)}" ${textReady() ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${ai ? '다시 검토' : '검토하기'}</button></div>
           ${ai ? `<div class="cnt-ai-review"><p>${esc(ai.summary)}</p>${(ai.issues || []).length ? `<ul class="cnt-review-items">${ai.issues.map(i => `<li class="warn">${esc(i.location)}: ${esc(i.problem)} → ${esc(i.suggestion)}</li>`).join('')}</ul>` : ''}<p class="panel-note">${esc(ai.note)}</p></div>` : ''}` : ''}
-        <p class="panel-note">${esc((kw && kw.scope) || '텍스트만 확인')} · 결과는 참고용이며 법적 승인이 아니에요.</p>
+        <p class="panel-note">${esc((v.review && v.review.videoScope) || (kw && kw.scope) || '텍스트만 확인')} · 결과는 참고용이며 법적 승인이 아니에요.</p>
       </div>
       <div class="flex wrap cnt-sel-actions">
         <button type="button" class="btn small ${v.isFinal ? '' : 'lime'}" data-act="final" data-id="${esc(v.id)}">${icon('check')}${v.isFinal ? '최종본 해제' : '최종본 지정'}</button>
         <button type="button" class="btn small" data-act="use-base" data-id="${esc(v.id)}">${icon('chat')}이 버전 기준으로 수정</button>
         ${compareCandidates(v).length ? `<button type="button" class="btn small" data-act="compare" data-id="${esc(v.id)}">비교</button>` : ''}
-        ${v.kind !== 'image' ? `<button type="button" class="btn small" data-act="manual-edit" data-id="${esc(v.id)}">${icon('edit')}직접 수정</button>
+        ${!media ? `<button type="button" class="btn small" data-act="manual-edit" data-id="${esc(v.id)}">${icon('edit')}직접 수정</button>
           <button type="button" class="btn small" data-act="view-version" data-id="${esc(v.id)}">크게 보기</button>
-          <button type="button" class="btn small ghost" data-act="copy" data-id="${esc(v.id)}">복사</button>` : `<a class="btn small ghost" href="${esc(v.imageUrl)}" target="_blank" rel="noopener">원본 열기</a>`}
+          <button type="button" class="btn small ghost" data-act="copy" data-id="${esc(v.id)}">복사</button>` : `<a class="btn small ghost" href="${esc(v.imageUrl || v.videoUrl)}" target="_blank" rel="noopener">원본 열기</a>`}
         <button type="button" class="btn small ghost" data-act="export-one" data-id="${esc(v.id)}">${icon('download')}이 버전만</button>
       </div>
       ${c.finalVersionId === v.id ? '<p class="panel-note">최종본 지정은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</p>' : ''}
     </div>`;
+  }
+
+  // 이미지 생성 때 함께 넣은 최종 패키지·캐릭터 사진 (assets/manifest.json의 ID)
+  function referencesHtml(v) {
+    const ids = ((v.image || v.video) && (v.image || v.video).references) || [];
+    if (!ids.length) return '';
+    return `<div class="cnt-refs"><span class="panel-note">참고한 최종 자료 ${ids.length}장</span>
+      <div class="cnt-ref-thumbs">${ids.map(id => `<a href="${API}/assets/${encodeURIComponent(id)}.jpg" target="_blank" rel="noopener" title="${esc(id)}"><img src="${API}/assets/${encodeURIComponent(id)}.jpg" alt="${esc(id)}" loading="lazy"></a>`).join('')}</div></div>`;
   }
 
   // 편집기에서 위치를 정한 레이어는 그 자리에 (x·y·크기는 이미지 폭 대비 비율)
@@ -1457,16 +1501,23 @@
   function aiSettingsInner(inModal) {
     const meta = S.meta || {};
     const camp = !inModal || S.camp ? S.camp : null;
-    const st = camp ? camp.settings : Object.assign({}, (meta.defaults || { answer_length: 'short', candidates: 3, rewrite_max: 1 }), lsGet('settings', {}));
+    const st = camp ? camp.settings : Object.assign({}, (meta.defaults || { answer_length: 'short', candidates: 3, rewrite_max: 1, video_mode: 'plan_only', image_provider: 'openai' }), lsGet('settings', {}));
+    const video = meta.video || {};
+    const providersImg = meta.imageProviders || { openai: 'OpenAI', higgsfield: 'Higgsfield' };
+    const modes = video.modes || { plan_only: '구성안만 (실제 영상 아님)' };
+    const hfKey = !!video.higgsfieldKey;
+    const opts = (map, cur) => Object.keys(map).map(k => `<option value="${esc(k)}" ${cur === k ? 'selected' : ''}>${esc(map[k])}</option>`).join('');
     const ready = textReady();
     const lengths = meta.answerLengths || { short: '짧게', normal: '보통', long: '자세히' };
     return `<div class="cnt-ai-settings">
       <div class="setting-row"><div><b>대화·제작 AI</b><p>대화 · 추천 · 기획 · 카피 · 보조 검토를 모델 하나로 해요.</p></div>
         <div class="cnt-model">${esc(textModel())} ${ready ? badge('연결됨', 'green') : badge('키 없음', 'orange')}</div></div>
-      <div class="setting-row"><div><b>이미지 AI</b><p>이미지 작업 때만 써요. ${meta.imageEdit ? '기준 이미지를 넣어 편집할 수 있어요.' : '편집 미지원 모델이면 새 시안으로 만들어요.'}</p></div>
-        <div class="cnt-model">OpenAI · ${esc(meta.imageModel || 'gpt-image-1')}</div></div>
-      <div class="setting-row"><div><b>영상 AI</b><p>${esc((meta.video && meta.video.label) || '구성안만 (실제 영상 생성 미연동)')}</p></div>${badge('구성안만')}</div>
-      <p class="panel-note">모델은 서버 설정이에요: 대화·제작 = CONTENT_TEXT_MODEL 또는 공통 OPENAI_MODEL(설정 › 연결) · 이미지 = CONTENT_IMAGE_MODEL.</p>
+      <div class="setting-row"><div><b>이미지 AI</b><p>이미지 작업 때만 써요. OpenAI · ${esc(meta.imageModel || 'gpt-image-1')} 또는 Higgsfield · ${esc(meta.higgsfieldImageModel || 'marketing-studio/image')} (제품·Rebu 사진을 참고 이미지로 넣어요).</p></div>
+        <select class="cnt-model" data-setting="image_provider" aria-label="이미지 AI">${opts(providersImg, st.image_provider || 'openai')}</select></div>
+      <div class="setting-row"><div><b>영상 AI</b><p>실제 영상은 Higgsfield ${esc(video.model || 'Seedance 2.0')} · ${esc(video.resolution || '720p')} · 4~15초 · 소리 없음 (유료 · 명확히 요청할 때만).${hfKey ? '' : ' HIGGSFIELD_API_KEY가 없으면 구성안만 만들어요.'}</p></div>
+        <select class="cnt-model" data-setting="video_mode" aria-label="영상 AI">${opts(modes, st.video_mode || 'plan_only')}</select></div>
+      ${hfKey ? '' : `<p class="note warn">${icon('settings')}Higgsfield 키가 없어요. Higgsfield를 고르면 키를 넣기 전까지 이미지·영상을 만들지 않아요 (OpenAI로 자동 전환하지 않음).</p>`}
+      <p class="panel-note">모델은 서버 설정이에요: 대화·제작 = CONTENT_TEXT_MODEL 또는 공통 OPENAI_MODEL(설정 › 연결) · OpenAI 이미지 = CONTENT_IMAGE_MODEL · Higgsfield = HIGGSFIELD_API_KEY.</p>
       <details class="cnt-adv"${inModal ? ' open' : ''}><summary>고급 옵션 ${camp ? '(이 캠페인)' : '(새 캠페인 기본값)'}</summary>
         <div class="field-grid three">
           <label class="field"><span>답변 길이</span><select data-setting="answer_length">${Object.keys(lengths).map(k => `<option value="${esc(k)}" ${st.answer_length === k ? 'selected' : ''}>${esc(lengths[k])}</option>`).join('')}</select></label>
@@ -1480,7 +1531,7 @@
 
   function readSettings(el) {
     const out = {};
-    el.querySelectorAll('[data-setting]').forEach(s => { out[s.dataset.setting] = s.dataset.setting === 'answer_length' ? s.value : +s.value; });
+    el.querySelectorAll('[data-setting]').forEach(s => { out[s.dataset.setting] = ['candidates', 'rewrite_max'].includes(s.dataset.setting) ? +s.value : s.value; });
     return out;
   }
 
@@ -1624,8 +1675,8 @@
   }
 
   function compareCandidates(v) {
-    const image = v.kind === 'image';
-    return S.camp.versions.filter(x => x.id !== v.id && (x.kind === 'image') === image);
+    const group = x => (x.kind === 'image' || x.kind === 'video' ? x.kind : 'text');
+    return S.camp.versions.filter(x => x.id !== v.id && group(x) === group(v));
   }
 
   function compareBody(v) {
@@ -1633,6 +1684,8 @@
       ${v.isFinal ? badge('최종본', 'lime') : ''}${v.stale ? badge('미반영', 'orange') : ''}</div>`;
     const body = v.kind === 'image' && v.imageUrl
       ? `<img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 시안">`
+      : v.kind === 'video' && v.videoUrl
+      ? `<video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 시안"></video>`
       : `<div class="prose">${ui.markdown(v.body)}</div>`;
     return head + (v.approach ? `<p class="panel-note">접근: ${esc(v.approach)}</p>` : '') + body;
   }
@@ -1745,6 +1798,8 @@
     const cur = c.sheet;
     ['content_type', 'brand_focus', 'goal', 'extra_request'].forEach(k => { if (e[k] !== cur[k]) sheet[k] = e[k]; });
     ['channels', 'product_ids'].forEach(k => { if (e[k].join(',') !== cur[k].join(',')) sheet[k] = e[k].slice(); });
+    const curChar = (c.decisions.use_character && c.decisions.use_character.value) || 'AI 판단';
+    if (usesCharacter(e.content_type) && e.use_character !== curChar) sheet.use_character = e.use_character;
     const body = { expected_revision: c.revision };
     if (Object.keys(sheet).length) body.sheet = sheet;
     if ((e.reference_text || '') !== (c.referenceText || '')) body.reference_text = e.reference_text || '';
@@ -1891,6 +1946,14 @@
     clearInterval(S.pollTimer);
     S.pollTimer = null;
   }
+  async function cancelJob(b) {
+    b.disabled = true;
+    try {
+      const res = await REBOOT.api(`${API}/jobs/${b.dataset.job}/cancel`, {});
+      toast(res.message, res.ok ? '' : 'error');
+    } catch (e) { toast(e.message, 'error'); } finally { b.disabled = false; }
+  }
+
   async function pollJobs() {
     const c = S.camp;
     const active = c ? c.jobs.filter(j => ACTIVE_JOB.includes(j.status)) : [];
@@ -2076,7 +2139,8 @@
         case 'toggle-layers': S.showLayers = !S.showLayers; renderResults(); break;
         case 'make-draft': send('초안 만들어줘', { force: 'draft' }); break;
         case 'make-image': send('이미지 시안 만들어줘', { force: 'image' }); break;
-        case 'retry-image': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = '이미지 시안 다시 만들어줘'; inp.focus(); } break; }
+        case 'retry-image': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = b.dataset.kind === 'video' ? '영상 다시 만들어줘' : '이미지 시안 다시 만들어줘'; inp.focus(); } break; }
+        case 'cancel-job': cancelJob(b); break;
         case 'api-check': apiCheck(); break;
         case 'complete': completeCampaign(b); break;
         case 'reopen': reopenCampaign(); break;

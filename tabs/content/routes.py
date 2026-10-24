@@ -1,7 +1,7 @@
 """콘텐츠 제작 API (담당: 나원). 모두 로그인 필요 · 쓰기는 CSRF (core.js가 자동).
 
   GET    /api/content/meta                          모델·연결 상태 · 선택지
-  GET    /api/content/meta/check                    연결 테스트 (OpenAI 모델 조회만 · 비용 없음 / Higgsfield는 키 유무)
+  GET    /api/content/meta/check                    연결 테스트 (OpenAI 모델 조회 · Higgsfield 없는 요청 조회 — 둘 다 비용 없음)
   GET    /api/content/campaigns?q=&status=          내 캠페인 목록 (+ 상태별 개수)
   POST   /api/content/campaigns                     시트로 캠페인 시작 {content_type, channels, brand_focus, product_ids, goal, extra_request}
   GET    /api/content/campaigns/<id>                복원: 시트 · 결정 · 대화 · 버전 · 작업 · 제품 근거
@@ -18,20 +18,23 @@
   POST   /api/content/versions/<id>/final           {final: true|false}
   POST   /api/content/versions/<id>/review          컴플라이언스(화면에서 판정한 결과) 기록
   POST   /api/content/versions/<id>/ai-review       AI 보조 검토 (review_v2)
-  GET    /api/content/jobs/<id>                     이미지 작업 상태
-  GET    /api/content/files/<이름>.png              생성 이미지 (로그인 필요)
+  GET    /api/content/jobs/<id>                     이미지·영상 작업 상태
+  POST   /api/content/jobs/<id>/cancel              Higgsfield 요청 취소 (시작 전만 가능)
+  GET    /api/content/files/<이름>.png|jpg|webp|mp4 생성 이미지·영상 (로그인 필요)
+  GET    /api/content/assets                        브랜드 자산 목록 (로고 · 제품 · 캐릭터 Rebu 사진)
+  GET    /api/content/assets/<ID>.jpg               자산 사진 (로그인 필요)
 """
 import json
 
 from flask import Blueprint, Response, jsonify, request, send_from_directory
 from flask_login import current_user
 
-from server import envkeys, worklog
+from server import worklog
 from server.core.ai import AIError
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
-from . import conversation, media, prompts, providers, repository, review, schemas
+from . import assets, brandkit, conversation, higgsfield, media, prompts, providers, repository, review, schemas
 from . import options as O
 from .export import build_zip
 from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
@@ -89,27 +92,28 @@ def meta():
     return jsonify(
         textModel=providers.text_model(), textReady=providers.ready(),
         imageModel=providers.image_model(), imageReady=providers.ready(), imageEdit=providers.image_supports_edit(),
-        video={"mode": "plan_only", "label": "구성안만 (실제 영상 생성은 Higgsfield 연동 예정)",
-               "higgsfieldKey": envkeys.has("HIGGSFIELD_API_KEY")},
-        # 연결 상태 칸 — Higgsfield는 앱 연동 전이라 키가 있는지만 (실제 호출 확인 없음)
+        video={"modes": O.VIDEO_MODES, "model": "Seedance 2.0", "resolution": higgsfield.VIDEO_RESOLUTION,
+               "higgsfieldKey": higgsfield.ready()},
+        imageProviders=O.IMAGE_PROVIDERS, higgsfieldImageModel=higgsfield.IMAGE_MODEL,
         connections={"openai": {"key": providers.ready(), "textModel": providers.text_model(),
                                 "imageModel": providers.image_model(), "imageEdit": providers.image_supports_edit()},
-                     "higgsfield": {"key": envkeys.has("HIGGSFIELD_API_KEY"), "wired": False}},
+                     "higgsfield": {"key": higgsfield.ready(), "wired": True, "imageModel": higgsfield.IMAGE_MODEL,
+                                    "videoModel": f"Seedance 2.0 · {higgsfield.VIDEO_RESOLUTION}"}},
         defaults=O.DEFAULT_SETTINGS, answerLengths=O.ANSWER_LENGTHS, promptVersion=prompts.PROMPT_BUNDLE_VERSION,
         contentTypes=[{"id": k, "label": v["label"], "kind": v["kind"]} for k, v in O.CONTENT_TYPES.items()],
         channels=[{"id": k, "label": v["label"]} for k, v in O.CHANNELS.items()], statuses=list(O.STATUSES),
-        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS)
+        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS,
+        character={"choices": list(assets.CHARACTER_CHOICES), "contentTypes": list(assets.CHARACTER_TYPES), "name": "Rebu"},
+        productKit={pid: {"form": p.get("form"), "flavors": (p.get("flavors") or {}).get("value")}
+                    for pid, p in brandkit.load()["products"].items()})
 
 
 @bp.get("/meta/check")
 def meta_check():
-    """연결 테스트 — OpenAI는 모델 조회만 (생성 비용 없음). Higgsfield는 어댑터가 없어 키 유무만."""
-    out = providers.check_connection()
-    hf = envkeys.has("HIGGSFIELD_API_KEY")
-    return jsonify(openai=out, higgsfield={
-        "key": hf, "checked": False,
-        "message": ("키는 있어요. 앱에 Higgsfield 연동 코드가 아직 없어 실제 호출 확인은 연동 후에 할 수 있어요." if hf
-                    else "HIGGSFIELD_API_KEY가 없어요 (설정 › 연결).")})
+    """연결 테스트 — OpenAI는 모델 조회만, Higgsfield는 없는 요청 상태 조회만 (둘 다 생성 비용 없음)."""
+    hf = higgsfield.check_connection()
+    hf["key"] = higgsfield.ready()
+    return jsonify(openai=providers.check_connection(), higgsfield=hf)
 
 
 # ───────── 캠페인 ─────────
@@ -151,6 +155,8 @@ def campaigns_create():
     products = repository.products_index()
     try:
         sheet = repository.build_sheet(data, products)
+        character = (assets.norm_character(data["use_character"])
+                     if data.get("use_character") and sheet["content_type"] in assets.CHARACTER_TYPES else None)
     except ValueError as e:
         raise ApiError(str(e))
     try:  # 브라우저에 저장된 새 캠페인 기본값 — 이상하면 기본값으로
@@ -168,6 +174,9 @@ def campaigns_create():
     # 소비자용 결과물 언어는 영어를 '초기 제안'으로 (README 5.4) — 사용자 확정이 아님
     c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
                                 "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    if character is not None:  # 시트에서 고른 캐릭터 Rebu 사용 여부 → 확정 결정
+        c.decisions = dict(c.decisions, use_character={"value": character, "status": "confirmed", "source": "sheet",
+                                                       "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
     db.session.add(c)
     db.session.flush()
     lab = repository.labels_of(sheet, products)
@@ -204,6 +213,12 @@ def campaigns_patch(cid):
                    if k in repository.SHEET_FIELDS]
         if "channel" in sheet_in and "channels" not in sheet_in:
             changes.append({"field": "sheet.channels", "value": [sheet_in["channel"]], "status": "confirmed"})
+        if sheet_in.get("use_character"):  # 캐릭터 Rebu 사용 여부는 결정 사항으로 저장
+            try:
+                changes.append({"field": "decisions.use_character", "value": assets.norm_character(sheet_in["use_character"]),
+                                "status": "confirmed"})
+            except ValueError as e:
+                raise ApiError(str(e))
         plan = repository.plan_changes(repository.sheet_of(c), c.decisions, changes, user=user, source="sheet",
                                        revision=c.revision)
         if plan["rejected"]:
@@ -339,8 +354,7 @@ def images_upload(cid):
         raise ApiError("이미지를 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
     user = _who()
     sheet = repository.sheet_of(c)
-    from server.catalog import service as catalog
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
                                            model=None, mode="manual")
     snap["image"] = {"model": None, "size": f"{size[0]}x{size[1]}", "mode": "manual_edit", "text_layers": layers,
@@ -390,8 +404,7 @@ def versions_create(cid):
     user = _who()
     label = clip(data.get("label"), 30).strip() or (parent.label if parent else "직접 작성")
     sheet = repository.sheet_of(c)
-    from server.catalog import service as catalog
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
                                            model=None, mode="manual")
     v = ContentVersion(campaign_id=cid, seq=repository.next_seq(cid), kind=kind, label=label,
@@ -466,12 +479,12 @@ def suggest():
         return jsonify(field=field, items=O.example_suggestions(field, sheet), source="example", basis=basis,
                        note="OpenAI 키가 없어 예시 추천을 보여 드려요. 설정 › 연결에서 키를 넣으면 AI 추천을 받을 수 있어요.")
     from server.catalog import service as catalog
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     lab = repository.labels_of(sheet, products)
     user = {"field": field, "sheet": {"content_type": lab["contentType"], "channels": lab["channels"], "target": lab["target"],
                                       "brand_focus": sheet["brand_focus"], "goal": sheet["goal"] or None,
                                       "extra_request": sheet["extra_request"] or None},
-            "brand_facts": {k: (facts.get("brand") or {}).get(k) for k in ("name", "slogan", "colors", "character", "cm_song")},
+            "brand_facts": brandkit.brand_view(facts),
             "product_facts": facts.get("products"),
             "upcoming_seasons": [{"name": s["name"], "start": s["start"], "dday": s["dday"]} for s in catalog.list_seasons()[:3]]}
     try:
@@ -548,9 +561,8 @@ def versions_ai_review(vid):
         raise ApiError("이미지는 AI 보조 검토 대상이 아닙니다 (텍스트 레이어만 키워드 확인).")
     if not providers.ready():
         raise ApiError(conversation.NO_KEY, 503)
-    from server.catalog import service as catalog
     sheet = repository.sheet_of(c)
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     user = {"version": {"label": v.label, "kind": O.KIND_LABELS.get(v.kind), "body": v.body[:12000]},
             "sheet": repository.labels_of(sheet), "brand_facts": facts.get("brand"), "product_facts": facts.get("products"),
             "keyword_check": (v.review or {}).get("keyword")}
@@ -581,6 +593,38 @@ def jobs_get(job_id):
     return jsonify(job=repository.job_dict(j))
 
 
+@bp.post("/jobs/<job_id>/cancel")
+def jobs_cancel(job_id):
+    if not job_id.isalnum() or len(job_id) > 32:
+        raise ApiError("없는 작업입니다.", 404)
+    j = db.session.get(ContentJob, job_id)
+    if j is None:
+        raise ApiError("없는 작업입니다.", 404)
+    try:
+        ok, message = media.cancel_job(j)
+    except providers.ProviderError as e:
+        raise ApiError(str(e), e.status)
+    if ok:
+        worklog.add("content", "AI 프롬프트", "Higgsfield 취소 요청", detail={"job": j.id, "campaign": j.campaign_id},
+                    user_name=_who())
+    return jsonify(ok=ok, message=message, job=repository.job_dict(j))
+
+
+@bp.get("/assets")
+def assets_list():
+    return jsonify(items=[assets.public(a) for a in assets.all_assets()], version=assets.manifest()["version"])
+
+
+@bp.get("/assets/<name>")
+def assets_file(name):
+    a = assets.get(name[:-4]) if (name or "").endswith(".jpg") else None
+    if a is None or not assets.path_of(a).is_file():
+        raise ApiError("없는 자산입니다.", 404)
+    resp = send_from_directory(str(assets.path_of(a).parent), assets.path_of(a).name, mimetype="image/jpeg", max_age=0)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
+
+
 @bp.get("/files/<name>")
 def files(name):
     if not media.FILE_RE.match(name or ""):
@@ -590,7 +634,7 @@ def files(name):
     folder = media.upload_dir()
     if not (folder / name).is_file():
         raise ApiError("파일을 찾지 못했습니다 (서버 저장소 확인).", 404)
-    resp = send_from_directory(str(folder), name, mimetype="image/png", max_age=0)
+    resp = send_from_directory(str(folder), name, mimetype=media.MIMES["." + name.rsplit(".", 1)[1]], max_age=0)
     resp.headers["Cache-Control"] = "private, max-age=86400"
     resp.headers["Content-Disposition"] = f'inline; filename="reboot-content-{name}"'
     return resp

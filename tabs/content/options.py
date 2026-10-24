@@ -28,7 +28,7 @@ STATUSES = ("제작 중", "검토 중", "완료")
 # 결과물(버전) 종류
 KIND_LABELS = {
     "copy": "카피", "cardnews": "카드뉴스", "script": "숏폼 구성안", "desc": "상품 설명",
-    "crm": "CRM 메시지", "plan": "기획서", "image": "이미지",
+    "crm": "CRM 메시지", "plan": "기획서", "image": "이미지", "video": "영상",
 }
 TEXT_KINDS = ("copy", "cardnews", "script", "desc", "crm", "plan")
 
@@ -53,6 +53,7 @@ DECISION_LABELS = {
     "target": "타깃", "length": "길이", "format": "형식", "season": "시즌", "accent_color": "포인트 색",
     "featured_product": "메인 제품", "slide_count": "장 수", "duration": "영상 길이", "lighting": "조명",
     "composition": "구도", "mood": "분위기", "caption": "캡션", "hashtags": "해시태그", "subtitle": "자막",
+    "use_character": "캐릭터 Rebu", "flavor": "맛",
 }
 # 모델이 한국어 키를 줄 때
 DECISION_ALIASES = {
@@ -60,6 +61,8 @@ DECISION_ALIASES = {
     "비율": "ratio", "스타일": "style", "배치": "layout", "헤드라인": "headline", "타깃": "target", "타겟": "target",
     "길이": "length", "형식": "format", "시즌": "season", "핵심메시지": "message", "핵심 메시지": "message",
     "구도": "composition", "조명": "lighting", "분위기": "mood", "자막": "subtitle",
+    "캐릭터": "use_character", "리부": "use_character", "rebu": "use_character", "character": "use_character",
+    "mascot": "use_character", "맛": "flavor",
 }
 
 # 제품·브랜드 사실에 해당하는 키 — 대화로 바꾸지 않고 '확인 대기'로 기록 (README 3.4)
@@ -71,8 +74,12 @@ FACT_KEYS = frozenset({
 })
 
 # 접어 둔 고급 옵션 (README 4.2 초기 제안값)
-DEFAULT_SETTINGS = {"answer_length": "short", "candidates": 3, "rewrite_max": 1, "video_mode": "plan_only"}
+DEFAULT_SETTINGS = {"answer_length": "short", "candidates": 3, "rewrite_max": 1, "video_mode": "plan_only",
+                    "image_provider": "openai"}
 ANSWER_LENGTHS = {"short": "짧게 (2~4문장)", "normal": "보통 (5~7문장)", "long": "자세히"}
+# 이미지 AI 제공사 · 영상 모드 (Higgsfield는 HIGGSFIELD_API_KEY가 있을 때만 실제 호출)
+IMAGE_PROVIDERS = {"openai": "OpenAI", "higgsfield": "Higgsfield (Marketing Studio)"}
+VIDEO_MODES = {"plan_only": "구성안만 (실제 영상 아님)", "higgsfield": "실제 영상 (Higgsfield Seedance 2.0 · 720p)"}
 
 GOAL_PRESETS = ("브랜드 알리기", "제품 소개", "구매 유도", "재구매")
 

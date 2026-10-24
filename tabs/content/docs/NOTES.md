@@ -61,7 +61,16 @@ README는 LangGraph + 공식 SDK를 권장했지만, v1은 **의존성을 늘리
   프롬프트는 creative_edit_v2로 만들고(실패 시 결정 사항으로 만든 기본 프롬프트), **이미지 안에는 글자·로고를 그리지 않게** 하고 문구는 텍스트 레이어(미리보기 위에 겹쳐 보임)로 따로 둠.
   "배경만 흰색으로"는 기준 PNG를 `images.edit`에 실제로 넣어 편집(부모 연결, 원본 보존). 편집 미지원 모델이면 '새 시안(원본 편집 아님)'.
   비율은 모델 지원 크기(1024², 1024×1536, 1536×1024)로 근사하고 버전에 적음. 유료 호출은 자동 재시도·재제출하지 않음 (응답 시간 초과 → `submission_unknown`)
-- **영상**: 실제 생성 없음. 영상 요청은 숏폼 **구성안(장면 표 · 실제 영상 아님)**으로 만들고 그렇게 표시
+- **이미지 제공사**: AI 설정 `image_provider` — OpenAI(기본) 또는 Higgsfield `marketing-studio/image`(1k · 제품·Rebu 사진을 `image_urls` 참고 이미지로).
+  Higgsfield 편집은 기준 이미지를 참고 이미지 1번으로 넣어 **다시 생성**(픽셀 편집 아님). 비율은 모델이 받는 값 중 가장 가까운 값(예: 4:5 → 3:4)으로 적음.
+  결과는 PNG가 아닐 수 있어 형식대로 저장(png · jpg · webp). Higgsfield를 골랐는데 키가 없으면 만들지 않고 안내 (OpenAI로 자동 전환 없음)
+- **영상**: AI 설정 `video_mode` — `plan_only`(기본: 숏폼 **구성안**만 · 실제 영상 아님) 또는 `higgsfield`(키가 있을 때만).
+  실제 영상은 Higgsfield **Seedance 2.0 · 720p 고정** · 4~15초(결정 '영상 길이'에서, 없으면 5초) · 비율은 결정 '비율'(없으면 9:16) · 소리 없음.
+  기준 구성안(가리킨 버전 → 기준 버전 → 최근 구성안)을 video_v1 프롬프트로 영어 장면 흐름으로 바꾸고, 제품·Rebu 사진이 있으면 `reference-to-video`, 없으면 `text-to-video`.
+  자막·로고·대사는 넣지 않음. 결과는 `영상 N` 버전(mp4)으로 저장되고 키워드 확인 대상이 아님 (영상 속 장면은 사람이 확인)
+- **Higgsfield 흐름** (`higgsfield.py`): 참고 사진 업로드(`/files/generate-upload-url` → PUT) → 제출(요청 ID를 작업 snapshot에 기록) → 5초마다 상태 확인
+  (`completed · failed · nsfw · canceled`) → 결과 다운로드·저장. 이미지 5분 · 영상 15분 안에 안 끝나거나 제출 응답을 못 받으면 `submission_unknown`(재제출 없음).
+  취소는 `POST /jobs/<id>/cancel` → Higgsfield에 실제 취소 요청 (시작 전 요청만 가능, 시작 후면 그렇게 안내)
 - **검토 3층 분리**: 키워드 확인(서버 규칙, 버전 저장 시 자동) · 컴플라이언스(화면에서 `REBOOT.use('compliance').review` — 채널 Amazon→amazon, 그 밖(CRM 포함)→b2c,
   제품은 팩트시트 `compliance_id`, 제품이 여럿이면 제품별로 돌려 가장 엄한 판정) · AI 보조 검토(review_v2, 버튼). 기록이 없으면 '미검토', 컴플라이언스 파트가 없으면 '미연동'
 - **최종본**: 최신 버전 선택과 별개. 지정해도 승인·사실 확인이 아님을 화면·이벤트·내보내기에 적음
@@ -76,9 +85,11 @@ README는 LangGraph + 공식 SDK를 권장했지만, v1은 **의존성을 늘리
 | `OPENAI_API_KEY` | 대화 · 추천 · 초안 · 보조 검토 · 이미지 | 대화·AI 검토 503, 추천은 예시, 직접 작성은 됨 |
 | `CONTENT_TEXT_MODEL` (선택) | 대화·제작 AI 모델 하나 | 공통 `OPENAI_MODEL`(기본 gpt-4o-mini) |
 | `CONTENT_IMAGE_MODEL` (선택) | 이미지 모델 | `gpt-image-1` |
-| `HIGGSFIELD_API_KEY` | 쓰지 않음 (연동 전) | 영상은 구성안만 |
+| `HIGGSFIELD_API_KEY` | Higgsfield 이미지 · 실제 영상 (`KEY_ID:KEY_SECRET` 형식 그대로) | 영상은 구성안만, Higgsfield 이미지는 만들지 않고 안내 |
 
 **실제 키로 확인할 것 (미검증)**: strict JSON Schema(anyOf 포함)가 선택 모델에서 통과하는지, `gpt-image-1` 생성·편집(조직 인증 필요 여부), 응답 시간, 비용.
+Higgsfield: 요청 본문 칸 이름(모델 문서 기준 — 실제 계정 호출 전), 결과 이미지 형식, 영상 생성 시간, 크레딧 차감. Seedance 2.0 공식 단가는 1천 토큰당 $0.014(720p · 할인 전)로 5초 영상 약 $1.5 수준이지만 앱에는 비용을 표시하지 않음.
+API에는 Higgsfield 웹의 'Fast' 모드가 없어 Seedance 2.0 일반 모델을 씀.
 
 ## 6. 완료 기준 (README 11장) — 현재 상태
 
@@ -100,8 +111,8 @@ README는 LangGraph + 공식 SDK를 권장했지만, v1은 **의존성을 늘리
 
 - LangGraph·체크포인트 없음 (3장). BriefRevision 표 대신 결정 JSON + `content_decision_events`(이전/새 값) + 버전 스냅샷
 - 작업 큐·outbox 없음: 작업마다 서버 스레드(`jobs.run_background`). 서버가 꺼지면 멈춘 작업은 12분 뒤 '실패(보내기 전)' 또는 '결과 불명'으로 바뀌고 다시 제출하지 않음
-- 취소(`cancel_requested/canceled`) 없음 — OpenAI Images는 동기 호출이라 실제 취소 요청을 보낼 수 없음
-- 참고 **이미지** 첨부 · 로고 원본 합성 · 카드뉴스 장별 이미지 파일 · 실제 영상 · Higgsfield 없음. 문구는 텍스트 레이어(미리보기 겹침 · 내보내기 텍스트)까지만
+- OpenAI 이미지는 취소 없음 (동기 호출이라 실제 취소 요청을 보낼 수 없음). Higgsfield는 시작 전 요청만 취소 가능, `cancel_requested` 상태는 따로 두지 않음
+- 사용자가 직접 올리는 참고 **이미지** 첨부 · 로고 원본 합성 · 카드뉴스 장별 이미지 파일 · 영상 편집(기존 영상 수정) 없음. 문구는 텍스트 레이어(미리보기 겹침 · 내보내기 텍스트)까지만
 - 사용량은 작업 로그의 토큰까지만. 비용 추정은 표시하지 않음
 - 페르소나(인사이트 파트)는 '타깃 참고' 버튼으로 입력창에 넣기만 함 (자동 전송·자동 확정 없음). 시즌은 시트 추가 요청 칩으로 덧붙이기만 함
 
