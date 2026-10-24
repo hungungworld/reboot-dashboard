@@ -102,7 +102,7 @@ def classify_reviews(rows):
     return {str(i["id"]): i for i in out.get("items") or []}
 
 
-COMMENT_TOPICS = [k for k, _l, _w in QUESTION_TOPICS] + ["other", "none"]
+COMMENT_TOPICS = [k for k, _l, _w in QUESTION_TOPICS] + ["none"]
 COMMENT_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],
     "properties": {"items": {"type": "array", "items": {
@@ -115,9 +115,9 @@ COMMENT_SCHEMA = {
 def classify_comments(rows):
     """rows: [{id, text}] → {id: {relevant, question, topic}}."""
     topics = ", ".join(f"{k}={label}" for k, label, _w in QUESTION_TOPICS)
-    system = ("유튜브 댓글이 숙취 · 숙취해소 제품과 관련 있는지(relevant), 구매 전 궁금증을 묻는 질문인지(question) 판단하고 "
-              f"질문이면 주제(topic)를 골라: {topics}, 그 밖의 질문=other, 질문이 아니면 none. "
-              "유튜버 칭찬 · 잡담 · 광고는 relevant=false.")
+    system = ("유튜브 댓글이 숙취해소 제품 · 해결책과 관련 있는지(relevant), 제품을 사기 전 궁금증을 묻는 질문인지(question) 판단하고 "
+              f"질문이면 주제(topic)를 골라: {topics}. 어느 주제에도 맞지 않으면 question=false, topic=none. "
+              "숙취 공감 · 한탄 · 농담('anyone else hungover?' 등), 유튜버 칭찬 · 잡담 · 광고는 relevant=false.")
     out = openai_json(system, {"comments": rows}, schema=COMMENT_SCHEMA, schema_name="voc", part=PART,
                       action="VOC(유튜브 댓글) 분류", max_tokens=4000)
     return {str(i["id"]): i for i in out.get("items") or []}
