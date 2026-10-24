@@ -19,7 +19,7 @@
     ['trends', '검색 수요'], ['accuracy', '정확도 검증']];
   const QUESTIONS = {
     shelf: '누가 얼마에, 무슨 말로 팔고 있나', competitors: '누구와 경쟁하고 있나', reviews: '고객은 무엇에 만족하고, 무엇에 실망하나',
-    audience: '사기 전에 무엇을 궁금해하나', trends: '언제 찾고, 왜 늘었나', accuracy: 'AI 분류를 믿어도 되나'
+    audience: '사기 전에 무엇을 궁금해하나', accuracy: 'AI 분류를 믿어도 되나'
   };
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
@@ -30,7 +30,6 @@
   const USE_LABEL = { serpapi: 'SerpApi', firecrawl: 'Firecrawl', youtube: 'YouTube', openai: 'OpenAI' };
   const USE_UNIT = { serpapi: '회', firecrawl: ' 크레딧', youtube: ' units', openai: '회' };
   const SERVING_SRC = { manual: '직접 수정', parsed: '문구에서 읽음', default: '확인 필요 (1회분으로 계산)' };
-  const LINE_COLORS = ['--lime-deep', '--blue', '--orange', '--purple', '--red', '--gray'];
 
   const $ = (el, sel) => (el ? el.querySelector(sel) : null);
   const $$ = (el, sel) => (el ? Array.from(el.querySelectorAll(sel)) : []);
@@ -52,7 +51,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', sub: 'shelf', weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, chart: null, loading: {}
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}
   };
   const panel = id => $(S.root, `[data-panel="${id}"]`);
   const skel = '<div class="skeleton ins-skel"></div>';
@@ -168,7 +167,6 @@
       case 'month': S.monthly = null; S.month = d.month; loadMonthly(d.month); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'upload-reviews': uploadCsv(b, 'reviews'); break;
-      case 'upload-trends': uploadCsv(b, 'trends'); break;
       case 'weee-raw': openWeeeRaw(); break;
       case 'reload-sub': loadData(S.sub); break;
       default: break;
@@ -462,10 +460,8 @@
   function drawSub(sub) {
     const body = $(panel('data'), '[data-ref="data-body"]');
     if (!body) return;
-    if (S.chart) { try { S.chart.destroy(); } catch (e) { /* 무시 */ } S.chart = null; }
     const d = S.data[sub];
     body.innerHTML = { shelf: shelfHtml, competitors: competitorsHtml, reviews: reviewsHtml, audience: audienceHtml, trends: trendsHtml }[sub](d);
-    if (sub === 'trends') drawChart(d);
   }
 
   function qHead(sub, oneLine, extra) {
@@ -891,69 +887,13 @@
   function trendsHtml(d) {
     const next = d.next.map(n => `<li><div class="between"><b>${esc(n.name)}</b><span class="flex">${n.opportunity ? badge('기회', 'green') : ''}<span class="small muted">${esc(fmt.dday(n.start))}</span></span></div>
       <small>${n.lift ? esc(`작년 같은 시기 '${n.lift.keyword}' 검색이 12개월 평균 대비 ${fmt.signed(n.lift.pct, 0, '%')} (${n.lift.date} 주)`) : '작년 같은 시기 데이터 없음'}</small></li>`).join('');
-    const spikes = d.spikes.map(s => `<li><div class="between"><b>${esc(s.keyword)}</b>${badge(fmt.signed(s.pct, 0, '%'), 'orange')}</div><small>${esc(s.date)} 주 · 지수 ${esc(s.value)} · ${esc(s.reason)}</small></li>`).join('');
-    const dates = Array.from(new Set(d.series.flatMap(s => s.points.map(p => p.date)))).sort();
-    const table = d.series.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>주 시작</th>${d.series.map(s => `<th class="num">${esc(s.keyword)}</th>`).join('')}</tr></thead>
-      <tbody>${dates.map(dt => `<tr><td>${esc(dt)}</td>${d.series.map(s => { const p = s.points.find(x => x.date === dt); return `<td class="num">${p ? esc(p.value) : '—'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`
-      : '<p class="small muted">없음</p>';
-    const upload = `<section class="card"><div class="card-head"><h2>Google Trends CSV 올리기</h2>${badge('SerpApi 키가 없을 때')}</div>
-      <p class="small muted">trends.google.com에서 키워드를 <b>하나씩</b> 조회(미국 · 지난 12개월)한 뒤 '내려받기'로 받은 CSV를 올리세요.</p>
-      <div class="flex wrap mt-16"><input type="file" accept=".csv,text/csv" data-ref="file-trends" aria-label="Google Trends CSV 파일"><button type="button" class="btn small lime" data-act="upload-trends">${icon('upload')}올리기</button></div></section>`;
-    const srcs = d.series.map(s => `${s.keyword} (${s.source === 'csv' ? 'CSV' : 'SerpApi'} · ${s.week})`).join(' · ');
-    return qHead('trends', d.oneLine) +
-      `<div class="grid-2 mt-24">
-        <section class="card"><div class="card-head"><h2>다음 급등 예상</h2><a class="link" href="/dashboard/settings#collect">시즌 편집 (설정)</a></div>${next ? `<ul class="ins-list">${next}</ul>` : '<p class="small muted">모니터링 중인 다가오는 시즌이 없어요.</p>'}</section>
-        <section class="card"><div class="card-head"><h2>지난 12개월 급등과 이유</h2>${badge('이유는 추정')}</div>${spikes ? `<ul class="ins-list">${spikes}</ul>` : '<p class="small muted">평균보다 30% 넘게 오른 주가 없거나 데이터가 없어요.</p>'}</section>
-      </div>
-      <section class="card mt-24"><div class="card-head"><h2>12개월 검색 추이</h2><span class="small muted">미국 · 키워드마다 따로 조회 (0~100)</span></div>
-        ${d.series.length ? `<div class="ins-chart"><canvas data-ref="chart" role="img" aria-label="키워드별 12개월 검색 추이"></canvas></div><p class="panel-note mt-8">${esc(srcs)}</p>`
-          : ui.empty('검색 트렌드 데이터가 없어요. 데이터 업데이트(SerpApi)나 아래 CSV 올리기로 채우세요.', 'chart')}
-      </section>
-      <div class="grid-2 mt-24">${upload}<section class="card"><h3>알아두세요</h3><p class="panel-note mt-8">키워드마다 따로 조회해서 키워드끼리 크기를 비교하면 안 돼요 (각자 최고점이 100). 급등 이유는 시즌 날짜로 붙인 추정이에요. 시즌은 설정 › 수집 설정에서만 편집해요.</p></section></div>` +
-      fold('trend-table', '숫자 표', table);
-  }
-
-  function cssVar(name, fallback) {
-    try {
-      const v = global.getComputedStyle(global.document.documentElement).getPropertyValue(name).trim();
-      return v || fallback;
-    } catch (e) { return fallback; }
-  }
-
-  function drawChart(d) {
-    const canvas = $(panel('data'), '[data-ref="chart"]');
-    if (!canvas || !global.Chart || !d.series.length) return;
-    const dates = Array.from(new Set(d.series.flatMap(s => s.points.map(p => p.date)))).sort();
-    const grid = cssVar('--line', '#e9ece4');
-    const text = cssVar('--muted', '#858981');
-    S.chart = new global.Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: dates,
-        datasets: d.series.map((s, i) => {
-          const color = cssVar(LINE_COLORS[i % LINE_COLORS.length], '#637c13');
-          const byDate = {};
-          s.points.forEach(p => { byDate[p.date] = p.value; });
-          return { label: s.keyword, data: dates.map(dt => (dt in byDate ? byDate[dt] : null)), borderColor: color, backgroundColor: color,
-            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.25, spanGaps: true };
-        })
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { color: text, boxWidth: 12 } } },
-        scales: {
-          x: { ticks: { color: text, maxTicksLimit: 12 }, grid: { color: grid } },
-          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: text }, grid: { color: grid } }
-        }
-      }
-    });
+    return `<section class="card"><div class="card-head"><h2>다음 급등 예상</h2><a class="link" href="/dashboard/settings#collect">시즌 편집 (설정)</a></div>${next ? `<ul class="ins-list">${next}</ul>` : '<p class="small muted">모니터링 중인 다가오는 시즌이 없어요.</p>'}</section>`;
   }
 
   /* 정확도 검증 (자리만 · README '정확도 검증') */
   function drawAccuracy() {
     const body = $(panel('data'), '[data-ref="data-body"]');
     if (!body) return;
-    if (S.chart) { try { S.chart.destroy(); } catch (e) { /* 무시 */ } S.chart = null; }
     body.innerHTML = qHead('accuracy', '아직 검증 전이에요. 지금 분류는 규칙(단어 · 별점) 또는 AI 결과이고, 둘 다 사람 확인이 필요해요.') + `
       <div class="workbench mt-24">
         <section class="card">
@@ -969,7 +909,7 @@
       </div>`;
   }
 
-  /* CSV 올리기 (Weee! 리뷰 · Google Trends) */
+  /* CSV 올리기 (Weee! 리뷰) */
   async function uploadCsv(btn, kind) {
     const input = $(panel('data'), `[data-ref="file-${kind}"]`);
     const f = input && input.files && input.files[0];
@@ -979,9 +919,8 @@
     try {
       const csv = (await f.text()).replace(/^﻿/, '');
       const r = await api(`/api/insights/${kind}/upload`, { csv });
-      toast(kind === 'reviews' ? `리뷰 ${r.rows}줄 중 새 리뷰 ${r.added}개를 넣었어요.` : `키워드 ${r.keywords.length}개 (${r.keywords.join(', ')})를 넣었어요.`);
+      toast(`리뷰 ${r.rows}줄 중 새 리뷰 ${r.added}개를 넣었어요.`);
       S.data = {};
-      trendP = null;
       loadData(kind);
       loadWeekly();
     } catch (e) {
