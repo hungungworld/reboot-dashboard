@@ -57,7 +57,7 @@ class ServingOverride(db.Model):
 
 
 class Review(db.Model):
-    """구매자 리뷰 (Amazon 대표 리뷰 · Olive Young · Yami · Weee! CSV). 작성자 이름은 저장하지 않음."""
+    """구매자 리뷰 (Amazon 대표 리뷰 · Olive Young · Yami · Weee!). 작성자 이름은 저장하지 않음."""
     __tablename__ = "insights_reviews"
 
     id = db.Column(db.Integer, primary_key=True)

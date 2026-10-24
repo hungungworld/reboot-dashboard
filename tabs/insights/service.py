@@ -12,7 +12,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import channel_reviews, competitors, lines, rules
+from . import channel_reviews, competitors, lines, rules, slack
 from .classify import QUESTION_LABEL, TOPICS, expressions
 from .models import (Comment, Competitor, Monthly, Review, ReviewCS, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get,
                      load_json)
@@ -486,7 +486,6 @@ def monthly_view(month=None, t=None):
     watch_first = sorted([x for col in comp["columns"].values() for x in col], key=lambda x: (not x["watched"], -x["score"]))
     rule_comp = [f"{x['brand']}: {x['reason']}" for x in watch_first[:3]]
     prev_row = _monthly_row(prev_month(month))
-    creators = audience_view(month).get("creators", []) if Video.query.filter_by(month=month).first() else []
     return {
         "month": month, "label": f"{int(month[:4])}년 {int(month[5:])}월", "isPrevMonth": month != month_key(t),
         "metrics": metrics, "ai": bool(row), "aiReady": insights_ai.ready(),
@@ -495,7 +494,7 @@ def monthly_view(month=None, t=None):
         "insights": data.get("insights") or rule_insights, "insightsAi": bool(data.get("insights")),
         "competitorTrends": data.get("competitor_trends") or rule_comp, "competitorAi": bool(data.get("competitor_trends")),
         "strategy": {k: data.get(k) for k in ("changes", "personas", "swot", "target", "positioning")} if row else None,
-        "prevStrategy": bool(prev_row), "creators": creators[:5],
+        "prevStrategy": bool(prev_row),
         "questions": q, "expressions": ex,
     }
 
@@ -719,12 +718,16 @@ def reviews_view():
     if rows:
         neg = Counter(t for r in rows if r.sentiment == "-" for t in r.topic_list())
         pos = Counter(t for r in rows if r.sentiment == "+" for t in r.topic_list())
-        one = f"리뷰 {len(rows)}개 (Amazon 대표 리뷰 · Olive Young · Yami · Weee! CSV)"
+        one = f"리뷰 {len(rows)}개 (Amazon 대표 리뷰 · Olive Young · Yami · Weee!)"
         if pos:
             one += f" · 칭찬 1위 {pos.most_common(1)[0][0]}"
         if neg:
             one += f" · 불만 1위 {neg.most_common(1)[0][0]}"
     cs = _cs_items(rows)
+    shared = slack.shared_map()
+    for x in items + cs:  # 슬랙으로 보낸 리뷰 (누가 · 언제)
+        s = shared.get(str(x["id"])) or {}
+        x["slackBy"], x["slackAt"] = s.get("by", ""), s.get("at")
     return {"oneLine": one, "table": table, "topics": list(TOPICS), "items": items, "summaries": summaries,
             "cs": cs, "csStatus": list(CS_STATUS.items()), "lines": list(channel_reviews.LINES), "channels": _channel_stats(),
             "stats": {"total": len(rows), "amazon": sum(1 for r in rows if r.source == "amazon"),
@@ -733,7 +736,7 @@ def reviews_view():
                       "weee": sum(1 for r in rows if r.source == "weee"), "own": sum(1 for r in rows if r.own),
                       "csTodo": sum(1 for x in cs if x["cs"] == "todo"),
                       "ai": sum(1 for r in rows if r.classified_by == "ai")},
-            "new7d": _new_reviews()["count"]}
+            "new7d": _new_reviews()["count"], "slackReady": slack.ready()}
 
 
 # ───────── 유튜브 댓글 ─────────

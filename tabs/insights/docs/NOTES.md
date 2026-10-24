@@ -8,11 +8,11 @@ README의 '3번째 대시보드'(주간 리뷰 · 월간 리뷰 · 데이터)를
 - 위: KPI 4칸(이번 주 액션 · 진열대 상품 · 새 리뷰 7일 · 다음 시즌, 데이터 탭에서는 숨김) → 탭 → 2단. 오른쪽 위: **데이터 업데이트** + 탭별 내려받기
 - 주소: `#weekly` · `#monthly` · `#data/shelf|competitors|reviews|audience|trends|accuracy` (설정의 규칙 카드가 `#data/shelf`로 연결)
 - **주간 리뷰**: 이번 주 액션(긴급 빨강 · 기회 초록 · 참고 파랑, 사실 → 왜 중요한가 → 할 일) · '규칙에 걸린 신호 보기'(규칙 · 사실 값 · AI가 다듬기 전 문장) · 진열대 변화 · 새 리뷰 · 마지막 업데이트. 신호가 없으면 '특이사항 없음'
-- **월간 리뷰**: 1~7일에는 지난달. 지표 4개 · 이달의 요약(AI 3줄) · 고객 인사이트(펼치면 FAQ · 고객 표현 · 크리에이터 · 분류 정확도) · 경쟁사 동향 · 전략 업데이트(바뀐 점 · 페르소나 ≤3 · SWOT · 타깃 · 포지셔닝). AI가 없으면 규칙 요약 + 빈 상태 안내. 이전/다음 달 이동
+- **월간 리뷰**: 1~7일에는 지난달. 지표 4개 · 이달의 요약(AI 3줄) · 고객 인사이트(펼치면 FAQ · 고객 표현 · 분류 정확도) · 경쟁사 동향 · 전략 업데이트(바뀐 점 · 페르소나 ≤3 · SWOT · 타깃 · 포지셔닝). AI가 없으면 규칙 요약 + 빈 상태 안내. 이전/다음 달 이동
 - **데이터**: 탭마다 '질문 → 한 줄 정리 → 핵심 → 접어둔 원본'
   - 진열대: 1회분 단가 3구간 카드(자사 초록 · 주시 ★ · 품절 빨강 · 가격 변동/신규 배지) → 누르면 가격 계산 · 재고 · 판매 신호 · 판매 문구(원문). '표로 보기'에서 수집 버튼 · 가격 · 회분 · 재고 · 자사 표시를 바로 고침, Weee! 원문 보기
   - 경쟁사: 이번 주 경쟁사 변화 → 경쟁사 비교 표(알디콤 행 맨 위 · 채널 칩 필터 · 판매 채널 · 1회분 · 제형 · 핵심 메시지 · 주력 성분 · 칭찬/불만 · 유튜브) → 행을 누르면 브랜드 카드(분석 6칸 · 출처 링크 · 고객 반응 · 진열대 상품 · 다시 조사 · 주시 · 보관 · 홈페이지 고치기) → 대체재 · 보관함 접기. 신호 3개(같은 판매처 · 고객 언급 · 가격대 비슷)는 Excel '경쟁사 후보·점수' 시트에 남김
-  - 구매자 리뷰: 브랜드 × (효과 · 맛·향 · 복용 편의 · 부작용 · 가격) 표, +칭찬/−불만을 누르면 리뷰(AI 한국어 요약이 있으면 함께), 아마존 리뷰 요약(원문), Weee! 리뷰 CSV 올리기 · 양식
+  - 구매자 리뷰: 브랜드 × (효과 · 맛·향 · 복용 편의 · 부작용 · 가격) 표, +칭찬/−불만을 누르면 리뷰(AI 한국어 요약이 있으면 함께), 아마존 리뷰 요약(원문)
   - 유튜브 댓글: 사기 전에 묻는 것(질문 주제 순위 막대) · 협업 후보 크리에이터 Top 5, 댓글 원문 · 자주 쓰는 표현 · 수집 과정은 접기
   - 검색 수요: 2026-10-25 삭제 → 다음 급등 예상은 홈 › 콘텐츠 캘린더 맨 아래(접기)로 옮김. 수집 · `/api/insights/data/trends`는 그대로
   - 정확도 검증: 방법 설명 자리 (사람 정답 30건 → 규칙 / AI 예시 없이 / AI 예시 포함 채점 → 이긴 방식) — 아직 구현 안 함
@@ -26,7 +26,8 @@ README의 '3번째 대시보드'(주간 리뷰 · 월간 리뷰 · 데이터)를
 |---|---|
 | `amazon.py` | SerpApi `engine=amazon` 검색(광고 제외 · 검색어마다 상위 8) + `engine=amazon_product` 상세(리뷰 많은 순 N개 + 추적 ASIN): 재고 · 브랜드 · 불릿 · 대표 리뷰 · 리뷰 요약 |
 | `trends.py` | SerpApi `engine=google_trends` (미국 · `today 12-m` · TIMESERIES) 키워드마다 따로 · Google Trends CSV 읽기 |
-| `weee.py` | Firecrawl `v1/scrape`(markdown) → 상품 주소 · 바로 뒤 첫 `$가격` · Sold out. 상품 페이지 주소면 제목 · 가격 · 설명 앞부분. 원문 앞부분 저장 |
+| `weee.py` | Firecrawl `v1/scrape`(markdown) → 상품 주소 · 바로 뒤 첫 `$가격` · Sold out. 상품 페이지 주소면 제목 · 가격 · 설명 앞부분. 원문 앞부분 저장. 이어서 상품마다 공개 리뷰 페이지의 'Reviews (N)'을 보고 N이 있으면 JSON 추출로 리뷰 저장 (api.weee.com은 robots.txt `*/api/` 금지라 안 씀) |
+| `slack.py` | 리뷰 카드 › 슬랙으로 보내기. Incoming Webhook(`SLACK_WEBHOOK_URL`)에 `{text}` 한 번. 미리 보기와 같은 글을 서버가 만듦(작성자 이름 없음 · `&<>` 바꿈 · 원문 600자). 보낸 기록 kv `slack_shared`. 웹훅 주소는 응답 · 로그에 안 남김 |
 | `youtube.py` | search(100 units) → videos 통계(조회수 기준) → commentThreads(영상당 1 unit · 댓글 꺼진 영상은 건너뜀) |
 | `classify.py` | 규칙 분류: 리뷰 주제 · 칭찬/불만(별점 우선), 댓글 관련 여부 · 질문 주제, 자주 쓰는 표현(2~3단어) |
 | `rules.py` | 이번 주 액션 규칙 6개 (README 그대로 · 순수 함수 · 테스트 대상) |
@@ -37,7 +38,7 @@ README의 '3번째 대시보드'(주간 리뷰 · 월간 리뷰 · 데이터)를
 | `update.py` | 데이터 업데이트: 항목 · 비용 · 이번 달 사용량 · `jobs.run_background` 실행 · 진행 기록(`insights_runs`) |
 | `reports.py` | 주간 Word(1장) · 월간 Word · 데이터 Excel(진열대(주차별) · 구매자 리뷰 · VOC · 검색 트렌드 · 경쟁사 후보·점수 · 경쟁사 분석 · 이번 주 액션 · 작업 로그) |
 
-API는 `routes.py` 맨 위 설명을 보세요. 주요: `GET /api/insights/weekly` · `/monthly` · `/data/<탭>` · `PATCH /shelf/<id>` · `PUT /servings` · `PUT /watch` · `POST /competitors/discover` · `/competitors/<id>/research` · `/competitors/research-all` · `PATCH /competitors/<id>` · `GET /competitors.csv` · `.json` · `POST /reviews/upload` · `POST /trends/upload` · `GET /update/plan` · `POST /update` · `GET /update/status` · `GET /report/weekly.docx` · `/report/monthly.docx` · `/export.xlsx` · `/trends` · `/personas`.
+API는 `routes.py` 맨 위 설명을 보세요. 주요: `GET /api/insights/weekly` · `/monthly` · `/data/<탭>` · `PATCH /shelf/<id>` · `PUT /servings` · `PUT /watch` · `POST /competitors/discover` · `/competitors/<id>/research` · `/competitors/research-all` · `PATCH /competitors/<id>` · `GET /competitors.csv` · `.json` · `POST /reviews/<id>/slack` · `POST /trends/upload` · `GET /update/plan` · `POST /update` · `GET /update/status` · `GET /report/weekly.docx` · `/report/monthly.docx` · `/export.xlsx` · `/trends` · `/personas`.
 
 ### 1회분 단가
 
@@ -54,11 +55,11 @@ API는 `routes.py` 맨 위 설명을 보세요. 주요: `GET /api/insights/weekl
 
 ## 테스트
 
-`tabs/insights/tests/test_insights.py` — 1회분 단가 파서 · 구간 · 규칙 엔진(고정 데이터) · 빈 상태 · 업데이트 계획(키 없음) · 가짜 응답으로 전체 업데이트(광고 · 해장국 제외, 같은 ASIN 한 번, 키워드마다 따로, 자사 품절 + 시즌 → 긴급 등) · 잘못된 키 · 실행 중 거절 · 2주차 가격 변동/신규 · 회분/가격/재고/자사 수정 · 주시 · CSV 올리기 · 가짜 OpenAI로 문장 다듬기 · 캐시 · 월간 · 페르소나 · Word/Excel.
+`tabs/insights/tests/test_insights.py` — 1회분 단가 파서 · 구간 · 규칙 엔진(고정 데이터) · 빈 상태 · 업데이트 계획(키 없음) · 가짜 응답으로 전체 업데이트(광고 · 해장국 제외, 같은 ASIN 한 번, 키워드마다 따로, 자사 품절 + 시즌 → 긴급 등) · 잘못된 키 · 실행 중 거절 · 2주차 가격 변동/신규 · 회분/가격/재고/자사 수정 · 주시 · Weee! 리뷰 수 · 트렌드 CSV 올리기 · 가짜 OpenAI로 문장 다듬기 · 캐시 · 월간 · 페르소나 · Word/Excel.
 
 ## 실제 키 · 인터넷으로는 확인하지 못한 것
 
-- SerpApi Amazon 상품(`amazon_product`) 응답의 재고 · 리뷰 이름(여러 후보 이름을 차례로 확인하도록 만듦), Google Trends 응답, Firecrawl이 Weee! 페이지를 마크다운으로 바꾼 실제 모양(가장 불안정 — 원문 보기 · 표에서 고치기로 보완), YouTube 응답, 실제 OpenAI 응답 품질.
+- SerpApi Amazon 상품(`amazon_product`) 응답의 재고 · 리뷰 이름(여러 후보 이름을 차례로 확인하도록 만듦), Google Trends 응답, Firecrawl이 Weee! 페이지를 마크다운으로 바꾼 실제 모양(가장 불안정 — 원문 보기 · 표에서 고치기로 보완), Weee! 리뷰 페이지의 'Reviews (N)' 마크다운과 JSON 추출 결과(브라우저로만 확인), YouTube 응답, 실제 OpenAI 응답 품질.
 - Weee! 기본 주소(`/en/search?keyword=hangover`)가 실제로 숙취 상품 목록을 보여주는지.
 
 ## 알려진 한계 · 가정

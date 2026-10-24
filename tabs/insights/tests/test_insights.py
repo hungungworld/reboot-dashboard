@@ -135,6 +135,14 @@ def fake_net(monkeypatch):
         calls.append(("POST", url, dict(json or {})))
         if "firecrawl.dev" in url:
             assert headers["Authorization"].startswith("Bearer ")
+            page = (json or {}).get("url", "")
+            if "/social/review/more/12345" in page:  # Condition만 리뷰 1개 (Aldicom은 0개)
+                if "json" in json["formats"]:
+                    return FakeRes(200, {"success": True, "data": {"json": {"reviews": [
+                        {"rating": 5, "date": "Oct 17, 2026", "text": "Works great, no headache next morning"}]}}})
+                return FakeRes(200, {"success": True, "data": {"markdown": "# Reviews (1)\n\nKimi\nVerified Buyer\nWorks great"}})
+            if "/social/review/more/" in page:
+                return FakeRes(200, {"success": True, "data": {"markdown": "# Reviews (0)\n\nPost a review"}})
             return FakeRes(200, {"success": True, "data": {"markdown": WEEE_MD}})
         raise AssertionError(f"예상하지 못한 호출: {url}")
 
@@ -363,13 +371,13 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
     run = st["run"]
     assert run["status"] == "done", run["results"]
     assert set(run["results"]) == set(items)
-    assert run["usage"]["serpapi"] >= 2 + 2 and run["usage"]["firecrawl"] == 1 and run["usage"]["youtube"] == 100 + 1 + 1
+    assert run["usage"]["serpapi"] >= 2 + 2 and run["usage"]["firecrawl"] == 1 + 2 + 5 and run["usage"]["youtube"] == 100 + 1 + 1
     # 키가 결과 · 로그에 남지 않음
     logs = auth_client.get("/api/worklog?part=insights").get_json()["items"]
     dumped = json.dumps(logs, ensure_ascii=False) + json.dumps(st, ensure_ascii=False)
     assert "serp-test-key" not in dumped and "fc-test-key" not in dumped and "AIza-test-key" not in dumped
     kinds = {(i["kind"], i["action"]) for i in logs}
-    assert ("수집", "Amazon 진열대 · 리뷰 수집") in kinds and ("수집", "Weee! 진열대 수집") in kinds
+    assert ("수집", "Amazon 진열대 · 리뷰 수집") in kinds and ("수집", "Weee! 진열대 · 리뷰 수집") in kinds
     assert ("승인 · 선정", "이번 주 액션 선정 (규칙)") in kinds
     # 광고 제외 · soup 제외 · 같은 ASIN은 한 번
     amazon_calls = [c for c in fake_net if c[0] == "GET" and c[2].get("engine") == "amazon"]
@@ -390,6 +398,12 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
     assert {x["title"] for x in weee} == {"Condition Hangover Drink 100ml x 10", "Aldicom Hangover Jelly 1 pack*5 pack"}
     wo = next(x for x in weee if x["own"])
     assert wo["price"] == 12.99 and wo["in_stock"] is False
+    # Weee! 리뷰: 리뷰 페이지마다 수를 보고, 있는 상품만 JSON 추출 · 작성자 이름은 저장 안 함
+    rv = auth_client.get("/api/insights/data/reviews").get_json()
+    wr = [r for r in rv["items"] if r["source"] == "weee"]
+    assert len(wr) == 1 and wr[0]["sourceLabel"] == "Weee!" and wr[0]["rating"] == 5 and "Kimi" not in json.dumps(wr)
+    review_pages = [c[2] for c in fake_net if c[0] == "POST" and "/social/review/more/" in c[2].get("url", "")]
+    assert sorted(p["formats"][0] for p in review_pages) == ["json", "markdown", "markdown"]
     flyby = next(x for x in shelf["items"] if x["key"] == "amazon:B0COMP0001")
     assert flyby["brand"] == "Flyby" and flyby["detailed"] and flyby["in_stock"] is True
 
@@ -516,25 +530,65 @@ def test_watch_toggle_marks_competitor(app, auth_client, fixed_today):
     assert auth_client.put("/api/insights/watch", json={"brand": ""}).status_code == 400
 
 
-# ───────── CSV 올리기 ─────────
+# ───────── 구매자 리뷰 표 · CSV 올리기 ─────────
 
-def test_weee_review_csv_upload(auth_client):
-    csv_text = "제품,브랜드,별점,날짜,제목,내용,자사\n" \
-               "Aldicom Jelly,Aldicom,2,2026-10-01,,The taste is too sweet,Y\n" \
-               "Condition Drink,Condition,5,2026-10-02,Great,Works great and easy to carry,N\n"
-    res = auth_client.post("/api/insights/reviews/upload", json={"csv": csv_text})
-    assert res.status_code == 200 and res.get_json()["added"] == 2
-    assert auth_client.post("/api/insights/reviews/upload", json={"csv": csv_text}).get_json()["added"] == 0  # 같은 리뷰는 한 번
+def test_review_table_rule_topics(app, auth_client):
+    from tabs.insights import store
+    rows = [{"source": "weee", "product_key": "weee:1", "product_title": "Aldicom Jelly", "brand": "Aldicom", "rating": 2.0,
+             "date_text": "Oct 1, 2026", "title": "", "text": "The taste is too sweet", "own": True},
+            {"source": "weee", "product_key": "weee:2", "product_title": "Condition Drink", "brand": "Condition", "rating": 5.0,
+             "date_text": "Oct 2, 2026", "title": "Great", "text": "Works great and easy to carry", "own": False}]
+    with app.app_context():
+        assert store.save_reviews(rows, "2026-W43") == 2
+        assert store.save_reviews(rows, "2026-W43") == 0  # 같은 리뷰는 한 번
     rv = auth_client.get("/api/insights/data/reviews").get_json()
     own = next(b for b in rv["table"] if b["own"])
     assert own["topics"]["맛·향"]["neg"] == 1
     cond = next(b for b in rv["table"] if b["brand"] == "Condition")
     assert cond["topics"]["효과"]["pos"] == 1 and cond["topics"]["복용 편의"]["pos"] == 1
-    bad = auth_client.post("/api/insights/reviews/upload", json={"csv": "product,rating,text\nx,9,hello\n"})
-    assert bad.status_code == 400 and "별점" in bad.get_json()["error"]
-    assert auth_client.post("/api/insights/reviews/upload", json={"csv": "a,b\n1,2\n"}).status_code == 400
-    tpl = auth_client.get("/api/insights/templates/weee-reviews.csv")
-    assert tpl.status_code == 200 and "product,brand,rating" in tpl.get_data(as_text=True)
+    # Weee! 리뷰 CSV 올리기는 없앰 (Weee! 리뷰는 진열대 수집 때 자동으로)
+    assert auth_client.post("/api/insights/reviews/upload", json={"csv": "text\nx\n"}).status_code in (404, 405)
+    assert auth_client.get("/api/insights/templates/weee-reviews.csv").status_code == 404
+
+
+def test_review_slack_share(app, auth_client, monkeypatch):
+    """미리 보기는 보내지 않음 · 키 없음/모양 틀림은 안내 · 보내면 기록 · 웹훅 주소는 응답 · 로그에 안 남음."""
+    from tabs.insights import store
+    from tabs.insights.models import Review
+    with app.app_context():
+        store.save_reviews([{"source": "amazon", "product_key": "amazon:A1", "product_title": "ALDICOM A Liquid 5-Pack", "rating": 2.0,
+                             "date_text": "Oct 1, 2026", "text": "Too pricey <b>& sweet</b>", "own": True}], "2026-W43")
+        rid = Review.query.first().id
+    sent = []
+
+    class Res:
+        status_code = 200
+    monkeypatch.setattr(http, "post", lambda url, json=None, headers=None, timeout=90: sent.append((url, json)) or Res())
+    url = f"/api/insights/reviews/{rid}/slack"
+    pv = auth_client.post(url, json={"preview": True}).get_json()
+    assert pv["ready"] is False and "*[알디콤 A · Amazon]* ★★☆☆☆ 불만" in pv["text"] and "&lt;b&gt;&amp; sweet" in pv["text"]
+    assert "대응: 대응 필요" in pv["text"] and sent == []
+    res = auth_client.post(url, json={"note": "논의 필요"})
+    assert res.status_code == 400 and "SLACK_WEBHOOK_URL" in res.get_json()["error"]
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://example.com/hook")
+    assert "모양" in auth_client.post(url, json={}).get_json()["error"] and sent == []
+    hook = "https://hooks.slack.com/services/T000/B000/secretTEST1234"
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", hook)
+    res = auth_client.post(url, json={"note": "논의 필요"})
+    assert res.status_code == 200 and res.get_json()["slackBy"]
+    assert sent[0][0] == hook and "💬" in sent[0][1]["text"] and "논의 필요" in sent[0][1]["text"]
+    rv = auth_client.get("/api/insights/data/reviews").get_json()
+    assert rv["slackReady"] and rv["cs"][0]["slackBy"] and rv["items"][0]["slackAt"]
+    logs = json.dumps(auth_client.get("/api/worklog?part=insights").get_json(), ensure_ascii=False)
+    assert "리뷰 슬랙 보내기" in logs and "secretTEST1234" not in logs and "secretTEST1234" not in res.get_data(as_text=True)
+    Res.status_code = 404
+    assert "거절" in auth_client.post(url, json={}).get_json()["error"]
+
+
+def test_weee_review_count():
+    from tabs.insights.weee import review_count
+    assert review_count("# Reviews (1,506)\n\nBased on") == 1506
+    assert review_count("[Back](x)\n\nReviews (0)") == 0 and review_count("no header") is None
 
 
 def test_trends_csv_upload(auth_client):
@@ -573,7 +627,10 @@ def test_ai_rewrite_and_monthly_with_mocked_openai(app, auth_client, monkeypatch
         raise AssertionError(schema_name)
 
     monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
-    auth_client.post("/api/insights/reviews/upload", json={"csv": "product,rating,text\nX,2,too pricey for me\n"})
+    from tabs.insights import store
+    with app.app_context():
+        store.save_reviews([{"source": "weee", "product_key": "weee:X", "product_title": "X", "rating": 2.0,
+                             "text": "too pricey for me"}], week_key(service.today()))
     res = auth_client.post("/api/insights/update", json={"items": ["reviews", "actions", "monthly"]})
     assert res.status_code == 202
     run = auth_client.get("/api/insights/update/status").get_json()["run"]
