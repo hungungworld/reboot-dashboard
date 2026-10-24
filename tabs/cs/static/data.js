@@ -201,32 +201,33 @@
       rfrHours: 24            // 보고 대상으로 판단한 시점부터
     },
 
-    // 시연·테스트용 가짜 문의. 실제 고객 정보는 넣지 않습니다. expect는 분류 테스트용.
+    // 시연·테스트용 가짜 문의. 이름은 지어낸 흔한 미국식 이름이고 주소는 예시용 도메인(example.com)이라 실제 고객 정보가 아닙니다.
+    // legacy: 예전 id(TEST-NN) — 이미 저장된 더미 문의를 새 이름으로 바꿀 때 씀 (cs.js load). expect는 분류 테스트용.
     dummyInquiries: [
-      { id: 'TEST-01', expect: 'C1', hoursAgo: 0.4, name: 'Test Customer 01', from: 'test01@example.com', orderNo: 'TEST-1001',
+      { id: 'CS-24101', legacy: 'TEST-01', expect: 'C1', hoursAgo: 0.4, name: 'Lauren Mitchell', from: 'lauren.mitchell@example.com', orderNo: 'RB-241001',
         subject: 'Itchy spots after the jelly stick', body: 'I had one stick last night and this morning I have red, itchy spots on my arms. Is this an allergic reaction?' },
-      { id: 'TEST-02', expect: 'C1', hoursAgo: 2, name: 'Test Customer 02', from: 'test02@example.com', orderNo: 'TEST-1002',
+      { id: 'CS-24102', legacy: 'TEST-02', expect: 'C1', hoursAgo: 2, name: 'Kevin Park', from: 'kevin.park@example.com', orderNo: 'RB-241002',
         subject: 'Went to the ER', body: 'My partner felt dizzy and threw up after having two sticks, so we went to the emergency room. What is in this product?' },
-      { id: 'TEST-03', expect: 'C2', hoursAgo: 3, name: 'Test Customer 03', from: 'test03@example.com', orderNo: '',
+      { id: 'CS-24103', legacy: 'TEST-03', expect: 'C2', hoursAgo: 3, name: 'Megan Foster', from: 'megan.foster@example.com', orderNo: '',
         subject: 'Question before buying', body: "I'm 5 months pregnant. Is it okay to have these?" },
-      { id: 'TEST-04', expect: 'C3', hoursAgo: 20, name: 'Test Customer 04', from: 'test04@example.com', orderNo: 'TEST-1004',
+      { id: 'CS-24104', legacy: 'TEST-04', expect: 'C3', hoursAgo: 20, name: 'Tyler Brooks', from: 'tyler.brooks@example.com', orderNo: 'RB-241004',
         subject: 'Refund request', body: "I'd like to send back my unopened box and get a refund." },
-      { id: 'TEST-05', expect: 'C4', hoursAgo: 30, name: 'Test Customer 05', from: 'test05@example.com', orderNo: 'TEST-1005',
+      { id: 'CS-24105', legacy: 'TEST-05', expect: 'C4', hoursAgo: 30, name: 'Rachel Simmons', from: 'rachel.simmons@example.com', orderNo: 'RB-241005',
         subject: 'Box arrived leaking', body: 'Two of the sticks were leaking and the box was damaged.' },
-      { id: 'TEST-06', expect: 'C5', hoursAgo: 5, name: 'Test Customer 06', from: 'test06@example.com', orderNo: 'TEST-1006',
-        tracking: 'TEST-TRK-1006', eta: 'Oct 27',
+      { id: 'CS-24106', legacy: 'TEST-06', expect: 'C5', hoursAgo: 5, name: 'Brandon Hughes', from: 'brandon.hughes@example.com', orderNo: 'RB-241006',
+        tracking: 'RBX-48210-US', eta: 'Oct 27',
         subject: 'Where is my order?', body: "I ordered last week and still haven't received it." },
-      { id: 'TEST-07', expect: 'C6', hoursAgo: 8, name: 'Test Customer 07', from: 'test07@example.com', orderNo: '',
+      { id: 'CS-24107', legacy: 'TEST-07', expect: 'C6', hoursAgo: 8, name: 'Natalie Rivera', from: 'natalie.rivera@example.com', orderNo: '',
         subject: 'Flavor and allergens', body: 'What flavor is it, and does it contain nuts or gluten?' },
-      { id: 'TEST-08', expect: 'C7', hoursAgo: 12, name: 'Test Customer 08', from: 'test08@example.com', orderNo: '',
+      { id: 'CS-24108', legacy: 'TEST-08', expect: 'C7', hoursAgo: 12, name: 'Jordan Bennett', from: 'jordan.bennett@example.com', orderNo: '',
         subject: 'First order', body: 'Is there a discount for first orders? My code did not go through.' },
-      { id: 'TEST-09', expect: 'C8', hoursAgo: 26, name: 'Test Customer 09', from: 'test09@example.com', orderNo: 'TEST-1009',
+      { id: 'CS-24109', legacy: 'TEST-09', expect: 'C8', hoursAgo: 26, name: 'Samantha Price', from: 'samantha.price@example.com', orderNo: 'RB-241009',
         subject: 'Not happy', body: 'Tastes terrible. Worst purchase this month.' },
-      { id: 'TEST-10', expect: 'C9', hoursAgo: 6, name: 'Test Customer 10', from: 'test10@example.com', orderNo: '',
+      { id: 'CS-24110', legacy: 'TEST-10', expect: 'C9', hoursAgo: 6, name: 'Daniel Cho', from: 'daniel.cho@example.com', orderNo: '',
         subject: 'Wholesale inquiry', body: 'We run a few convenience stores in LA and are interested in wholesale pricing and your MOQ.' },
-      { id: 'TEST-11', expect: 'C10', hoursAgo: 40, name: 'Test Customer 11', from: 'test11@example.com', orderNo: '',
+      { id: 'CS-24111', legacy: 'TEST-11', expect: 'C10', hoursAgo: 40, name: 'Ashley Morgan', from: 'ashley.morgan@example.com', orderNo: '',
         subject: 'Hello from a creator', body: "I'm a creator with 80k followers and would love to collaborate." },
-      { id: 'TEST-12', expect: 'C10', hoursAgo: 1, name: 'Test Customer 12', from: 'test12@example.com', orderNo: '',
+      { id: 'CS-24112', legacy: 'TEST-12', expect: 'C10', hoursAgo: 1, name: 'Ethan Collins', from: 'ethan.collins@example.com', orderNo: '',
         subject: 'Question', body: 'Hi, I have a quick question about your company. Who should I contact?' }
     ]
   };

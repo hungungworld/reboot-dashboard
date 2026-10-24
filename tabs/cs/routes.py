@@ -2,6 +2,8 @@
 
   GET  /api/cs/gmail/inquiries   GMAIL_QUERY에 맞는 문의 (최대 50건)
   POST /api/cs/gmail/draft       {message_id, body} → Gmail 답장 초안 ([확인 필요]가 남으면 거절)
+  POST /api/cs/gmail/preview     {message_id} → 보내기 전 받는 사람·제목 확인 (보내지 않음)
+  POST /api/cs/gmail/send        {message_id, body, approved_by, verdict} → 승인된 답장을 바로 보냄 (BLOCK·[확인 필요]·미승인은 거절)
   POST /api/cs/ai-draft          {persona, inquiry, current, facts, banned} → 페르소나로 다듬은 영문 초안
   GET  /api/cs/gmail/status      Gmail 로그인 상태 (연결된 주소)
   GET  /api/cs/gmail/connect     Google 로그인 시작 (웹 · GOOGLE_CLIENT_ID/SECRET 필요)
@@ -14,6 +16,7 @@ import re
 from flask import Blueprint, abort, current_app, jsonify, redirect, request, session, url_for
 
 from server import envkeys, worklog
+from server.extensions import limiter
 from server.security import ApiError, clip, json_body
 
 bp = Blueprint("cs", __name__, url_prefix="/api/cs")
@@ -63,6 +66,55 @@ def gmail_draft():
         raise ApiError(f"Gmail 초안 만들기 실패: {type(e).__name__}", 502)
     worklog.add("cs", "승인 · 선정", "Gmail 답장 초안 생성", approval=None, detail={"draft_id": draft_id})
     return jsonify(draft_id=draft_id)
+
+
+def _gmail_input(data):
+    message_id = str(data.get("message_id", ""))
+    if not GMAIL_ID.match(message_id):
+        raise ApiError("Gmail 문의 번호가 올바르지 않습니다.")
+    return message_id
+
+
+@bp.post("/gmail/preview")
+def gmail_preview():
+    """보내기 전 확인: 받는 사람·제목 (보내지 않음)."""
+    from . import gmail
+    message_id = _gmail_input(json_body(max_bytes=4 * 1024))
+    try:
+        out = gmail.reply_preview(gmail.service(interactive=False), message_id)
+    except gmail.LoginRequired as e:
+        raise ApiError(str(e), 401)
+    except Exception as e:
+        raise ApiError(f"Gmail 확인 실패: {type(e).__name__}", 502)
+    return jsonify(to=clip(out["to"], 300), subject=clip(out["subject"], 300))
+
+
+@bp.post("/gmail/send")
+@limiter.limit("20 per minute", methods=["POST"], error_message="보내기 요청이 너무 많습니다. 1분 뒤 다시 시도하세요.")
+def gmail_send():
+    """최종 승인된 답장을 Gmail로 바로 보냄. 화면 검사와 별도로 서버도 막음:
+    승인자·승인 판정이 없거나, 승인 판정이 BLOCK이거나, [확인 필요] 빈칸이 남았으면 거절."""
+    from . import gmail
+    data = json_body(max_bytes=64 * 1024)
+    message_id = _gmail_input(data)
+    body = str(data.get("body", ""))
+    approved_by, verdict = clip(data.get("approved_by"), 60).strip(), clip(data.get("verdict"), 8)
+    if not body.strip() or len(body) > 20000:
+        raise ApiError("답장 내용이 비었거나 너무 깁니다.")
+    if TODO.search(body):
+        raise ApiError("[확인 필요] 빈칸이 남아 있어 보낼 수 없습니다.")
+    if not approved_by or verdict not in ("PASS", "REVISE", "REVIEW", "COND"):
+        raise ApiError("최종 승인된 답장만 보낼 수 있습니다 (승인자·재검사 판정 필요 · BLOCK은 보낼 수 없음).")
+    try:
+        svc = gmail.service(interactive=False)
+        sent_id, to = gmail.send_reply(svc, message_id, body)
+    except gmail.LoginRequired as e:
+        raise ApiError(str(e), 401)
+    except Exception as e:
+        raise ApiError(f"Gmail 보내기 실패: {type(e).__name__}", 502)
+    worklog.add("cs", "승인 · 선정", "Gmail 답장 보냄", approval=approved_by,
+                detail={"sent_id": sent_id, "to": clip(to, 200), "verdict": verdict})
+    return jsonify(sent_id=sent_id, to=clip(to, 300))
 
 
 @bp.post("/ai-draft")
