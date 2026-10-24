@@ -1,6 +1,6 @@
 """컴플라이언스 AI 2차 판정 (Claude).
 
-규칙 판정(R1~R12)을 대신하지 않습니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
+규칙 판정(R1~R13)을 대신하지 않습니다. 당 함량 표현은 팀 결정(2026-10-24, R11·R12 끔)에 따라 AI도 판정하지 않습니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
 '더 안전한 문장'을 참고용으로 받습니다. 최종 사용 여부는 담당자 승인으로 정합니다.
 
 Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽습니다. 로직은 원본(JUNHEE/server)과 같습니다.
@@ -25,8 +25,8 @@ The request names which product the copy is for.
 Assess the copy the way a careful US food-advertising compliance reviewer would:
 - FDA: a conventional food must not claim to prevent, treat, cure or mitigate a disease or condition (a hangover claim reads as a drug claim); structure/function claims on a conventional food must come from the food's nutritive value; no implied medical or clinical authority.
 - FTC: every objective claim needs competent and reliable substantiation; testimonials, reviews and endorsements must be genuine and disclosed; no incentivised reviews; no claims that encourage excessive drinking.
-- Sugar claims (21 CFR 101.60(c)): "low sugar" is not a defined claim and must not be used; "reduced/less sugar" needs at least 25% less sugar than a named reference product with the amounts; "sugar free" needs under 0.5 g per serving; "no added sugar" has its own conditions. Only the sugar-reduced products may make a comparative sugar claim, and only once the numbers are verified.
-- The team's own rules R1-R12 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
+- Sugar-content wording (low sugar, zero sugar, less/reduced sugar, sugar free, no added sugar) is outside this review by team decision (rules R11-R12 are switched off): do not list it as an issue and do not let it change the verdict. Still judge any health or hangover claim in the same sentence as usual.
+- The team's own rules R1-R13 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
 
 Verdict scale (pick the strictest that applies):
 BLOCK = must not be used as written; REVISE = needs rewording; COND = acceptable only under a stated condition (channel, substantiation, disclosure); REVIEW = a human must judge; PASS = no issue found.
@@ -85,7 +85,13 @@ def _rules_text(rules):
     return "Team rules:\n" + ("\n".join(lines) if lines else "(not provided)")
 
 
-def review(text, channel="", category="FOOD", rule=None, rules=None, product=""):
+MAX_PERSONA = 600
+PERSONA_INTRO = ("Reviewer persona chosen by the team. It sets your perspective and tone only: the FDA/FTC standards, "
+                 "the team rules, the verdict scale and the output format above always take precedence, and the persona "
+                 "never makes a verdict less strict.\n")
+
+
+def review(text, channel="", category="FOOD", rule=None, rules=None, product="", persona=""):
     text = str(text or "").strip()
     if not text:
         raise ReviewError("점검할 문구가 없습니다.", 400)
@@ -106,6 +112,13 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="")
             "matched_terms": [str(t)[:60] for t in (rule.get("terms") or [])][:20],
         },
     }
+    # 페르소나(화면 '단건 심의 → AI 검토자 페르소나')는 관점·말투만. 기준·판정 단계는 SYSTEM이 우선
+    persona = str(persona or "").strip()[:MAX_PERSONA]
+    system = [{"type": "text", "text": SYSTEM}]
+    if persona:
+        system.append({"type": "text", "text": PERSONA_INTRO + persona})
+    # 규칙 목록·페르소나는 매번 거의 같으니 시스템 프롬프트 끝에 캐시 지점
+    system.append({"type": "text", "text": _rules_text(rules), "cache_control": {"type": "ephemeral"}})
     client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=120.0)
     try:
         res = client.beta.messages.create(
@@ -114,11 +127,7 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="")
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
             output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
-            # 규칙 목록은 매번 같으니 시스템 프롬프트 끝에 캐시 지점
-            system=[
-                {"type": "text", "text": SYSTEM},
-                {"type": "text", "text": _rules_text(rules), "cache_control": {"type": "ephemeral"}},
-            ],
+            system=system,
             messages=[{"role": "user", "content": "Review this ad copy. Input as JSON:\n" + json.dumps(payload, ensure_ascii=False)}],
         )
     except anthropic.AuthenticationError:

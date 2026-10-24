@@ -370,3 +370,22 @@
   .part-compliance .cmp-kpi { min-height: 0; }
   .part-compliance .cmp-agencies { grid-template-columns: 1fr; }
 }
+
+/* 단건 심의 오른쪽 'AI 검토자 페르소나' */
+.part-compliance .cmp-persona textarea { width: 100%; resize: vertical; font-size: 13px; line-height: 1.6; margin-top: 4px; }
+.part-compliance .cmp-persona .cmp-actions { justify-content: flex-end; }
+
+/* 규칙 표 '근거 조문' 칸: 기관 + 조문 한 줄씩 */
+.part-compliance .cmp-law { min-width: 220px; font-size: 12.5px; line-height: 1.5; }
+.part-compliance .cmp-law-line { display: block; }
+.part-compliance .cmp-law-line + .cmp-law-line { margin-top: 4px; }
+
+/* 규제 모니터링 안내 단계 (키 신청 · 경고장 올리기) */
+.part-compliance .cmp-steps { margin: 6px 0 12px; padding-left: 20px; line-height: 1.7; font-size: 13.5px; }
+.part-compliance .cmp-steps li + li { margin-top: 2px; }
+
+/* 일괄 심의: 한국어 원문 + 아래 영어 번역 (걸린 표현 표시) */
+.part-compliance .cmp-b-ko { font-weight: 600; line-height: 1.6; }
+.part-compliance .cmp-b-en { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--cmp-rule-strong); background: var(--cmp-soft, rgba(0, 0, 0, .03)); border-radius: 0 6px 6px 0; line-height: 1.6; font-size: 13px; }
+.part-compliance .cmp-b-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--cmp-rule); color: var(--cmp-muted); }
+.part-compliance .cmp-b-note { display: block; margin-top: 4px; font-size: 12px; color: var(--cmp-muted); }
