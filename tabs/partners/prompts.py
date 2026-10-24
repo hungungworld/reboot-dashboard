@@ -66,7 +66,7 @@ GUIDE_PURPOSES = {
     CATERING: ["현장 샘플링", "바 메뉴 입점", "페스티벌·콘서트 부스", "VIP 파티 웰컴 키트", "브랜드 팝업 공동 개최", "대학·테일게이트 시즌"],
 }
 
-GUIDE_SUMMARY = "REBOOT는 즐거운 밤 다음 날, 가볍게 하루를 다시 시작하는 스틱 젤리·음료입니다."
+GUIDE_SUMMARY = "REBOOT는 즐거운 밤 다음 날, 가볍게 하루를 다시 시작하는 젤리·음료입니다."
 
 GUIDE_KEY_MESSAGE = "REBOOT와 함께 더 즐거운 하루를 보내세요. | Enjoy a brighter day with REBOOT."
 
@@ -81,7 +81,7 @@ GUIDE_SECTIONS = [
     {"title": "승인 절차 및 문의", "how": "번호 목록 — 초안 제출 → REBOOT 검토 → 수정 → 최종 승인 → 게시 · 문의처"},
 ]
 
-GUIDE_RULES = """You write partner collaboration guides for REBOOT, a Korean brand launching stick jellies and non-carbonated drinks in the United States. REBOOT is a conventional food, not a dietary supplement or medicine.
+GUIDE_RULES = """You write partner collaboration guides for REBOOT, a Korean brand launching jellies and non-carbonated drinks in the United States. REBOOT is a conventional food, not a dietary supplement or medicine. Call the jelly product just "jelly" (Korean: 젤리); never write "stick jelly", "jelly stick" or "스틱 젤리". In the schedule input, "{ }" is a blank for the user to fill: use the number written inside as given, and if it is still empty write "{확인 필요}" instead of guessing.
 
 Write the guide in Korean Markdown (key messages also in English). Start with a "# " title, then use EXACTLY these 8 sections in this order as "## " headings numbered 1-8:
 {sections}

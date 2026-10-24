@@ -57,12 +57,12 @@ class ServingOverride(db.Model):
 
 
 class Review(db.Model):
-    """구매자 리뷰 (Amazon 대표 리뷰 · Weee! CSV). 작성자 이름은 저장하지 않음."""
+    """구매자 리뷰 (Amazon 대표 리뷰 · Olive Young · Yami · Weee! CSV). 작성자 이름은 저장하지 않음."""
     __tablename__ = "insights_reviews"
 
     id = db.Column(db.Integer, primary_key=True)
     uid = db.Column(db.String(64), nullable=False, unique=True)
-    source = db.Column(db.String(10), nullable=False)                # amazon · weee
+    source = db.Column(db.String(10), nullable=False)                # amazon · oliveyoung · yami · weee
     product_key = db.Column(db.String(200), nullable=False, default="", index=True)
     product_title = db.Column(db.String(500), nullable=False, default="")
     brand = db.Column(db.String(120), nullable=False, default="")
@@ -80,6 +80,17 @@ class Review(db.Model):
 
     def topic_list(self):
         return load_json(self.topics, [])
+
+
+class ReviewCS(db.Model):
+    """자사 리뷰 CS 대응 상태 — 마케터가 바꿀 때만 저장 (없으면 화면이 규칙으로 '대응 필요' · '미확인'을 붙임)."""
+    __tablename__ = "insights_review_cs"
+
+    review_id = db.Column(db.Integer, primary_key=True)                # insights_reviews.id
+    status = db.Column(db.String(10), nullable=False, default="new")   # new · todo · done · skip
+    memo = db.Column(db.String(1000), nullable=False, default="")
+    updated_by = db.Column(db.String(100), nullable=False, default="")
+    updated_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
 
 class TrendSeries(db.Model):

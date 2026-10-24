@@ -14,7 +14,7 @@
 from datetime import date, timedelta
 
 GRADE_ORDER = {"긴급": 0, "기회": 1, "참고": 2}
-SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!"}
+SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!", "yami": "Yami"}
 RULE_LABEL = {
     "own_oos_season": "자사 품절 + 45일 안에 시즌 → 긴급",
     "price_cut": "경쟁사 가격 10% 이상 인하 → 긴급",
@@ -28,6 +28,8 @@ PRICE_PCT = 10
 OOS_DAYS = 45
 SEASON_DAYS = 30
 SEASON_LIFT = 20
+QUESTION_MIN = 5       # 최다 질문 액션: 최소 건수
+QUESTION_SHARE = 15    # 최다 질문 액션: 분류된 질문 중 최소 비중(%)
 
 
 def _d(v):
@@ -165,8 +167,9 @@ def weekly_actions(ctx):
                  "12개월 평균": best["avg"], "최고 주": best["date"]}, weight=best["pct"]))
 
     # 5) 잠재 고객 최다 질문
-    qs = [q for q in ctx.get("questions") or [] if q.get("count")]
-    if qs:
+    qs = [q for q in ctx.get("questions") or [] if q.get("count") and q.get("key") not in ("", "other")]
+    total = sum(q["count"] for q in qs)
+    if qs and qs[0]["count"] >= QUESTION_MIN and qs[0]["count"] * 100 >= total * QUESTION_SHARE:
         q = qs[0]
         ex = f' 예: "{_short(q["examples"][0], 80)}"' if q.get("examples") else ""
         acts.append(_action(

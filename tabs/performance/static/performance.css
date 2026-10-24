@@ -135,3 +135,20 @@
   .part-performance .perf-report h2 { margin-top: 20px; }
   .part-performance .perf-report table, .part-performance .perf-report-kpis { break-inside: avoid; }
 }
+
+/* 채널별 성과 표 머리글 설명 말풍선 */
+.perf-tip { position: relative; cursor: help; border-bottom: 1px dotted currentColor; outline-offset: 2px; }
+.perf-tip::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
+  width: max-content; max-width: 240px; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 500; line-height: 1.45;
+  text-align: left; white-space: normal; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none;
+}
+.perf-tip:hover::after, .perf-tip:focus-visible::after { opacity: 1; visibility: visible; }
+
+/* 채널별 성과 표 접기·펴기 (제목 버튼) */
+.perf-fold { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; }
+.perf-fold::before { content: '▾'; font-size: .8em; transition: transform .15s; }
+.perf-fold[aria-expanded="false"]::before { transform: rotate(-90deg); }
+.perf-fold:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

@@ -95,10 +95,12 @@ YT_SEARCH = {"items": [{"id": {"videoId": "vid00000001"}, "snippet": {"title": "
 YT_STATS = {"items": [{"id": "vid00000001", "statistics": {"viewCount": "50000", "likeCount": "900", "commentCount": "4"}},
                       {"id": "vid00000002", "statistics": {"viewCount": "500", "commentCount": "1"}}]}
 YT_COMMENTS = {"items": [
-    {"snippet": {"topLevelComment": {"id": f"c{i}", "snippet": {"textOriginal": t, "likeCount": 5 - i,
+    {"snippet": {"topLevelComment": {"id": f"c{i}", "snippet": {"textOriginal": t, "likeCount": 10 - i,
                                                                  "publishedAt": "2026-09-03T00:00:00Z"}}}}
     for i, t in enumerate(["Where can I buy this in the US?", "Where to buy the korean hangover drink online?",
-                           "Does it actually work for a bad hangover?", "great video bro"])]}
+                           "Does it actually work for a bad hangover?", "great video bro",
+                           "Is this available at Costco or Walmart?", "Can I order this jelly on Amazon?",
+                           "Where do you find this in stores?", "anyone else extremely hungover right now?"])]}
 
 
 @pytest.fixture()
@@ -238,6 +240,32 @@ def test_rules_price_changes_and_new_entries():
     assert rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=None)) == []
 
 
+def test_comment_rules_drop_chatter_and_unknown_questions():
+    from tabs.insights import classify
+    noise = classify.classify_comment("anyone else extremely hungover right now?")
+    assert noise == {"relevant": False, "is_question": False, "topic": ""}
+    assert classify.classify_comment("Where can I buy this jelly in the US?")["topic"] == "buy"
+    assert classify.classify_comment("Is it better than Liquid IV for hangovers?")["topic"] == "compare"
+    odd = classify.classify_comment("Why is the hangover cure in the thumbnail blue?")
+    assert odd["relevant"] and not odd["is_question"] and odd["topic"] == ""  # 주제를 모르면 질문 아님 ('기타' 없음)
+    assert not classify.is_relevant("I went drinking last night and feel bad")  # 숙취 잡담
+    assert classify.video_on_topic("Korean hangover drink review") and not classify.video_on_topic("My crazy weekend vlog")
+    assert classify.video_on_topic("Aldicom unboxing", ["aldicom"])
+    assert "other" not in classify.QUESTION_LABEL
+
+
+def test_rules_top_question_needs_volume_and_skips_other():
+    few = _ctx(questions=[{"key": "buy", "label": "어디서 사나요 (구매처)", "count": 4, "examples": []}])
+    assert "top_question" not in {a["rule"] for a in rules.weekly_actions(few)}
+    thin = _ctx(questions=[{"key": "buy", "label": "어디서 사나요 (구매처)", "count": 5, "examples": []}]
+                + [{"key": k, "label": k, "count": 5, "examples": []} for k in ("works", "when", "safety", "taste", "price", "ingredients", "compare")])
+    assert "top_question" not in {a["rule"] for a in rules.weekly_actions(thin)}  # 5/40 = 12.5% < 15%
+    other = _ctx(questions=[{"key": "other", "label": "기타 질문", "count": 68, "examples": []},
+                            {"key": "taste", "label": "맛이 어떤가요", "count": 6, "examples": []}])
+    top = next(a for a in rules.weekly_actions(other) if a["rule"] == "top_question")
+    assert top["facts"]["질문 주제"] == "맛이 어떤가요"
+
+
 def test_rules_season_search_lift_questions_and_complaints():
     pts = [{"date": (date(2025, 10, 26) + timedelta(weeks=i)).isoformat(), "value": 90 if i == 1 else 40} for i in range(52)]
     lift = rules.season_lift(pts, "2026-10-31")
@@ -349,9 +377,9 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
 
     aud = auth_client.get("/api/insights/data/audience").get_json()
     assert aud["process"]["found"] == 2 and aud["process"]["kept"] == 1
-    assert aud["questions"][0]["key"] == "buy" and aud["questions"][0]["count"] == 2
+    assert aud["questions"][0]["key"] == "buy" and aud["questions"][0]["count"] == 5
     assert aud["creators"][0]["channel"] == "K-Snack Lab"
-    assert all("great video" not in c["text"] for c in aud["comments"])
+    assert all("great video" not in c["text"] and "anyone else" not in c["text"] for c in aud["comments"])
 
     rv = auth_client.get("/api/insights/data/reviews").get_json()
     own_row = next(b for b in rv["table"] if b["own"])
@@ -564,127 +592,207 @@ def test_amazon_search_parser_skips_ads():
     assert stock_state("Currently unavailable.") is False and stock_state("Only 3 left in stock") is True and stock_state("") is None
 
 
-# ───────── 경쟁사 분석 · 매트릭스 ─────────
+# ───────── 경쟁사 분석 (판매 채널 · 칭찬/불만 · 이번 주 변화 · 웹 검색 보충) ─────────
 
-CHECK = "{확인 필요}"
+YAMI_MD = """510 items
+
+[![x](https://cdn.yamibuy.net/item/a.webp)](https://www.yami.com/us/en/p/morning-is-back-jelly/1026089171?bu_type=search)
+
+[Morning Is Back](https://www.yami.com/us/en/b/morning-is-back/18336) [Blueberry Hangover Relief Jelly 30 Sticks](https://www.yami.com/us/en/p/morning-is-back-jelly/1026089171?bu_type=search "Blueberry")
+
+30+ Sold
+
+$18.99$19.99
+
+Options: 2
+
+[ALDICOM](https://www.yami.com/us/en/b/aldicom/24944) [Hangover Relief Liquid Supplement, 5 Sticks](https://www.yami.com/us/en/p/aldicom-a/1174080301?bu_type=search "A")
+
+60+ Sold
+
+$4.79$8.99
+
+[ORIHIRO](https://www.yami.com/us/en/b/orihiro/663) [Collagen Beauty Drink \\* 10](https://www.yami.com/us/en/p/collagen/3030045071?x=1 "C")
+
+$15.99
+
+Options: 4
+
+Sold by [TOKYO PLAZA](https://www.yami.com/us/en/s/tokyo-plaza/1)
+"""
 
 
-def test_position_rules():
-    from tabs.insights.competitors import rule_form, rule_timing, rule_wellness
+def test_form_rules_and_yami_parser():
+    from tabs.insights.competitors import rule_form
+    from tabs.insights.yami import RELEVANT_RE, parse_search
     assert rule_form("Cheers Restore Hangover Liquid Shot 2oz") == "liquid"
-    assert rule_form("Hangover Gummies 30 Count") == "solid" and rule_form("Aldicom Hangover Jelly Stick") == "solid"
-    assert rule_form("Electrolyte Drink Mix Powder Packets") == "solid"  # 분말 음료는 고형으로
-    assert rule_form("Hangover support") == ""
-    assert rule_timing("Take before drinking") == "pre" and rule_timing("Morning after recovery") == "post"
-    assert rule_timing("Take before drinking for the morning after") == "both" and rule_timing("Great taste") == ""
-    assert rule_wellness("Ayurvedic herbal blend") and not rule_wellness("Electrolytes")
+    assert rule_form("Hangover Gummies 30 Count") == "gummy" and rule_form("Aldicom Hangover Jelly Stick") == "gummy"
+    assert rule_form("Electrolyte Drink Mix Powder Packets") == "powder"  # 분말 음료는 분말
+    assert rule_form("Flyby Recovery 30 Capsules") == "tablet" and rule_form("Hangover support") == ""
+    items = parse_search(YAMI_MD)
+    assert [i["id"] for i in items] == ["1026089171", "1174080301", "3030045071"]
+    assert items[0]["brand"] == "Morning Is Back" and items[0]["price"] == 18.99 and items[0]["list_price"] == 19.99
+    assert items[0]["sold"] == "30+" and items[1]["sold"] == "60+" and items[2]["sold"] == ""  # 'Sold by'는 판매량 아님
+    assert items[2]["title"] == "Collagen Beauty Drink * 10" and not RELEVANT_RE.search(items[2]["title"])
+
+
+def test_yami_collect_through_update(app, auth_client, monkeypatch, fixed_today, sync_jobs):
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-test-key-zzzz")
+    seen = []
+
+    def fake_post(url, json=None, headers=None, timeout=90):
+        seen.append(json["url"])
+        return FakeRes(200, {"success": True, "data": {"markdown": YAMI_MD}})
+
+    monkeypatch.setattr(http, "post", fake_post)
+    assert auth_client.post("/api/insights/update", json={"items": ["yami"]}).status_code == 202
+    run = auth_client.get("/api/insights/update/status").get_json()["run"]
+    assert run["status"] == "done", run["results"]
+    assert seen == ["https://www.yami.com/us/en/search?q=hangover", "https://www.yami.com/us/en/search?q=hangover%20jelly"]
+    shelf = auth_client.get("/api/insights/data/shelf").get_json()["items"]
+    yami = {x["key"]: x for x in shelf if x["source"] == "yami"}
+    assert set(yami) == {"yami:1026089171", "yami:1174080301"}  # 숙취와 관계없는 상품은 뺌
+    assert yami["yami:1026089171"]["sourceLabel"] == "Yami" and yami["yami:1026089171"]["servings"] == 30
+    assert yami["yami:1174080301"]["own"] and "60+ Sold" in yami["yami:1174080301"]["availability"]
 
 
 def _seed_competitors(app):
     from server.extensions import db
-    from tabs.insights.models import ShelfItem
-    rows = [
-        ("amazon:B0SHOT0001", "Cheers Restore Hangover Liquid Shot", "Cheers", "hangover liquid shot", 9000,
-         "Take before drinking. DHM and electrolytes."),
-        ("amazon:B0GUMMY001", "Flyby Hangover Gummies 30 Count", "Flyby", "hangover gummies, hangover supplement", 5000,
-         "Morning after recovery with herbal blend."),
-        ("amazon:B0UNSURE01", "Purple Tree Celebration Formula", "Purple Tree", "hangover supplement", 3000, ""),
-        ("amazon:B0LIV00001", "Liquid I.V. Hydration Multiplier Drink Mix Powder", "Liquid I.V.", "electrolyte drink hangover", 90000,
-         "Hydration for recovery."),
-        ("amazon:B0OWN00001", "Aldicom Hangover Jelly Stick", "Aldicom", "korean hangover", 40, "Enjoy after the party."),
+    from tabs.insights.models import Review, ShelfItem
+    amazon = [  # (key, title, brand, queries, reviews, price, msg)
+        ("amazon:B0SHOT0001", "Cheers Restore Hangover Liquid Shot 3 Count", "Cheers", "hangover liquid shot", 9000, 15.0,
+         "DHM and electrolytes in a shot."),
+        ("amazon:B0GUMMY001", "Flyby Hangover Gummies 30 Count", "Flyby", "hangover gummies", 5000, 30.0, "Herbal blend."),
+        ("amazon:B0LIV00001", "Liquid I.V. Hydration Multiplier Drink Mix Powder", "Liquid I.V.", "electrolyte drink hangover",
+         90000, 25.0, "Hydration."),
+        ("amazon:B0OWN00001", "Aldicom Hangover Jelly Stick", "Aldicom", "korean hangover", 40, 20.0, ""),
     ]
     with app.app_context():
-        for key, title, brand, queries, reviews, msg in rows:
-            db.session.add(ShelfItem(week="2026-W43", source="amazon", key=key, title=title, brand=brand, queries=queries,
-                                     reviews=reviews, price=30.0, servings=10, in_stock=True, message=msg, own=brand == "Aldicom",
-                                     link=f"https://www.amazon.com/dp/{key.split(':')[1]}"))
+        for week in ("2026-W42", "2026-W43"):
+            for key, title, brand, q, reviews, price, msg in amazon:
+                if week == "2026-W42" and brand == "Flyby":
+                    continue  # 이번 주 새 상품
+                if week == "2026-W42" and brand == "Cheers":
+                    price, msg = 18.0, "DHM shot."
+                db.session.add(ShelfItem(week=week, source="amazon", key=key, title=title, brand=brand, queries=q, reviews=reviews,
+                                         price=price, servings=parse_servings(title)[0], in_stock=True, message=msg,
+                                         own=brand == "Aldicom", link=f"https://www.amazon.com/dp/{key.split(':')[1]}"))
+        db.session.add(ShelfItem(week="2026-W43", source="yami", key="yami:1", title="Cheers Hangover Jelly 10 Sticks",
+                                 brand="Cheers", queries="hangover", price=12.0, servings=10, in_stock=True,
+                                 availability="30+ Sold", link="https://www.yami.com/us/en/p/cheers/1"))
+        db.session.add(ShelfItem(week="2026-W43", source="yami", key="yami:2", title="Morning Is Back Hangover Drink 10 Bottles",
+                                 brand="Morning Is Back", queries="hangover", price=14.99, servings=10, in_stock=True,
+                                 link="https://www.yami.com/us/en/p/mib/2"))
+        for i, (s, topics, text) in enumerate([("+", ["효과"], "Works fast"), ("+", ["효과"], "Great"), ("-", ["가격"], "Pricey")]):
+            db.session.add(Review(uid=f"r{i}", source="amazon", product_key="amazon:B0SHOT0001", product_title="Cheers",
+                                  brand="Cheers", rating=5 if s == "+" else 2, text=text, sentiment=s,
+                                  topics=json.dumps(topics, ensure_ascii=False), summary_ko=f"요약 {text}", classified_by="rule"))
         db.session.commit()
 
 
-def test_competitor_register_matrix_and_blue_ocean(app, auth_client, fixed_today):
+def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today):
+    from server.extensions import db
+    from tabs.insights import competitors
+    from tabs.insights.models import ProductPosition
     _seed_competitors(app)
+    with app.app_context():  # 예전 버전이 저장한 제형 값(solid)이 남아 있어도 화면이 깨지지 않음
+        db.session.add(ProductPosition(key="amazon:B0GUMMY001", brand="Flyby", form="solid", timing="post", classified_by="ai",
+                                       sig=competitors._sig({"title": "Flyby Hangover Gummies 30 Count", "message": "Herbal blend."})))
+        db.session.commit()
     res = auth_client.post("/api/insights/competitors/discover", json={})
-    assert res.status_code == 200 and set(res.get_json()["added"]) == {"Cheers", "Flyby", "Purple Tree", "Liquid I.V."}
-    assert auth_client.post("/api/insights/competitors/discover", json={}).get_json()["added"] == []  # 두 번째는 그대로
+    assert set(res.get_json()["added"]) == {"Cheers", "Flyby", "Liquid I.V.", "Morning Is Back"}
     d = auth_client.get("/api/insights/data/competitors").get_json()
-    assert {c["brand"] for c in d["table"]} == {"Cheers", "Flyby", "Purple Tree"}
+    assert "matrix" not in d and "blueOcean" not in json.dumps(d)
+    assert {c["brand"] for c in d["table"]} == {"Cheers", "Flyby", "Morning Is Back"}
     assert [c["brand"] for c in d["substitutes"]] == ["Liquid I.V."]  # 대체재 검색어로만 잡힘
-    assert all(not c["analyzed"] for c in d["table"]) and d["table"][0]["deep"]
-    m = d["matrix"]
-    pts = {p["brand"]: p for p in m["points"]}
-    assert set(pts) == {"Cheers", "Flyby", "Aldicom"} and m["unknown"] == 1  # Purple Tree는 제형 · 타이밍 모름
-    assert pts["Cheers"]["form"] == "liquid" and pts["Cheers"]["timing"] == "pre"
-    assert pts["Flyby"]["timing"] == "post" and pts["Flyby"]["wellness"] and pts["Aldicom"]["own"]
-    cells = {c["key"]: c for c in m["cells"]}
-    assert cells["pre-liquid"]["reviews"] == 9000 and cells["post-solid"]["products"] == 1 and cells["post-solid"]["own"] == 1
-    assert m["blueOcean"]["key"] in ("post-liquid", "pre-solid") and "검색 수요는 아직 확인 전" in m["blueOcean"]["reason"]
-    # 월간 리뷰 · 기존 열 묶음은 그대로
-    assert "columns" in d and auth_client.get("/api/insights/monthly").status_code == 200
+    cheers = next(c for c in d["table"] if c["brand"] == "Cheers")
+    assert [ch["label"] for ch in cheers["channels"]] == ["Amazon", "Yami"]
+    assert cheers["channels"][0]["minPrice"] == 15.0 and cheers["channels"][1]["sold"] == "30+ Sold"
+    assert cheers["perServing"] == 1.2 and {f["key"] for f in cheers["forms"]} == {"liquid", "gummy"}
+    fb = cheers["feedback"]
+    assert fb["reviews"] == 3 and fb["praise"]["topic"] == "효과" and fb["praise"]["count"] == 2
+    assert fb["complaint"]["topic"] == "가격" and fb["complaint"]["example"] == "요약 Pricey"
+    assert d["own"]["own"] and d["own"]["channels"][0]["label"] == "Amazon"  # 알디콤 행
+    kinds = {(c["brand"], c["kind"]) for c in d["changes"]}
+    assert ("Cheers", "price") in kinds and ("Flyby", "new") in kinds and ("Cheers", "message") in kinds
+    price = next(c for c in d["changes"] if c["kind"] == "price")
+    assert price["label"] == "가격 인하" and "$18.00 → $15.00" in price["text"]
+    assert not any(c["source"] == "Yami" for c in d["changes"])  # 지난주 Yami 수집이 없으면 비교 안 함
 
 
-def test_competitor_research_with_mocked_ai_and_firecrawl(app, auth_client, monkeypatch, fixed_today, sync_jobs):
+def test_competitor_research_fills_from_evidence_then_web(app, auth_client, monkeypatch, fixed_today, sync_jobs):
     from tabs.insights import ai as insights_ai
+    from tabs.insights.competitors import NOT_FOUND
     _seed_competitors(app)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
     monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-test-key-zzzz")
     posts, seen, version = [], [], {"n": 1}
 
     def fake_post(url, json=None, headers=None, timeout=90):
-        posts.append((url, dict(json or {})))
+        posts.append(url)
         if url.endswith("/search"):
             q = json["query"].lower()
-            hits = ([{"url": "https://www.amazon.com/cheers"}, {"url": "https://www.cheershealth.com/products"}] if "cheers" in q
-                    else [{"url": "https://www.reddit.com/r/hangover"}])
+            if "official site" in q:
+                hits = ([{"url": "https://www.amazon.com/cheers"}, {"url": "https://www.cheershealth.com/products"}]
+                        if "cheers" in q else [{"url": "https://www.reddit.com/r/hangover"}])
+            else:
+                hits = [{"url": "https://bevnet.com/cheers-launch", "title": "Cheers launches new shot", "description": "Cheers expands to Target."},
+                        {"url": "https://blog.example.com/best", "title": "10 Best Hangover Cures", "description": "Cheers and more"}]
             return FakeRes(200, {"success": True, "data": hits})
         if url.endswith("/scrape"):
-            return FakeRes(200, {"success": True, "data": {"markdown": f"# Cheers\nDHM based. Sold at CVS and on our site. v{version['n']}"}})
+            return FakeRes(200, {"success": True, "data": {"markdown": f"# Cheers\nScience-backed. Sold at CVS. v{version['n']}"}})
         raise AssertionError(url)
 
-    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
-        seen.append(schema_name)
-        if schema_name == "product_positions":
-            return {"items": [{"id": p["id"], "form": "solid", "timing": "post", "wellness": True} for p in user["products"]]}
+    def fake_openai(system, user, *, schema=None, schema_name="result", model=None, **kw):
+        seen.append((schema_name, model))
+        if schema_name == "product_forms":
+            return {"items": [{"id": p["id"], "form": "other"} for p in user["products"]]}
         if schema_name == "competitor_analysis":
             ids = [e["id"] for e in user["evidence"]]
-            return {"positioning": {"values": ["Pre-Drinking"], "sources": [ids[0]]},
-                    "formats": {"values": ["Liquid Shot"], "sources": [ids[0]]},
-                    "channels": {"values": ["Amazon", "대형 오프라인 리테일"], "sources": ["W1"] if "W1" in ids else []},
-                    "usp": {"text": f"DHM 성분 v{version['n']}", "sources": [ids[0], "X9"]},
-                    "marketing": {"text": "틱톡 인플루언서", "sources": []},  # 근거 없음 → 확인 필요
-                    "implication": {"text": "샷 제형 방어 필요", "sources": []}}
+            return {"message": {"text": f"과학 기반 숙취 케어 v{version['n']}", "sources": [ids[0], "X9"]},
+                    "ingredients": {"values": ["DHM"], "sources": []},  # 출처 없음 → 웹 검색
+                    "retail": {"text": "CVS", "sources": ["W1"] if "W1" in ids else []},
+                    "news": {"text": "Target 입점", "sources": ["N1"] if "N1" in ids else []},
+                    "use": {"text": "젤리 제형의 간편함", "sources": []},
+                    "avoid": {"text": "prevent 표현", "sources": []}}
+        if schema_name == "competitor_web":
+            out = {f: {"text": "", "values": [], "urls": []} for f in user["fields"]}
+            if "ingredients" in out:
+                out["ingredients"] = {"text": "", "values": ["DHM", "Milk Thistle"], "urls": ["https://www.cheershealth.com/science"]}
+            return out
         raise AssertionError(schema_name)
 
     monkeypatch.setattr(http, "post", fake_post)
     monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
     auth_client.post("/api/insights/competitors/discover", json={})
-    res = auth_client.post("/api/insights/update", json={"items": ["competitors"]})
-    assert res.status_code == 202
+    assert auth_client.post("/api/insights/update", json={"items": ["competitors"]}).status_code == 202
     run = auth_client.get("/api/insights/update/status").get_json()["run"]
     assert run["status"] == "done", run["results"]
     assert "브랜드 분석 3개" in run["results"]["competitors"]["message"]
-    assert seen.count("product_positions") == 1 and seen.count("competitor_analysis") == 3
+    assert ("competitor_web", insights_ai.WEB_MODEL) in seen  # 웹 검색은 검색 모델로
     d = auth_client.get("/api/insights/data/competitors").get_json()
     cheers = next(c for c in d["table"] if c["brand"] == "Cheers")
     a = cheers["analysis"]
-    assert cheers["analyzed"] and cheers["website"] == "https://www.cheershealth.com/"
-    assert a["usp"]["sources"] == ["P1"] and a["marketing"]["text"] == CHECK and a["channels"]["sources"] == ["W1"]
-    assert any(s["id"] == "W1" for s in cheers["sources"])
-    flyby = next(c for c in d["table"] if c["brand"] == "Flyby")
-    assert flyby["website"] == "" and flyby["analysis"]["channels"]["values"] == []  # 홈페이지 없음 → 채널 근거 없음
-    assert "Purple Tree" in {p["brand"] for p in d["matrix"]["points"]}  # AI가 위치를 정해 줌
-    # 한 곳 다시 조사 (홈페이지 내용이 바뀜) → 바뀐 항목 기록, 홈페이지 검색은 다시 안 함
+    assert cheers["website"] == "https://www.cheershealth.com/"
+    assert a["message"] == {"text": "과학 기반 숙취 케어 v1", "sources": ["P1"]}
+    assert a["retail"]["sources"] == ["W1"] and a["news"]["sources"] == ["N1"]  # 'Best' 비교 글은 뉴스에서 뺌
+    assert a["ingredients"]["values"] == ["DHM", "Milk Thistle"] and a["ingredients"]["sources"] == ["G1"]
+    g1 = next(s for s in cheers["sources"] if s["id"] == "G1")
+    assert g1["type"] == "AI 웹 검색" and g1["url"] == "https://www.cheershealth.com/science"
+    mib = next(c for c in d["table"] if c["brand"] == "Morning Is Back")
+    assert mib["analysis"]["retail"]["text"] == NOT_FOUND and mib["analysis"]["news"]["text"] == NOT_FOUND  # 지어내지 않음
+    assert mib["analysis"]["use"]["text"] == "젤리 제형의 간편함"  # 판단 칸은 AI가 채움
+    # 다시 조사 (홈페이지가 바뀜) → 바뀐 항목 기록, 홈페이지 찾기는 다시 안 함
     version["n"] = 2
-    n_search = sum(1 for u, _ in posts if u.endswith("/search"))
-    res = auth_client.post(f"/api/insights/competitors/{cheers['id']}/research", json={})
-    assert res.status_code == 202
-    assert sum(1 for u, _ in posts if u.endswith("/search")) == n_search
+    n_site = sum(1 for u in posts if u.endswith("/search"))
+    assert auth_client.post(f"/api/insights/competitors/{cheers['id']}/research", json={}).status_code == 202
+    assert sum(1 for u in posts if u.endswith("/search")) == n_site + 1  # 뉴스 검색 1회만
     cheers = next(c for c in auth_client.get("/api/insights/data/competitors").get_json()["table"] if c["brand"] == "Cheers")
-    assert cheers["analysis"]["usp"]["text"] == "DHM 성분 v2" and cheers["history"][0]["changed"] == ["핵심 소구 소스 / USP"]
-    # 내려받기
+    assert cheers["analysis"]["message"]["text"] == "과학 기반 숙취 케어 v2" and cheers["history"][0]["changed"] == ["핵심 메시지"]
     csv_text = auth_client.get("/api/insights/competitors.csv").data.decode("utf-8-sig")
-    assert csv_text.splitlines()[0].startswith("브랜드,구분,상태,핵심 포지셔닝 축") and "DHM 성분 v2" in csv_text
+    assert csv_text.splitlines()[0].startswith("브랜드,구분,상태,판매 채널 (최저가)") and "Amazon $15.00 · Yami $12.00" in csv_text
     rows = json.loads(auth_client.get("/api/insights/competitors.json").data)
-    assert {r["brand"] for r in rows} == {"Cheers", "Flyby", "Purple Tree", "Liquid I.V."}
+    assert {r["brand"] for r in rows} == {"Cheers", "Flyby", "Liquid I.V.", "Morning Is Back"}
     assert "fc-test-key" not in csv_text and "sk-test" not in json.dumps(rows)
 
 
@@ -698,7 +806,154 @@ def test_competitor_edit_archive_and_website(app, auth_client, fixed_today):
     assert out["status"] == "archived" and out["website"] == "https://flybyrecovery.com/"
     d = auth_client.get("/api/insights/data/competitors").get_json()
     assert "Flyby" not in {c["brand"] for c in d["table"]} and [c["brand"] for c in d["archived"]] == ["Flyby"]
-    assert "Flyby" not in {p["brand"] for p in d["matrix"]["points"]}
     assert auth_client.patch(f"/api/insights/competitors/{cid}", json={"status": "gone"}).status_code == 400
     assert auth_client.patch("/api/insights/competitors/9999", json={"status": "active"}).status_code == 404
     assert auth_client.post("/api/insights/competitors/9999/research", json={}).status_code == 404
+
+
+# ───────── 채널 리뷰 (Olive Young · Yami) · CS ─────────
+
+def _oy_unit(stars, text, date):
+    full = '<div class="icon-star coral-50 left filled"></div><div class="icon-star coral-50 right filled"></div>' * stars
+    gray = '<div class="icon-star gray-50 left filled"></div>'  # 항목별 별점 (전체 별점에 안 셈)
+    return (f'<div class="product-review-unit"><div class="product-review-unit-main notranslate"><div class="review-star-rating">{full}</div>'
+            f'<button>Report</button><div class="review-unit-option"><span>Aldicom 4 Sticks</span></div><ul><li>{gray}</li></ul>'
+            f'<div class="review-unit-cont-comment -flip notranslate">{text}</div></div>'
+            f'<span class="review-write-info-date notranslate">{date}</span><span>by. ab*****</span></div>')
+
+
+def _oy_page(units, total):
+    return (f"<html><h3>Global Reviews ({total})</h3><h3>Korean Reviews (800)</h3><div>4.6</div><div><b>{total}</b> reviews</div>"
+            + "".join(units) + '<button class="review-list-more-btn">More (1/2)</button></html>')
+
+
+def test_product_line_ignores_pack_size():
+    from tabs.insights.channel_reviews import product_line
+    assert product_line("Aldicom Hangover Helper 15g 4 Sticks") == "알디콤 A"
+    assert product_line("Aldicom A Hangover Helper 15ml 1 Stick") == "알디콤 A"
+    assert product_line("Aldicom V Hangover Helper 20ml 4 Sticks (4-day supply)") == "알디콤 V"
+    assert product_line("Aldicom Plus Hangover Helper 21ml*4 Sticks") == "알디콤 Plus"
+    assert product_line("ALDICOM Plus (4 boxs) 5 pack*4 boxes") == "알디콤 Plus"
+    assert product_line("Aldicom Boost Daily Energy Gel Green Zest 30g * 8 Sticks") == "부스트 그린"
+    assert product_line("Aldicom Boost Daily Energy Gel Pink Citrus 30g") == "부스트 핑크"
+
+
+def test_oliveyoung_parser_reads_stars_text_date_without_names():
+    from tabs.insights.channel_reviews import parse_oliveyoung
+    p = parse_oliveyoung(_oy_page([_oy_unit(5, "Works great!<br>Buying again &amp; again", "2026/10/14"),
+                                   _oy_unit(2, "The taste is too strong", "2026/09/01")], 12))
+    assert p["total"] == 12 and p["avg"] == 4.6
+    assert [r["rating"] for r in p["reviews"]] == [5.0, 2.0]
+    assert p["reviews"][0]["text"] == "Works great! Buying again & again" and p["reviews"][1]["date"] == "2026/09/01"
+    assert "ab***" not in json.dumps(p)
+
+
+def test_oliveyoung_without_english_reviews_reads_nothing(monkeypatch):
+    """영어 리뷰가 0개면 사이트가 한국 리뷰를 보여 줌 → 읽지 않음."""
+    from tabs.insights import channel_reviews
+    korean_shown = _oy_page([_oy_unit(5, "Translated Korean review", "2026/10/01")], 0)
+    monkeypatch.setattr(channel_reviews, "firecrawl", lambda key, payload: {"rawHtml": korean_shown, "metadata": {"title": "Boost | OLIVE YOUNG"}})
+    res = channel_reviews._oliveyoung("k", "https://global.oliveyoung.com/product/detail?prdtNo=GA1")
+    assert res["reviews"] == [] and res["total"] == 0 and res["avg"] is None and res["calls"] == 1
+
+
+def test_channel_reviews_amazon_marks_shelf_review_as_own(app, monkeypatch):
+    """진열대(Amazon) 수집이 같은 리뷰를 경쟁사로 먼저 넣었어도 채널 리뷰가 자사로 바꿈 · SerpApi 키가 없으면 Amazon은 건너뜀."""
+    from server.extensions import db
+    from tabs.insights import channel_reviews, store
+    from tabs.insights.models import Review
+    monkeypatch.setattr(channel_reviews, "load_sources", lambda: [{"channel": "amazon", "asin": "B0DTYS4BP4"}])
+    row = {"source": "amazon", "product_key": "amazon:B0DTYS4BP4", "product_title": "ALDICOM A", "brand": "", "own": False,
+           "rating": 5.0, "title": "Works", "text": "No hangover", "date_text": "June 9, 2025"}
+    monkeypatch.setattr(channel_reviews.amazon, "product", lambda key, asin: {
+        "title": "ALDICOM A", "rating": 3.9, "reviews": 28, "review_rows": [dict(row, date_text=row["date_text"])]})
+    with app.app_context():
+        store.save_reviews([row], "2026-W43")
+        with pytest.raises(http.CollectError):  # 키 없음 → Amazon만 있으면 읽은 게 없음
+            channel_reviews.collect("fc", "2026-W43", None)
+        res = channel_reviews.collect("fc", "2026-W43", "serp")
+        assert res["reviews"] == 0 and res["serpapi"] == 1
+        assert [r.own for r in Review.query.all()] == [True]
+        db.session.remove()
+
+
+def test_channel_reviews_collect_cs_and_translate(app, auth_client, monkeypatch, fixed_today, sync_jobs):
+    from tabs.insights import ai as insights_ai
+    from tabs.insights import channel_reviews
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-test-key-zzzz")
+    monkeypatch.setenv("SERPAPI_KEY", "serp-test-key-zzzz")
+    monkeypatch.setattr(channel_reviews, "load_sources", lambda: [
+        {"channel": "oliveyoung", "url": "https://global.oliveyoung.com/product/detail?prdtNo=GA240222422"},
+        {"channel": "amazon", "asin": "B0DTYS4BP4"},
+        {"channel": "yami", "url": "https://www.yami.com/us/en/p/aldicom-a/1174080301"}])
+    first = [_oy_unit(5, f"Great hangover helper {i}", "2026/10/1%d" % i) for i in range(10)]
+    more = first + [_oy_unit(1, "Box arrived crushed and one stick was leaking", "2026/08/01"),
+                    _oy_unit(4, "Nice taste", "2026/07/01")]
+    posts = []
+
+    def fake_post(url, json=None, headers=None, timeout=90):
+        posts.append(dict(json or {}))
+        meta = {"title": "Aldicom Hangover Helper 15g 4 Sticks | OLIVE YOUNG Global"}
+        if "oliveyoung" in json["url"]:
+            raw = _oy_page(more if json.get("actions") else first, 12)
+        else:
+            raw, meta = '<section id="pdp-comment-section" class="commentSection_containerNoComment__x">Have your say</section>', {"title": "ALDICOM | Yami"}
+        return FakeRes(200, {"success": True, "data": {"rawHtml": raw, "metadata": meta}})
+
+    def fake_get(url, params=None, headers=None, timeout=25):
+        assert params["engine"] == "amazon_product" and params["asin"] == "B0DTYS4BP4"
+        return FakeRes(200, {"product_results": {"title": "ALDICOM A | Before Drinking, Travel Size Liquid 5-Pack", "rating": 3.9,
+                                                 "reviews": 28},
+                             "reviews_information": {"authors_reviews": [
+                                 {"title": "Disgusting Taste", "text": "Such a disgusting taste, I almost vomited.", "rating": 1,
+                                  "date": "August 6, 2025"},
+                                 {"title": "Made Me a Tank", "text": "No hangover in the morning!!", "rating": 5, "date": "October 6, 2026"}]}})
+
+    monkeypatch.setattr(http, "post", fake_post)
+    monkeypatch.setattr(http, "get", fake_get)
+    plan = {i["id"]: i for i in auth_client.get("/api/insights/update/plan").get_json()["items"]}
+    assert plan["channel_reviews"]["ready"] and plan["channel_reviews"]["cost"] == {"firecrawl": 3, "serpapi": 1}
+    assert auth_client.post("/api/insights/update", json={"items": ["channel_reviews"]}).status_code == 202
+    run = auth_client.get("/api/insights/update/status").get_json()["run"]
+    assert run["status"] == "done", run["results"]
+    clicks = [a for a in posts[1]["actions"] if a["type"] == "executeJavascript"]
+    assert len(clicks) == 1 and ".review-list-more-btn" in clicks[0]["script"]  # 12개 → 더 보기 1번 (한국 탭은 안 누름)
+
+    d = auth_client.get("/api/insights/data/reviews").get_json()
+    assert len(d["cs"]) == 14 and d["stats"]["oliveyoung"] == 12 and d["stats"]["amazon"] == 2 and d["stats"]["yami"] == 0
+    assert {x["line"] for x in d["cs"]} == {"알디콤 A"} and {x["sourceLabel"] for x in d["cs"]} == {"Olive Young", "Amazon"}
+    bad = next(x for x in d["cs"] if "crushed" in x["text"])
+    assert bad["cs"] == "todo" and bad["csAuto"] and d["stats"]["csTodo"] == 2  # 상자 파손 + 아마존 1점
+    amz = next(x for x in d["cs"] if x["source"] == "amazon" and x["rating"] == 1)
+    assert amz["title"] == "Disgusting Taste" and amz["cs"] == "todo"
+    ch = {c["channel"]: c for c in d["channels"]}
+    assert ch["oliveyoung"]["total"] == 12 and ch["oliveyoung"]["got"] == 12 and ch["yami"]["total"] == 0
+    assert ch["amazon"]["total"] == 28 and ch["amazon"]["avg"] == 3.9 and ch["amazon"]["got"] == 2
+
+    # 다시 모아도 같은 리뷰는 한 번만
+    auth_client.post("/api/insights/update", json={"items": ["channel_reviews"]})
+    assert len(auth_client.get("/api/insights/data/reviews").get_json()["cs"]) == 14
+
+    # CS 상태 · 메모
+    res = auth_client.post(f"/api/insights/reviews/{bad['id']}/cs", json={"status": "done", "memo": "교환 안내함"})
+    assert res.status_code == 200 and res.get_json()["cs"] == "done" and res.get_json()["csAuto"] is False
+    assert auth_client.post(f"/api/insights/reviews/{bad['id']}/cs", json={"status": "nope"}).status_code == 400
+    again = next(x for x in auth_client.get("/api/insights/data/reviews").get_json()["cs"] if x["id"] == bad["id"])
+    assert again["cs"] == "done" and again["memo"] == "교환 안내함" and again["csBy"]
+
+    # 번역: 키 없으면 안내, 있으면 한 번만 부르고 저장된 번역을 씀
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert auth_client.post(f"/api/insights/reviews/{bad['id']}/translate", json={}).status_code == 400
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
+    seen = []
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        seen.append(schema_name)
+        return {"text_ko": "상자가 찌그러져 왔고 한 포가 새고 있었어요"}
+
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    for _ in range(2):
+        res = auth_client.post(f"/api/insights/reviews/{bad['id']}/translate", json={})
+        assert res.status_code == 200 and res.get_json()["textKo"].startswith("상자가")
+    assert seen == ["review_ko"]
+    assert auth_client.post("/api/insights/reviews/999999/translate", json={}).status_code == 404

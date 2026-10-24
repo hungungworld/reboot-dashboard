@@ -54,3 +54,40 @@ def test_cs_ai_draft_checks(auth_client):
 def test_google_connect_needs_client(auth_client):
     res = auth_client.get("/api/cs/gmail/connect")
     assert res.status_code == 503
+
+
+# ───────── Gmail 바로 보내기 (실제로 보내지 않게 Gmail 연결을 가짜로 바꿈) ─────────
+
+def _fake_gmail(monkeypatch):
+    from tabs.cs import gmail
+    sent = []
+    monkeypatch.setattr(gmail, "service", lambda interactive=False: object())
+    monkeypatch.setattr(gmail, "send_reply", lambda svc, mid, body: (sent.append((mid, body)) or ("sent123", "Lauren <lauren@example.com>")))
+    monkeypatch.setattr(gmail, "reply_preview", lambda svc, mid: {"to": "Lauren <lauren@example.com>", "subject": "Re: Hi"})
+    return sent
+
+
+def test_gmail_send_requires_approval_and_clean_body(auth_client, monkeypatch):
+    sent = _fake_gmail(monkeypatch)
+    ok = {"message_id": "abc123def", "body": "Hello Lauren,\nThanks for writing.", "approved_by": "소준희", "verdict": "PASS"}
+    assert auth_client.post("/api/cs/gmail/send", json=dict(ok, message_id="../x")).status_code == 400
+    assert auth_client.post("/api/cs/gmail/send", json=dict(ok, body="within [확인 필요: 기한].")).status_code == 400
+    assert auth_client.post("/api/cs/gmail/send", json=dict(ok, approved_by="")).status_code == 400
+    assert auth_client.post("/api/cs/gmail/send", json=dict(ok, verdict="BLOCK")).status_code == 400
+    assert sent == []   # 위 경우에는 하나도 보내지 않음
+    res = auth_client.post("/api/cs/gmail/send", json=ok)
+    assert res.status_code == 200 and res.get_json()["sent_id"] == "sent123"
+    assert sent == [("abc123def", ok["body"])]
+
+
+def test_gmail_preview(auth_client, monkeypatch):
+    _fake_gmail(monkeypatch)
+    out = auth_client.post("/api/cs/gmail/preview", json={"message_id": "abc123def"}).get_json()
+    assert out == {"to": "Lauren <lauren@example.com>", "subject": "Re: Hi"}
+
+
+def test_translate_batch_checks(auth_client):
+    assert auth_client.post("/api/compliance/translate-batch", json={"texts": []}).status_code == 400
+    assert auth_client.post("/api/compliance/translate-batch", json={"texts": ["가"] * 201}).status_code == 400
+    res = auth_client.post("/api/compliance/translate-batch", json={"texts": ["파티 전에 챙기는 젤리"]})
+    assert res.status_code == 503 and "ANTHROPIC_API_KEY" in res.get_json()["error"]

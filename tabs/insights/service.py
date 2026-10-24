@@ -12,14 +12,20 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import competitors, rules
+from . import channel_reviews, competitors, rules
 from .classify import QUESTION_LABEL, TOPICS, expressions
-from .models import Comment, Competitor, Monthly, Review, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get, load_json
+from .models import (Comment, Competitor, Monthly, Review, ReviewCS, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get,
+                     load_json)
 from .util import (BUCKET_LABEL, bucket, month_key, month_range, per_serving, prev_month, review_month, week_key, week_label,
                    week_range)
 
-SOURCES = ("amazon", "weee")
-SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!"}
+SOURCES = ("amazon", "weee", "yami")
+SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!", "yami": "Yami"}
+REVIEW_SOURCE_LABEL = {"amazon": "Amazon", "oliveyoung": "Olive Young", "yami": "Yami", "weee": "Weee!"}
+CS_STATUS = {"new": "미확인", "todo": "대응 필요", "done": "대응 완료", "skip": "대응 안 함"}
+# 불만이 아니어도 마케터가 봐야 하는 말 (배송 · 파손 · 환불 등)
+CS_WORDS = re.compile(r"leak|broken|damag|crush|missing|refund|expired|never arrived|arrived late|late delivery|배송|파손|누수|환불|유통기한",
+                      re.I)
 GENERIC = {"korean", "hangover", "premium", "organic", "natural", "the", "new", "best", "original", "extra", "advanced",
            "ultimate", "super", "pure", "daily", "fast", "hangover-relief", "anti-hangover", "1", "2"}
 TIER_WORDS = {"direct": ("jelly", "stick", "korean", "korea", "젤리", "스틱"),
@@ -177,7 +183,9 @@ def top_questions(month=None, limit=5):
     rows = Comment.query.filter_by(month=month, is_question=True, relevant=True).order_by(Comment.likes.desc()).all()
     counts, examples = Counter(), defaultdict(list)
     for c in rows:
-        k = c.topic or "other"
+        k = c.topic
+        if k not in QUESTION_LABEL:  # 주제 없음 · 예전 '기타'는 집계하지 않음
+            continue
         counts[k] += 1
         if len(examples[k]) < 3:
             examples[k].append(c.text[:300])
@@ -278,7 +286,7 @@ def weekly_context(t=None):
     now, prev, info = snapshots(week_key(t))
     series, _ = latest_trends()
     ctx = {"today": t, "shelf_now": now, "shelf_prev": prev, "seasons": catalog.list_seasons(today=t), "trends": series,
-           "questions": top_questions(), "own_complaints": own_complaints()}
+           "questions": top_questions(limit=None), "own_complaints": own_complaints()}
     return ctx, info
 
 
@@ -492,7 +500,7 @@ def _tier(titles):
 
 
 def competitors_view(limit_text=False):
-    now, _, _ = snapshots()
+    now, prev, _ = snapshots()
     watch = _watch_set()
     own = [x for x in now if x["own"]]
     own_sources = {x["source"] for x in own}
@@ -546,41 +554,107 @@ def competitors_view(limit_text=False):
     if limit_text:  # 월간 리뷰 · Excel은 열 묶음만 씀
         out["oneLine"] = ""
         return out
-    return dict(out, **_analysis_view(now, cols, watch, total))
+    return dict(out, **_analysis_view(now, prev, cols, watch, total))
 
 
-def _analysis_view(now, cols, watch, total):
-    """경쟁사 분석 표 · 포지셔닝 매트릭스 · 대체재 목록 (competitors.py)."""
+def _analysis_view(now, prev, cols, watch, total):
+    """경쟁사 분석: 이번 주 변화 · 비교 표(알디콤 맨 위) · 대체재 · 보관함 (competitors.py)."""
     shelf = {x["brand"].lower(): x for col in cols.values() for x in col}
     regs = {c.brand.lower(): c for c in Competitor.query.all()}
     rule_sub = {b for b, x in shelf.items() if x["tier"] == "substitute"}
-    sub_set = {b for b, c in regs.items() if c.tier == "substitute" or c.status == "archived"} | (rule_sub - set(regs))
+    sub_set = {b for b, c in regs.items() if c.tier == "substitute"} | (rule_sub - set(regs))
     targets = {c.id for c in competitors.deep_targets(now)}
+    groups = competitors.brand_groups(now)
+    stored = competitors.stored_positions()
+    yt = competitors.youtube_texts()
     rows, subs, archived = [], [], []
     for b in set(shelf) | set(regs):
         c, s = regs.get(b), shelf.get(b)
         d = competitors.comp_dict(c) if c else {"id": None, "brand": s["brand"], "tier": s["tier"], "status": "active",
                                                   "analysis": {}, "analyzed": False, "sources": [], "keywords": [],
                                                   "website": "", "isNew": True, "history": [], "researchedAt": None}
+        d.update(competitors.brand_facts(groups.get(b, []), stored, yt, d["brand"]))
         d.update(tierLabel=TIER_LABEL.get(d["tier"], d["tier"]), deep=bool(c and c.id in targets), onShelf=s is not None,
-                 watched=b in watch, recommended=bool(s and s["recommended"]), score=s["score"] if s else 0,
-                 signals=s["signals"] if s else None, reason=s["reason"] if s else "이번 진열대에는 없어요.",
-                 reviews=s["reviews"] if s else 0, products=s["products"] if s else [], brandGuessed=bool(s and s["brandGuessed"]))
+                 watched=b in watch, own=False, signals=s["signals"] if s else None,
+                 reason=s["reason"] if s else "이번 진열대에는 없어요.", brandGuessed=bool(s and s["brandGuessed"]))
         (archived if d["status"] == "archived" else subs if b in sub_set else rows).append(d)
     order = lambda d: (not d["watched"], not d["deep"], not d["analyzed"], -d["reviews"], d["brand"].lower())  # noqa: E731
     rows.sort(key=order)
     subs.sort(key=lambda d: -d["reviews"])
-    m = competitors.with_trend(competitors.matrix(now, sub_set), month_key(today()))
+    own_items = [x for x in now if x["own"]]
+    own = None
+    if own_items:
+        own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤 (자사)", own=True,
+                   tierLabel="자사", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
+    changes = competitors.weekly_changes(now, prev)
     analyzed = sum(1 for d in rows if d["analyzed"])
-    one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 대체재 {len(subs)}개 · 매트릭스 상품 {len(m['points'])}개"
-           + (f" · 블루오션 후보 {m['blueOcean']['label']}" if m["blueOcean"] else "")
+    chans = sorted({ch["label"] for d in rows for ch in d["channels"]})
+    one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 판매 채널 {' · '.join(chans) or '없음'}"
+           + (f" · 이번 주 변화 {len(changes)}건" if changes else "")
            + (f" · 주시 중 {len(watch)}개" if watch else "")) if total or rows else ""
-    return {"oneLine": one, "table": rows, "substitutes": subs, "archived": archived, "matrix": m,
+    return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes,
             "fields": [{"key": k, "label": label} for k, label in competitors.FIELDS],
+            "channelLabels": competitors.CHANNEL_LABEL, "formLabels": competitors.FORM_LABEL,
             "aiReady": insights_ai.ready(), "firecrawlReady": envkeys.has("FIRECRAWL_API_KEY"), "deepTop": competitors.DEEP_TOP}
 
 
+EXPORT_HEAD = [("brand", "브랜드"), ("tier", "구분"), ("status", "상태"), ("channels", "판매 채널 (최저가)"),
+               ("perServing", "1회분 최저 ($)"), ("forms", "제형"), ("reviews", "진열대 리뷰 수"), ("praise", "고객 칭찬"),
+               ("complaint", "고객 불만"), ("youtube", "유튜브 언급")] + list(competitors.FIELDS) + [
+               ("website", "홈페이지"), ("sources", "출처"), ("researched_at", "조사일(UTC)")]
+
+
+def competitor_export():
+    """CSV · JSON · Excel용 한 줄씩 (보관 포함, 알디콤 제외)."""
+    v = competitors_view()
+    out = []
+    for d in v["table"] + v["substitutes"] + v["archived"]:
+        fb = d["feedback"]
+        out.append({
+            "brand": d["brand"], "tier": d["tierLabel"], "status": "보관" if d["status"] == "archived" else "관리 중",
+            "channels": " · ".join(f"{ch['label']} ${ch['minPrice']:.2f}" if ch["minPrice"] is not None else ch["label"]
+                                   for ch in d["channels"]),
+            "perServing": d["perServing"], "forms": ", ".join(f["label"] for f in d["forms"]), "reviews": d["reviews"],
+            "praise": f"{fb['praise']['topic']} {fb['praise']['count']}건" if fb["praise"] else "",
+            "complaint": f"{fb['complaint']['topic']} {fb['complaint']['count']}건" if fb["complaint"] else "",
+            "youtube": d["youtube"],
+            **{f: competitors.field_text(d["analysis"], f) for f, _ in competitors.FIELDS},
+            "website": d["website"], "sources": " ".join(s["url"] for s in d["sources"] if s.get("url")),
+            "researched_at": d["researchedAt"] or "",
+        })
+    return out
+
+
 # ───────── 구매자 리뷰 ─────────
+
+def cs_dict(r, cs=None):
+    """자사 리뷰의 CS 상태 — 저장된 것이 없으면 규칙(불만 · 부작용 · 배송/파손 단어)으로 '대응 필요', 아니면 '미확인'."""
+    if cs is not None:
+        return {"cs": cs.status, "csAuto": False, "memo": cs.memo, "csBy": cs.updated_by, "csAt": iso(cs.updated_at)}
+    todo = r.sentiment == "-" or "부작용" in r.topic_list() or bool(CS_WORDS.search(f"{r.title} {r.text}"))
+    return {"cs": "todo" if todo else "new", "csAuto": True, "memo": "", "csBy": "", "csAt": None}
+
+
+def _cs_items(rows):
+    """자사 리뷰 전부 (채널 · 제품 라인 · 주제 · 감정 · CS 상태로 거르는 화면용)."""
+    own = [r for r in rows if r.own]
+    saved = {c.review_id: c for c in ReviewCS.query.filter(ReviewCS.review_id.in_([r.id for r in own])).all()} if own else {}
+    out = []
+    for r in own:
+        out.append({"id": r.id, "source": r.source, "sourceLabel": REVIEW_SOURCE_LABEL.get(r.source, r.source),
+                    "line": channel_reviews.product_line(r.product_title), "product": r.product_title[:200], "rating": r.rating,
+                    "title": r.title, "text": r.text[:3000], "summaryKo": r.summary_ko, "topics": r.topic_list(),
+                    "sentiment": r.sentiment, "date": r.date_text, "by": r.classified_by, **cs_dict(r, saved.get(r.id))})
+    return out
+
+
+def _channel_stats():
+    """채널 · 상품별 전체 리뷰 수 · 평균 별점 (사이트에 보이는 숫자) + 모은 수."""
+    out = []
+    for k, v in kv_get("channel_review_stats", {}).items():
+        out.append(dict(v, key=k, channelLabel=REVIEW_SOURCE_LABEL.get(v.get("channel"), v.get("channel"))))
+    return sorted(out, key=lambda x: (x.get("channel", ""), x.get("line", "")))
+
 
 def reviews_view():
     rows = Review.query.order_by(Review.collected_at.desc()).limit(2000).all()
@@ -598,7 +672,8 @@ def reviews_view():
             if t in b["topics"]:
                 b["topics"][t]["pos" if r.sentiment == "+" else "neg" if r.sentiment == "-" else "neu"] += 1
         if len(items) < 400:
-            items.append({"id": r.id, "brand": key, "own": r.own, "source": r.source, "product": r.product_title[:200],
+            items.append({"id": r.id, "brand": key, "own": r.own, "source": r.source,
+                          "sourceLabel": REVIEW_SOURCE_LABEL.get(r.source, r.source), "product": r.product_title[:200],
                           "rating": r.rating, "title": r.title, "text": r.text[:1500], "summaryKo": r.summary_ko,
                           "topics": r.topic_list(), "sentiment": r.sentiment, "date": r.date_text, "by": r.classified_by})
     table = sorted(brands.values(), key=lambda b: (not b["own"], not b["watched"], -b["total"]))[:12]
@@ -610,14 +685,19 @@ def reviews_view():
     if rows:
         neg = Counter(t for r in rows if r.sentiment == "-" for t in r.topic_list())
         pos = Counter(t for r in rows if r.sentiment == "+" for t in r.topic_list())
-        one = f"리뷰 {len(rows)}개 (Amazon 대표 리뷰 · Weee! CSV)"
+        one = f"리뷰 {len(rows)}개 (Amazon 대표 리뷰 · Olive Young · Yami · Weee! CSV)"
         if pos:
             one += f" · 칭찬 1위 {pos.most_common(1)[0][0]}"
         if neg:
             one += f" · 불만 1위 {neg.most_common(1)[0][0]}"
+    cs = _cs_items(rows)
     return {"oneLine": one, "table": table, "topics": list(TOPICS), "items": items, "summaries": summaries,
+            "cs": cs, "csStatus": list(CS_STATUS.items()), "lines": list(channel_reviews.LINES), "channels": _channel_stats(),
             "stats": {"total": len(rows), "amazon": sum(1 for r in rows if r.source == "amazon"),
+                      "oliveyoung": sum(1 for r in rows if r.source == "oliveyoung"),
+                      "yami": sum(1 for r in rows if r.source == "yami"),
                       "weee": sum(1 for r in rows if r.source == "weee"), "own": sum(1 for r in rows if r.own),
+                      "csTodo": sum(1 for x in cs if x["cs"] == "todo"),
                       "ai": sum(1 for r in rows if r.classified_by == "ai")},
             "new7d": _new_reviews()["count"]}
 
@@ -661,7 +741,8 @@ def audience_view(month=None):
                       "video": vids[c.video_id].title if c.video_id in vids else "", "videoId": c.video_id, "by": c.classified_by}
                      for c in relevant[:150]],
         "process": {"found": len(videos), "kept": len(kept), "minViews": cfg.get("min_views"), "comments": len(comments),
-                    "relevant": len(relevant), "bySet": dict(by_set),
+                    "relevant": len(relevant), "noisePct": round((len(comments) - len(relevant)) * 100 / len(comments))
+                    if comments else None, "bySet": dict(by_set),
                     "queries": cfg.get("search_sets"), "ai": sum(1 for c in comments if c.classified_by == "ai")},
     }
 

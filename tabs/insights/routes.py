@@ -15,6 +15,8 @@
   PATCH /api/insights/competitors/<id>         {status: active|archived, website}
   GET   /api/insights/competitors.csv · /competitors.json
   POST  /api/insights/reviews/upload           Weee! 리뷰 CSV {csv}
+  POST  /api/insights/reviews/<id>/translate   리뷰 한국어 번역 (OpenAI · 같은 원문은 저장된 번역)
+  POST  /api/insights/reviews/<id>/cs          자사 리뷰 CS 대응 {status: new · todo · done · skip, memo}
   POST  /api/insights/trends/upload            Google Trends CSV {csv} (SerpApi 키가 없을 때)
 데이터 업데이트
   GET   /api/insights/update/plan              항목 · 필요한 키 · 예상 비용 · 이번 달 쓴 양
@@ -39,8 +41,9 @@ from server.config import ROOT
 from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
+from . import ai as insights_ai
 from . import competitors, reports, service, store, trends, update
-from .models import Competitor, ServingOverride, ShelfItem, kv_get, kv_set
+from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
 
 bp = Blueprint("insights", __name__, url_prefix="/api/insights")
@@ -249,20 +252,18 @@ def competitor_edit(cid):
 
 @bp.get("/competitors.json")
 def competitors_json():
-    body = json.dumps(competitors.export_rows(), ensure_ascii=False, indent=2)
+    body = json.dumps(service.competitor_export(), ensure_ascii=False, indent=2)
     return Response(body, content_type="application/json; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.json"})
 
 
 @bp.get("/competitors.csv")
 def competitors_csv():
-    rows = competitors.export_rows()
     buf = io.StringIO()
-    head = ["brand", "tier", "status"] + [f for f, _ in competitors.FIELDS] + ["website", "keywords", "sources", "researched_at", "ai"]
     w = csv.writer(buf)
-    w.writerow(["브랜드", "구분", "상태"] + [label for _, label in competitors.FIELDS] + ["홈페이지", "발견 검색어", "출처", "조사일", "AI 분석"])
-    for r in rows:
-        w.writerow([r[k] for k in head])
+    w.writerow([label for _, label in service.EXPORT_HEAD])
+    for r in service.competitor_export():
+        w.writerow(["" if r[k] is None else r[k] for k, _ in service.EXPORT_HEAD])
     return Response("﻿" + buf.getvalue(), content_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.csv"})
 
@@ -312,6 +313,42 @@ def reviews_upload():
     added = store.save_reviews(rows, week_key(service.today()))
     worklog.add("insights", "수집", "Weee! 리뷰 CSV 올리기", detail={"rows": len(rows), "added": added})
     return jsonify(ok=True, rows=len(rows), added=added)
+
+
+def _review(rid):
+    r = db.session.get(Review, rid)
+    if r is None:
+        raise ApiError("리뷰를 찾지 못했어요.", 404)
+    return r
+
+
+@bp.post("/reviews/<int:rid>/translate")
+def review_translate(rid):
+    r = _review(rid)
+    if insights_ai.is_korean(r.text):
+        return jsonify(textKo=r.text)
+    if not insights_ai.ready():
+        raise ApiError("OpenAI 키가 없어 번역할 수 없어요. 설정 › 연결에서 키를 넣으세요.")
+    return jsonify(textKo=insights_ai.translate_review(r.text))
+
+
+@bp.post("/reviews/<int:rid>/cs")
+def review_cs(rid):
+    r = _review(rid)
+    if not r.own:
+        raise ApiError("CS 대응은 자사 리뷰에만 표시할 수 있어요.")
+    data = json_body()
+    status = str(data.get("status", "")).strip()
+    if status not in service.CS_STATUS:
+        raise ApiError("대응 상태가 올바르지 않아요.")
+    row = db.session.get(ReviewCS, rid) or ReviewCS(review_id=rid)
+    row.status = status
+    if "memo" in data:
+        row.memo = clip(str(data.get("memo") or ""), 1000)
+    row.updated_by, row.updated_at = _who()[:100], utcnow()
+    db.session.add(row)
+    db.session.commit()
+    return jsonify(ok=True, **service.cs_dict(r, row))
 
 
 @bp.post("/trends/upload")

@@ -11,7 +11,12 @@ Flask 통합: 저장 위치는 DATA_DIR/parts_override/compliance/monitor-data.j
 - openFDA 식품 리콜 (food/enforcement): 젤리·곤약·숙취 제품. 키 없이 먼저 부르고 실패하면 OPENFDA_API_KEY로 다시
 - Regulations.gov: FDA·FTC 규칙·규칙안 (FDA는 식품·표시·광고 관련 제목만)
 - CourtListener: 숙취 제품·건강식품 허위광고 판결 (관련성 낮은 결과가 섞일 수 있음 → 참고용)
-FDA 경고장 크롤링은 README 부록 B 4단계에서 옮길 예정이라 아직 없습니다.
+- FDA 수입 거부: Data Dashboard API (FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY) · 한국산 식품만
+- CBP CROSS: 품목분류 결정 검색 API (키 없음) · 젤리·2106.90·곤약
+- Federal Register: FTC 전체 + FDA 식품 관련 공고 (키 없음). FTC 보도자료 RSS는 봇 차단이라 대신 씀
+- 자동으로 못 읽는 곳 (2026-10-24 확인): NAD(화면을 자바스크립트로 그림 · 피드 없음) · Prop 65(OEHHA 봇 차단) → 화면의 바로가기 버튼
+- FDA 경고장: warning_letters.py (Data Dashboard API · fda.gov XLSX · 사람이 올린 XLSX·본문). fda.gov는 자동 요청을
+  봇 차단으로 막을 수 있어, 막히면 이유를 errors에 남기고 올려 둔 경고장은 그대로 보여 줌
 """
 import json
 import re
@@ -155,18 +160,119 @@ def courtlistener():
     return items
 
 
+CROSS_FOOD = re.compile(r"jelly|konjac|gumm|confection|candy|beverage|drink|food preparation|dietary supplement|hangover", re.I)
+CROSS_HTS = re.compile(r"\b(1704|2106|2202|2009)\.")   # 설탕 과자 · 기타 조제 식료품 · 음료 · 주스
+
+
+def cbp_rulings():
+    """CBP CROSS 품목분류 결정 (공식 검색 API · 키 없음). 젤리·HS 2106.90·곤약 관련 최신 결정."""
+    seen, items = set(), []
+    for term in ("jelly", "2106.90", "konjac"):
+        q = urllib.parse.urlencode({"term": term, "collection": "ALL", "commodityGrouping": "ALL",
+                                    "pageSize": 10, "page": 1, "sortBy": "DATE_DESC"})
+        for x in _get("https://rulings.cbp.gov/api/search?" + q).get("rulings", []):
+            no = str(x.get("rulingNumber") or "")
+            # 전문 검색이라 'jelly roll 배터리' 같은 결과가 섞임 → 제목·HS 코드가 식품인 것만
+            if not no or no in seen or not (CROSS_FOOD.search(x.get("subject") or "") or CROSS_HTS.search(x.get("tariffs") or "")):
+                continue
+            seen.add(no)
+            items.append({
+                "id": no,
+                "date": (x.get("rulingDate") or "")[:10],
+                "title": (x.get("subject") or "")[:240],
+                "firm": f'{str(x.get("collection") or "").upper()} · {x.get("categories") or ""}',
+                "url": f"https://rulings.cbp.gov/ruling/{urllib.parse.quote(no)}",
+                "summary": ("HTS " + x["tariffs"])[:300] if x.get("tariffs") else "",
+            })
+        time.sleep(1)
+    return sorted(items, key=lambda i: i["date"], reverse=True)[:20]
+
+
+def federal_register():
+    """Federal Register 공고 (키 없음): FTC 전체 + FDA 식품·표시·광고 관련 제목. FTC 보도자료 RSS는 봇 차단이라 대신 씀."""
+    items = []
+    for slug, label in (("federal-trade-commission", "FTC"), ("food-and-drug-administration", "FDA")):
+        params = [("conditions[agencies][]", slug), ("conditions[publication_date][gte]", _lookback().isoformat()),
+                  ("order", "newest"), ("per_page", "40")] + [("fields[]", f) for f in
+                  ("document_number", "title", "type", "publication_date", "html_url", "abstract")]
+        for x in _get("https://www.federalregister.gov/api/v1/documents.json?" + urllib.parse.urlencode(params)).get("results", []):
+            title = x.get("title") or ""
+            if label == "FDA" and not FDA_FOOD_WORDS.search(title):
+                continue
+            items.append({
+                "id": x.get("document_number"),
+                "date": x.get("publication_date") or "",
+                "title": title[:240],
+                "firm": f'{label} · {x.get("type") or ""}',
+                "url": x.get("html_url") or "",
+                "summary": (x.get("abstract") or "")[:400],
+            })
+    return sorted(items, key=lambda i: i["date"], reverse=True)[:30]
+
+
+def fda_import_refusals():
+    """FDA 수입 거부 (Data Dashboard API · 경고장과 같은 키). 한국산 식품만."""
+    user, key = env("FDA_DASHBOARD_USER"), env("FDA_DASHBOARD_KEY")
+    if not (user and key):
+        raise RuntimeError("FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY 없음 (Data Dashboard 키 신청 필요)")
+    body = json.dumps({"start": 1, "rows": 2000, "sort": "RefusalDate", "sortorder": "DESC",
+                       "columns": ["FEINumber", "FirmName", "City", "ProductCode", "ProductCodeDescription", "IndustryCodeDescription",
+                                   "RefusalDate", "RefusalCharges", "FirmProfile"],
+                       "filters": {"ProductCategory": ["Human Foods"], "CountryName": ["South Korea"],   # 2026-10-24 실제 값 확인
+                                   "RefusalDateFrom": [_lookback().isoformat()]}}).encode()
+    req = urllib.request.Request("https://api-datadashboard.fda.gov/v1/import_refusals", data=body, method="POST", headers={
+        "User-Agent": UA, "Content-Type": "application/json", "Authorization-User": user, "Authorization-Key": key})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    # 같은 날 같은 회사·제품은 선적 줄마다 한 행씩 오므로 한 항목으로 묶고 건수만 셈
+    groups = {}
+    for x in data.get("result") or []:
+        gid = f'{x.get("FEINumber") or ""}-{str(x.get("RefusalDate") or "")[:10]}-{x.get("ProductCode") or ""}'
+        g = groups.setdefault(gid, {"x": x, "n": 0, "charges": set()})
+        g["n"] += 1
+        g["charges"].update(c.strip() for c in str(x.get("RefusalCharges") or "").split(",") if c.strip())
+    items = []
+    for gid, g in groups.items():
+        x = g["x"]
+        # 사유는 FDA 거부 사유 코드 번호 · 뜻은 FDA Import Refusal Report에서 확인 (공식 코드표를 확인하지 못해 번호 그대로)
+        bits = [x.get("IndustryCodeDescription") or "", f'거부 사유 코드 {", ".join(sorted(g["charges"]))}' if g["charges"] else "",
+                f'{g["n"]}줄' if g["n"] > 1 else "", x.get("City") or ""]
+        items.append({
+            "id": gid,
+            "date": str(x.get("RefusalDate") or "")[:10],
+            "title": str(x.get("ProductCodeDescription") or x.get("ProductCode") or "")[:240],
+            "firm": str(x.get("FirmName") or "")[:160],
+            "url": x.get("FirmProfile") if str(x.get("FirmProfile") or "").startswith("https://") else "https://datadashboard.fda.gov/oii/cd/imprefusals.htm",
+            "summary": " · ".join(b for b in bits if b)[:300],
+        })
+    return sorted(items, key=lambda i: i["date"], reverse=True)[:40]
+
+
+def fda_warning_letters(bodies=False):
+    from . import warning_letters
+    return warning_letters.collect(bodies=bodies)
+
+
 SOURCES = [
+    ("fda-warning-letters", "FDA 경고장 (식품·건강기능식품)", fda_warning_letters),
     ("openfda-food-recalls", "openFDA 식품 리콜 (젤리·곤약·숙취)", openfda_recalls),
     ("regulations-gov", "Regulations.gov FDA·FTC 규칙·규칙안", regulations_gov),
     ("courtlistener", "CourtListener 허위광고 판결 (참고)", courtlistener),
+    ("fda-import-refusals", "FDA 수입 거부 (한국산 식품)", fda_import_refusals),
+    ("cbp-cross", "CBP CROSS 품목분류 결정 (젤리·2106.90·곤약)", cbp_rulings),
+    ("federal-register", "Federal Register FTC·FDA 공고", federal_register),
 ]
 
 
-def collect():
+def collect(bodies=False):
+    """bodies=True면 경고장 본문까지 읽음 (30초 간격 · 하루 1회 작업에서만)."""
     sources, errors = [], []
     for sid, label, fn in SOURCES:
         try:
-            items = fn()
+            items = fn(bodies=bodies) if fn is fda_warning_letters else fn()
+            if isinstance(items, tuple):   # (항목, 경고) — 일부 경로만 실패해도 항목은 저장
+                items, warns = items
+                errors.extend({"id": sid, "label": label, "error": w} for w in warns)
             sources.append({"id": sid, "label": label, "items": items})
         except Exception as e:  # 한 출처가 실패해도 나머지는 저장
             msg = f"{type(e).__name__}: {getattr(e, 'code', '') or str(e)[:120]}"
@@ -191,9 +297,37 @@ def write(data):
     js = HEADER + "(function (global) {\n  'use strict';\n  global.REBOOT_MONITOR = " + body + ";\n})(typeof window !== 'undefined' ? window : globalThis);\n"
     out = out_path()
     out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_suffix(".js.tmp")
-    tmp.write_text(js, encoding="utf-8")
-    tmp.replace(out)
+    for path, text in ((out.with_suffix(".json"), body), (out, js)):   # .json은 출처 하나만 바꿀 때 읽는 사본
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+
+
+def _current():
+    """지금 화면이 읽는 수집 결과: 서버 사본(.json) → 서버 저장본(.js) → 저장소 기본 파일 순서."""
+    out = out_path()
+    try:
+        return json.loads(out.with_suffix(".json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    for path in (out, Path(__file__).parent / "static" / "monitor-data.js"):
+        try:
+            js = path.read_text(encoding="utf-8")
+            return json.loads(js[js.index("REBOOT_MONITOR = ") + len("REBOOT_MONITOR = "):js.rindex(";\n})(")])
+        except (OSError, ValueError):
+            continue
+    return {"sources": [], "errors": []}
+
+
+def update_source(source):
+    """출처 하나만 바꿔 다시 저장 (경고장 XLSX·본문을 올렸을 때 · 다른 출처는 다시 수집하지 않음)."""
+    data = _current()
+    sources = [s for s in data.get("sources", []) if s.get("id") != source["id"]]
+    data["sources"] = [source] + sources
+    data["errors"] = [e for e in data.get("errors", []) if e.get("id") != source["id"]]
+    data["generatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    write(data)
+    return data
 
 
 if __name__ == "__main__":

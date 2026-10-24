@@ -120,14 +120,15 @@ RULE.md, AI_RULES.md, 내 파트 폴더의 README.md(tabs/compliance/docs/README
 |---|---|---|---|
 | 단건 심의 | 입력 + 규칙 (+AI 선택) | 카피 1개 → R1~R10 판정 → 걸린 표현·이유·대체 방향. AI는 FDA 사례 Few-shot 2차 판정 | 규칙 판정 시연본 완료 · AI는 서버 키 있을 때만 |
 | 일괄 심의 | CSV 업로드 | `copy` 열 CSV → 결과 CSV (최대 500행) | 시연본 완료 |
-| 판정 근거 사례집 | 크롤링 → 데이터 | FDA 숙취 제품 경고장 7건 원문 인용, 금지 표현 JSON | 현재 53개 · 87개로 확장 예정 |
+| 판정 근거 사례집 | 크롤링 → 데이터 | FDA 숙취 제품 경고장 7건 원문 인용 (후기 8개 포함) | **87개** (seed.json 원문 · 2026-10-24) |
 | 한국→미국 표현 매핑 | 수동 | 검토자·검토일 기록 | 현재 10쌍 · 20쌍으로 확장 예정 |
-| 규칙 검증 | 자동 | 경고장 문구는 모두 걸리고, 안전 문구는 모두 통과 | 53개 기준 시연본 완료 · 87개 확장 후 재검증 예정 |
+| 규칙 검증 | 자동 | 경고장 문구는 모두 걸리고, 안전 문구는 모두 통과 | 87개 중 놓침 **0** · 안전 15개 모두 PASS (2026-10-24) |
 | 점검 기록 (예전 '심의 이력') | 자동 저장 | **승인·반려 없음** (마케터가 자기 대시보드에서 사용 · 2026-10-23 결정). [문구 점검하기]를 누를 때마다 문구·채널·제품·판정·시간 저장, 지금 규칙으로 다시 판정해 표시. **BLOCK 문구는 복사 불가**, 나머지는 안내와 함께 복사 가능 | `tabs/` 완료 |
 | 한→영 번역 | 서버 AI (Claude) | 한국어 카피 → 영어 광고 문구 (뜻·주장 그대로) → 문구 칸에 넣고 바로 점검. `POST /api/compliance/translate` · 1회마다 소액 과금 | `tabs/` 완료 |
 | 상단 숫자 카드 | 자동 | 사용 불가 · 수정 필요 · 규칙 미탐지 · 전체 점검 개수. **누르면 점검 기록 탭에서 그 판정만** 보임 (점검 기록의 '판정' 칸으로도 고를 수 있음) | `tabs/` 완료 |
 | 걸린 표현 자세히 보기 | 데이터 | 걸린 표현을 누르면 창(이유·근거·대신 쓸 표현·관련 기관·경고장 사례). 단건 심의 · 일괄 심의 표 · 점검 기록 · 규칙 표 어디서나 | `tabs/` 완료 |
-| FDA 규제 모니터링 | API + 크롤링 + 수동 | openFDA 식품 리콜 조회, 새 경고장 → '사례집 후보' (출처별 가능 여부 6장) | 리콜 조회 시연본 완료 · 경고장 수집은 서버 이관 예정 |
+| FDA 규제 모니터링 | API + 크롤링 + 수동 | openFDA 리콜 · Regulations.gov · CourtListener · **FDA 경고장** (`warning_letters.py`: Data Dashboard API · fda.gov XLSX · XLSX 올리기 · 본문 붙여넣기 → '사례집 후보') | `tabs/` 완료 · fda.gov는 자동 요청을 봇 차단으로 막음 (2026-10-24 확인) → 막히면 올리기로 |
+| AI 검토자 페르소나 | 화면 입력 | AI 2차 판정의 관점·말투 (기본 200자 · 최대 600자 · 팀 공용 저장). 기준·판정 단계는 서버 지시문이 우선 | `tabs/` 완료 · 문안은 담당 검토 중 |
 
 **전제** 미국 **일반식품** (건강기능식품 기준은 비교 옵션) · FDA는 2020년 숙취 제품 경고장에서 숙취 예방·치료·완화 표현을 미승인 의약품 표현으로 취급 · 일반식품도 **영양적 가치에 기반한 구조·기능 표현**은 FDA가 인정 → R8 일괄 수정은 법적 금지가 아니라 **팀의 보수적 기준** · 면책 별표(*)를 붙여도 판정은 그대로
 
@@ -294,6 +295,9 @@ REFRESH_MAX_LETTERS=10
 REGULATIONS_GOV_API_KEY=
 # 무료 토큰 · CourtListener
 COURTLISTENER_TOKEN=
+# 선택 · FDA Data Dashboard API (식품 경고장 목록 · OII Unified Logon에서 무료 신청 · 이메일이 USER)
+FDA_DASHBOARD_USER=
+FDA_DASHBOARD_KEY=
 
 # --- CS (소준희) ---
 # 예: to:<CS 전용 주소> newer_than:30d
@@ -383,7 +387,7 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 
 | 항목 | 대상 | 목표 |
 |---|---|---|
-| 경고장 원문 문구 중 PASS | 현재 **53개** (3단계 확장 후 87개) | **0개** |
+| 경고장 원문 문구 중 PASS | **87개** | **0개** |
 | 안전 문구 (8개 + 오탐 확인 4개) 중 PASS 아닌 것 | 12개 | **0개** |
 | CS 답변 템플릿 C1~C10 중 BLOCK | 10개 | **0개** (막히면 그 유형 발송이 전부 막힘 · 'CS → 답변 템플릿'에서 확인) |
 
@@ -396,6 +400,7 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-22 | 로컬 `parts/` (`dev/test_parts.js`) · 안전 4 / 템플릿 10 | 실행 안 됨 (0개 · 이관 전) | **0** / 4 | **0** / 10 | Claude Code | 엔진 예문 14개·분류 12건 통과 |
 | 2026-10-23 | 로컬 `parts/` (core 형식 정리 후) · 안전 4 / 템플릿 10 | 실행 안 됨 (0개 · 이관 전) | **0** / 4 | **0** / 10 | Claude Code | 기존 항목 + core 형식·저장 키·금지 패턴·`monitor-data.js` 형식 점검 통과 |
 | 2026-10-23 | `tabs/compliance` (R11·R12 끈 뒤) · 경고장 53 / 안전 15 / 예문 20 | 53개 중 **5** ❗ | **0** / 15 | — | Claude Code (화면 '규칙 검증' + node) | 놓친 5개는 R11·R12를 끄기 전에도 똑같이 PASS (기존 문제): `debauchery … feel better right away` · `formulated for the drinking population` · `a few cocktails … take my Miracoal` · `reduce alcohol's negative effects` · `Milk Thistle helps to protect the liver` → 규칙 보강 필요 (13장) |
+| 2026-10-24 | `tabs/compliance` · 경고장 **87** (원문) / 안전 15 / 예문 20 / 템플릿 10 | 87개 중 **0** | **0** / 15 | **0** / 10 | Claude Code (node) | 보강: R1 `alcohol withdrawal`·`intoxication`·`alcohol's negative effects` · R3 `protect the liver`·`liver damage` · R10 1인칭 사용 후기 문장(patterns). CS C3의 'We are sorry it did not work'가 후기로 잡혀 패턴을 I·My로 좁힘 |
 
 ---
 
@@ -463,6 +468,8 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-23 | 컴플라이언스는 마케터가 자기 대시보드에서 쓰므로 **검토 요청·승인·반려 절차 없음** → 점검 기록만 남김 · BLOCK 문구는 복사 불가 (CS 답장의 최종 승인은 그대로) |
 | 2026-10-23 | **당 함량 표시(R11·R12)는 점검하지 않음** (정할 것 2) — 규칙은 `off: true`로 보관 |
 | 2026-10-23 | 한→영 번역은 서버 Claude (`/api/compliance/translate`), 영→한은 기존 브라우저 내장 번역 유지 |
+| 2026-10-24 | **CS 답장은 대시보드에서 Gmail로 바로 보냄** (담당 결정 · 예전 '초안만, 발송은 사람이 Gmail에서' 대신). '보내기' 탭에서 최종 승인된 답장만 · 받는 사람 확인 창 · 서버도 BLOCK·[확인 필요]·미승인은 거절 · 더미 문의는 실제로 보내지 않음 |
+| 2026-10-24 | 당 함량 표현은 AI 2차 판정에서도 판정하지 않음 (low sugar 등 사용 · 함량 근거는 따로 없음) |
 
 | # | 정할 것 | 팀 안건 # | 관련 | 제안 · 비고 |
 |---|---|---|---|---|
@@ -485,15 +492,18 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 **컴플라이언스** (프롬프트: [부록 B](#부록-b-컴플라이언스-취합-프롬프트-vs-code--claude-code))
 - [ ] 1단계 · 검토 보고서 (dashboard.html vs FDA 광고 콘솔, 코드 수정 없음)
 - [ ] 2단계 · 규제 단어 57개를 R1~R10에 통합 (패턴 추가 23개, `hang-over` 포함)
-- [ ] 3단계 · 경고장 원문 87개로 사례집 확장, 표현 매핑 20쌍 → 87개 기준 재검증
-- [ ] 4단계 · 경고장 수집을 `tabs/compliance/`로 이관 (일반식품 기준 필터, 30초 간격)
+- [x] 3단계 · 경고장 원문 87개로 사례집 확장, 표현 매핑 20쌍 → 87개 기준 재검증 (2026-10-24 · 놓침 0)
+- [x] 4단계 · 경고장 수집을 `tabs/compliance/`로 이관 (일반식품 기준 필터, 30초 간격) → `warning_letters.py` · fda.gov 봇 차단으로 자동 경로는 막힘 → Data Dashboard 키 신청 필요
 - [ ] 5단계 · 4인 관점 최종 검토 (마케터·컴플라이언스·개발자·보안) — 같은 AI가 맡은 관점끼리 동의해도 독립 검증이 아니므로, 공통 판단은 별도 사실 확인 후 반영
 - [ ] 6단계 · (선택) 매일 자동 실행 → 결과를 `monitor-data.js`로 (6장)
-- [ ] R1~R10 근거 구분을 규제 담당과 확정 → `rules()` 반영
+- [x] R1~R10 근거 구분을 FDA·FTC 조문 기준으로 정리 (`law` 칸 · 2026-10-24) → 규제 담당 최종 확인만 남음
 - [x] 당 함량 표시 규칙 추가 여부 결정 후 반영 (정할 것 2 → 점검하지 않음, R11·R12 꺼 둠)
-- [ ] 경고장 원문 중 PASS 5개 규칙 보강 (8장 실행 기록 2026-10-23)
+- [x] 경고장 원문 중 PASS 규칙 보강 (87개 기준 놓침 0 · 2026-10-24)
+- [ ] FDA Data Dashboard API 키 신청 (OII Unified Logon · 무료) → `.env`에 `FDA_DASHBOARD_USER`(이메일) · `FDA_DASHBOARD_KEY` · `.env.example`에 이름 추가는 공통 영역이라 PR에 적기
+- [ ] AI 검토자 페르소나 문안 확정 (화면 '단건 심의 → AI 검토자 페르소나')
+- [ ] AI 지시문(`ai_review.py`)의 당류 기준을 R11·R12 끈 결정과 맞출지 결정
 - [ ] 무료 키 발급 (Regulations.gov · CourtListener) → `server/.env` ([부록 A](#부록-a-키-발급--신청--수동-확인))
-- [ ] 월 1회 수동 확인 시작 (CBP CROSS · FTC · NAD · Prop 65 · FDA 수입 거부 파일)
+- [x] 월 1회 수동 확인 → 자동 전환 (2026-10-24): CBP CROSS · FDA 수입 거부(Data Dashboard 키) · Federal Register(FTC 공고) 자동 수집. 자동으로 못 읽는 NAD · Prop 65 · FTC 보도자료 · 수입 경보 33-15는 규제 모니터링 '바로가기로 확인하는 곳' 버튼
 
 **CS**
 - [ ] 컴플라이언스 재검사를 `REBOOT.use('compliance').review`로 연결 (R1~R10 통합 후)
@@ -529,6 +539,13 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-23 | CS 문의 상세: 문의 머리(제목 24px · 본문 15.5px 상자 · 기한 줄)를 크게 · 아래 처리 단계(① 분류·제품 ② 답변 초안 ③ 재검사 ④ 최종 승인 · 처리 기록)를 접고 펴기, 제목 줄에 상태 요약 · 모두 펼치기/접기 · 기본은 ②④만 펼침 |
 | 2026-10-23 | 긴 단락 접기: 컴플라이언스(단건 심의 '알아두세요' · 규칙·검증 3단락 · 모니터링 사례집 후보·Federal Register·openFDA 조회 · 기관 안내 4단락) · CS(답변 템플릿 페르소나·템플릿 10개 + 모두 펼치기/접기 · 부작용 접수 기록). 접혀도 제목 줄에 개수·상태 요약 · 기관 카드의 공고 조회를 누르면 조회 칸이 자동으로 펼쳐짐 |
 | 2026-10-23 | 제품 정보를 팀 제품표에 맞춤: 4종 맛 라임·체리·레몬(임시) · 영문 제품명 Reboot Jelly/Drink Original·Balance · 캐릭터 리부(Rebu) |
+| 2026-10-24 | 컴플라이언스: 경고장 사례집 53 → 원문 87개 · 규칙 보강(놓침 0) · R1~R12에 근거 조문(`law`) 추가, 규칙 표 '근거 조문' 칸 · 근거 구분 조정(R4·R7·R8에 ⚖️ 공식 근거) · AI 2차 판정 검토자 페르소나(화면에서 수정·팀 공용 저장) · FDA 경고장 수집(`warning_letters.py`, `/api/compliance/letters/xlsx`·`/letters/text`, 규제 모니터링 '경고장 직접 올리기') · 테스트 `tests/test_compliance_letters.py` 7개 |
+| 2026-10-24 | 규제 모니터링 자동 출처 추가: FDA 수입 거부(한국산 식품) · CBP CROSS(젤리·2106.90·곤약) · Federal Register(FTC 전체 + FDA 식품) · '자동 수집 키 신청' 안내 · 경고장 올리기 단계 안내 · '바로가기로 확인하는 곳' 5곳 (NAD·Prop 65 2곳·FTC 보도자료·수입 경보 33-15) |
+| 2026-10-24 | CS '보내기' 탭(최종 승인 → 받는 사람 확인 → Gmail 바로 보내기 · `/api/cs/gmail/preview`·`/gmail/send`) · 컴플라이언스 '전체 채널'·'전체 제품'(모든 조합 점검 → 가장 엄격한 판정 + 조합별 차이 안내) · 일괄 심의 한국어 입력(서버 `/api/compliance/translate-batch`로 영어 번역 → 한국어·영어 둘 다 점검, 원문 아래 번역과 걸린 표현) · CSV `channel`·`product` 열 · 더미 20개 한국어·채널·제품 전체 · R6 근거 문구 정리 · R4 `drinking flush` |
+| 2026-10-24 | 규칙 R13 '성분 강조·숙취 연상 성분'(REVIEW · 21 CFR 102.5(b)·101.54(b)(1)·101.18(b)·2020 경고장) 추가 · 근거 구분에 📱 플랫폼 정책 추가 → R6(Meta 술 광고 기준·Google 무책임한 음주 광고 정책·DISCUS 규약) · R4(Meta 개인 특성 정책) · R3·R8·R9 같은 뜻 표현 보강(간을 지켜·process alcohol·clinically studied 등) · AI 지시문 당류 기준 삭제(팀 결정) · 일괄 심의 더미 문구 20개(`data.js` batchSample · `docs/batch-dummy-20.csv` · 화면 버튼) |
+| 2026-10-24 | CS 더미 문의 12건: 'Test Customer NN'·TEST 주문번호 → 지어낸 미국식 이름·example.com 주소·RB 주문번호 (이미 저장된 문의도 열 때 자동 변경) |
+| 2026-10-24 | CS 답변 초안: [확인 필요] 빈칸 안내 상자 (무엇을 채울지 · 그 문장 주황 표시 · 누르면 초안의 그 위치 선택) |
+| 2026-10-24 | CS: 상단 숫자 카드 4장을 누르면 문의함 '보기'가 그 조건으로 바뀜 · '담당 확인 대기' 보기 추가 |
 
 ---
 
