@@ -7,15 +7,30 @@
 }
 :root[data-theme="dark"] .part-home { --home-rev: #d4ea2a; --home-rev-fill: rgba(228, 250, 24, .14); --home-spend: #a0a1ab; }
 
+/* 다가오는 미국 시즌 — base.css 카드를 홈에서만 작게 */
+.part-home .season-card { padding: 10px 13px; }
+.part-home .season-card h3 { font-size: 14px; margin: 6px 0 2px; }
+.part-home .season-card p { font-size: 10.5px; }
+.part-home .season-card .rule { margin: 7px 0 5px; }
+.part-home .season-card .link { margin-top: 6px; }
+.part-home .season-card .days-left { font-size: 18px; }
+
+/* KPI 카드 — 누르면 해당 파트로 */
+.part-home .home-kpi-link { display: block; color: inherit; text-decoration: none; border-radius: 14px; min-width: 0; }
+.part-home .home-kpi-link .kpi { height: 100%; transition: border-color .15s; }
+.part-home .home-kpi-link:hover .kpi:not(.featured) { border-color: var(--line-2); }
+.part-home .home-kpi-link:hover .kpi.featured { filter: brightness(.97); }
+.part-home .home-kpi-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* 이번 주 성과 */
-.part-home .home-chart-top { margin-bottom: 14px; align-items: flex-end; flex-wrap: wrap; }
+.part-home .home-chart-top { margin-bottom: 10px; align-items: flex-end; flex-wrap: wrap; }
 .part-home .home-chart-summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.part-home .home-chart-summary strong { font-size: 25px; letter-spacing: -.8px; font-weight: 720; }
+.part-home .home-chart-summary strong { font-size: 21px; letter-spacing: -.8px; font-weight: 720; }
 .part-home .home-chart-summary small { font-size: 10px; color: var(--muted-2); flex-basis: 100%; }
 .part-home .home-legend { display: flex; gap: 14px; font-size: 10px; color: var(--muted); }
 .part-home .home-legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--home-rev); vertical-align: middle; margin-right: 6px; }
 .part-home .home-legend .spend::before { border-top: 2px dashed var(--home-spend); }
-.part-home .home-chart { position: relative; height: 205px; }
+.part-home .home-chart { position: relative; height: 150px; }
 .part-home .home-chart canvas { display: block; }
 .part-home [data-range]:disabled { opacity: .45; cursor: not-allowed; }
 
