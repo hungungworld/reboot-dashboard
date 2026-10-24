@@ -8,8 +8,9 @@ from docx.shared import Cm, Pt, RGBColor
 
 from server.models import WorkLog
 from tabs.settings import xlsx
+from . import competitors
 from .models import Comment, Review, ShelfItem, Video
-from .service import SOURCE_LABEL, competitors_view, latest_trends, monthly_view, shelf_dict, shelf_maps, weekly_view
+from .service import SOURCE_LABEL, TIER_LABEL, competitors_view, latest_trends, monthly_view, shelf_dict, shelf_maps, weekly_view
 from .util import BUCKET_LABEL, week_label
 
 GRADE_COLOR = {"긴급": RGBColor(0xB7, 0x5B, 0x48), "기회": RGBColor(0x63, 0x7C, 0x13), "참고": RGBColor(0x62, 0x7A, 0xA5)}
@@ -239,6 +240,11 @@ def data_xlsx(t=None):
                      x["signals"]["similarPrice"], x["watched"], x["recommended"], x["reason"],
                      " / ".join(p["title"][:60] for p in x["products"])] for col in comp["columns"].values() for x in col],
                    widths={10: 50, 11: 60})
+    xlsx.add_sheet(wb, "경쟁사 분석", ["브랜드", "구분", "상태"] + [label for _, label in competitors.FIELDS]
+                   + ["홈페이지", "발견 검색어", "출처", "조사일(UTC)", "AI 분석"],
+                   [[r["brand"], TIER_LABEL.get(r["tier"], r["tier"]), "보관" if r["status"] == "archived" else "관리 중"]
+                    + [r[f] for f, _ in competitors.FIELDS] + [r["website"], r["keywords"], r["sources"], r["researched_at"], r["ai"]]
+                    for r in competitors.export_rows()], widths={4: 30, 6: 30, 7: 50, 8: 50, 9: 50, 11: 40, 12: 60})
     wk = weekly_view(t)
     xlsx.add_sheet(wb, "이번 주 액션", ["주차", "등급", "규칙", "사실", "왜 중요한가", "할 일", "AI 문장", "규칙에 걸린 신호"],
                    [[wk["week"], a["grade"], a["ruleLabel"], a["fact"], a["why"], a["todo"], a["ai"],

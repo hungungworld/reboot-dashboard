@@ -9,7 +9,7 @@
 | 섹션 | 데이터 소스 | 처리 방식 | 갱신 |
 |---|---|---|---|
 | 📅 시즌 캘린더 | `data/seasons.csv` (수동 관리) | CSV 로드 → D-day 계산 | 페이지 로드 시 |
-| 📰 미국 주류 업계 뉴스 동향 | GDELT DOC 2.0 API | 배치 수집 → AI 필터링·요약 | 1일 1회 (캐싱) |
+| 📰 미국 주류 업계 뉴스 | 구글 뉴스 RSS (키 없음) | 수집 → 중복·노이즈 제거 → AI 필터링·기사별 한국어 요약 | 1일 1회 자동 + '지금 수집' |
 | ✅ 이번 주 To-Do | 위 두 섹션의 결과 | AI가 종합해 생성 | 주 1회 (월요일) + 수동 재생성 |
 
 ---
@@ -44,47 +44,70 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 
 ---
 
-## 2. 📰 미국 주류 업계 뉴스 동향
+## 2. 📰 미국 주류 업계 뉴스
 
-미국 매체의 주류 관련 보도를 수집해 핵심 동향과 보도량 급증 시그널을 보여줍니다.
+미국 매체의 주류 관련 보도를 모아, 마케터에게 중요한 기사를 한국어로 정리하고 보도 급증을 표시합니다.
 
-> ⚠️ **한계**: 뉴스 보도 기반이며 판매량·가격·소비자 검색 수요는 반영하지 않습니다. "시장 트렌드"가 아닌 "업계 뉴스 시그널"로 해석해야 합니다.
+> ⚠️ **한계**: 기사 **제목 기준** 요약이라 본문은 보지 않습니다 (페이월·저작권). 판매량·가격·검색 수요는 인사이트 탭에서 봅니다.
 
-### 데이터 소스: GDELT DOC 2.0 API
+### 데이터 소스: 구글 뉴스 RSS (팀 결정)
 
-- 무료, API 키·인증 불필요
-- Python 클라이언트: `gdeltdoc`
-- 사용 모드
-  - `ArtList`: 기사 목록 (제목·URL·도메인·날짜 등 메타데이터, 본문 없음)
-  - `TimelineVol`: 보도량 추이 (전체 모니터링 기사 대비 비율)
+- 주소: `https://news.google.com/rss/search?q={검색어} when:14d&hl=en-US&gl=US&ceid=US:en` (키 없음)
+- 검색어: `data/queries.json` — 분야 7개 · 검색어 9개 (2026-10-24 팀 결정 · 후보 20개를 실제 검색해 보고 고름)
+
+| 분야 | 종류 | 검색어 |
+|---|---|---|
+| 숙취 카테고리 | signal | `hangover (supplement OR electrolyte OR DHM OR probiotic)` |
+| 경쟁사 | signal | `ZBiotics OR "Liquid I.V." OR DripDrop OR "Cheers Restore"` (경쟁사 분석 상위 브랜드로 월 1회 갱신) |
+| 규제 | signal | `FDA "dietary supplement"` |
+| 음주 행태 | flow | `"sober curious" OR "drinking less" OR "Gen Z drinking"` · `"alcohol consumption" (survey OR study OR Gallup)` |
+| 무알코올 · 기능성 | flow | `"non-alcoholic" (beer OR spirits OR beverage)` · `"functional beverage" OR "functional drinks"` |
+| 주류 판매 | flow | `"alcohol sales" OR "spirits sales" OR "beer sales"` |
+| K-푸드 | flow | `"Korean hangover" OR "Korean snacks" OR "K-food" (US OR America)` |
+
+  - **signal**: 기사는 적지만 꼭 봐야 하는 분야 → 카드 자리 보장 · **flow**: 기사가 많은 흐름 → AI 점수로 경쟁
+- 항목마다 제목 · 매체 · 링크 · 날짜만 읽고, 제목 끝의 " - 매체명"은 뗍니다
+- 코드: `rss.py` (읽기 · 노이즈 판정 · 급증 계산) · `news.py` (수집 · 저장 · AI · 화면용 데이터)
 
 ### 수집 방식
 
-- **하루 1회 배치** 수집 (페이지 로드 시 API를 호출하지 않음)
-- 카테고리별 키워드 묶음 3~5개 + 공통 필터 `sourcecountry:US`, `sourcelang:english`
-- 노이즈 키워드 제외 (예: 음주운전, 사고 관련)
-- 결과는 SQLite에 저장, URL 기준 중복 제거
+- **하루 1회 자동**(하루 1회 작업) + 화면의 **"지금 수집"** 버튼. 화면을 열 때는 저장된 결과만 읽습니다
+- **규칙으로 먼저 거름 (무료, `queries.json`의 `exclude` · `filters`)**
+  - 사고 · 범죄: DUI · drunk driving · crash · arrest · killed · fatal · underage · minors
+  - 비유 hangover: AI · tariff · election · market … + hangover (진짜 숙취인 holiday hangover는 남김)
+  - 인사 소식: names · appoints · hires … 와 CEO · president · chief … 가 함께 있는 제목
+  - 미국 밖 시장: UK · India · China … 가 있고 US · America가 없는 제목
+  - 한국어 제목: K-푸드 검색어만 허용
+- URL · 제목 기준 중복 제거, 최근 7일 기사로 정리
+- 실패하면 마지막 결과를 그대로 보여 주고 "업데이트 실패" 배지 표시. 연달아 3번 실패하면 남은 검색어는 건너뜀
 
-### AI 처리 (2단계)
+### AI 처리 (OpenAI 1회)
 
-1. **관련성 필터링**: 마케팅과 무관한 기사 제거
-2. **요약**: 제목 + 도메인 기반으로 핵심 동향 3~5개 요약, 원문 링크 첨부
+1. **관련성 필터링**: 최근 7일 기사 최대 150개의 제목 · 매체 · 날짜 · 분야를 보고 관련 기사만 고름
+2. **점수 (후보 최대 15개)**: REBOOT와의 거리 0~2 · 실행 가능성 0~2 · 출처 0~2 · 새로움 0~1
 
-> 1차 범위에서는 기사 본문 크롤링을 하지 않습니다 (페이월·저작권 이슈).
+| 기준 | 2점 | 1점 | 0점 |
+|---|---|---|---|
+| REBOOT와의 거리 | 숙취 제품·성분 · 경쟁 브랜드 · 영양제/식품 규제 | 음주 행태 · 무알코올·기능성 · K-푸드 | 주류 업계 일반 |
+| 실행 가능성 | 이번 주 카피·캠페인·채널에 바로 반영 | 참고 | 없음 |
+| 출처 | 공공기관 · 업계지 · 연구·조사 | 주요 언론 | 보도자료 · 블로그 · 쇼핑 추천글 |
+| 새로움 | – | 처음 나온 소식 | 반복 |
 
-### 보도량 급증 시그널
+3. **최종 8개 (서버가 고름)**: signal 분야는 2개씩 먼저 자리 보장 → 한 분야는 3개까지 → 나머지는 점수순
+4. **기사별 정리**: 한국어 제목 · 한 줄 요약(제목에서 알 수 있는 사실만) · **왜 중요한가** 한 줄 · 주제
+5. **한 줄 정리**: 전체를 2문장 이내로 — 무엇이 일어나고 REBOOT에 무슨 의미인지
 
-`TimelineVol`로 키워드별 보도량을 비교해 **전주 대비 크게 증가한 키워드**를 표시하고, To-Do 생성의 근거로 사용합니다.
+### 검색어 점검 (월 1회)
 
-### 운영 시 주의사항
+뉴스 카드 아래 **"검색어 점검 (최근 60일)"**: 검색어마다 찾은 기사 · 규칙 통과 · 카드로 고른 수. 30일 넘게 돌렸는데 카드가 0개면 **교체 후보**로 표시합니다. 교체는 `queries.json`을 고치고 '지금 수집'으로 확인합니다.
 
-| 항목 | 내용 | 대응 |
-|---|---|---|
-| 요청 제한 | IP당 약 5초에 1회 | 쿼리 간 5초 이상 간격 + 재시도 |
-| 에러 응답 | 잘못된 쿼리에 HTTP 200 + 텍스트/빈 응답을 줄 수 있음 | JSON 파싱 검증 후 실패 처리 |
-| 쿼리 문법 | OR 조건은 괄호 필수, 너무 짧은 단어는 거부될 수 있음 | 쿼리 템플릿으로 관리 |
-| 조회 기간 | 기사 목록은 최근 약 3개월 | 데일리 브리핑 용도로는 충분 |
-| 안정성 | SLA 없음 | 실패 시 마지막 캐시 + "업데이트 실패" 배지 표시 |
+### 보도 급증 시그널
+
+검색어별로 **최근 7일 기사 수 vs 그 전 7일 기사 수**를 비교합니다. 최근 7일이 **5건 이상이고 1.5배 이상**이면 "보도 급증"으로 표시하고, 그 검색어로 들어온 기사 카드에도 태그를 붙입니다. To-Do 추천의 근거로도 씁니다.
+
+### 화면
+
+데일리 브리핑의 뉴스 카드: 한 줄 정리 → 보도 급증 검색어 → 기사 카드 3개 + 더보기(한국어 제목 · 요약 · 왜 중요 · 분야/보도 급증 · 매체 · 날짜 · 영어 원제목, 카드를 누르면 원문 새 탭) → 검색어 점검. OpenAI 키가 없으면 규칙을 통과한 최근 기사 제목만 보여 줍니다.
 
 ---
 
@@ -101,55 +124,46 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 ## 데이터 흐름
 
 ```
-seasons.csv ──────────────────────────────────┐
-                                              ├──▶ AI 종합 ──▶ 이번 주 To-Do
-GDELT API ──▶ 배치 수집 ──▶ SQLite ──▶ AI 필터링·요약 ─┘
-                  └──▶ TimelineVol ──▶ 급증 시그널 ──┘
+seasons.csv ───────────────────────────────────────────┐
+                                                       ├──▶ AI 종합 ──▶ 이번 주 To-Do
+구글 뉴스 RSS ──▶ 수집 ──▶ DB(home_news_articles) ──▶ AI 필터링·기사별 요약 ─┘
+                   └──▶ 날짜로 보도 급증 계산 ──────────┘
 ```
 
-## 디렉토리 구조
+## 파일
 
 ```
-app/
-├── routes/home.py            # 홈 라우트
-├── services/
-│   ├── season_service.py     # CSV 로드, D-day 계산
-│   ├── gdelt_client.py       # GDELT 호출 (요청 간격, 재시도, 응답 검증)
-│   ├── news_service.py       # 수집·중복 제거·AI 필터링·요약
-│   └── todo_service.py       # To-Do 생성
-├── jobs/
-│   └── daily_collect.py      # 하루 1회 배치 수집
-├── templates/home.html
-data/
-├── seasons.csv
-├── queries.yaml              # 카테고리별 GDELT 쿼리 템플릿
-└── briefing.db               # SQLite (기사, 요약, To-Do)
+tabs/home/
+├── routes.py      # API (/api/home/...) · 하루 1회 작업
+├── rss.py         # 구글 뉴스 RSS 읽기 · 노이즈 판정 · 보도 급증 계산
+├── news.py        # 수집 · 저장 · AI 필터링·요약 · 화면용 데이터
+├── todos.py       # 이번 주 To-Do
+├── models.py      # DB 표 (home_news_articles · home_news_runs · home_todos …)
+├── data/queries.json   # 뉴스 검색어 · 노이즈 단어 · 급증 기준
+├── static/home.js · home.css
+└── tests/test_home.py
 ```
+
+시즌 캘린더는 공용 `data/seasons.csv`(설정 탭에서 편집)를 씁니다.
 
 ## 환경 변수 (`.env`)
 
 ```
-AI_API_KEY=
-TIMEZONE=Asia/Seoul
-GDELT_REQUEST_INTERVAL_SEC=5
+OPENAI_API_KEY=     # 없으면 AI 요약 없이 최근 기사 제목만 표시
 ```
 
-> GDELT는 API 키가 필요 없습니다.
+> 구글 뉴스 RSS는 키가 필요 없습니다.
 
-## 실행
+## 실행 · 확인
 
-```bash
-pip install -r requirements.txt
-
-# 배치 수집 (수동 실행)
-python -m app.jobs.daily_collect
-
-# 서버 실행
-flask --app app run --debug
+```cmd
+python -m server                          # 데일리 브리핑 → 뉴스 '지금 수집'
+python -m pytest tabs\home               # 홈 테스트 (인터넷 · 키 없이)
 ```
 
 ## 로드맵
 
-- [ ] **PoC**: 1주일 수집 후 관련 기사 비율 확인 → 쿼리·노이즈 제거 규칙 조정
-- [ ] 본 개발: 배치 수집, AI 요약, 급증 시그널, To-Do
-- [ ] 2단계: 소비자 수요 시그널(검색 트렌드 등) 별도 소스 추가 검토
+- [x] 구글 뉴스 RSS로 수집 · 기사별 한국어 요약 · 보도 급증
+- [ ] 시즌 알림 팝업 (D-10 이내)
+- [ ] 뉴스 검색어를 화면에서 바꾸기
+- [ ] 보도 급증을 검색어 단위가 아니라 기사 묶음(주제) 단위로

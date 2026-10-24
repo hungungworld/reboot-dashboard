@@ -41,6 +41,7 @@
 .part-home .market-item p a:hover { text-decoration: underline; }
 .part-home .home-links a { color: var(--muted-2); text-decoration: underline; text-underline-offset: 2px; }
 .part-home .home-links a:hover { color: var(--ink); }
+.part-home .home-news-more { margin-top: 10px; }
 .part-home .home-news-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-3); flex-wrap: wrap; }
 .part-home .home-errors { margin-top: 10px; font-size: 11px; color: var(--red); }
 .part-home .home-errors summary { cursor: pointer; }
@@ -62,3 +63,40 @@
 @media (max-width: 950px) { .part-home .home-sched-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .part-home .home-cal-weekdays { min-width: 650px; } }
 @media (max-width: 600px) { .part-home .home-sched-grid { grid-template-columns: 1fr; } }
+
+/* 뉴스 카드: 카드 어디를 눌러도 기사 새 탭 */
+.part-home .home-news-card { cursor: pointer; border-radius: 9px; transition: background .15s; }
+.part-home .home-news-card:hover { background: var(--soft-2); }
+
+/* 이번 주 To-Do 버튼 · 사이드 패널 (모든 화면 · part-home 밖이라 home-dock 접두사) */
+.home-fab { position: fixed; right: 24px; bottom: 24px; z-index: 45; width: 52px; height: 52px; border-radius: 50%; border: 0;
+  background: var(--lime); color: var(--lime-ink); box-shadow: var(--shadow); display: grid; place-items: center; cursor: pointer; }
+.home-fab:hover { background: var(--lime-line); }
+.home-fab .icon { width: 22px; height: 22px; }
+.home-fab-count { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  background: var(--dark); color: var(--dark-ink); font-size: 10.5px; font-weight: 650; display: grid; place-items: center; }
+.home-fab-count[hidden] { display: none; }
+.home-dock-scrim { position: fixed; inset: 0; z-index: 54; background: rgba(23, 23, 32, .25); }
+.home-dock-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 55; width: min(380px, 100vw); background: var(--surface);
+  border-left: 1px solid var(--line); box-shadow: var(--shadow); padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; }
+.home-dock-panel[hidden], .home-dock-scrim[hidden] { display: none; }
+.home-dock-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.home-dock-head h2 { font-size: 15px; }
+.home-dock-close { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 7px; }
+.home-dock-close:hover { background: var(--soft); }
+.home-dock-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.home-dock-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 9px; cursor: pointer; }
+.home-dock-item:hover { background: var(--soft-2); }
+.home-dock-item input { margin-top: 3px; }
+.home-dock-title { display: block; font-size: 12.5px; color: var(--ink); }
+.home-dock-reason { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.home-dock-item.done .home-dock-title { text-decoration: line-through; color: var(--faint); }
+.home-dock-go { align-self: flex-start; }
+@media (max-width: 640px) { .home-fab { right: 16px; bottom: 16px; } }
+
+/* 뉴스 카드 '왜 중요' 한 줄 · 검색어 점검 */
+.part-home .home-why { display: block; margin-top: 4px; color: var(--ink-2); }
+.part-home .home-why b { font-weight: 650; color: var(--lime-deep); margin-right: 4px; }
+.part-home .home-qstats { margin-top: 10px; font-size: 11.5px; }
+.part-home .home-qstats summary { cursor: pointer; color: var(--muted); }
+.part-home .home-qstats code { font-size: 10.5px; white-space: normal; }

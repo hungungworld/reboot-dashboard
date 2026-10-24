@@ -1,6 +1,6 @@
 """홈 · 데일리 브리핑 API (담당: 이현경).
 
-  GET    /api/home/news              저장된 뉴스 동향 (GDELT를 부르지 않음) — 기사 · AI 요약 · 급증 시그널 · 수집 상태
+  GET    /api/home/news              저장된 뉴스 (구글 뉴스를 부르지 않음) — 기사 · AI 한국어 요약 · 급증 시그널 · 수집 상태
   POST   /api/home/news/collect      지금 수집 (뒤에서 실행, 바로 응답) → 화면이 /news/status로 끝났는지 확인
   GET    /api/home/news/status       수집 중인지 · 마지막 수집 결과
   GET    /api/home/todos             이번 주 To-Do (?week=YYYY-MM-DD 그 주 월요일)
@@ -56,7 +56,7 @@ def news_collect():
     return jsonify(started=True, runId=run.id), 202
 
 
-@jobs.daily("home-news", "홈 데일리 브리핑: 미국 주류 업계 뉴스 수집(GDELT) · AI 요약 → 이번 주 To-Do 자동 생성")
+@jobs.daily("home-news", "홈 데일리 브리핑: 미국 주류 업계 뉴스 수집(구글 뉴스) · AI 요약 → 이번 주 To-Do 자동 생성")
 def daily_briefing():
     news.collect(trigger="daily", user_name="시스템")
     todos.generate({}, auto=True, user="시스템")

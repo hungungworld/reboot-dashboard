@@ -5,13 +5,13 @@ README의 '3번째 대시보드'(주간 리뷰 · 월간 리뷰 · 데이터)를
 
 ## 화면 (tabs/insights/static/insights.js · insights.css)
 
-- 위: KPI 4칸(이번 주 액션 · 진열대 상품 · 새 리뷰 7일 · 다음 시즌) → 탭 → 2단. 오른쪽 위: **데이터 업데이트** + 탭별 내려받기
+- 위: KPI 4칸(이번 주 액션 · 진열대 상품 · 새 리뷰 7일 · 다음 시즌, 데이터 탭에서는 숨김) → 탭 → 2단. 오른쪽 위: **데이터 업데이트** + 탭별 내려받기
 - 주소: `#weekly` · `#monthly` · `#data/shelf|competitors|reviews|audience|trends|accuracy` (설정의 규칙 카드가 `#data/shelf`로 연결)
 - **주간 리뷰**: 이번 주 액션(긴급 빨강 · 기회 초록 · 참고 파랑, 사실 → 왜 중요한가 → 할 일) · '규칙에 걸린 신호 보기'(규칙 · 사실 값 · AI가 다듬기 전 문장) · 진열대 변화 · 새 리뷰 · 다가오는 시즌(시즌 카드 · 작년 검색 비교) · 마지막 업데이트. 신호가 없으면 '특이사항 없음'
 - **월간 리뷰**: 1~7일에는 지난달. 지표 4개 · 이달의 요약(AI 3줄) · 고객 인사이트(펼치면 FAQ · 고객 표현 · 크리에이터 · 분류 정확도) · 경쟁사 동향 · 전략 업데이트(바뀐 점 · 페르소나 ≤3 · SWOT · 타깃 · 포지셔닝). AI가 없으면 규칙 요약 + 빈 상태 안내. 이전/다음 달 이동
 - **데이터**: 탭마다 '질문 → 한 줄 정리 → 핵심 → 접어둔 원본'
   - 진열대: 1회분 단가 3구간 카드(자사 초록 · 주시 ★ · 품절 빨강 · 가격 변동/신규 배지) → 누르면 가격 계산 · 재고 · 판매 신호 · 판매 문구(원문). '표로 보기'에서 수집 버튼 · 가격 · 회분 · 재고 · 자사 표시를 바로 고침, Weee! 원문 보기
-  - 경쟁사: 직접 경쟁 / 카테고리 경쟁 / 대체재 3열, 신호 3개(같은 판매처 · 고객 언급 · 가격대 비슷) 많은 순, 근거 보기, 주시하기(추천 최대 6개 표시)
+  - 경쟁사: 포지셔닝 매트릭스(SVG · 점 = 상품) + 블루오션 후보 카드 → 경쟁사 분석 표(7개 항목 · 출처 id · 다시 조사 · 자세히 · 주시 · 보관) → 대체재 · 보관함 접기. 신호 3개(같은 판매처 · 고객 언급 · 가격대 비슷)는 '자세히'와 Excel '경쟁사 후보·점수' 시트에 남김
   - 구매자 리뷰: 브랜드 × (효과 · 맛·향 · 복용 편의 · 부작용 · 가격) 표, +칭찬/−불만을 누르면 리뷰(AI 한국어 요약이 있으면 함께), 아마존 리뷰 요약(원문), Weee! 리뷰 CSV 올리기 · 양식
   - 잠재 고객(유튜브): 자주 묻는 질문 · 자주 쓰는 표현 · 협업 후보 크리에이터 Top 5, 댓글 원문 · 수집 과정은 접기
   - 검색 수요: 다음 급등 예상(작년 같은 시기 대비 %) · 지난 12개월 급등과 이유(시즌 날짜로 붙인 추정) · 12개월 차트(Chart.js) · 숫자 표 · Google Trends CSV 올리기
@@ -30,12 +30,13 @@ README의 '3번째 대시보드'(주간 리뷰 · 월간 리뷰 · 데이터)를
 | `youtube.py` | search(100 units) → videos 통계(조회수 기준) → commentThreads(영상당 1 unit · 댓글 꺼진 영상은 건너뜀) |
 | `classify.py` | 규칙 분류: 리뷰 주제 · 칭찬/불만(별점 우선), 댓글 관련 여부 · 질문 주제, 자주 쓰는 표현(2~3단어) |
 | `rules.py` | 이번 주 액션 규칙 6개 (README 그대로 · 순수 함수 · 테스트 대상) |
-| `ai.py` | OpenAI(`openai_json`, strict schema): 액션 문장 다듬기 · 리뷰 분류 · 댓글(VOC) 분류 · 월간 요약 · 전략. 같은 입력이면 `insights_ai_cache`에서 꺼냄 |
+| `competitors.py` | 경쟁사 등록(진열대 브랜드 · 대체재 검색어 판별) · 상품 위치 규칙(제형 · 타이밍 · 웰니스) · 브랜드 분석(근거 P/S/R/W · {확인 필요} · 변경 기록) · Firecrawl `v1/search`(홈페이지 찾기) · 매트릭스 · 블루오션 · 월별 스냅숏(`insights_kv` matrix_snapshots) · CSV/JSON 행 |
+| `ai.py` | OpenAI(`openai_json`, strict schema): 액션 문장 다듬기 · 리뷰 분류 · 댓글(VOC) 분류 · 경쟁 상품 위치 분류 · 경쟁사 분석 · 월간 요약 · 전략. 같은 입력이면 `insights_ai_cache`에서 꺼냄 |
 | `service.py` | 화면 묶음 (주간 · 월간 · 데이터 탭 · 공개 함수) |
 | `update.py` | 데이터 업데이트: 항목 · 비용 · 이번 달 사용량 · `jobs.run_background` 실행 · 진행 기록(`insights_runs`) |
-| `reports.py` | 주간 Word(1장) · 월간 Word · 데이터 Excel(진열대(주차별) · 구매자 리뷰 · VOC · 검색 트렌드 · 경쟁사 후보·점수 · 이번 주 액션 · 작업 로그) |
+| `reports.py` | 주간 Word(1장) · 월간 Word · 데이터 Excel(진열대(주차별) · 구매자 리뷰 · VOC · 검색 트렌드 · 경쟁사 후보·점수 · 경쟁사 분석 · 이번 주 액션 · 작업 로그) |
 
-API는 `routes.py` 맨 위 설명을 보세요. 주요: `GET /api/insights/weekly` · `/monthly` · `/data/<탭>` · `PATCH /shelf/<id>` · `PUT /servings` · `PUT /watch` · `POST /reviews/upload` · `POST /trends/upload` · `GET /update/plan` · `POST /update` · `GET /update/status` · `GET /report/weekly.docx` · `/report/monthly.docx` · `/export.xlsx` · `/trends` · `/personas`.
+API는 `routes.py` 맨 위 설명을 보세요. 주요: `GET /api/insights/weekly` · `/monthly` · `/data/<탭>` · `PATCH /shelf/<id>` · `PUT /servings` · `PUT /watch` · `POST /competitors/discover` · `/competitors/<id>/research` · `/competitors/research-all` · `PATCH /competitors/<id>` · `GET /competitors.csv` · `.json` · `POST /reviews/upload` · `POST /trends/upload` · `GET /update/plan` · `POST /update` · `GET /update/status` · `GET /report/weekly.docx` · `/report/monthly.docx` · `/export.xlsx` · `/trends` · `/personas`.
 
 ### 1회분 단가
 
@@ -63,7 +64,10 @@ API는 `routes.py` 맨 위 설명을 보세요. 주요: `GET /api/insights/weekl
 
 - **한국어 핵심 메시지는 아직 없음**: 진열대 상세는 판매 문구 원문만 보여줘요 (번역 AI 호출은 넣지 않음).
 - **데이터 탭 '한 줄 정리'는 규칙 문장**이에요 (AI로 다시 쓰지 않아 비용 0).
-- **경쟁사 후보 AI 웹 검색은 뺐어요** (README '사전 조사 + AI 웹 검색'). 지금은 진열대에 나온 브랜드를 신호 3개로 정렬해요. 브랜드는 상품의 브랜드 값이 없으면 상품명 첫 단어로 추정하고 '추정'으로 표시해요. 직접 · 카테고리 · 대체재 구분은 상품명 단어 규칙이에요.
+- **경쟁사는 진열대에 나온 브랜드만 등록해요** (별도 웹 검색으로 새 브랜드를 찾지 않음). '새 경쟁사 찾기'는 지금 진열대 기준이라 무료예요. 브랜드는 상품의 브랜드 값이 없으면 상품명 첫 단어로 추정해요. 직접 · 카테고리 · 대체재 구분은 상품명 단어 규칙이고, 숙취 검색어로 잡힌 브랜드는 적어도 카테고리, 대체재 검색어로만 잡힌 브랜드는 대체재예요.
+- **같은 근거면 AI 분석을 다시 부르지 않아요** (`insights_ai_cache`). 다시 조사해도 진열대 · 홈페이지 내용이 그대로면 결과가 같아요.
+- **홈페이지 자동 찾기는 브랜드마다 한 번만** 해요 (`insights_kv` comp_site_searched). 못 찾았으면 '자세히'에서 직접 넣으세요. 주소에 브랜드 이름이 들어간 결과만 받아요.
+- **매트릭스의 '둘 다' 상품은 Pre · Post 두 칸에 모두 세요.** 알디콤 상품은 칸의 경쟁 수에 넣지 않아요.
 - **자사(알디콤) 표시**는 추적 ASIN의 '자사' · 상품명의 자사 표시 단어 · 표에서 직접 체크로 정해요.
 - **변화 알림은 2주차부터** (README와 같음). 월간 '가격 변동 횟수'도 비교할 지난주가 있어야 계산돼요.
 - **'새 리뷰'는 이 대시보드가 지난 7일 안에 새로 모은 리뷰**예요 (리뷰 작성일 기준 아님).

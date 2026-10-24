@@ -25,7 +25,7 @@
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
   const BUCKETS = [['low', '$3 미만'], ['mid', '$3~6'], ['high', '$6 이상']];
   const ITEM_LABEL = { weee: 'Weee! 진열대', amazon: 'Amazon 진열대 · 리뷰', trends: '검색 트렌드', reviews: '리뷰 분류', actions: '이번 주 액션',
-    youtube: '유튜브 수집', voc: 'VOC 분류', monthly: '요약 · 전략' };
+    youtube: '유튜브 수집', voc: 'VOC 분류', competitors: '경쟁사 분석', monthly: '요약 · 전략' };
   const KEY_LABEL = { SERPAPI_KEY: 'SerpApi', FIRECRAWL_API_KEY: 'Firecrawl', YOUTUBE_API_KEY: 'YouTube', OPENAI_API_KEY: 'OpenAI' };
   const USE_LABEL = { serpapi: 'SerpApi', firecrawl: 'Firecrawl', youtube: 'YouTube', openai: 'OpenAI' };
   const USE_UNIT = { serpapi: '회', firecrawl: ' 크레딧', youtube: ' units', openai: '회' };
@@ -121,6 +121,8 @@
       b.setAttribute('aria-selected', String(on));
     });
     $$(S.root, '[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== tab; });
+    const kpis = $(S.root, '[data-ref="kpis"]');
+    if (kpis) kpis.hidden = tab === 'data';
     drawActions();
     if (tab === 'weekly') { drawWeekly(); setHash('weekly'); }
     if (tab === 'monthly') { if (S.monthly) drawMonthly(); else loadMonthly(S.month); setHash('monthly'); }
@@ -156,6 +158,12 @@
       case 'run-close': S.showResult = false; drawRun(S.run); break;
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'watch': toggleWatch(b, d.brand, d.on === '1'); break;
+      case 'comp-discover': compAction(b, 'discover'); break;
+      case 'comp-research-all': compAction(b, 'all'); break;
+      case 'comp-research': compAction(b, 'one', d.id); break;
+      case 'comp-status': compAction(b, 'status', d.id, d.status); break;
+      case 'comp-detail': openCompDetail(findComp(d.id)); break;
+      case 'comp-point': jumpComp(d.brand); break;
       case 'rv': openReviews(d.brand, d.topic, d.s); break;
       case 'month': S.monthly = null; S.month = d.month; loadMonthly(d.month); break;
       case 'aud-month': loadData('audience', d.month); break;
@@ -574,31 +582,165 @@
     ui.modal({ title: 'Weee! 원문 (앞부분)', body, wide: true });
   }
 
-  /* 경쟁사 */
-  function compCard(c) {
+  /* 경쟁사 — 포지셔닝 매트릭스 · 블루오션 후보 · 분석 표 (competitors.py) */
+  const CHECK = '{확인 필요}';
+  const TIMING = { pre: 'Pre', post: 'Post', both: '둘 다' };
+  function sigChips(c) {
+    if (!c.signals) return '';
     const sig = (label, v) => `<span class="ins-sig${v ? ' on' : ''}">${v ? icon('check') : ''}${esc(label)}${typeof v === 'number' && v ? ` ${v}` : ''}</span>`;
-    return `<article class="ins-comp${c.watched ? ' watched' : ''}">
-      <div class="between"><strong>${c.watched ? '<span class="ins-star">★</span> ' : ''}${esc(c.brand)}</strong>
-        <div class="flex">${c.recommended && !c.watched ? badge('추천', 'lime') : ''}${badge(`신호 ${c.score}/3`, c.score >= 2 ? 'green' : c.score ? 'blue' : '')}</div></div>
-      <p class="small ins-reason">${esc(c.reason)}</p>
-      <div class="ins-sigs">${sig('같은 판매처', c.signals.sameSeller)}${sig('고객 언급', c.signals.mention)}${sig('가격대 비슷', c.signals.similarPrice)}</div>
-      <details class="ins-mini" data-fold="comp-${esc(c.brand)}"${S.open['comp-' + c.brand] ? ' open' : ''}><summary>근거 보기</summary>
-        <ul class="ins-ul">${c.products.map(p => `<li>${esc(p.title)} <span class="muted small">· ${esc(p.source)} · ${esc(money(p.price))} (1회분 ${esc(money(p.perServing))})${p.in_stock === false ? ' · 품절' : ''}</span> ${extLink(p.link)}</li>`).join('')}</ul>
-        ${c.mentions.length ? `<span class="field-label mt-8">고객 언급 (원문)</span><ul class="ins-ul">${c.mentions.map(m => `<li class="small">"${esc(m)}"</li>`).join('')}</ul>` : ''}
-        ${c.brandGuessed ? '<p class="panel-note">브랜드는 상품명 첫 단어로 추정했어요. 틀릴 수 있어요.</p>' : ''}
-      </details>
-      <button type="button" class="btn small${c.watched ? '' : ' dark'}" data-act="watch" data-brand="${esc(c.brand)}" data-on="${c.watched ? '0' : '1'}">${c.watched ? '주시 해제' : '★ 주시하기'}</button>
-    </article>`;
+    return `<div class="ins-sigs">${sig('같은 판매처', c.signals.sameSeller)}${sig('고객 언급', c.signals.mention)}${sig('가격대 비슷', c.signals.similarPrice)}</div>`;
+  }
+  function fieldHtml(c, key) {
+    if (!c.analyzed) return '<span class="muted small">분석 전</span>';
+    const v = c.analysis[key] || {};
+    const text = Array.isArray(v.values) ? (v.values.join(', ') || CHECK) : (v.text || CHECK);
+    const src = (v.sources || []).length ? ` <span class="ins-src">${esc(v.sources.join(' '))}</span>` : '';
+    return text === CHECK ? `<span class="ins-check">${esc(CHECK)}</span>` : `${esc(text)}${src}`;
+  }
+  function findComp(id) {
+    const d = S.data.competitors || {};
+    return [].concat(d.table || [], d.substitutes || [], d.archived || []).find(c => String(c.id) === String(id));
+  }
+
+  function matrixSvg(m) {
+    const W = 640, H = 400, P = 34;
+    const iw = W - P * 2, ih = H - P * 2;
+    const cell = k => m.cells.find(c => c.key === k) || {};
+    const blue = m.blueOcean ? m.blueOcean.key : '';
+    const quad = (k, x, y) => {
+      const c = cell(k);
+      const delta = c.delta == null ? '' : ` (지난달 대비 ${c.delta >= 0 ? '+' : ''}${c.delta})`;
+      return `<g class="ins-quad${k === blue ? ' blue' : ''}"><rect x="${x}" y="${y}" width="${iw / 2}" height="${ih / 2}" rx="6"></rect>
+        <text x="${x + 10}" y="${y + 18}" class="ins-quad-t">${esc(c.label || k)}</text>
+        <text x="${x + 10}" y="${y + 33}" class="ins-quad-n">제품 ${c.products || 0} · 리뷰 ${fmt.num(c.reviews || 0)}${esc(delta)}</text></g>`;
+    };
+    const dots = m.points.slice().sort((a, b) => b.reviews - a.reviews).map(p => {
+      const r = Math.min(18, 4 + Math.sqrt(p.reviews || 0) / 12);
+      const cx = P + p.x * iw, cy = P + (1 - p.y) * ih;
+      const cls = ['ins-dot', p.own ? 'own' : '', p.watched ? 'watched' : '', p.wellness ? 'well' : ''].filter(Boolean).join(' ');
+      const tip = `${p.brand} · ${p.title} · ${TIMING[p.timing]} × ${p.form === 'liquid' ? 'Liquid' : 'Powder/Gummy'} · 리뷰 ${fmt.num(p.reviews)}${p.wellness ? ' · 웰니스' : ''}${p.by === 'ai' ? ' · AI 분류' : ''}`;
+      return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" data-act="comp-point" data-brand="${esc(p.brand)}"><title>${esc(tip)}</title></circle>`;
+    }).join('');
+    return `<svg class="ins-matrix-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="포지셔닝 매트릭스: 가로 섭취 타이밍, 세로 제형">
+      ${quad('pre-liquid', P, P)}${quad('post-liquid', P + iw / 2, P)}${quad('pre-solid', P, P + ih / 2)}${quad('post-solid', P + iw / 2, P + ih / 2)}
+      <text x="${P}" y="${H - 10}" class="ins-axis">← Pre (음주 전)</text>
+      <text x="${W - P}" y="${H - 10}" class="ins-axis" text-anchor="end">Post (음주 후 · 회복) →</text>
+      <text x="${P}" y="20" class="ins-axis">▲ Liquid (샷 · 음료)</text>
+      <text x="${W - P}" y="20" class="ins-axis" text-anchor="end">▼ Powder/Gummy (분말 · 구미 · 젤리)</text>
+      ${dots}</svg>`;
+  }
+
+  function compRow(c, fields) {
+    const flags = [c.isNew ? badge('새', 'blue') : '', c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '',
+      c.deep ? badge(`상위 ${S.data.competitors.deepTop}`, 'lime') : '', c.analyzed ? badge('AI 분석', 'purple') : ''].join(' ');
+    const acts = c.id == null ? '<span class="small muted">새 경쟁사 찾기로 등록</span>' : `<div class="flex wrap">
+      <button type="button" class="btn small" data-act="comp-research" data-id="${c.id}">${icon('refresh')}다시 조사</button>
+      <button type="button" class="btn small ghost" data-act="comp-detail" data-id="${c.id}">자세히</button>
+      <button type="button" class="btn small ghost" data-act="watch" data-brand="${esc(c.brand)}" data-on="${c.watched ? '0' : '1'}">${c.watched ? '주시 해제' : '★ 주시'}</button>
+      <button type="button" class="btn small ghost" data-act="comp-status" data-id="${c.id}" data-status="${c.status === 'archived' ? 'active' : 'archived'}">${c.status === 'archived' ? '복원' : '보관'}</button></div>`;
+    return `<tr data-comp-row="${esc(c.brand.toLowerCase())}">
+      <td><strong>${esc(c.brand)}</strong><div class="flex wrap mt-4">${flags}</div>
+        <div class="small muted">${esc(c.tierLabel)} · 리뷰 ${fmt.num(c.reviews)}${c.onShelf ? '' : ' · 이번 진열대에 없음'}</div></td>
+      ${fields.map(f => `<td class="ins-field">${fieldHtml(c, f.key)}</td>`).join('')}
+      <td class="small nowrap">${c.researchedAt ? esc(fmt.date(c.researchedAt)) : '—'}</td>
+      <td>${acts}</td></tr>`;
   }
 
   function competitorsHtml(d) {
-    const cols = ['direct', 'category', 'substitute'].map(k => `<section class="card"><div class="card-head"><h2>${esc(d.tierLabels[k])}</h2>${badge(`${d.columns[k].length}개`)}</div>
-      <div class="stack tight">${d.columns[k].map(compCard).join('') || '<p class="small muted">없음</p>'}</div></section>`).join('');
-    const any = Object.values(d.columns).some(c => c.length);
-    return qHead('competitors', d.oneLine, d.watch.length ? badge(`주시 ${d.watch.length}개`, 'lime') : '') +
-      (d.ownFound ? '' : '<div class="note warn mt-16">자사 상품이 진열대에 없어 \'같은 판매처 · 가격대 비슷\' 신호는 계산하지 못했어요. 설정 › 수집 설정에서 추적 ASIN · Weee! 상품 주소를 넣거나, 진열대 표에서 자사 표시를 하세요.</div>') +
-      (any ? `<div class="grid-3 mt-24">${cols}</div>` : `<div class="mt-24">${ui.empty('진열대 데이터가 있어야 경쟁사를 묶을 수 있어요.', 'users')}</div>`) +
-      `<p class="panel-note mt-16">신호 3개(같은 판매처 · 고객 언급 · 가격대 비슷)가 많을수록 위에 보여요. 주시하기로 고른 브랜드는 다른 화면에서도 먼저 보여요 (5~6개 추천). 구분(직접 · 카테고리 · 대체재)은 상품명 단어로 나눈 규칙 결과예요.</p>`;
+    const m = d.matrix;
+    const fields = d.fields;
+    const head = `<tr><th>브랜드</th>${fields.map(f => `<th>${esc(f.label)}</th>`).join('')}<th>조사일</th><th></th></tr>`;
+    const table = rows => `<div class="table-wrap"><table class="data-table ins-table ins-comp-table"><thead>${head}</thead><tbody>${rows.map(c => compRow(c, fields)).join('')}</tbody></table></div>`;
+    const blue = m.blueOcean;
+    const tools = `<div class="flex wrap mb-16">
+      <button type="button" class="btn" data-act="comp-discover">${icon('search')}새 경쟁사 찾기</button>
+      <button type="button" class="btn dark" data-act="comp-research-all"${d.aiReady ? '' : ' disabled'}>${icon('refresh')}전체 다시 조사 (상위 ${d.deepTop})</button>
+      <a class="btn ghost" href="/api/insights/competitors.csv" download>${icon('download')}CSV</a>
+      <a class="btn ghost" href="/api/insights/competitors.json" download>${icon('download')}JSON</a></div>`;
+    const notes = [!d.aiReady ? '<div class="note warn mt-16">OpenAI 키가 없어 브랜드 분석과 애매한 상품의 AI 분류는 할 수 없어요. 매트릭스는 상품명 규칙으로만 그려요 (설정 › 연결).</div>' : '',
+      d.aiReady && !d.firecrawlReady ? '<div class="note mt-16">Firecrawl 키가 없어 브랜드 홈페이지는 읽지 않고, Amazon · Weee! 자료로만 분석해요.</div>' : '',
+      d.ownFound ? '' : '<div class="note warn mt-16">자사 상품이 진열대에 없어 \'같은 판매처 · 가격대 비슷\' 신호와 매트릭스의 알디콤 점이 빠져요. 설정 › 수집 설정에서 추적 ASIN을 넣거나 진열대 표에서 자사 표시를 하세요.</div>'].join('');
+    const matrix = `<section class="card"><div class="card-head"><h2>포지셔닝 매트릭스</h2>${badge(`상품 ${m.points.length}개`)}</div>
+      ${m.points.length ? matrixSvg(m) : ui.empty('제형과 섭취 타이밍을 알 수 있는 상품이 아직 없어요.', 'grid')}
+      <div class="ins-legend small"><span><i class="ins-lg own"></i>알디콤</span><span><i class="ins-lg watched"></i>주시 중</span><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg well"></i>점선 테두리 = 기능성 웰니스</span><span>점 크기 = 리뷰 수</span></div>
+      <p class="panel-note">점 하나 = 상품 하나. 제형은 상품명 규칙, 섭취 타이밍은 판매 문구 규칙으로 정하고 애매한 것만 AI가 분류해요 (마우스를 올리면 보여요). 점을 누르면 아래 표에서 그 브랜드로 가요.${m.unknown ? ` 제형이나 타이밍을 알 수 없는 상품 ${m.unknown}개는 찍지 않았어요.` : ''} 대체재 브랜드는 찍지 않아요.</p></section>`;
+    const blueCard = `<section class="card ins-blue"><div class="card-head"><h2>블루오션 후보</h2>${badge('규칙 · 참고용', 'blue')}</div>
+      ${blue ? `<p><b>${esc(blue.label)}</b></p><p class="small">${esc(blue.reason)}</p>${blue.own ? '<p class="small muted">알디콤 상품도 이 칸에 있어요.</p>' : ''}` : '<p class="small muted">매트릭스에 찍힌 경쟁 상품이 없어 판단하지 못했어요.</p>'}
+      <p class="panel-note">경쟁 상품이 적다는 뜻이지 수요가 있다는 뜻은 아니에요. 검색 수요(Google Trends)를 더하는 건 2단계예요.${m.prevMonth ? ` 칸별 변화는 ${esc(m.prevMonth)} 대비예요.` : ' 칸별 변화는 다음 달부터 보여요.'}</p></section>`;
+    const list = `<section class="card mt-24"><div class="card-head"><h2>경쟁사 분석</h2>${badge(`${d.table.length}개`)}</div>${tools}
+      ${d.table.length ? table(d.table) : `<div class="mt-16">${ui.empty('아직 등록된 경쟁사가 없어요. 진열대를 모은 뒤 새 경쟁사 찾기를 누르세요.', 'users')}</div>`}
+      <p class="panel-note mt-8">7개 항목은 AI가 모은 근거(P = 진열대 상품 · S = 리뷰 요약 · R = 구매자 리뷰 · W = 브랜드 홈페이지) 안에서만 채우고, 근거가 없으면 ${esc(CHECK)}로 남겨요. 사람이 확정하지 않은 AI 분석이라 참고용이에요. 리뷰 상위 ${d.deepTop}개 브랜드만 분석하고, 데이터 업데이트 때 25일이 지난 곳을 다시 조사해요.</p></section>`;
+    const subs = d.substitutes.length ? fold('comp-subs', `대체재 ${d.substitutes.length}개 (전해질 음료 · 간 영양제 등 · 매트릭스 제외)`, table(d.substitutes)) : '';
+    const arch = d.archived.length ? fold('comp-arch', `보관함 ${d.archived.length}개`, table(d.archived)) : '';
+    return qHead('competitors', d.oneLine, d.watch.length ? badge(`주시 ${d.watch.length}개`, 'lime') : '') + notes +
+      `<div class="ins-comp-top mt-24">${matrix}${blueCard}</div>` + list + subs + arch;
+  }
+
+  function openCompDetail(c) {
+    if (!c) return;
+    const src = (c.sources || []).map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('');
+    const hist = (c.history || []).map(h => `<li>${esc(fmt.date(h.savedAt))}: ${h.changed.length ? esc(h.changed.join(', ')) + ' 바뀜' : '바뀐 항목 없음'}</li>`).join('');
+    const prods = (c.products || []).map(p => `<li>${esc(p.title)} <span class="muted small">· ${esc(p.source)} · ${esc(money(p.price))}</span> ${extLink(p.link)}</li>`).join('');
+    const body = `<div class="part-insights ins-modal">
+      <p class="small muted">${esc(c.tierLabel)} · 발견 검색어: ${esc((c.keywords || []).join(', ') || '—')}${c.model ? ` · ${esc(c.model)}` : ''}</p>
+      ${c.reason ? `<p class="small ins-reason">${esc(c.reason)}</p>${sigChips(c)}` : ''}
+      <label class="field-label mt-8" for="comp-site">브랜드 홈페이지 (자동으로 찾고, 틀리면 고치세요)</label>
+      <div class="flex"><input id="comp-site" class="grow" data-ref="site" value="${esc(c.website || '')}" placeholder="https://"><button type="button" class="btn small" data-ref="site-save">저장</button></div>
+      <h3 class="ins-h3">근거 자료</h3>${src ? `<ul class="ins-ul">${src}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}
+      ${prods ? `<h3 class="ins-h3">이번 진열대 상품</h3><ul class="ins-ul">${prods}</ul>` : ''}
+      <h3 class="ins-h3">다시 조사 기록</h3>${hist ? `<ul class="ins-ul">${hist}</ul>` : '<p class="small muted">기록이 없어요.</p>'}
+      ${c.brandGuessed ? '<p class="panel-note">브랜드는 상품명 첫 단어로 추정했어요. 틀릴 수 있어요.</p>' : ''}</div>`;
+    ui.modal({
+      title: c.brand, body, wide: true,
+      onOpen: el => {
+        const btn = $(el, '[data-ref="site-save"]');
+        btn.addEventListener('click', async () => {
+          ui.busy(btn, true);
+          try {
+            await api(`/api/insights/competitors/${c.id}`, { website: $(el, '[data-ref="site"]').value }, { method: 'PATCH' });
+            toast('홈페이지 주소를 저장했어요. 다시 조사하면 이 주소를 읽어요.');
+            loadData('competitors');
+          } catch (e) { toast(e.message, 'error'); }
+          ui.busy(btn, false);
+        });
+      }
+    });
+  }
+
+  async function compAction(btn, act, id, status) {
+    if (act === 'all' && !(await ui.confirm(`리뷰 상위 ${S.data.competitors.deepTop}개 브랜드를 모두 다시 조사해요. 브랜드마다 OpenAI 1회 · Firecrawl 1~2회를 써요. 진행할까요?`))) return;
+    ui.busy(btn, true);
+    try {
+      if (act === 'discover') {
+        const r = await api('/api/insights/competitors/discover', {});
+        toast(r.added.length ? `새 경쟁사 ${r.added.length}개를 등록했어요: ${r.added.slice(0, 5).join(', ')}` : '새로 등록할 경쟁사가 없어요. 새 상품을 모으려면 데이터 업데이트 › Amazon 진열대를 돌리세요.');
+        await loadData('competitors');
+        return;
+      }
+      if (act === 'status') {
+        await api(`/api/insights/competitors/${id}`, { status }, { method: 'PATCH' });
+        toast(status === 'archived' ? '보관함으로 옮겼어요.' : '다시 관리 목록에 넣었어요.');
+        await loadData('competitors');
+        return;
+      }
+      await api(act === 'all' ? '/api/insights/competitors/research-all' : `/api/insights/competitors/${id}/research`, {});
+      toast('경쟁사 조사를 시작했어요. 끝나면 표가 새로 그려져요.');
+      S.showResult = true;
+      checkRun(false);
+      ui.busy(btn, false);
+    } catch (e) {
+      ui.busy(btn, false);
+      toast(e.message, 'error');
+    }
+  }
+
+  function jumpComp(brand) {
+    const key = String(brand).toLowerCase();
+    const row = $$(panel('data'), '[data-comp-row]').find(r => r.dataset.compRow === key);
+    if (!row) { toast(`${brand}는 대체재이거나 표에 없어요.`); return; }
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('flash');
+    setTimeout(() => row.classList.remove('flash'), 1600);
   }
 
   async function toggleWatch(btn, brand, on) {

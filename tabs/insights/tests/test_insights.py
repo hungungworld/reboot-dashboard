@@ -540,7 +540,7 @@ def test_reports_and_export(app, auth_client, fixed_today):
     res = auth_client.get("/api/insights/export.xlsx")
     assert res.status_code == 200 and "spreadsheetml" in res.headers["Content-Type"]
     wb = load_workbook(io.BytesIO(res.data))
-    assert wb.sheetnames == ["진열대(주차별)", "구매자 리뷰", "VOC(유튜브·리뷰)", "검색 트렌드", "경쟁사 후보·점수", "이번 주 액션", "작업 로그"]
+    assert wb.sheetnames == ["진열대(주차별)", "구매자 리뷰", "VOC(유튜브·리뷰)", "검색 트렌드", "경쟁사 후보·점수", "경쟁사 분석", "이번 주 액션", "작업 로그"]
     assert wb["진열대(주차별)"].max_row == 1 + 4
 
 
@@ -562,3 +562,143 @@ def test_amazon_search_parser_skips_ads():
     item = parse_search_item({"asin": "b0comp0001", "title": " Flyby ", "price": "$29.99", "rating": "4.3", "reviews": "5,400"})
     assert item["asin"] == "B0COMP0001" and item["price"] == 29.99 and item["reviews"] == 5400 and item["title"] == "Flyby"
     assert stock_state("Currently unavailable.") is False and stock_state("Only 3 left in stock") is True and stock_state("") is None
+
+
+# ───────── 경쟁사 분석 · 매트릭스 ─────────
+
+CHECK = "{확인 필요}"
+
+
+def test_position_rules():
+    from tabs.insights.competitors import rule_form, rule_timing, rule_wellness
+    assert rule_form("Cheers Restore Hangover Liquid Shot 2oz") == "liquid"
+    assert rule_form("Hangover Gummies 30 Count") == "solid" and rule_form("Aldicom Hangover Jelly Stick") == "solid"
+    assert rule_form("Electrolyte Drink Mix Powder Packets") == "solid"  # 분말 음료는 고형으로
+    assert rule_form("Hangover support") == ""
+    assert rule_timing("Take before drinking") == "pre" and rule_timing("Morning after recovery") == "post"
+    assert rule_timing("Take before drinking for the morning after") == "both" and rule_timing("Great taste") == ""
+    assert rule_wellness("Ayurvedic herbal blend") and not rule_wellness("Electrolytes")
+
+
+def _seed_competitors(app):
+    from server.extensions import db
+    from tabs.insights.models import ShelfItem
+    rows = [
+        ("amazon:B0SHOT0001", "Cheers Restore Hangover Liquid Shot", "Cheers", "hangover liquid shot", 9000,
+         "Take before drinking. DHM and electrolytes."),
+        ("amazon:B0GUMMY001", "Flyby Hangover Gummies 30 Count", "Flyby", "hangover gummies, hangover supplement", 5000,
+         "Morning after recovery with herbal blend."),
+        ("amazon:B0UNSURE01", "Purple Tree Celebration Formula", "Purple Tree", "hangover supplement", 3000, ""),
+        ("amazon:B0LIV00001", "Liquid I.V. Hydration Multiplier Drink Mix Powder", "Liquid I.V.", "electrolyte drink hangover", 90000,
+         "Hydration for recovery."),
+        ("amazon:B0OWN00001", "Aldicom Hangover Jelly Stick", "Aldicom", "korean hangover", 40, "Enjoy after the party."),
+    ]
+    with app.app_context():
+        for key, title, brand, queries, reviews, msg in rows:
+            db.session.add(ShelfItem(week="2026-W43", source="amazon", key=key, title=title, brand=brand, queries=queries,
+                                     reviews=reviews, price=30.0, servings=10, in_stock=True, message=msg, own=brand == "Aldicom",
+                                     link=f"https://www.amazon.com/dp/{key.split(':')[1]}"))
+        db.session.commit()
+
+
+def test_competitor_register_matrix_and_blue_ocean(app, auth_client, fixed_today):
+    _seed_competitors(app)
+    res = auth_client.post("/api/insights/competitors/discover", json={})
+    assert res.status_code == 200 and set(res.get_json()["added"]) == {"Cheers", "Flyby", "Purple Tree", "Liquid I.V."}
+    assert auth_client.post("/api/insights/competitors/discover", json={}).get_json()["added"] == []  # 두 번째는 그대로
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    assert {c["brand"] for c in d["table"]} == {"Cheers", "Flyby", "Purple Tree"}
+    assert [c["brand"] for c in d["substitutes"]] == ["Liquid I.V."]  # 대체재 검색어로만 잡힘
+    assert all(not c["analyzed"] for c in d["table"]) and d["table"][0]["deep"]
+    m = d["matrix"]
+    pts = {p["brand"]: p for p in m["points"]}
+    assert set(pts) == {"Cheers", "Flyby", "Aldicom"} and m["unknown"] == 1  # Purple Tree는 제형 · 타이밍 모름
+    assert pts["Cheers"]["form"] == "liquid" and pts["Cheers"]["timing"] == "pre"
+    assert pts["Flyby"]["timing"] == "post" and pts["Flyby"]["wellness"] and pts["Aldicom"]["own"]
+    cells = {c["key"]: c for c in m["cells"]}
+    assert cells["pre-liquid"]["reviews"] == 9000 and cells["post-solid"]["products"] == 1 and cells["post-solid"]["own"] == 1
+    assert m["blueOcean"]["key"] in ("post-liquid", "pre-solid") and "검색 수요는 아직 확인 전" in m["blueOcean"]["reason"]
+    # 월간 리뷰 · 기존 열 묶음은 그대로
+    assert "columns" in d and auth_client.get("/api/insights/monthly").status_code == 200
+
+
+def test_competitor_research_with_mocked_ai_and_firecrawl(app, auth_client, monkeypatch, fixed_today, sync_jobs):
+    from tabs.insights import ai as insights_ai
+    _seed_competitors(app)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-test-key-zzzz")
+    posts, seen, version = [], [], {"n": 1}
+
+    def fake_post(url, json=None, headers=None, timeout=90):
+        posts.append((url, dict(json or {})))
+        if url.endswith("/search"):
+            q = json["query"].lower()
+            hits = ([{"url": "https://www.amazon.com/cheers"}, {"url": "https://www.cheershealth.com/products"}] if "cheers" in q
+                    else [{"url": "https://www.reddit.com/r/hangover"}])
+            return FakeRes(200, {"success": True, "data": hits})
+        if url.endswith("/scrape"):
+            return FakeRes(200, {"success": True, "data": {"markdown": f"# Cheers\nDHM based. Sold at CVS and on our site. v{version['n']}"}})
+        raise AssertionError(url)
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        seen.append(schema_name)
+        if schema_name == "product_positions":
+            return {"items": [{"id": p["id"], "form": "solid", "timing": "post", "wellness": True} for p in user["products"]]}
+        if schema_name == "competitor_analysis":
+            ids = [e["id"] for e in user["evidence"]]
+            return {"positioning": {"values": ["Pre-Drinking"], "sources": [ids[0]]},
+                    "formats": {"values": ["Liquid Shot"], "sources": [ids[0]]},
+                    "channels": {"values": ["Amazon", "대형 오프라인 리테일"], "sources": ["W1"] if "W1" in ids else []},
+                    "usp": {"text": f"DHM 성분 v{version['n']}", "sources": [ids[0], "X9"]},
+                    "marketing": {"text": "틱톡 인플루언서", "sources": []},  # 근거 없음 → 확인 필요
+                    "implication": {"text": "샷 제형 방어 필요", "sources": []}}
+        raise AssertionError(schema_name)
+
+    monkeypatch.setattr(http, "post", fake_post)
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    auth_client.post("/api/insights/competitors/discover", json={})
+    res = auth_client.post("/api/insights/update", json={"items": ["competitors"]})
+    assert res.status_code == 202
+    run = auth_client.get("/api/insights/update/status").get_json()["run"]
+    assert run["status"] == "done", run["results"]
+    assert "브랜드 분석 3개" in run["results"]["competitors"]["message"]
+    assert seen.count("product_positions") == 1 and seen.count("competitor_analysis") == 3
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    cheers = next(c for c in d["table"] if c["brand"] == "Cheers")
+    a = cheers["analysis"]
+    assert cheers["analyzed"] and cheers["website"] == "https://www.cheershealth.com/"
+    assert a["usp"]["sources"] == ["P1"] and a["marketing"]["text"] == CHECK and a["channels"]["sources"] == ["W1"]
+    assert any(s["id"] == "W1" for s in cheers["sources"])
+    flyby = next(c for c in d["table"] if c["brand"] == "Flyby")
+    assert flyby["website"] == "" and flyby["analysis"]["channels"]["values"] == []  # 홈페이지 없음 → 채널 근거 없음
+    assert "Purple Tree" in {p["brand"] for p in d["matrix"]["points"]}  # AI가 위치를 정해 줌
+    # 한 곳 다시 조사 (홈페이지 내용이 바뀜) → 바뀐 항목 기록, 홈페이지 검색은 다시 안 함
+    version["n"] = 2
+    n_search = sum(1 for u, _ in posts if u.endswith("/search"))
+    res = auth_client.post(f"/api/insights/competitors/{cheers['id']}/research", json={})
+    assert res.status_code == 202
+    assert sum(1 for u, _ in posts if u.endswith("/search")) == n_search
+    cheers = next(c for c in auth_client.get("/api/insights/data/competitors").get_json()["table"] if c["brand"] == "Cheers")
+    assert cheers["analysis"]["usp"]["text"] == "DHM 성분 v2" and cheers["history"][0]["changed"] == ["핵심 소구 소스 / USP"]
+    # 내려받기
+    csv_text = auth_client.get("/api/insights/competitors.csv").data.decode("utf-8-sig")
+    assert csv_text.splitlines()[0].startswith("브랜드,구분,상태,핵심 포지셔닝 축") and "DHM 성분 v2" in csv_text
+    rows = json.loads(auth_client.get("/api/insights/competitors.json").data)
+    assert {r["brand"] for r in rows} == {"Cheers", "Flyby", "Purple Tree", "Liquid I.V."}
+    assert "fc-test-key" not in csv_text and "sk-test" not in json.dumps(rows)
+
+
+def test_competitor_edit_archive_and_website(app, auth_client, fixed_today):
+    _seed_competitors(app)
+    auth_client.post("/api/insights/competitors/discover", json={})
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    cid = next(c["id"] for c in d["table"] if c["brand"] == "Flyby")
+    assert auth_client.patch(f"/api/insights/competitors/{cid}", json={"website": "flyby"}).status_code == 400
+    out = auth_client.patch(f"/api/insights/competitors/{cid}", json={"website": "https://flybyrecovery.com/", "status": "archived"}).get_json()
+    assert out["status"] == "archived" and out["website"] == "https://flybyrecovery.com/"
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    assert "Flyby" not in {c["brand"] for c in d["table"]} and [c["brand"] for c in d["archived"]] == ["Flyby"]
+    assert "Flyby" not in {p["brand"] for p in d["matrix"]["points"]}
+    assert auth_client.patch(f"/api/insights/competitors/{cid}", json={"status": "gone"}).status_code == 400
+    assert auth_client.patch("/api/insights/competitors/9999", json={"status": "active"}).status_code == 404
+    assert auth_client.post("/api/insights/competitors/9999/research", json={}).status_code == 404

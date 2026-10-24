@@ -14,14 +14,14 @@ def _loads(text, default):
 
 
 class HomeNewsArticle(db.Model):
-    """GDELT 기사 (URL 기준 중복 제거). 본문은 저장하지 않음 (제목·도메인·날짜만)."""
+    """구글 뉴스 기사 (URL·제목 기준 중복 제거). 본문은 저장하지 않음 (제목·매체·날짜만). domain 칸에 매체명 저장."""
     __tablename__ = "home_news_articles"
 
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(1000), nullable=False, unique=True, index=True)
     title = db.Column(db.String(500), nullable=False, default="")
     domain = db.Column(db.String(200), nullable=False, default="")
-    seen_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)  # GDELT seendate (UTC)
+    seen_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)  # 기사 날짜 pubDate (UTC)
     group_id = db.Column(db.String(40), nullable=False, default="")             # 처음 찾은 키워드 묶음
     groups = db.Column(db.String(200), nullable=False, default="")              # 찾은 키워드 묶음들 (쉼표)
     language = db.Column(db.String(40), nullable=False, default="")
