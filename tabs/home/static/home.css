@@ -1,0 +1,102 @@
+/* 홈 · 데일리 브리핑 스타일 (담당: 강현서) — .part-home 안에서만, home- 접두사.
+   kpis · home-layout · brief-hero · season-card · calendar-large · intro-* · launch-* · task · market-item · activity는 base.css 그대로 씁니다.
+   차트 색: 매출(라임 실선) · 광고비(어두운 올리브 점선) — 다크 모드는 따로 */
+.part-home { --home-rev: #a3bb12; --home-rev-fill: rgba(228, 250, 24, .28); --home-spend: #6d6e78; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .part-home { --home-rev: #d4ea2a; --home-rev-fill: rgba(228, 250, 24, .14); --home-spend: #a0a1ab; }
+}
+:root[data-theme="dark"] .part-home { --home-rev: #d4ea2a; --home-rev-fill: rgba(228, 250, 24, .14); --home-spend: #a0a1ab; }
+
+/* 이번 주 성과 */
+.part-home .home-chart-top { margin-bottom: 14px; align-items: flex-end; flex-wrap: wrap; }
+.part-home .home-chart-summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.part-home .home-chart-summary strong { font-size: 25px; letter-spacing: -.8px; font-weight: 720; }
+.part-home .home-chart-summary small { font-size: 10px; color: var(--muted-2); flex-basis: 100%; }
+.part-home .home-legend { display: flex; gap: 14px; font-size: 10px; color: var(--muted); }
+.part-home .home-legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--home-rev); vertical-align: middle; margin-right: 6px; }
+.part-home .home-legend .spend::before { border-top: 2px dashed var(--home-spend); }
+.part-home .home-chart { position: relative; height: 205px; }
+.part-home .home-chart canvas { display: block; }
+.part-home [data-range]:disabled { opacity: .45; cursor: not-allowed; }
+
+/* To-Do */
+.part-home .home-todo-meta { margin: -8px 0 4px; }
+.part-home .home-task-main { display: flex; gap: 10px; align-items: flex-start; flex: 1; min-width: 0; cursor: pointer; }
+.part-home .home-task-main .task-title, .part-home .home-task-main .meta { display: block; }
+.part-home .home-task-main .meta .link { font-size: 10px; display: inline; }
+.part-home .home-todo-del { flex-shrink: 0; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; color: var(--faint); opacity: .6; }
+.part-home .home-todo-del:hover, .part-home .home-todo-del:focus-visible { opacity: 1; background: var(--soft); color: var(--red); }
+.part-home .home-todo-del .icon { width: 14px; height: 14px; }
+.part-home .home-todo-form { display: grid; gap: 8px; margin: 10px 0 6px; padding: 12px; border-radius: 10px; background: var(--soft-2); border: 1px solid var(--line); }
+
+/* 뉴스 */
+.part-home .home-news-badges { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+.part-home .home-headline { display: flex; gap: 8px; align-items: flex-start; background: var(--lime-wash); border-radius: 9px; padding: 12px 13px; font-size: 11.5px; line-height: 1.75; color: var(--ink-2); }
+.part-home .home-headline .icon { width: 15px; height: 15px; margin-top: 3px; color: var(--lime-deep); }
+.part-home .home-signals { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 2px; }
+.part-home .home-signal { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 4px 8px; border-radius: 6px; background: var(--orange-bg); color: var(--orange); }
+.part-home .home-signal .icon { width: 12px; height: 12px; }
+.part-home .home-signal-none { margin-top: 10px; }
+.part-home .market-item p a { color: inherit; text-decoration: none; }
+.part-home .market-item p a:hover { text-decoration: underline; }
+.part-home .home-links a { color: var(--muted-2); text-decoration: underline; text-underline-offset: 2px; }
+.part-home .home-links a:hover { color: var(--ink); }
+.part-home .home-news-more { margin-top: 10px; }
+.part-home .home-news-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-3); flex-wrap: wrap; }
+.part-home .home-errors { margin-top: 10px; font-size: 11px; color: var(--red); }
+.part-home .home-errors summary { cursor: pointer; }
+.part-home .home-errors ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+
+/* 콘텐츠 캘린더 (큰 달력 · base.css .calendar-large) */
+.part-home .home-cal-head { flex-wrap: wrap; }
+.part-home .home-cal-title { font-size: 20px; margin-right: 4px; }
+.part-home .home-cal-weekdays { font-size: 11px; margin: 0 0 17px; }
+.part-home .home-sched-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 22px; }
+.part-home .home-sched-grid .schedule-item { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--line-3); }
+.part-home .home-sched.is-lead .date-box { background: var(--lime); color: var(--lime-ink); }
+.part-home .home-sched p { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.part-home .home-sched .date-box small { font-size: 7.5px; white-space: nowrap; }
+
+/* 데일리 브리핑 오른쪽 */
+.part-home .home-todo-head { flex-wrap: wrap; }
+.part-home .home-side-title { font-size: 13px; }
+@media (max-width: 950px) { .part-home .home-sched-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .part-home .home-cal-weekdays { min-width: 650px; } }
+@media (max-width: 600px) { .part-home .home-sched-grid { grid-template-columns: 1fr; } }
+
+/* 뉴스 카드: 카드 어디를 눌러도 기사 새 탭 */
+.part-home .home-news-card { cursor: pointer; border-radius: 9px; transition: background .15s; }
+.part-home .home-news-card:hover { background: var(--soft-2); }
+
+/* 이번 주 To-Do 버튼 · 사이드 패널 (모든 화면 · part-home 밖이라 home-dock 접두사) */
+.home-fab { position: fixed; right: 24px; bottom: 24px; z-index: 45; width: 52px; height: 52px; border-radius: 50%; border: 0;
+  background: var(--lime); color: var(--lime-ink); box-shadow: var(--shadow); display: grid; place-items: center; cursor: pointer; }
+.home-fab:hover { background: var(--lime-line); }
+.home-fab .icon { width: 22px; height: 22px; }
+.home-fab-count { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  background: var(--dark); color: var(--dark-ink); font-size: 10.5px; font-weight: 650; display: grid; place-items: center; }
+.home-fab-count[hidden] { display: none; }
+.home-dock-scrim { position: fixed; inset: 0; z-index: 54; background: rgba(23, 23, 32, .25); }
+.home-dock-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 55; width: min(380px, 100vw); background: var(--surface);
+  border-left: 1px solid var(--line); box-shadow: var(--shadow); padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; }
+.home-dock-panel[hidden], .home-dock-scrim[hidden] { display: none; }
+.home-dock-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.home-dock-head h2 { font-size: 15px; }
+.home-dock-close { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 7px; }
+.home-dock-close:hover { background: var(--soft); }
+.home-dock-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.home-dock-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 9px; cursor: pointer; }
+.home-dock-item:hover { background: var(--soft-2); }
+.home-dock-item input { margin-top: 3px; }
+.home-dock-title { display: block; font-size: 12.5px; color: var(--ink); }
+.home-dock-reason { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.home-dock-item.done .home-dock-title { text-decoration: line-through; color: var(--faint); }
+.home-dock-go { align-self: flex-start; }
+@media (max-width: 640px) { .home-fab { right: 16px; bottom: 16px; } }
+
+/* 뉴스 카드 '왜 중요' 한 줄 · 검색어 점검 */
+.part-home .home-why { display: block; margin-top: 4px; color: var(--ink-2); }
+.part-home .home-why b { font-weight: 650; color: var(--lime-deep); margin-right: 4px; }
+.part-home .home-qstats { margin-top: 10px; font-size: 11.5px; }
+.part-home .home-qstats summary { cursor: pointer; color: var(--muted); }
+.part-home .home-qstats code { font-size: 10.5px; white-space: normal; }

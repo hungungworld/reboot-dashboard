@@ -27,8 +27,9 @@
 
 | 항목 | 내용 |
 |---|---|
-| 회사 | **REBOOT** (한국, 2025년 설립) |
-| 제품 | 숙취해소제 **알디콤** (매출 비중 90% 이상의 주력 라인업) |
+| 회사 | **알디콤 (ALDICOM)** — 한국 숙취해소제 기업 |
+| 신규 라인 | **Reboot** — 미국 시장을 위한 새로운 라인 |
+| 출시 목적 | 미국 소비자에게 낯선 카테고리인 숙취해소제를 더 친숙하게 소개하기 위함 |
 | 목표 시장 | 미국 |
 | 판매 채널 | Amazon(일반 미국 소비자), Weee · Yamibuy(아시아계), TikTok · Instagram(2030 숏폼) |
 | 서비스 사용자 | 미국 채널 담당 마케터 (1인) |
@@ -38,6 +39,31 @@
 
 > **"효능을 말할 수 없는 상태에서, 낯선 카테고리를, 여러 채널에, 정확한 타이밍에 알린다."**
 > → 규제를 지키면서, 채널별로, 시즌에 맞춰 **빠르게 콘텐츠를 만드는 방법**을 제공한다.
+
+### 브랜드
+
+<img src="./reboot_logo.png" alt="Reboot 로고" width="480">
+
+| 항목 | 내용 |
+|---|---|
+| 라인명 | **Reboot** |
+| 색 | 검정 & 네온 |
+| 슬로건 | *"Restart Your Day"* |
+| 캐릭터 | 리부부 |
+| CM송 | 니온 앤 리부 |
+
+### 제품 라인업
+
+| 항목 | 젤리 | 제로슈가 젤리 | 음료 | 제로슈가 음료 |
+|---|---|---|---|---|
+| 내부 제품명 | Reboot Jelly Original | Reboot Jelly Balance | Reboot Drink Original | Reboot Drink Balance |
+| 제형 | 스틱 젤리 | 스틱 젤리 | 비탄산 음료 | 비탄산 음료 |
+| 성분 | A-HAT + 헛개나무 열매 | A-HAT + 헛개나무 열매 | A-HAT + 헛개나무 열매 | A-HAT + 헛개나무 열매 |
+| 맛 | 라임, 체리, 레몬 | 라임, 체리, 레몬 | 라임, 체리, 레몬 | 라임, 체리, 레몬 |
+| 판매 구성 및 포장 | 개별 포장된 한 팩 | 개별 포장된 한 팩 | 6병/박스, 소형 병 | 6병/박스, 소형 병 |
+| 개발 방향 | 기본 젤리 | 기본 젤리 대비 당류 저감 목표 | 기본 음료 | 기본 음료 대비 당류 저감 목표 |
+
+> 맛은 확정 전 임시안입니다. "Balance"(제로슈가) 제품의 당류 관련 표현은 미국 표시 규정을 확인한 뒤 사용합니다. (§12)
 
 ---
 
@@ -169,206 +195,73 @@ REBOOT US 마케팅 대시보드
 
 ## 6. 폴더 구조
 
-> 폴더·브랜치·PR 등 협업 규칙은 [`RULE.md`](./RULE.md)를 따릅니다. 이 절은 `RULE.md` §5를 이 프로젝트에 적용한 모습입니다.
-> 6명이 동시에 작업하므로 **파트(메뉴)별로 폴더를 완전히 분리**하고, 각자 **자기 파트 폴더 안에서만** 라우트 · 화면 · 로직 · 데이터를 만듭니다.
+> 팀 규칙·담당·작업 순서는 모두 [`RULE.md`](./RULE.md)에 있습니다. 대시보드 코드의 자세한 설명은 [`docs/DASHBOARD.md`](docs/DASHBOARD.md), 코드 짜는 법은 [`docs/DEV_GUIDE.md`](docs/DEV_GUIDE.md)에 있습니다.
 
-```
-reboot-us-dashboard/
-├── app.py                   # create_app() · 모든 파트 Blueprint 등록 (공통)
-├── config.py                # 설정값 (공통)
-├── requirements.txt         # 패키지 목록 (공통)
-├── .env.example             # 환경 변수 예시 (공통, 실제 값 없음)
-├── .gitignore / .gitattributes
-├── README.md / RULE.md / AI_RULES.md
-├── AGENTS.md / CLAUDE.md / GEMINI.md / .geminiignore   # AI 도구 설정 (공통)
-│
-├── core/                    # 🔒 공통 (팀장·PM과 협의 후 수정)
-│   ├── services/
-│   │   ├── llm.py           #    AI 호출 공통 함수 (OpenAI API)
-│   │   └── db.py            #    DB 연결
-│   ├── templates/           #    base.html (레이아웃 · 사이드바)
-│   └── static/              #    공통 CSS · JS
-│
-├── home/                    # 🏠 홈 · 데일리 브리핑 .......... 현경 (HK)
-├── insight/                 # 🔍 시장 · 고객 인사이트 ........ 현경 (HK)
-├── content/                 # ✍️ 콘텐츠 제작 ................. 나원 (NW)
-├── compliance/              # 🛡️ 컴플라이언스 ................ 준희 (JH)
-├── cs/                      # 💬 고객 응대 (CS) .............. 준희 (JH)
-├── influencer/              # 🤝 인플루언서 · 파트너 ......... 혁주 (HJ)
-├── performance/             # 📊 성과분석 .................... 혁주 (HJ)
-├── auth/                    # 🔐 로그인 (탭 아님) ............ 현경 (HK)
-├── settings/                # ⚙️ 설정 (탭 아님) .............. 현경 (HK)
-│
-├── tests/                   # 파트별 하위 폴더로 분리 (tests/home/, tests/cs/ ...)
-└── instance/                # 로컬 DB 등 (Git에 올리지 않음)
+```text
+reboot/
+├─ README.md · RULE.md          프로젝트 소개 · 팀 규칙
+├─ .env · .env.example · .gitignore
+├─ tabs/                        ★ 탭별 작업 공간 (자기 탭 폴더만 수정)
+│   ├─ home/  insights/  settings/      현경
+│   ├─ content/                         나원
+│   ├─ compliance/  cs/                 준희
+│   └─ partners/  performance/          혁주
+├─ server/                      공통 서버
+├─ core/                        공통 화면 (디자인 · REBOOT 기능)
+├─ data/  tests/  docs/
+└─ 설정 파일 (requirements.txt · render.yaml · wsgi.py …)
 ```
 
-### 파트 폴더 내부 구성 (공통 규칙)
-
-모든 파트 폴더는 같은 모양으로 만듭니다. (예: `content/`)
-
-```
-content/
-├── __init__.py      # Blueprint 정의 (url_prefix="/content")
-├── routes.py        # URL · 화면 연결
-├── services/        # 이 파트의 로직 · 외부 API 호출
-├── models.py        # 이 파트에서만 쓰는 DB 테이블
-├── prompts/         # 이 파트의 AI 프롬프트
-├── templates/
-│   └── content/     # 화면 HTML (파트 이름 폴더로 한 번 더 감싸 이름 충돌 방지)
-├── static/
-│   └── content/     # 이 파트 전용 CSS · JS · 이미지 (템플릿과 같은 이유로 감쌈)
-├── data/            # 이 파트의 수동 · 더미 데이터
-└── README.md        # 파트 README (담당자 작성, RULE.md §5.4)
-```
-
-### 충돌 방지 규칙
-
-| 규칙 | 내용 |
-|---|---|
-| 내 폴더만 수정 | 자기 파트 폴더 밖의 파일은 수정하지 않습니다. 다른 사람의 코드는 작성자와 먼저 협의합니다. |
-| 공통 영역은 협의 후 | `app.py`, `config.py`, `requirements.txt`, `.env.example`, `core/` 등(`RULE.md` §5.2)은 팀장 또는 PM과 협의한 뒤 PR로 수정하고, PR에 공통 영역 수정임을 표시합니다. |
-| URL 접두사 고정 | 파트마다 `/home`, `/insight`, `/content`, `/compliance`, `/cs`, `/influencer`, `/performance`, `/auth`, `/settings`를 사용합니다. |
-| DB 테이블 이름 | 파트 이름을 앞에 붙입니다. (예: `cs_inquiry`, `content_campaign`) |
-| 다른 파트 기능 사용 | 다른 파트의 코드는 **가져다 쓰기만** 하고 수정하지 않습니다. 먼저 그 파트 README의 "다른 파트에 제공하는 함수"를 확인합니다. (예: CS · 콘텐츠 · 인플루언서 → `compliance.services`의 심의 함수 호출) |
-| 브랜치 | `main`·`pre_main`에 직접 push하지 않습니다. 최신 `pre_main`에서 기능마다 `feature/이니셜-기능명` 브랜치를 새로 만들고 `pre_main`으로 PR합니다. (`RULE.md` §3·§4) |
-| 패키지 추가 | 패키지가 필요한 PR에서 `requirements.txt`에 버전을 고정해 직접 추가하고, PR에 이유를 적습니다. `pip freeze`로 파일 전체를 덮어쓰지 않습니다. (`RULE.md` §8.2) |
-| 두 파트 담당 | 두 파트를 맡은 사람도 파트마다 브랜치 · PR을 따로 만듭니다. (예: 준희 — `compliance/`와 `cs/` 변경을 한 PR에 섞지 않음) |
+각 탭 폴더는 같은 모양입니다: `routes.py`(서버) · `static/`(화면 JS·CSS) · `tests/` · `data/` · `docs/README.md`(설명서, 첫 줄에 담당자)
 
 ---
 
 ## 7. 설치 및 실행
 
-명령은 Windows `cmd` 기준입니다. (`RULE.md` §8.1)
-
-1. 저장소를 받고 가상환경을 만듭니다.
-
 ```cmd
-git clone <repository-url>
-cd reboot-us-dashboard
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-2. 환경 변수 파일을 만들고, `.env`에 각자 받은 API 키를 채웁니다.
-
-```cmd
+git clone https://github.com/hungungworld/reboot-dashboard.git
+cd reboot-dashboard
+pip install -r requirements-dev.txt
 copy .env.example .env
+python -m server
 ```
 
-3. DB를 초기화하고 더미 데이터를 넣은 뒤 개발 서버를 실행합니다.
-
-```cmd
-flask init-db
-flask seed-dummy
-flask run --debug
-```
-
-브라우저에서 `http://127.0.0.1:5000` 접속
-
-> 처음 받은 뒤 `main`·`pre_main` push 차단 훅을 각자 설치합니다. (`RULE.md` §10.1)
+크롬에서 `http://127.0.0.1:5000` 접속 → `.env`의 `ADMIN_EMAIL` · `ADMIN_PASSWORD`로 로그인. 자세한 순서는 `RULE.md` §3.
 
 ---
 
 ## 8. 환경 변수
 
-`.env.example`
+- 키 이름 목록은 [`.env.example`](.env.example)에 있습니다. `.env`는 **저장소 맨 위에 하나만** 둡니다.
+- AI: 홈 · 인사이트 · 콘텐츠 · 파트너 · 성과분석은 **OpenAI**, 컴플라이언스 · CS는 **Claude**.
+- 키는 `.env` · Render Environment · 대시보드 **설정 › 연결** 화면 중 한 곳에 넣습니다. 비어 있는 키는 해당 기능만 꺼집니다.
 
-```env
-# Flask
-FLASK_DEBUG=1
-SECRET_KEY=change-me
-
-# DB
-DATABASE_URL=sqlite:///reboot.db
-
-# LLM (OpenAI API — 모든 AI 호출은 core/services/llm.py 래퍼를 거침)
-OPENAI_API_KEY=
-LLM_MODEL=
-
-# 공공데이터포털 / KOTRA
-DATA_GO_KR_SERVICE_KEY=
-KOTRA_API_KEY=
-
-# 검색 트렌드
-SERPAPI_KEY=
-
-# YouTube / Gmail
-YOUTUBE_API_KEY=
-GMAIL_CLIENT_ID=
-GMAIL_CLIENT_SECRET=
-GMAIL_REDIRECT_URI=
-
-# openFDA (키 없이도 사용 가능, 있으면 한도 상향)
-OPENFDA_API_KEY=
-```
-
-> ⚠️ `.env`는 절대 Git에 커밋하지 않습니다. (`.gitignore`에 포함)
-> 새 환경 변수가 필요하면 `.env.example`에 **이름만** 추가하고(값은 비움) PR에 적습니다. (`RULE.md` §11)
+> ⚠️ `.env`는 절대 Git에 커밋하지 않습니다. 이 저장소는 공개 저장소입니다.
 
 ---
 
 ## 9. 배포
 
-```bash
-# 프로덕션 실행
-gunicorn -w 2 -b 0.0.0.0:8000 "app:create_app()"
-```
-
-**배포 체크리스트**
-
-- [ ] `SECRET_KEY` 운영용 값으로 교체
-- [ ] `DEBUG` 비활성화 (`FLASK_DEBUG` 미설정 또는 `0`)
-- [ ] 운영 DB 설정 (`DATABASE_URL`)
-- [ ] 모든 API 키를 배포 플랫폼 환경 변수로 등록
-- [ ] Gmail OAuth Redirect URI를 배포 도메인으로 등록
-- [ ] SerpApi · YouTube 쿼터 초과 시 fallback 동작 확인
-- [ ] 로그인 없이 내부 페이지 접근 불가 확인
-
-### Render 배포 설정
-
-| 항목 | 값 |
-|---|---|
-| Service Type | Web Service |
-| Runtime | Python 3 |
-| Build Command | `pip install -r requirements.txt` |
-| Start Command | `gunicorn -w 2 -b 0.0.0.0:$PORT "app:create_app()"` |
-| Environment | §8의 환경 변수를 Render 대시보드 → Environment에 등록 |
-
-> ⚠️ **SQLite 사용 시 주의:** Render 기본 파일시스템은 재배포 · 재시작 때 초기화됩니다.
-> 심의 이력 · 협업 이력 · 작업 로그를 유지하려면 **Persistent Disk**를 붙이고 DB 경로를 디스크로 지정하세요.
-> (예: 디스크 마운트 `/var/data` → `DATABASE_URL=sqlite:////var/data/reboot.db`)
-> Persistent Disk는 유료 플랜에서 제공되므로, 무료 플랜이면 시연 전 `seed-dummy`로 데이터를 다시 적재하는 방식으로 운영합니다.
+Render로 배포합니다. 설정 파일은 저장소 맨 위 `render.yaml`이고, **배포 브랜치는 `main`**입니다 (Blueprint를 만들 때 Branch를 `main`으로 고름). 순서·비용은 [`docs/DASHBOARD.md`](docs/DASHBOARD.md) 「2. Render 배포」.
 
 ---
 
 ## 10. 개발 우선순위 로드맵
 
+모든 메뉴의 **v1 초안**이 구현되어 있습니다. 다음 단계는 각 담당이 실제 키·파일로 외부 연동을 확인하고 기능을 다듬는 것입니다.
+
 | 단계 | 범위 | 완료 기준 |
 |---|---|---|
-| **Phase 0** 기반 | 프로젝트 구조, 로그인, base 레이아웃, LLM 래퍼, 설정(팩트시트) | 로그인 후 빈 메뉴 이동 가능 |
-| **Phase 1** P0 | 🛡️ 컴플라이언스 (단건·일괄 심의, 사례집, 매핑, 이력) → ✍️ 콘텐츠 제작 (채널별 카피 카드 + 복사) | 한국어 카피 입력 → 심의 → 3채널 카피 복사까지 10분 이내 |
-| **Phase 2** P1 | 🏠 데일리 브리핑, 💬 CS, 🤝 인플루언서, 🔍 인사이트 | 각 메뉴 더미/실데이터로 시연 가능 |
-| **Phase 3** | 📊 성과분석, 작업 로그 제출 기능 | 주간 보고서 자동 생성 |
+| **Phase 0** 기반 | 프로젝트 구조, 로그인, base 레이아웃, AI 호출, 설정(팩트시트) | 로그인 후 모든 메뉴 이동 가능 ✅ (v1) |
+| **Phase 1** P0 | 🛡️ 컴플라이언스 → ✍️ 콘텐츠 제작 | 한국어 카피 입력 → 심의 → 3채널 카피 복사까지 10분 이내 |
+| **Phase 2** P1 | 🏠 데일리 브리핑, 💬 CS, 🤝 인플루언서, 🔍 인사이트 | 각 메뉴 실데이터로 시연 가능 |
+| **Phase 3** | 📊 성과분석, 작업 로그 | 주간 보고서 자동 생성 |
 
 ---
 
 ## 11. 팀 및 역할
 
-| 이름 | 이니셜 | 역할 | 담당 탭 | 폴더 |
-|---|---|---|---|---|
-| 준희 | JH | 팀장 | 🛡️ 컴플라이언스, 💬 고객 응대 (CS) | `compliance/`, `cs/` |
-| 현경 | HK | PM | 🏠 홈 · 데일리 브리핑, 🔍 시장 · 고객 인사이트, 🔐 로그인, ⚙️ 설정 | `home/`, `insight/`, `auth/`, `settings/` |
-| 강현서 | KHS | PM | 없음 (다른 업무) | |
-| 양효선 | YHS | 팀원 | 없음 (다른 업무) | |
-| 나원 | NW | 팀원 | ✍️ 콘텐츠 제작 | `content/` |
-| 혁주 | HJ | 팀원 | 🤝 인플루언서 · 파트너, 📊 성과분석 | `influencer/`, `performance/` |
-
-- 🔐 로그인(`auth/`)과 ⚙️ 설정(`settings/`)은 상단 탭이 아닌 화면이며, 현경(HK)이 맡습니다.
-- 강현서(KHS), 양효선(YHS)은 개발 파트 없이 다른 업무를 맡습니다. 강현서는 PM으로서 PR 리뷰·병합은 그대로 합니다.
-- 이니셜은 브랜치 이름에 씁니다. (예: `feature/NW-channel-copy`) 같은 이니셜이 겹치는 사람은 성까지 넣습니다. (KHS, YHS)
-- 역할별 권한은 `RULE.md` §1, 분담 변경 절차는 `RULE.md` §5.3을 따릅니다.
+팀 구성, 역할, 탭별 담당은 [`RULE.md`](./RULE.md) §1을 봅니다.
 
 ---
 
@@ -385,14 +278,15 @@ gunicorn -w 2 -b 0.0.0.0:8000 "app:create_app()"
 
 ---
 
-## 13. 협업 규칙
+## 13. 문서 안내
 
-| 문서 | 내용 | 누가 읽나 |
-|---|---|---|
-| [`RULE.md`](./RULE.md) | 브랜치 · PR · 폴더 · 커밋 · 개발 환경 등 협업 규칙 | 팀원 전원 (필수) |
-| [`AI_RULES.md`](./AI_RULES.md) | AI 코딩 도구 사용 규칙 (공통 §1~§9 + 내가 쓰는 도구의 절) | AI를 쓰는 팀원 |
-| `AGENTS.md` / `CLAUDE.md` / `GEMINI.md` | AI 도구가 자동으로 읽는 규칙 요약 (세 파일 내용 동일) | AI 도구 |
-| 각 파트 폴더의 `README.md` | 파트 기능 · 라우트 · 다른 파트에 제공하는 함수 | 그 파트를 쓰거나 고치는 사람 |
+| 문서 | 내용 |
+|---|---|
+| [`RULE.md`](./RULE.md) | **팀 규칙 전부** (담당 · 브랜치 · PR · 코드 규칙 · AI 사용 규칙) |
+| [`docs/DEV_GUIDE.md`](docs/DEV_GUIDE.md) | 탭 화면·서버 만드는 법, 이름 규칙, 탭끼리 공개하는 기능 |
+| [`docs/DASHBOARD.md`](docs/DASHBOARD.md) | 대시보드 상세 (실행 · 배포 · 메뉴별 구현 상태 · 저장 방식) |
+| `tabs/<탭>/docs/README.md` | 탭 설명서 (첫 줄에 담당자) |
+| `AGENTS.md` · `CLAUDE.md` · `GEMINI.md` | AI 도구에게 "RULE.md를 읽어"라고 알려 주는 쪽지 |
+| `docs/원본/` | 예전 팀·파트 문서 (보관용, 고치지 않음) |
 
-- 이 README와 `RULE.md`가 다르면 **`RULE.md`를 우선**합니다.
-- 팀장 · PM 역할과 이니셜(브랜치 이름에 사용)은 `RULE.md` §1을 봅니다.
+이 README와 `RULE.md`가 다르면 **`RULE.md`가 우선**합니다.

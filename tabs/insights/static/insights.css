@@ -1,0 +1,184 @@
+/* 시장 · 고객 인사이트 (담당: 이현경) — .part-insights 안에서만, ins- 접두사
+   base.css의 kpis · tabs · workbench · card · season · data-table · chips를 그대로 쓰고, 빈 곳만 채웁니다.
+   모달 본문도 .part-insights 로 감싸서 같은 규칙을 씁니다. 색은 base.css 변수만 (다크 모드 자동). */
+
+.part-insights .ins-skel { height: 220px; }
+.part-insights .ins-skel-sm { height: 90px; }
+.part-insights .ins-h3 { font-size: 13px; margin: 20px 0 10px; display: flex; align-items: baseline; gap: 8px; }
+.part-insights .ins-ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.75; color: var(--text); }
+.part-insights .ins-ul li + li { margin-top: 4px; }
+.part-insights .ins-sub { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); font-weight: 400; line-height: 1.5; }
+.part-insights .ins-star { color: var(--orange); font-weight: 700; }
+
+/* 업데이트 진행 */
+.part-insights .ins-run { margin-bottom: 22px; }
+.part-insights .ins-run h2 { font-size: 15px; }
+.part-insights .ins-run.is-running { border-color: var(--lime-soft-line); background: var(--lime-wash); }
+.part-insights .ins-steps-list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.part-insights .ins-steps-list li { display: flex; align-items: baseline; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.part-insights .ins-steps-list li.fail { color: var(--red); }
+.part-insights .ins-steps-list li.wait { color: var(--muted); }
+.part-insights .ins-mark { width: 18px; display: inline-flex; justify-content: center; flex-shrink: 0; }
+.part-insights .ins-mark .icon { width: 15px; height: 15px; }
+.part-insights .ins-steps-list li.ok .ins-mark { color: var(--green); }
+
+/* 이번 주 액션 */
+.part-insights .ins-action { border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: 12px; padding: 16px 18px; background: var(--surface); }
+.part-insights .ins-action.urgent { border-left-color: var(--red); }
+.part-insights .ins-action.chance { border-left-color: var(--green); }
+.part-insights .ins-action.info { border-left-color: var(--blue); }
+.part-insights .ins-fact { font-size: 13px; font-weight: 600; color: var(--ink); margin: 10px 0 8px; line-height: 1.6; }
+.part-insights .ins-steps { margin: 0; display: grid; gap: 6px; }
+.part-insights .ins-steps > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; font-size: 12px; }
+.part-insights .ins-steps dt { color: var(--muted); }
+.part-insights .ins-steps dd { margin: 0; color: var(--text); }
+.part-insights .ins-signal { padding: 12px 0; border-bottom: 1px solid var(--line-3); }
+.part-insights .ins-signal:last-of-type { border-bottom: 0; }
+.part-insights .ins-signal b { font-size: 12px; }
+.part-insights .ins-facts { margin-top: 8px; display: grid; gap: 4px; }
+.part-insights .ins-facts > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; font-size: 11px; }
+.part-insights .ins-facts > div > span:first-child { color: var(--muted); }
+
+/* 접는 상자 */
+.part-insights .ins-fold > summary, .part-insights .ins-mini > summary, .part-insights .ins-insight > summary { cursor: pointer; list-style: none; }
+.part-insights .ins-fold > summary::-webkit-details-marker, .part-insights .ins-mini > summary::-webkit-details-marker,
+.part-insights .ins-insight > summary::-webkit-details-marker { display: none; }
+.part-insights .ins-fold > summary { font-size: 12px; font-weight: 600; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
+.part-insights .ins-fold > summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+.part-insights .ins-fold[open] > summary::before { transform: rotate(90deg); }
+.part-insights details.ins-fold:not(.card) { border-top: 1px solid var(--line-3); padding-top: 14px; }
+.part-insights .ins-fold-body { margin-top: 16px; }
+
+/* 진열대 변화 · 새 리뷰 · 시즌 */
+.part-insights .ins-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.part-insights .ins-stat { background: var(--soft-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.part-insights .ins-stat span { display: block; font-size: 10px; color: var(--muted); }
+.part-insights .ins-stat b { display: block; font-size: 20px; margin-top: 6px; color: var(--ink); letter-spacing: -.5px; }
+.part-insights .ins-stat.red b { color: var(--red); }
+.part-insights .ins-big { font-size: 28px; font-weight: 720; letter-spacing: -1px; color: var(--ink); }
+.part-insights .ins-big span { font-size: 13px; font-weight: 500; margin-left: 3px; }
+.part-insights .ins-season-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line-3); }
+.part-insights .ins-season-row:last-of-type { border-bottom: 0; }
+.part-insights .ins-season-row b { font-size: 12px; }
+.part-insights .ins-season-row small { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+.part-insights .ins-results { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 11px; color: var(--text); }
+.part-insights .ins-results li.fail { color: var(--red); }
+.part-insights .ins-results b { margin-right: 4px; }
+
+/* 월간 리뷰 */
+.part-insights .ins-month { font-size: 15px; }
+.part-insights .ins-summary { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: var(--ink-2); }
+.part-insights .ins-insight { border: 1px solid var(--line); border-radius: 11px; padding: 12px 14px; }
+.part-insights .ins-insight + .ins-insight { margin-top: 10px; }
+.part-insights .ins-insight > summary { display: flex; gap: 12px; align-items: flex-start; }
+.part-insights .ins-insight > summary small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+.part-insights .ins-idx { width: 22px; height: 22px; border-radius: 50%; background: var(--lime-soft); color: var(--lime-deep); display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.part-insights .ins-insight-body { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--line-3); }
+.part-insights .ins-insight-body ul { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.7; }
+.part-insights .ins-personas { gap: 12px; }
+.part-insights .ins-persona { border: 1px solid var(--line); border-radius: 11px; padding: 14px; background: var(--surface-2); }
+.part-insights .ins-persona b { font-size: 13px; color: var(--ink); }
+.part-insights .ins-persona p { font-size: 12px; margin: 6px 0 10px; color: var(--text); }
+.part-insights .ins-persona small { display: block; font-size: 11px; color: var(--text); margin-top: 6px; line-height: 1.6; }
+.part-insights .ins-persona small span { display: block; font-size: 10px; color: var(--muted); }
+.part-insights .ins-swot { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.part-insights .ins-swot-cell { border-radius: 10px; padding: 12px 14px; background: var(--soft-2); border: 1px solid var(--line); }
+.part-insights .ins-swot-cell b { font-size: 11px; }
+.part-insights .ins-swot-cell ul { margin: 6px 0 0; padding-left: 16px; font-size: 12px; line-height: 1.7; }
+.part-insights .ins-swot-cell.s-S b { color: var(--green); }
+.part-insights .ins-swot-cell.s-W b { color: var(--orange); }
+.part-insights .ins-swot-cell.s-O b { color: var(--blue); }
+.part-insights .ins-swot-cell.s-T b { color: var(--red); }
+
+/* 데이터 탭 */
+.part-insights .ins-subtabs { margin-bottom: 18px; }
+.part-insights .ins-q h2 { font-size: 18px; margin-top: 6px; letter-spacing: -.5px; }
+.part-insights .ins-oneline { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.part-insights .ins-bucket .card-head h2 { font-size: 14px; }
+.part-insights .ins-prod { display: block; width: 100%; text-align: left; border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: 10px;
+  padding: 11px 12px; background: var(--surface); }
+.part-insights .ins-prod:hover { background: var(--soft-2); }
+.part-insights .ins-prod.own { border-left-color: var(--green); background: var(--green-bg); }
+.part-insights .ins-prod.oos { border-left-color: var(--red); }
+.part-insights .ins-prod-top { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.part-insights .ins-prod-title { display: block; font-size: 12px; color: var(--ink); margin: 7px 0 6px; line-height: 1.5; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.part-insights .ins-prod-price { display: block; font-size: 11px; color: var(--text); }
+.part-insights .ins-prod-price b { font-size: 14px; color: var(--ink); }
+.part-insights .ins-table td { vertical-align: middle; }
+.part-insights .ins-title-cell { min-width: 240px; }
+.part-insights .data-table input.ins-num { width: 92px; padding: 7px 8px; }
+.part-insights .data-table .ins-sel, .part-insights .ins-q .ins-sel { width: auto; padding: 7px 8px; }
+.part-insights .ins-quote { font-size: 12px; color: var(--text); background: var(--soft-2); border-left: 3px solid var(--line-2); padding: 10px 12px; border-radius: 6px;
+  white-space: pre-wrap; word-break: break-word; }
+.part-insights .ins-quote-block + .ins-quote-block { margin-top: 12px; }
+.part-insights .ins-quote-block b { font-size: 12px; display: block; margin-bottom: 6px; }
+.part-insights .ins-pre { margin: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 280px; overflow: auto;
+  white-space: pre-wrap; word-break: break-word; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
+.part-insights .ins-comp-top { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.part-insights .ins-matrix-svg { width: 100%; height: auto; display: block; }
+.part-insights .ins-quad rect { fill: var(--soft-2); stroke: var(--line); }
+.part-insights .ins-quad.blue rect { fill: var(--blue-bg); stroke: var(--blue); stroke-dasharray: 5 4; }
+.part-insights .ins-quad-t { font-size: 12px; font-weight: 600; fill: var(--ink-2); }
+.part-insights .ins-quad-n, .part-insights .ins-axis { font-size: 10px; fill: var(--muted); }
+.part-insights .ins-dot { fill: var(--gray); fill-opacity: .45; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; }
+.part-insights .ins-dot:hover { fill-opacity: .85; }
+.part-insights .ins-dot.watched { fill: var(--orange); fill-opacity: .7; }
+.part-insights .ins-dot.own { fill: var(--lime); fill-opacity: 1; stroke: var(--lime-deep); stroke-width: 2; }
+.part-insights .ins-dot.well { stroke: var(--purple); stroke-width: 2; stroke-dasharray: 3 2; }
+.part-insights .ins-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; color: var(--muted); }
+.part-insights .ins-lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; background: var(--gray); opacity: .6; }
+.part-insights .ins-lg.own { background: var(--lime); border: 1px solid var(--lime-deep); opacity: 1; }
+.part-insights .ins-lg.watched { background: var(--orange); opacity: .8; }
+.part-insights .ins-lg.well { background: transparent; border: 2px dashed var(--purple); opacity: 1; }
+.part-insights .ins-comp-table td:first-child { min-width: 170px; }
+.part-insights .ins-comp-table td:last-child { min-width: 210px; }
+.part-insights .ins-comp-table td.ins-field { min-width: 150px; max-width: 260px; font-size: 11px; line-height: 1.5; }
+.part-insights .ins-comp-table tr.flash td { background: var(--lime-wash); transition: background .3s; }
+.part-insights .ins-check { color: var(--muted-2); font-style: italic; }
+.part-insights .ins-src { font-size: 9px; color: var(--blue); white-space: nowrap; }
+.part-insights .ins-reason { margin: 8px 0; color: var(--text); }
+.part-insights .ins-sigs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.part-insights .ins-sig { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; padding: 3px 7px; border-radius: 5px; background: var(--gray-bg); color: var(--muted); }
+.part-insights .ins-sig.on { background: var(--green-bg); color: var(--green); }
+.part-insights .ins-sig .icon { width: 11px; height: 11px; }
+.part-insights .ins-mini { margin: 6px 0 10px; font-size: 12px; }
+.part-insights .ins-mini > summary { font-size: 11px; color: var(--muted-2); }
+.part-insights .ins-matrix td, .part-insights .ins-matrix th { text-align: center; }
+.part-insights .ins-matrix td:first-child, .part-insights .ins-matrix th:first-child { text-align: left; }
+.part-insights .ins-cell { font-size: 11px; font-weight: 650; padding: 4px 7px; border-radius: 6px; margin: 1px; }
+.part-insights .ins-cell.pos { background: var(--green-bg); color: var(--green); }
+.part-insights .ins-cell.neg { background: var(--red-bg); color: var(--red); }
+.part-insights .ins-cell:hover { filter: brightness(.95); }
+.part-insights .ins-list, .part-insights .ins-reviews { list-style: none; margin: 0; padding: 0; }
+.part-insights .ins-list li { padding: 11px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
+.part-insights .ins-list li:last-child { border-bottom: 0; }
+.part-insights .ins-list small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; line-height: 1.55; }
+.part-insights .ins-reviews li { padding: 12px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
+.part-insights .ins-reviews li:last-child { border-bottom: 0; }
+.part-insights .ins-reviews p { margin-top: 6px; }
+.part-insights .ins-chart { position: relative; height: 300px; }
+
+/* 데이터 업데이트 창 */
+.part-insights .ins-item { display: flex; gap: 12px; align-items: flex-start; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; cursor: pointer; }
+.part-insights .ins-item input { margin-top: 3px; width: 16px; height: 16px; accent-color: #9cc20e; flex-shrink: 0; }
+.part-insights .ins-item.off { background: var(--soft-2); cursor: not-allowed; }
+.part-insights .ins-item.off b { color: var(--muted); }
+.part-insights .ins-item b { font-size: 12px; color: var(--ink); }
+.part-insights .ins-miss { display: inline-flex; gap: 4px; margin-left: 4px; }
+.part-insights .ins-cost { font-size: 11px; color: var(--muted-2); white-space: nowrap; text-align: right; }
+.part-insights .ins-usage { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 11px; color: var(--muted); }
+.part-insights .ins-usage span:first-child { font-weight: 600; color: var(--text); }
+
+@media (max-width: 950px) {
+  .part-insights .ins-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .part-insights .ins-insight-body, .part-insights .ins-swot { grid-template-columns: 1fr; }
+  .part-insights .ins-steps > div, .part-insights .ins-facts > div { grid-template-columns: 1fr; gap: 2px; }
+  .part-insights .ins-item { flex-wrap: wrap; }
+  .part-insights .ins-comp-top { grid-template-columns: 1fr; }
+  .part-insights .ins-cost { width: 100%; text-align: left; padding-left: 28px; }
+}
