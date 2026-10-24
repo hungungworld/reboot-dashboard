@@ -736,7 +736,7 @@ def reviews_view():
             "new7d": _new_reviews()["count"]}
 
 
-# ───────── 잠재 고객 (유튜브) ─────────
+# ───────── 유튜브 댓글 ─────────
 
 def audience_view(month=None):
     months = [m for (m,) in db.session.query(Video.month).distinct().order_by(Video.month.desc()).all()]
@@ -749,7 +749,7 @@ def audience_view(month=None):
     vids = {v.id: v for v in videos}
     comments = Comment.query.filter_by(month=month).order_by(Comment.likes.desc()).all()
     relevant = [c for c in comments if c.relevant]
-    questions = top_questions(month)
+    questions = top_questions(month, limit=None)  # 주제 전체 (비율이 전체 질문 기준이 되도록)
     ex = expressions([c.text for c in relevant], 5)
     ch = defaultdict(lambda: {"views": 0, "videos": 0, "relevant": 0, "titles": []})
     for v in kept:
@@ -772,8 +772,8 @@ def audience_view(month=None):
     return {
         "month": month, "months": months, "oneLine": one, "questions": questions, "expressions": ex, "creators": creators,
         "comments": [{"text": c.text[:600], "likes": c.likes, "question": c.is_question, "topic": QUESTION_LABEL.get(c.topic, ""),
-                      "video": vids[c.video_id].title if c.video_id in vids else "", "videoId": c.video_id, "by": c.classified_by}
-                     for c in relevant[:150]],
+                      "video": vids[c.video_id].title if c.video_id in vids else "", "videoId": c.video_id, "id": c.id, "by": c.classified_by}
+                     for i, c in enumerate(relevant) if i < 150 or c.is_question],  # 질문 댓글은 모두 (질문 주제를 누르면 보여 줌)
         "process": {"found": len(videos), "kept": len(kept), "minViews": cfg.get("min_views"), "comments": len(comments),
                     "relevant": len(relevant), "noisePct": round((len(comments) - len(relevant)) * 100 / len(comments))
                     if comments else None, "bySet": dict(by_set),

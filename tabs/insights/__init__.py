@@ -4,7 +4,7 @@
   amazon.py     Amazon 진열대 · 대표 리뷰 (SerpApi)
   trends.py     Google 검색 트렌드 (SerpApi · CSV 올리기)
   weee.py       Weee! 진열대 (Firecrawl)
-  youtube.py    잠재 고객 영상 · 댓글 (YouTube Data API)
+  youtube.py    유튜브 댓글 · 영상 (YouTube Data API)
   classify.py   규칙 분류 (리뷰 주제 · 댓글 질문 · 자주 쓰는 표현)
   rules.py      이번 주 액션 규칙 (판단은 규칙, AI는 문장만)
   ai.py         OpenAI 호출 (문장 다듬기 · 분류 · 월간 요약)

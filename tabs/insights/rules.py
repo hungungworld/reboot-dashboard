@@ -5,7 +5,7 @@
   2. 경쟁사 가격 ±10% 이상 변동 (지난 수집 대비)          → 인하 긴급 · 인상 참고
   3. 신규 제품 진입                                     → 참고
   4. 작년에 검색이 평균보다 20% 이상 늘었던 시즌이 30일 안 → 기회
-  5. 잠재 고객(유튜브 댓글) 최다 질문                    → 기회
+  5. 유튜브 댓글 최다 질문                             → 기회
   6. 자사 리뷰 불만 1위                                 → 긴급
   7. 경쟁 제품 라인 품절 (한 채널)                       → 기회 · 같은 라인이 2채널 이상 품절 → 긴급
   8. 경쟁 상품 재고 임박 (Amazon 'Only N left', N ≤ 20)  → 참고
@@ -25,7 +25,7 @@ RULE_LABEL = {
     "price_up": "경쟁사 가격 10% 이상 인상 → 참고",
     "new_entry": "신규 제품 진입 → 참고",
     "season_search": "작년 검색이 평균보다 20% 이상 늘었던 시즌이 30일 안 → 기회",
-    "top_question": "잠재 고객 최다 질문 → 기회",
+    "top_question": "유튜브 댓글 최다 질문 → 기회",
     "own_complaint": "자사 리뷰 불만 1위 → 긴급",
     "comp_oos": "경쟁 제품 한 채널 품절 → 기회",
     "comp_oos_multi": "경쟁 제품 2채널 이상 동시 품절 → 긴급",
@@ -266,7 +266,7 @@ def weekly_actions(ctx):
                 {"시즌": s["name"], "시즌 시작": s["start"], "남은 날": d, "키워드": best["keyword"], "작년 최고": best["peak"],
                  "12개월 평균": best["avg"], "최고 주": best["date"]}, weight=best["pct"]))
 
-    # 5) 잠재 고객 최다 질문
+    # 5) 유튜브 댓글 최다 질문
     qs = [q for q in ctx.get("questions") or [] if q.get("count") and q.get("key") not in ("", "other")]
     total = sum(q["count"] for q in qs)
     if qs and qs[0]["count"] >= QUESTION_MIN and qs[0]["count"] * 100 >= total * QUESTION_SHARE:
