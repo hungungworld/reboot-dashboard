@@ -55,7 +55,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', sub: 'shelf', weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, rvf: Object.assign({}, RVF_EMPTY), tbl: { q: '', page: 1 }, comp: { q: '', page: 1, all: false }, chg: 'all',
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, rvf: Object.assign({}, RVF_EMPTY), tbl: { q: '', page: 1 }, comp: { q: '', page: 1, sort: 'reviews', dir: -1, f: { form: '', price: '', tier: '', watch: false, ai: false } }, chg: 'all',
     shelfView: 'pantry', board: { src: '', stock: '', sort: 'signal' }
   };
   const SHELF_VIEWS = [['pantry', '선반'], ['cards', '상태 카드'], ['board', '스코어보드']];
@@ -214,7 +214,9 @@
       case 'comp-detail': if (!e.target.closest('a')) openCompDetail(findComp(d.id)); break;
       case 'comp-chan': S.compChannel = d.ch; S.comp.page = 1; drawCompTable(); break;
       case 'comp-page': S.comp.page = Number(d.p) || 1; drawCompTable(); break;
-      case 'comp-all': S.comp.all = d.on === '1'; S.comp.page = 1; drawCompTable(); break;
+      case 'comp-sort': S.comp.dir = S.comp.sort === d.k ? -S.comp.dir : COMP_SORTS[d.k][1]; S.comp.sort = d.k; S.comp.page = 1; drawCompTable(); break;
+      case 'comp-ftog': S.comp.f[d.k] = !S.comp.f[d.k]; S.comp.page = 1; drawCompTable(); break;
+      case 'comp-fclear': S.comp.f = { form: '', price: '', tier: '', watch: false, ai: false }; S.comp.page = 1; drawCompTable(); break;
       case 'chg-group': S.chg = S.chg === d.g ? 'all' : d.g; drawSub('competitors'); break;
       case 'chg-more': S.open['chg-' + d.g] = !S.open['chg-' + d.g]; drawSub('competitors'); break;
       case 'rv': openReviews(d.brand, d.topic, d.s); break;
@@ -237,6 +239,10 @@
     const t = e.target;
     if (!t.dataset) return;
     if (t.dataset.ref === 'aud-month') { loadData('audience', t.value); return; }
+    if (t.dataset.cf) {
+      if (t.dataset.cf === 'sort') { S.comp.sort = t.value; S.comp.dir = COMP_SORTS[t.value][1]; } else S.comp.f[t.dataset.cf] = t.value;
+      S.comp.page = 1; drawCompTable(); return;
+    }
     if (t.dataset.edit) editShelf(t);
     if (t.dataset.line) editLine(t);
     if (t.dataset.memo) saveCs(t.dataset.memo, null, t.value.trim());
@@ -1120,12 +1126,6 @@
         : `<span class="ins-chan ${esc(ch.source)}">${esc(label)}</span>`;
     }).join('') || '<span class="muted small">이번 진열대에 없음</span>';
   }
-  function feedbackHtml(fb) {
-    if (!fb || !fb.reviews) return '<span class="muted small">리뷰 없음</span>';
-    const p = fb.praise ? `<span class="ins-fb pos">+ ${esc(fb.praise.topic)} ${fb.praise.count}</span>` : '';
-    const n = fb.complaint ? `<span class="ins-fb neg">− ${esc(fb.complaint.topic)} ${fb.complaint.count}</span>` : '';
-    return `${p}${n}<div class="small muted">리뷰 ${fmt.num(fb.reviews)}개</div>`;
-  }
   function findComp(id) {
     const d = S.data.competitors || {};
     if (id === 'own') return d.own;
@@ -1134,18 +1134,37 @@
     return all.find(c => String(c.id) === String(id));
   }
 
+  // 판매량: Yami 'N+ Sold' 중 가장 큰 수 (리뷰 수가 없는 채널의 인기 지표)
+  function compSold(c) {
+    return Math.max(0, ...(c.channels || []).map(ch => Number((/(\d[\d,]*)\+?\s*sold/i.exec(ch.sold || '') || [])[1]?.replace(/,/g, '')) || 0));
+  }
+  function compPop(c) {
+    if (c.reviews) return `리뷰 ${fmt.num(c.reviews)}`;
+    const n = compSold(c);
+    return n ? `${n}+ 판매` : '—';
+  }
+  // AI 칸: 분석 대상이 아니면 이유 + 바로 분석 (등록된 브랜드만)
+  function compField(c, key) {
+    if (c.own) return '<span class="muted">—</span>';
+    if (c.analyzed) return fieldHtml(c, key);
+    const why = c.deep ? '분석 전' : '분석 대상 밖';
+    return `<span class="muted">${why}</span>${c.id != null ? ` · <button type="button" class="ins-link" data-act="comp-research" data-id="${esc(c.id)}">${icon('spark')}지금 분석</button>` : ''}`;
+  }
   function compRow(c) {
-    const flags = c.own ? badge('자사', 'green') : [c.isNew ? badge('새', 'blue') : '', c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '',
-      c.analyzed ? badge('AI 분석', 'purple') : ''].join(' ');
+    const flags = c.own ? badge('자사', 'green') : [c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', c.isNew ? badge('새', 'blue') : ''].join('');
     const forms = (c.forms || []).map(f => esc(f.label.split(' (')[0])).join(', ') || '—';
+    const fb = c.feedback || {};
+    const fbt = [fb.praise ? `<span class="ins-fb pos">+ ${esc(fb.praise.topic)}</span>` : '', fb.complaint ? `<span class="ins-fb neg">− ${esc(fb.complaint.topic)}</span>` : ''].join('') || '<span class="muted">—</span>';
+    const one = (html, title) => `<div class="ins-1l"${title ? ` title="${esc(title)}"` : ''}>${html}</div>`;
     return `<tr class="${c.own ? 'ins-own-row' : ''}" data-act="comp-detail" data-id="${c.own ? 'own' : esc(c.id == null ? 'b:' + c.brand : c.id)}" tabindex="0">
-      <td><strong>${esc(c.brand)}</strong><div class="flex wrap mt-4">${flags}</div><div class="small muted">${esc(c.tierLabel)}</div></td>
-      <td><div class="ins-chans">${chanChips(c)}</div></td>
+      <td>${one(`<strong>${esc(c.brand)}</strong>${flags}`, `${c.brand} · ${c.tierLabel}`)}</td>
+      <td>${one(`<span class="ins-chans">${chanChips(c)}</span>`)}</td>
+      <td class="num nowrap">${esc(compPop(c))}</td>
       <td class="num nowrap">${c.perServing != null ? esc(money(c.perServing)) : '—'}</td>
-      <td class="small ins-forms">${forms}</td>
-      <td class="ins-field">${c.own ? '<span class="muted small">—</span>' : fieldHtml(c, 'message')}</td>
-      <td class="ins-field">${c.own ? '<span class="muted small">—</span>' : fieldHtml(c, 'ingredients')}</td>
-      <td>${feedbackHtml(c.feedback)}</td>
+      <td>${one(forms)}</td>
+      <td class="ins-field">${one(compField(c, 'message'), c.analyzed ? fieldText(c, 'message') : '')}</td>
+      <td class="ins-field">${one(compField(c, 'ingredients'), c.analyzed ? fieldText(c, 'ingredients') : '')}</td>
+      <td>${one(fbt)}</td>
       <td class="num">${c.youtube == null ? '—' : fmt.num(c.youtube)}</td></tr>`;
   }
 
@@ -1191,36 +1210,80 @@
       <p class="panel-note mt-8">지난주 진열대의 같은 상품과 비교했어요. '→' 줄은 수집한 가격 · 재고로 계산한 알디콤 입장이에요 (1회분은 알디콤 최저 1회분과 비교). 위 칸을 누르면 그 종류만 모아 봐요.</p>`;
   }
 
-  // 경쟁사 비교 표: 접으면 알디콤 + 상위 COMP_FIRST개, 펼치면 COMP_PAGE개씩 페이지 · 검색하면 자동으로 펼침 (검색창은 그대로 두고 표만 다시 그림)
-  const COMP_FIRST = 3, COMP_PAGE = 5;
-  const COMP_HEAD = '<tr><th>브랜드</th><th>판매 채널 (최저가)</th><th class="num">1회분</th><th>제형</th><th>핵심 메시지</th><th>주력 성분</th><th>고객 칭찬 / 불만</th><th class="num">유튜브 언급</th></tr>';
-  const compTableHtml = rows => `<div class="table-wrap"><table class="data-table ins-table ins-comp-table"><thead>${COMP_HEAD}</thead><tbody>${rows.map(compRow).join('')}</tbody></table></div>`;
+  // 경쟁사 비교 표: 필터 · 정렬 · COMP_PAGE개씩 페이지 (알디콤 행은 늘 맨 위) — 검색창은 그대로 두고 표만 다시 그림
+  const COMP_PAGE = 5, COMP_SLOTS = 5;
+  const COMP_SORTS = {   // key: [이름, 기본 방향(-1 = 큰 값 먼저)]
+    reviews: ['리뷰 · 판매 많은 순', -1], ps: ['1회분 싼 순', 1], name: ['이름순', 1], watch: ['주시 먼저', -1] };
+  const COMP_PRICE = [['under1', '$1 미만', v => v < 1], ['1to3', '$1–3', v => v >= 1 && v < 3], ['over3', '$3 이상', v => v >= 3]];
+  function compSortVal(c, k) {
+    if (k === 'ps') return c.perServing;
+    if (k === 'name') return c.brand.toLowerCase();
+    if (k === 'watch') return (c.watched ? 1e9 : 0) + (c.reviews || 0);
+    return (c.reviews || 0) * 1000 + compSold(c);
+  }
+  function compSorted(rows) {
+    const { sort: k, dir } = S.comp;
+    return rows.slice().sort((a, b) => {
+      const x = compSortVal(a, k), y = compSortVal(b, k);
+      if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1;   // 값 없는 행은 늘 아래
+      return (x < y ? -1 : x > y ? 1 : 0) * dir || a.brand.localeCompare(b.brand);
+    });
+  }
+  const COMP_COLS = [['브랜드', 'name'], ['판매 채널 (최저가)'], ['리뷰 · 판매', 'reviews', 'num'], ['1회분', 'ps', 'num'], ['제형'], ['핵심 메시지'], ['주력 성분'], ['고객 칭찬 / 불만'], ['유튜브', '', 'num']];
+  function compHead(sortable) {
+    return '<tr>' + COMP_COLS.map(([label, k, cls]) => {
+      if (!sortable || !k) return `<th${cls ? ` class="${cls}"` : ''}>${esc(label)}</th>`;
+      const on = S.comp.sort === k;
+      return `<th class="${cls || ''}${on ? ' sorted' : ''}"><button type="button" class="ins-th-sort" data-act="comp-sort" data-k="${k}" aria-label="${esc(label)} 정렬">${esc(label)}<i>${on ? (S.comp.dir < 0 ? '▼' : '▲') : '↕'}</i></button></th>`;
+    }).join('') + '</tr>';
+  }
+  const compTableHtml = (rows, sortable) => `<div class="table-wrap"><table class="data-table ins-table ins-comp-table"><thead>${compHead(sortable)}</thead><tbody>${rows.map(compRow).join('')}</tbody></table></div>`;
   function compSearchText(c) {
     return [c.brand, c.tierLabel, fieldText(c, 'message'), fieldText(c, 'ingredients'), (c.channels || []).map(x => x.label).join(' '),
       (c.forms || []).map(f => f.label).join(' ')].join(' ').toLowerCase();
   }
+  function compFilterBar(d) {
+    const f = S.comp.f;
+    const sel = (k, all, opts) => `<select class="ins-cf${f[k] ? ' on' : ''}" data-cf="${k}" aria-label="${esc(all)}"><option value="">${esc(all)}</option>${opts.map(([v, l]) =>
+      `<option value="${esc(v)}"${f[k] === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+    const forms = Object.entries(d.formLabels || {}).filter(([k]) => d.table.some(c => (c.forms || []).some(x => x.key === k))).map(([k, l]) => [k, l.split(' (')[0]]);
+    const tiers = [...new Map(d.table.map(c => [c.tier, c.tierLabel])).entries()];
+    const tog = (k, l) => `<button type="button" class="ins-cf${f[k] ? ' on' : ''}" data-act="comp-ftog" data-k="${k}" aria-pressed="${!!f[k]}">${esc(l)}</button>`;
+    const any = f.form || f.price || f.tier || f.watch || f.ai;
+    return `<div class="ins-cf-bar"><span class="ins-cf-icon" aria-hidden="true">${icon('filter')}</span>
+      ${sel('form', '제형', forms)}${sel('price', '1회분 가격', COMP_PRICE.map(([v, l]) => [v, l]))}${sel('tier', '경쟁 구분', tiers)}
+      ${tog('watch', '주시 중만')}${tog('ai', 'AI 분석된 것만')}${any ? '<button type="button" class="ins-link" data-act="comp-fclear">필터 지우기</button>' : ''}
+      <span class="ins-cf-gap"></span>
+      <select class="ins-cf sort" data-cf="sort" aria-label="정렬">${Object.entries(COMP_SORTS).map(([k, [l]]) => `<option value="${k}"${S.comp.sort === k ? ' selected' : ''}>정렬: ${esc(l)}</option>`).join('')}</select></div>`;
+  }
+  // 페이지 버튼: 위치 · 크기 · 칸 수(COMP_SLOTS) 고정, 번호는 1–5 · 6–10 묶음으로 (가운데 따라 밀리지 않음) — 없는 페이지 칸은 흐리게
+  function compPager(cur, pages, total, from, to) {
+    const first = Math.floor((cur - 1) / COMP_SLOTS) * COMP_SLOTS + 1;
+    const btn = (p, label, extra) => `<button type="button" class="ins-pg${p === cur && !extra ? ' on' : ''}" data-act="comp-page" data-p="${p}"${p < 1 || p > pages || (p === cur && !extra) ? ' disabled' : ''}${p === cur && !extra ? ' aria-current="page"' : ''}${extra ? ` aria-label="${extra}"` : ''}>${label}</button>`;
+    const slots = Array.from({ length: COMP_SLOTS }, (_, k) => first + k).map(p => btn(p, p)).join('');
+    return `<div class="ins-pg-row"><span class="small muted">${total ? `${total}개 중 ${from}–${to}` : '0개'}</span>
+      <nav class="ins-pg-nav" aria-label="경쟁사 표 페이지">${btn(cur - 1, '‹', '이전 페이지')}${slots}${btn(cur + 1, '›', '다음 페이지')}</nav></div>`;
+  }
   function compTable(d) {
     const ch = S.compChannel || 'all';
-    const inChan = c => ch === 'all' || (c.channels || []).some(x => x.source === ch);
+    const f = S.comp.f;
     const q = S.comp.q.trim().toLowerCase();
-    const chanRows = d.table.filter(inChan);
-    const rows = q ? chanRows.filter(c => compSearchText(c).includes(q)) : chanRows;
-    const own = d.own && inChan(d.own) && !q ? [d.own] : [];
-    if (!rows.length && !own.length) {
-      return `<div class="mt-16">${ui.empty(q ? `'${S.comp.q.trim()}'에 맞는 경쟁사가 없어요.` : d.table.length ? '이 채널에서 찾은 경쟁사가 없어요.' : '아직 등록된 경쟁사가 없어요. 진열대를 모은 뒤 새 경쟁사 찾기를 누르세요.', 'users')}</div>`;
-    }
-    if (!q && !S.comp.all) {
-      const rest = rows.length - COMP_FIRST;
-      return compTableHtml(own.concat(rows.slice(0, COMP_FIRST))) +
-        (rest > 0 ? `<button type="button" class="btn small ins-comp-more mt-8" data-act="comp-all" data-on="1">나머지 ${rest}개 모두 보기 ▾</button>` : '');
+    const price = COMP_PRICE.find(x => x[0] === f.price);
+    const ok = c => (ch === 'all' || (c.channels || []).some(x => x.source === ch)) && (!q || compSearchText(c).includes(q)) &&
+      (!f.form || (c.forms || []).some(x => x.key === f.form)) && (!price || (c.perServing != null && price[2](c.perServing))) &&
+      (!f.tier || c.tier === f.tier) && (!f.watch || c.watched) && (!f.ai || c.analyzed);
+    const rows = compSorted(d.table.filter(ok));
+    const own = d.own && !q && (ch === 'all' || (d.own.channels || []).some(x => x.source === ch)) ? [d.own] : [];
+    const bar = d.table.length ? compFilterBar(d) : '';
+    if (!rows.length) {
+      return bar + `<div class="mt-16">${ui.empty(!d.table.length ? '아직 등록된 경쟁사가 없어요. 진열대를 모은 뒤 다시 불러오기를 누르세요.' : '조건에 맞는 경쟁사가 없어요. 검색어나 필터를 바꿔 보세요.', 'users')}</div>`;
     }
     const pages = Math.max(1, Math.ceil(rows.length / COMP_PAGE));
     S.comp.page = Math.min(Math.max(1, S.comp.page), pages);
     const cur = S.comp.page;
     const shown = rows.slice((cur - 1) * COMP_PAGE, cur * COMP_PAGE);
-    return `<p class="small muted mb-8">${q ? `검색 결과 ${rows.length}개 · ` : `전체 ${rows.length}개 중 `}${rows.length ? `${(cur - 1) * COMP_PAGE + 1}–${(cur - 1) * COMP_PAGE + shown.length}번째` : ''}${own.length ? ' · 알디콤 행은 늘 맨 위' : ''}</p>
-      ${compTableHtml(own.concat(shown))}<div class="between wrap">${pagerHtml(cur, pages, 'comp-page')}
-      ${q ? '' : '<button type="button" class="btn small ghost mt-8" data-act="comp-all" data-on="0">접기 ▴</button>'}</div>`;
+    const pad = pages > 1 ? '<tr class="ins-pad" aria-hidden="true"><td colspan="9"></td></tr>'.repeat(COMP_PAGE - shown.length) : '';   // 마지막 페이지도 표 높이 그대로
+    return bar + compTableHtml(own.concat(shown), true).replace('</tbody>', pad + '</tbody>') + compPager(cur, pages, rows.length, (cur - 1) * COMP_PAGE + 1, (cur - 1) * COMP_PAGE + shown.length);
   }
   function drawCompTable() {
     const box = $(panel('data'), '[data-ref="comp-body"]');
@@ -1235,20 +1298,20 @@
     const chips = [['all', '전체']].concat(Object.entries(d.channelLabels)).map(([k, l]) =>
       `<button type="button" class="chip${ch === k ? ' selected' : ''}" aria-pressed="${ch === k}" data-act="comp-chan" data-ch="${esc(k)}">${esc(l)}</button>`).join('');
     const tools = `<div class="flex wrap">
-      <button type="button" class="btn small" data-act="comp-discover">${icon('search')}새 경쟁사 찾기</button>
-      <button type="button" class="btn small dark" data-act="comp-research-all"${d.aiReady ? '' : ' disabled'}>${icon('refresh')}전체 다시 조사 (상위 ${d.deepTop})</button>
-      <a class="btn small ghost" href="/api/insights/competitors.csv" download>${icon('download')}CSV</a>
-      <a class="btn small ghost" href="/api/insights/competitors.json" download>${icon('download')}JSON</a></div>`;
+      <button type="button" class="btn small" data-act="comp-discover" title="이번 주 진열대에 새로 보인 브랜드를 표에 넣어요 (무료)">${icon('refresh')}다시 불러오기</button>
+      <button type="button" class="btn small dark" data-act="comp-research-all"${d.aiReady ? '' : ' disabled'} title="리뷰 상위 ${d.deepTop}개 브랜드의 핵심 메시지 · 성분을 AI로 새로 채워요 (API 사용)">${icon('spark')}AI 분석</button>
+      <details class="ins-export"><summary class="btn small ghost" aria-label="내보내기" title="내보내기">${icon('download')}</summary>
+        <div class="ins-export-menu"><a href="/api/insights/competitors.csv" download>CSV</a><a href="/api/insights/competitors.json" download>JSON</a></div></details></div>`;
     const notes = [!d.aiReady ? '<div class="note warn mt-16">OpenAI 키가 없어 핵심 메시지 · 성분 분석은 할 수 없어요. 판매 채널 · 단가 · 칭찬/불만은 그대로 보여요 (설정 › 연결).</div>' : '',
       d.aiReady && !d.firecrawlReady ? '<div class="note mt-16">Firecrawl 키가 없어 홈페이지 · 뉴스는 읽지 않고, 진열대 자료와 AI 웹 검색으로 채워요.</div>' : ''].join('');
     const changes = `<section class="card mt-24"><div class="card-head"><h2>이번 주 경쟁사 변화</h2>${d.changes && d.changes.length ? badge(`${d.changes.length}건`, 'blue') : ''}</div>${changesHtml(d.changes)}</section>`;
     const list = `<section class="card mt-24"><div class="card-head"><h2>경쟁사 비교</h2>${badge(`${d.table.length}개`)}</div>
-      <div class="between wrap mb-16"><div class="chips">${chips}</div>${tools}</div>
-      ${d.table.length ? `<input class="input ins-tbl-q mb-8" type="search" data-ref="comp-q" value="${esc(S.comp.q)}" placeholder="브랜드 · 핵심 메시지 · 성분 · 판매 채널 검색" aria-label="경쟁사 검색">` : ''}
+      <div class="between wrap mb-16"><div class="ins-comp-filter"><div class="chips">${chips}</div>
+        ${d.table.length ? `<input class="input ins-tbl-q" type="search" data-ref="comp-q" value="${esc(S.comp.q)}" placeholder="브랜드 · 핵심 메시지 · 성분 · 판매 채널 검색" aria-label="경쟁사 검색">` : ''}</div>${tools}</div>
       <div data-ref="comp-body">${compTable(d)}</div>
-      <p class="panel-note mt-8">행을 누르면 브랜드 카드가 열려요. 판매 채널 · 1회분 · 제형 · 칭찬/불만 · 유튜브 언급은 수집한 데이터 그대로예요. 핵심 메시지 · 주력 성분은 리뷰 상위 ${d.deepTop}개 브랜드만 AI가 진열대 · 홈페이지 · 뉴스에서 찾고, 못 찾은 칸은 AI 웹 검색(출처 링크 포함)으로 채워요.</p></section>`;
-    const subs = d.substitutes.length ? fold('comp-subs', `대체재 ${d.substitutes.length}개 (전해질 음료 · 간 영양제 등)`, table(d.substitutes)) : '';
-    const arch = d.archived.length ? fold('comp-arch', `보관함 ${d.archived.length}개`, table(d.archived)) : '';
+      <p class="panel-note mt-8">행을 누르면 브랜드 카드가 열려요. 핵심 메시지 · 주력 성분은 리뷰 상위 ${d.deepTop}개 브랜드만 AI가 채워요. 나머지는 '분석 대상 밖'이고, 지금 분석을 누르면 그 브랜드만 채워요.</p></section>`;
+    const subs = d.substitutes.length ? fold('comp-subs', `대체재 ${d.substitutes.length}개 (전해질 음료 · 간 영양제 등)`, table(compSorted(d.substitutes))) : '';
+    const arch = d.archived.length ? fold('comp-arch', `보관함 ${d.archived.length}개 · 브랜드 카드에서 '보관'한 브랜드 (다시 불러와도 표에 안 올라와요)`, table(d.archived)) : '';
     return qHead('competitors', d.oneLine, d.watch.length ? badge(`주시 ${d.watch.length}개`, 'lime') : '') + notes + changes + list + subs + arch;
   }
 
