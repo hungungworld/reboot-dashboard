@@ -287,6 +287,17 @@
 .part-content .cnt-review-items li.error { border-left-color: var(--red); }
 .part-content .cnt-review-items li.warn { border-left-color: var(--orange); }
 .part-content .cnt-review-items code { font-size: 10px; background: var(--soft); padding: 0 4px; border-radius: 3px; }
+/* 문구별 컴플라이언스 */
+.part-content .cnt-units { border-top: 1px solid var(--line-3); margin-top: 10px; padding-top: 10px; }
+.part-content .cnt-units > summary { cursor: pointer; font-size: 12px; font-weight: 650; }
+.part-content .cnt-units-head { gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.part-content .cnt-unit-list { list-style: none; padding: 0; margin: 0; }
+.part-content .cnt-unit { border: 1px solid var(--line-2); border-left-width: 3px; border-radius: 8px; padding: 7px 10px; margin-bottom: 6px; font-size: 11px; }
+.part-content .cnt-unit.ok { border-left-color: var(--green); }
+.part-content .cnt-unit.hit { border-left-color: var(--orange); background: var(--orange-bg); }
+.part-content .cnt-unit .link { font-size: 10px; }
+.part-content .cnt-unit-text { margin: 4px 0 2px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.part-content .cnt-cmp-hit { background: var(--red-bg); color: var(--red); font-weight: 700; border-radius: 3px; padding: 0 2px; }
 .part-content .cnt-ai-review p { font-size: 11px; margin: 2px 0 4px; }
 .part-content .cnt-sel-actions { gap: 6px; margin-top: 12px; }
 .part-content .cnt-vhead { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 8px; }
@@ -361,11 +372,9 @@
 .part-content .cnt-poster strong { font-size: 28px; }
 .part-content .cnt-poster.t-cardnews { background: #ebebf0; }
 .part-content .cnt-poster.t-shortform { background: #d9e7ee; }
-.part-content .cnt-poster.t-product_desc { background: #e8e2d6; }
 .part-content .cnt-poster.t-crm { background: #e6e8e2; }
-.part-content .cnt-poster.t-plan { background: #f3f5dc; }
-.part-content .cnt-poster.t-cardnews::after, .part-content .cnt-poster.t-shortform::after, .part-content .cnt-poster.t-product_desc::after,
-.part-content .cnt-poster.t-crm::after, .part-content .cnt-poster.t-plan::after { color: rgba(32, 40, 0, .1); }
+.part-content .cnt-poster.t-cardnews::after, .part-content .cnt-poster.t-shortform::after,
+.part-content .cnt-poster.t-crm::after { color: rgba(32, 40, 0, .1); }
 .part-content .cnt-campaign-card h3 { margin: 17px 5px 8px; font-size: 14px; }
 .part-content .cnt-campaign-card p { margin: 0 5px 10px; font-size: 11px; color: var(--muted-2); }
 .part-content .cnt-campaign-card .cnt-tags { margin: 0 5px 12px; }
@@ -398,7 +407,7 @@
 /* 캐릭터 Rebu 선택 (시트) · 참고한 최종 자료 썸네일 (이미지 결과) */
 .part-content .cnt-rebu-row { display: flex; align-items: center; gap: 10px; }
 .part-content .cnt-rebu { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--line-2);
-  background-color: var(--soft-2); background-size: 500% auto; background-position: 2% 3%; background-repeat: no-repeat; }
+  background-color: var(--soft-2); background-size: cover; background-position: center; background-repeat: no-repeat; }
 .part-content .cnt-refs { margin-top: 8px; }
 .part-content .cnt-ref-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .part-content .cnt-ref-thumbs img { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line-2); display: block; }

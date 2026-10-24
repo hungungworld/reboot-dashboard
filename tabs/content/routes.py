@@ -48,7 +48,7 @@ def _who():
 
 def _campaign(cid):
     c = db.session.get(ContentCampaign, cid)
-    if c is None:
+    if c is None or c.content_type in O.RETIRED_TYPES:  # 없앤 콘텐츠 종류(상품 설명·기획서)는 숨김 — DB에는 남음
         raise ApiError("없는 캠페인입니다.", 404)
     return c
 
@@ -122,7 +122,8 @@ def meta_check():
 def campaigns_list():
     q = (request.args.get("q") or "").strip().lower()[:100]
     status = (request.args.get("status") or "").strip()
-    rows = ContentCampaign.query.order_by(ContentCampaign.updated_at.desc()).limit(500).all()
+    rows = (ContentCampaign.query.filter(ContentCampaign.content_type.notin_(O.RETIRED_TYPES))
+            .order_by(ContentCampaign.updated_at.desc()).limit(500).all())
     products = repository.products_index()
     counts = {s: 0 for s in O.STATUSES}
     for c in rows:

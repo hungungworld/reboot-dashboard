@@ -57,8 +57,9 @@ TURN_GUIDE = """[출력 필드 안내]
   · edit(특정 버전 수정) · compare_versions(버전 비교) · select_version(이전 버전으로 돌아가기) · save · chitchat · other
 - assistant_text: 담당자에게 보여 줄 한국어 답변. 길이: {length}.
 - decision_patch: 바꿀 값만. field는 아래 허용 목록만 쓴다.
-  · sheet.content_type: image|cardnews|shortform|product_desc|crm|plan
-  · sheet.channels: instagram|tiktok|amazon|weee|yamibuy|crm 배열 (캠페인 기획서만 여러 개)
+  · sheet.content_type: image|cardnews|shortform|crm
+  · sheet.channels: instagram|tiktok|amazon|weee|yamibuy(Yami)|oliveyoung(Global Olive Young)|crm 중 하나만 담은 배열
+    (crm 콘텐츠는 crm 채널하고만, crm 채널은 crm 콘텐츠하고만)
   · sheet.brand_focus: true/false (Reboot 브랜드 자체를 주제로 삼는지)
   · sheet.product_ids: 등록된 제품 ID 배열 (product_facts의 entity_id만)
   · sheet.goal · sheet.extra_request: 짧은 문장
@@ -71,8 +72,8 @@ TURN_GUIDE = """[출력 필드 안내]
 - candidates: 사용자가 고를 후보. field는 decisions.<키> 또는 sheet.goal · sheet.extra_request. 필요할 때만 3개, reason은 한 줄.
 - clarification_questions: 지금 작업을 막는 것만 0~2개. 시트·결정에 이미 있는 값은 묻지 않는다.
 - action_request: 실행 요청안 (서버가 사용자 발화를 보고 실행 여부를 최종 결정).
-  type: none · draft_copy(카피·캡션) · draft_cardnews(카드뉴스 장별 문구) · draft_script(숏폼 구성안) · draft_desc(상품 설명)
-        · draft_crm(CRM 이메일·SMS) · draft_plan(캠페인 기획서) · generate_image(새 이미지) · edit_image(기준 이미지 수정)
+  type: none · draft_copy(카피·캡션) · draft_cardnews(카드뉴스 장별 문구) · draft_script(숏폼 구성안)
+        · draft_crm(CRM 이메일·SMS) · generate_image(새 이미지) · edit_image(기준 이미지 수정)
         · generate_video(실제 영상 — 현재 미연동) · select_version(이전 버전 선택)
   사용자가 명확히 만들거나 고쳐 달라고 할 때만 none이 아닌 값을 쓴다. 질문·감상·결정 변경만 있으면 none.
   target_version_id: 수정·선택할 버전 ID (versions의 id), 없으면 null.
@@ -164,18 +165,10 @@ Visual note에는 쓸 자산 id(brand_assets)를 괄호로 적는다. 예: (asse
 표 형식: | 장면 | 시간 | 화면 | 움직임·카메라 | 자막 | 기준 자산 | 이고, 장면 칸은 SC1, SC2 …로 쓴다. 기본 15초 세로형.
 기준 자산 칸에는 brand_assets의 id를 쓴다 (실제 영상 생성 때 첫 장면·참고 이미지로 쓸 사진).
 표 아래에 총 길이 합계와 오디오 메모를 쓴다. CM송은 제작 중이라 가사·멜로디를 쓰지 않고 '음원 연결 필요'로 표시한다.""",
-    "desc": """[작업: channel_copy · 상품 설명]
-채널 형식을 따른다. Amazon: Title / 5 Bullet points / Description. Weee·Yamibuy: Title / Short description / Key points.
-product_facts에 있는 스펙(용량·가격·구성·성분명·맛)만 쓰고, 봉지 안 개수·성분 함량·인증 등 미제공 스펙은 [확인 필요: …]로 비워 둔다.
-효능 주장 금지. "Zero Sugar"는 zero_sugar가 true인 제품에만 쓰고 당·영양 수치는 쓰지 않는다.""",
     "crm": """[작업: crm_sequence · CRM 메시지]
 이메일(Subject / Preheader / Body / CTA)과 SMS(160자 이내)를 쓴다. 시퀀스를 요청하면 메시지마다 목적·간격·발송 조건을 적는다.
 {{first_name}} · {{unsubscribe_link}} 같은 개인화 토큰은 그대로 둔다. 할인·쿠폰·연락처·개인화 값은 지어내지 않는다.
 이 모듈은 발송하지 않는다.""",
-    "plan": """[작업: campaign_plan · 캠페인 기획서 — 담당자용 한국어 문서, 소비자 문구 예시는 결과물 언어로]
-요청 규모에 맞게 쓴다. 기본은 미니 기획: 목표 / 타깃 가설 / 핵심 메시지와 근거 / 채널·포맷 / 콘텐츠 아이디어 3개 / 일정 초안 / 확인 필요.
-상세 기획을 요청하면 10개 항목: 1 배경 2 목표 3 타깃 4 핵심 메시지와 근거 5 채널 전략 6 콘텐츠 구성 7 일정 8 예산(입력 없으면 미정)
-9 KPI(측정 방법만, 목표 수치 창작 금지) 10 리스크·확인 필요. 메시지마다 근거(entity_id · fact_id)를 적는다.""",
 }
 
 # PL06: 생성 직전 핵심 규칙 재확인
@@ -218,6 +211,7 @@ CREATIVE_EDIT_V2 = """너는 Reboot 이미지 시안의 아트 디렉터다. 이
 VIDEO_V1 = """너는 Reboot 숏폼 영상의 연출가다. 영상 생성 모델(Seedance 2.0)에 보낼 영어 프롬프트 하나를 만든다.
 - script가 있으면 그 구성안(장면·자막·내레이션)을 duration_seconds 안에 들어가게 줄여 한 편의 장면 흐름으로 쓴다.
   없으면 sheet · decisions로 짧은 장면 흐름을 만든다.
+- previous_video가 있으면 영상 수정이다. 이전 prompt를 바탕으로 instructions에서 고치라는 부분만 바꾸고 나머지(장면·제품·분위기)는 유지한다.
 - 제품: reference_photos가 true면 서버가 최종 패키지 사진을 참고 이미지로 보낸다. "the Reboot product shown in the
   reference images"처럼 가리키고 모양·색·라벨을 바꾸지 말라고 쓴다. false면 product_facts.look을 바탕으로 묘사한다.
 - 젤리 모양은 카우보이 부츠 · 카우보이 모자 · 올가미만. 총·리볼버 모양은 넣지 않는다.

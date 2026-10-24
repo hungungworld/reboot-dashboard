@@ -115,8 +115,10 @@ def check_sheet(s):
         raise ValueError("만들 콘텐츠를 골라 주세요.")
     if not s.get("channels"):
         raise ValueError("게시 채널을 골라 주세요.")
-    if len(s["channels"]) > 1 and s["content_type"] != "plan":
-        raise ValueError("캠페인 기획서가 아니면 게시 채널은 하나만 고를 수 있어요.")
+    if len(s["channels"]) > 1:
+        raise ValueError("게시 채널은 하나만 고를 수 있어요.")
+    if (s["content_type"] == O.CRM_TYPE) != (s["channels"][0] == O.CRM_CHANNEL):
+        raise ValueError("CRM 메시지는 CRM 채널하고만, CRM 채널은 CRM 메시지하고만 만들 수 있어요.")
     if not s.get("brand_focus") and not s.get("product_ids"):
         raise ValueError("제작 대상을 하나 이상 골라 주세요 (Reboot 브랜드 자체 또는 제품).")
 
@@ -171,9 +173,7 @@ def norm_settings(data, base=None):
 
 def auto_title(sheet):
     today = catalog._today()
-    ch = sheet["channels"]
-    name = O.CHANNELS[ch[0]]["short"] + (f" 외 {len(ch) - 1}" if len(ch) > 1 else "")
-    return f"{name} {O.CONTENT_TYPES[sheet['content_type']]['label']} · {today:%m.%d}"
+    return f"{O.CHANNELS[sheet['channels'][0]]['short']} {O.CONTENT_TYPES[sheet['content_type']]['label']} · {today:%m.%d}"
 
 
 # ───────── 결정 ─────────
@@ -226,7 +226,7 @@ def plan_changes(sheet, decisions, changes, *, user, source, revision, vague=Fal
     sheet = copy.deepcopy(sheet)
     decisions = copy.deepcopy(decisions)
     applied, rejected, fact_requests, demoted = [], [], [], []
-    pending_sheet = {}  # 시트 변경은 모아서 한 번에 검사 (예: 기획서 → 이미지 + 채널 하나)
+    pending_sheet = {}  # 시트 변경은 모아서 한 번에 검사 (예: CRM → 이미지 + 채널 Instagram)
     now = iso(utcnow())
     for ch in list(changes or [])[:20]:
         if not isinstance(ch, dict):

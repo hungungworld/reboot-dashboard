@@ -139,6 +139,11 @@ def test_data_js_ids_match_server_options():
     text = (ROOT / "tabs" / "content" / "static" / "data.js").read_text(encoding="utf-8")
     for key in list(O.CONTENT_TYPES) + list(O.CHANNELS) + list(O.STATUSES):
         assert f"'{key}'" in text, key
+    cmp_map = re.search(r"complianceChannel: \{([^}]*)\}", text).group(1)
+    for ch in O.CHANNELS:  # 채널마다 컴플라이언스 규칙 묶음 연결이 있어야 함 (없으면 b2c로 조용히 검사)
+        assert re.search(rf"\b{ch}: '(b2c|amazon)'", cmp_map), ch
+    for retired in O.RETIRED_TYPES:
+        assert f"'{retired}'" not in text, retired
 
 
 # ───────── 캠페인 생성 · 목록 ─────────
@@ -165,8 +170,16 @@ def test_create_validation(auth_client):
     assert "알 수 없는 제품" in err(content_type="image", channels=["instagram"], product_ids=["jelly_original", "fake"])
     assert "하나만" in err(content_type="image", channels=["instagram", "tiktok"], brand_focus=True)
     assert "채널" in err(content_type="image", channels=["myspace"], brand_focus=True)
-    plan = create(auth_client, content_type="plan", channels=["instagram", "amazon"])
-    assert plan["sheet"]["channels"] == ["instagram", "amazon"]
+    # 상품 설명 · 기획서는 없앤 종류 (기획서도 채널 하나)
+    assert "알 수 없는 콘텐츠" in err(content_type="product_desc", channels=["amazon"], brand_focus=True)
+    assert "알 수 없는 콘텐츠" in err(content_type="plan", channels=["instagram"], brand_focus=True)
+    # CRM 메시지 ↔ CRM 채널끼리만
+    assert "CRM" in err(content_type="crm", channels=["instagram"], brand_focus=True)
+    assert "CRM" in err(content_type="image", channels=["crm"], brand_focus=True)
+    oy = create(auth_client, content_type="cardnews", channels=["oliveyoung"])
+    assert oy["sheet"]["channels"] == ["oliveyoung"] and oy["labels"]["channels"] == ["Global Olive Young"]
+    assert oy["title"].startswith("올리브영 카드뉴스")
+    assert create(auth_client, channels=["yamibuy"])["labels"]["channels"] == ["Yami"]  # ID는 그대로 · 표시만 Yami
     multi = create(auth_client, brand_focus=False, product_ids=["drink_balance", "jelly_original"])
     assert multi["sheet"]["product_ids"] == ["jelly_original", "drink_balance"]  # 표준 순서 · 브랜드와 분리
     assert [p["entity_id"] for p in multi["facts"]["products"]] == ["jelly_original", "drink_balance"]
@@ -175,7 +188,7 @@ def test_create_validation(auth_client):
 
 def test_list_search_status_and_counts(auth_client):
     a = create(auth_client)
-    b = create(auth_client, channels=["amazon"], content_type="product_desc", brand_focus=False, product_ids=["jelly_balance"])
+    b = create(auth_client, channels=["amazon"], content_type="image", brand_focus=False, product_ids=["jelly_balance"])
     create(auth_client, content_type="crm", channels=["crm"])
     res = auth_client.patch(f"/api/content/campaigns/{b['id']}", json={"expected_revision": 1, "status": "완료"})
     assert res.status_code == 200
@@ -186,6 +199,29 @@ def test_list_search_status_and_counts(auth_client):
     assert [i["id"] for i in auth_client.get("/api/content/campaigns?q=아마존").get_json()["items"]] == [b["id"]]
     assert [i["id"] for i in auth_client.get("/api/content/campaigns?q=저당 젤리").get_json()["items"]] == [b["id"]]
     assert a["id"] in [i["id"] for i in auth_client.get("/api/content/campaigns?q=브랜드").get_json()["items"]]
+
+
+def test_retired_types_hidden_not_deleted(app, auth_client):
+    """예전에 만든 상품 설명 · 기획서 캠페인은 DB에 남기고 목록 · 열기에서만 숨김."""
+    from server.extensions import db
+    from tabs.content.models import ContentCampaign
+    keep = create(auth_client)
+    with app.app_context():
+        old = []
+        for ct, chs in (("product_desc", ["amazon"]), ("plan", ["instagram", "tiktok"])):
+            c = ContentCampaign(title=f"옛 {ct}", content_type=ct, brand_focus=True, status="제작 중", revision=1,
+                                created_by="t", updated_by="t")
+            c.channels, c.product_ids, c.settings, c.decisions = chs, [], {}, {}
+            db.session.add(c)
+            db.session.flush()
+            old.append(c.id)
+        db.session.commit()
+    data = auth_client.get("/api/content/campaigns").get_json()
+    assert [i["id"] for i in data["items"]] == [keep["id"]] and data["total"] == 1
+    for cid in old:
+        assert auth_client.get(f"/api/content/campaigns/{cid}").status_code == 404
+    with app.app_context():
+        assert ContentCampaign.query.filter(ContentCampaign.id.in_(old)).count() == 2  # 지우지 않음
 
 
 # ───────── 시트 수정 · 리비전 ─────────
@@ -208,8 +244,10 @@ def test_patch_revision_conflict_and_sheet_rules(auth_client):
     res = auth_client.patch(f"/api/content/campaigns/{cid}", json={"expected_revision": 2, "sheet": {"brand_focus": False, "product_ids": []}})
     assert res.status_code == 400 and "대상" in res.get_json()["error"]
     assert get(auth_client, cid)["revision"] == 2
-    # 기획서(채널 2개) ↔ 이미지(채널 1개)를 한 번에 바꿔도 순서와 상관없이 검사
-    res = auth_client.patch(f"/api/content/campaigns/{cid}", json={"expected_revision": 2, "sheet": {"content_type": "plan", "channels": ["instagram", "tiktok"]}})
+    # 콘텐츠만 CRM으로 바꾸면 거절 · CRM ↔ 이미지(채널 함께)는 한 번에 바꿔도 순서와 상관없이 검사
+    res = auth_client.patch(f"/api/content/campaigns/{cid}", json={"expected_revision": 2, "sheet": {"content_type": "crm"}})
+    assert res.status_code == 400 and "CRM" in res.get_json()["error"]
+    res = auth_client.patch(f"/api/content/campaigns/{cid}", json={"expected_revision": 2, "sheet": {"content_type": "crm", "channels": ["crm"]}})
     assert res.status_code == 200
     res = auth_client.patch(f"/api/content/campaigns/{cid}", json={"expected_revision": 3, "sheet": {"content_type": "image", "channels": ["tiktok"]}})
     assert res.status_code == 200 and res.get_json()["campaign"]["sheet"]["channels"] == ["tiktok"]
@@ -1007,6 +1045,48 @@ def test_higgsfield_video_needs_key_and_setting(auth_client, ai, monkeypatch):
     ai.add("content_draft", {"note": "", "drafts": [draft("| 장면 | 시간 |\n| --- | --- |\n| SC1 | 0-3s |\n")]})
     out = chat(auth_client, camp, "숏폼 영상 만들어줘").get_json()
     assert out["job"] is None and "Higgsfield 키가 없어" in out["reply"]["payload"]["action"]["note"]
+
+
+def test_video_button_makes_video_from_draft_and_revise_keeps_original(auth_client, ai, sync_jobs, monkeypatch):
+    hf = FakeHiggsfield(monkeypatch)
+    camp = create(auth_client, content_type="shortform", channels=["tiktok"], brand_focus=False, product_ids=["jelly_original"])
+    camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
+        "expected_revision": camp["revision"], "changes": [{"field": "decisions.duration", "value": "8초 가로형 16:9"}]}).get_json()["campaign"]
+    ai.add("content_turn", turn(intent="draft", action="draft_script"))
+    ai.add("content_draft", {"note": "", "drafts": [draft("| 장면 | 시간 |\n| --- | --- |\n| SC1 | 0-3s |\n")]})
+    camp = chat(auth_client, camp, "숏폼 구성안 만들어줘").get_json()["campaign"]
+    script = camp["versions"][0]
+    # 영상 설정이 '구성안만'이어도 영상 만들기 버튼(force_action=video)은 실제 영상
+    ai.add("content_turn", turn(text="영상으로 만들어 볼게요."))
+    ai.add("content_video_plan", {"prompt_en": "Pouch spins on black.", "notes_ko": "회전 컷", "flavors": [], "include_character": False})
+    out = chat(auth_client, camp, "이 초안으로 영상 만들어줘", force_action="video", base_version_id=script["id"]).get_json()
+    assert out["job"]["kind"] == "video" and out["reply"]["payload"]["action"]["type"] == "generate_video"
+    c = get(auth_client, camp["id"])
+    first = next(v for v in c["versions"] if v["kind"] == "video")
+    assert first["label"] == "영상 1" and hf.submits[0][1]["duration"] == 8 and "구성안 기준" in first["note"]
+    assert json.loads(ai.calls[-1]["user"])["script"]["label"] == script["label"]
+    # 수정: 이전 프롬프트 + 요청 → 새 버전 (원본 유지 · 길이는 요청대로, 비율은 이전 그대로)
+    ai.add("content_turn", turn(text="수정해 볼게요."))
+    ai.add("content_video_plan", {"prompt_en": "Pouch spins slowly on black.", "notes_ko": "느린 회전", "flavors": [], "include_character": False})
+    out = chat(auth_client, c, "카메라를 더 천천히, 길이는 5초로", force_action="video", base_version_id=first["id"]).get_json()
+    user = json.loads(ai.calls[-1]["user"])
+    assert user["previous_video"]["prompt"].startswith("Pouch spins on black.") and user["script"] is None
+    _, body = hf.submits[1]
+    assert body["duration"] == 5 and body["aspect_ratio"] == hf.submits[0][1]["aspect_ratio"]
+    c = get(auth_client, camp["id"])
+    videos = sorted((v for v in c["versions"] if v["kind"] == "video"), key=lambda v: v["seq"])
+    assert len(videos) == 2 and videos[1]["label"] == "영상 1" and "원본 영상 유지" in videos[1]["note"]
+    assert "원본 영상 유지" not in videos[0]["note"] and videos[0]["videoUrl"] != videos[1]["videoUrl"]
+    assert any("영상 수정본이 준비됐어요" in m["text"] for m in c["messages"])
+
+
+def test_video_button_without_higgsfield_key_does_not_fall_back(auth_client, ai, monkeypatch):
+    monkeypatch.setattr(higgsfield, "ready", lambda: False)
+    camp = create(auth_client)
+    ai.add("content_turn", turn())
+    out = chat(auth_client, camp, "영상 만들어줘", force_action="video").get_json()
+    assert out["job"] is None and "Higgsfield 키" in out["reply"]["payload"]["action"]["note"]
+    assert not get(auth_client, camp["id"])["versions"]
 
 
 def test_higgsfield_image_provider_saves_jpg_and_keeps_provider(auth_client, ai, sync_jobs, monkeypatch):

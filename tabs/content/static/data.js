@@ -13,20 +13,21 @@
       { id: 'image', label: '이미지', icon: 'image', kind: 'copy', hint: '이미지 시안 + 위에 얹을 문구' },
       { id: 'cardnews', label: '카드뉴스', icon: 'doc', kind: 'cardnews', hint: '장별 문구 (S1, S2 …)' },
       { id: 'shortform', label: '숏폼 영상', icon: 'video', kind: 'script', hint: '구성안 · 실제 영상 생성은 미연동' },
-      { id: 'product_desc', label: '상품 설명', icon: 'edit', kind: 'desc', hint: '채널 형식의 제목·특징·설명' },
-      { id: 'crm', label: 'CRM 메시지', icon: 'mail', kind: 'crm', hint: '이메일·SMS 문안 (발송은 하지 않음)' },
-      { id: 'plan', label: '캠페인 기획서', icon: 'calendar', kind: 'plan', hint: '미니 기획 · 상세 10개 항목 · 채널 여러 개' }
+      { id: 'crm', label: 'CRM 메시지', icon: 'mail', kind: 'crm', hint: '이메일·SMS 문안 (발송은 하지 않음) · CRM 채널 전용' }
     ],
 
-    // 02 게시 채널 — 기획서만 여러 개
+    // 02 게시 채널 — 하나만. yamibuy는 다른 탭도 쓰는 ID라 그대로 두고 표시 이름만 Yami
     channels: [
       { id: 'instagram', label: 'Instagram' },
       { id: 'tiktok', label: 'TikTok' },
       { id: 'amazon', label: 'Amazon' },
       { id: 'weee', label: 'Weee' },
-      { id: 'yamibuy', label: 'Yamibuy' },
+      { id: 'yamibuy', label: 'Yami' },
+      { id: 'oliveyoung', label: 'Global Olive Young' },
       { id: 'crm', label: 'CRM' }
     ],
+    // CRM 메시지 ↔ CRM 채널끼리만 (tabs/content/options.py CRM_TYPE · CRM_CHANNEL)
+    crm: { type: 'crm', channel: 'crm' },
 
     // 04 목적 (선택)
     goals: ['브랜드 알리기', '제품 소개', '구매 유도', '재구매'],
@@ -34,8 +35,8 @@
     statuses: ['제작 중', '검토 중', '완료'],
     statusTone: { '제작 중': 'orange', '검토 중': 'blue', '완료': 'green' },
 
-    kinds: { copy: '카피', cardnews: '카드뉴스', script: '숏폼 구성안', desc: '상품 설명', crm: 'CRM 메시지', plan: '기획서', image: '이미지', video: '영상' },
-    textKinds: ['copy', 'cardnews', 'script', 'desc', 'crm', 'plan'],
+    kinds: { copy: '카피', cardnews: '카드뉴스', script: '숏폼 구성안', crm: 'CRM 메시지', image: '이미지', video: '영상' },
+    textKinds: ['copy', 'cardnews', 'script', 'crm'],
 
     sheetLabels: {
       content_type: '콘텐츠', channels: '게시 채널', brand_focus: '브랜드 자체', product_ids: '제작 대상 제품',
@@ -47,7 +48,7 @@
       choices: ['사용', '사용 안 함', 'AI 판단'],
       contentTypes: ['image', 'cardnews', 'shortform'],
       hints: { '사용': '캐릭터 사진을 참고해 Rebu를 넣어요', '사용 안 함': 'Rebu 없이 만들어요', 'AI 판단': '콘셉트에 어울릴 때만 넣어요' },
-      thumb: '/api/content/assets/rebu-faces.jpg'
+      thumb: '/api/content/assets/rebu-thumb.jpg'
     },
     decisionLabels: {
       concept: '콘셉트', background: '배경', tone: '말투·톤', style: '스타일', layout: '제품 배치', ratio: '비율',
@@ -61,9 +62,7 @@
       image: ['concept', 'background', 'style', 'ratio', 'language'],
       cardnews: ['concept', 'tone', 'slide_count', 'language'],
       shortform: ['concept', 'duration', 'tone', 'language'],
-      product_desc: ['tone', 'message', 'language'],
-      crm: ['format', 'tone', 'cta', 'language'],
-      plan: ['concept', 'target', 'season', 'language']
+      crm: ['format', 'tone', 'cta', 'language']
     },
 
     // 빠른 버튼 → 입력창에 미리 채움 (같은 대화 경로로 보냄 · README 7.1)
@@ -75,6 +74,13 @@
         { label: '스타일 변경', text: '스타일을 [밝은 아침 느낌]으로 바꿔줘' },
         { label: '비율 변경', text: '비율을 [4:5 세로]로 바꿔줘' },
         { label: '다른 시안', text: '다른 시안도 만들어줘' }
+      ],
+      video: [
+        { label: '장면 변경', text: '[첫 장면]을 [제품 클로즈업]으로 바꿔줘' },
+        { label: '카메라·움직임', text: '카메라를 [더 천천히] 움직여줘' },
+        { label: '분위기 변경', text: '분위기를 [밝은 아침 느낌]으로 바꿔줘' },
+        { label: '길이 변경', text: '길이를 [10초]로 바꿔줘' },
+        { label: '비율 변경', text: '비율을 [9:16 세로]로 바꿔줘' }
       ],
       text: [
         { label: '더 짧게', text: '[B안]을 더 짧게 고쳐줘' },
@@ -92,13 +98,12 @@
       image: { bg: '', en: 'IMAGE' },
       cardnews: { bg: '#e5eadb', en: 'CARD NEWS' },
       shortform: { bg: '#d9e7ee', en: 'SHORT FORM' },
-      product_desc: { bg: '#e8e2d6', en: 'PRODUCT PAGE' },
-      crm: { bg: '#e6e8e2', en: 'CRM MESSAGE' },
-      plan: { bg: '#eef3d6', en: 'CAMPAIGN PLAN' }
+      crm: { bg: '#e6e8e2', en: 'CRM MESSAGE' }
     },
 
     // 컴플라이언스 파트 review() 연결 — 채널: Amazon → amazon, 나머지(CRM 포함) → b2c
-    complianceChannel: { instagram: 'b2c', tiktok: 'b2c', amazon: 'amazon', weee: 'b2c', yamibuy: 'b2c', crm: 'b2c' },
+    // Global Olive Young은 임시로 b2c (별도 규칙 필요 여부는 컴플라이언스 담당 확인 전)
+    complianceChannel: { instagram: 'b2c', tiktok: 'b2c', amazon: 'amazon', weee: 'b2c', yamibuy: 'b2c', oliveyoung: 'b2c', crm: 'b2c' },
     complianceLabels: { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '규칙 미탐지' },
     complianceTone: { BLOCK: 'red', REVISE: 'orange', COND: 'blue', REVIEW: 'purple', PASS: 'green' },
 

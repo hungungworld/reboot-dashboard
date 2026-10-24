@@ -196,6 +196,8 @@ def decide_action(turn, sig, sheet, base, versions, force, settings=None):
         t = "draft_" + default_kind
     if force == "image" and t not in ("generate_image", "edit_image"):
         t = "edit_image" if (base is not None and base.kind == "image") else "generate_image"
+    if force == "video":  # 영상 만들기 버튼 — 대화 AI 판단과 상관없이 실제 영상
+        t = "generate_video"
     out = {"type": t, "run": None, "status": "none", "note": "", "target": None, "kind": None, "mode": None}
     if t == "none":
         return out
@@ -213,9 +215,16 @@ def decide_action(turn, sig, sheet, base, versions, force, settings=None):
         if "video" in sig["excluded_media"]:
             out.update(status="skipped", note="요청대로 영상 작업은 하지 않았어요.")
             return out
-        if video_ready(settings):
-            # 기준 구성안: 가리킨 버전 → 기준 버전 → 가장 최근 구성안 (없으면 시트·결정만으로)
-            script = next((v for v in (target, base) if v is not None and v.kind == "script"), None)
+        if force == "video" and not higgsfield.ready():
+            out.update(status="skipped", note="Higgsfield 키가 없거나 확인되지 않아 영상을 만들지 않았어요. "
+                                              "설정 › 연결에서 HIGGSFIELD_API_KEY(KEY_ID:KEY_SECRET)를 확인해 주세요.")
+            return out
+        if force == "video" or video_ready(settings):
+            # 기준: 가리킨·기준 영상(수정 = 새로 생성) → 구성안 → 텍스트 초안 → 가장 최근 구성안 (없으면 시트·결정만으로)
+            picked = [v for v in (target, base) if v is not None]
+            script = next((v for v in picked if v.kind == "video"), None)
+            script = script or next((v for v in picked if v.kind == "script"), None)
+            script = script or next((v for v in picked if v.kind not in ("image", "video")), None)
             script = script or next((v for v in reversed(versions) if v.kind == "script"), None)
             out.update(run="video", type=t, target=script, status="queued")
             return out
@@ -278,7 +287,7 @@ def run_turn(c, data, user):
     req_id = _request_id(data.get("client_request_id") or data.get("clientRequestId"))
     if req_id and ContentMessage.query.filter_by(campaign_id=c.id, client_request_id=req_id).first():
         raise repository.Duplicate(c.id)
-    force = data.get("force_action") if data.get("force_action") in ("draft", "image") else None
+    force = data.get("force_action") if data.get("force_action") in ("draft", "image", "video") else None
     try:
         base_id = int(data.get("base_version_id")) if data.get("base_version_id") not in (None, "") else None
     except (TypeError, ValueError):
@@ -516,9 +525,7 @@ EXAMPLE_ORDER = {
     "image": ["goal", "concept", "background", "ratio", "tone", "language"],
     "cardnews": ["goal", "concept", "tone", "slide_count", "target", "language"],
     "shortform": ["goal", "concept", "duration", "tone", "target"],
-    "product_desc": ["goal", "message", "tone", "cta", "language"],
     "crm": ["goal", "format", "tone", "cta", "target"],
-    "plan": ["goal", "target", "concept", "tone", "language"],
 }
 FIELD_RE = re.compile(r"^decisions\.[a-z][a-z0-9_]{1,39}$")
 

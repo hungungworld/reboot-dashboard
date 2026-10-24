@@ -28,12 +28,14 @@
     baseOff: false, showLayers: true,
     flash: new Set(), flashTimer: null,
     reviews: {},             // versionId → 컴플라이언스 판정 (이번 화면에서 실행)
+    unitReviews: {},         // 'versionId:문구 번호' → 문구별 컴플라이언스 판정 (이번 화면에서만 · 서버에 기록 안 함)
     folds: { sheet: false },
     pollTimer: null, searchTimer: null,
     personas: null,
     apiCheck: null, apiChecking: false,   // 연결 테스트 결과
     ivBusy: false, ivDraft: '',          // 인터뷰: 보내는 중 · 직접 입력 칸
-    imgDraft: ''                         // 이미지 AI 수정 입력 칸
+    imgDraft: '',                        // 이미지 AI 수정 입력 칸
+    vidDraft: ''                         // 영상 AI 수정 입력 칸
   };
   const CIRCLED = ['①', '②', '③'];
 
@@ -94,6 +96,13 @@
     if (usesCharacter(s.content_type)) out.use_character = s.use_character || 'AI 판단';
     return out;
   }
+  // 저장해 둔 옛 시트(상품 설명·기획서 · 채널 여러 개)를 지금 규칙에 맞춤: 채널 하나 · CRM끼리만
+  function fitSheet(s) {
+    if (!typeOf(s.content_type)) s.content_type = '';
+    s.channels = (s.channels || []).filter(id => DATA.channels.some(c => c.id === id)).slice(0, 1);
+    if (s.content_type && s.channels.length && (s.content_type === DATA.crm.type) !== (s.channels[0] === DATA.crm.channel)) s.channels = [];
+    return s;
+  }
   const usesCharacter = type => DATA.character.contentTypes.includes(type);
   // 브랜드 키트(콘텐츠 탭 기준)의 제품 형태 — 없으면 공용 팩트시트 값
   function productForm(p) {
@@ -117,7 +126,7 @@
     S.root = root;
     root.classList.add('part-content');
     const saved = lsGet('sheet', null);
-    if (saved && typeof saved === 'object') S.sheet = Object.assign(emptySheet(), saved);
+    if (saved && typeof saved === 'object') S.sheet = fitSheet(Object.assign(emptySheet(), saved));
     const hash = parseHash();
     if (hash.tab) S.tab = hash.tab;
     root.innerHTML = '<div data-ref="tabs"></div><div data-ref="main"></div>';
@@ -297,7 +306,6 @@
   }
 
   function sheetFormHtml(s, ctx) {
-    const isPlan = s.content_type === 'plan';
     const t = typeOf(s.content_type);
     const goalIsPreset = DATA.goals.includes(s.goal);
     const seasons = upcomingSeasons();
@@ -305,7 +313,7 @@
       <div class="field-label cnt-q">01 &nbsp; 만들 콘텐츠 <span class="cnt-req">필수</span></div>
       <div class="choice-grid cnt-types">${DATA.contentTypes.map(x => `<button type="button" class="choice" data-act="sheet-type" data-value="${esc(x.id)}" aria-pressed="${s.content_type === x.id}">${icon(x.icon)}<span>${esc(x.label)}</span>${s.content_type === x.id ? '<span class="cnt-check" aria-hidden="true">✓</span>' : ''}</button>`).join('')}</div>
       ${t ? `<p class="hint">${esc(t.hint)}</p>` : ''}
-      <div class="field-label cnt-q">02 &nbsp; 게시 채널 <span class="cnt-req">필수</span>${isPlan ? '<span class="cnt-opt">기획서는 여러 개 선택 가능</span>' : ''}</div>
+      <div class="field-label cnt-q">02 &nbsp; 게시 채널 <span class="cnt-req">필수 · 하나</span><span class="cnt-opt">CRM 메시지 ↔ CRM 채널끼리만</span></div>
       <div class="chips">${DATA.channels.map(c => `<button type="button" class="chip" data-act="sheet-channel" data-value="${esc(c.id)}" aria-pressed="${s.channels.includes(c.id)}">${esc(c.label)}</button>`).join('')}</div>
       <div class="field-label cnt-q">03 &nbsp; 제작 대상 <span class="cnt-req">필수 · 하나 이상</span><span class="cnt-opt">제품은 여러 개 선택 가능</span></div>
       <div class="cnt-targets">
@@ -422,12 +430,15 @@
     if (!c || !c.s) return false;
     const s = c.s;
     if (act === 'sheet-type') {
+      // CRM 메시지 ↔ CRM 채널: 한쪽을 고르면 다른 쪽을 맞추고, 안 맞는 쪽은 비움
       s.content_type = b.dataset.value;
-      if (s.content_type !== 'plan' && s.channels.length > 1) s.channels = s.channels.slice(0, 1);
+      if (s.content_type === DATA.crm.type) s.channels = [DATA.crm.channel];
+      else if (s.channels[0] === DATA.crm.channel) s.channels = [];
     } else if (act === 'sheet-channel') {
       const id = b.dataset.value;
-      if (s.content_type === 'plan') s.channels = s.channels.includes(id) ? s.channels.filter(x => x !== id) : s.channels.concat(id);
-      else s.channels = s.channels.includes(id) ? [] : [id];
+      s.channels = s.channels.includes(id) ? [] : [id];
+      if (id === DATA.crm.channel && s.channels.length) s.content_type = DATA.crm.type;
+      else if (id !== DATA.crm.channel && s.content_type === DATA.crm.type) s.content_type = '';
     } else if (act === 'sheet-character') {
       s.use_character = b.dataset.value;
     } else if (act === 'goal-pick') {
@@ -507,8 +518,8 @@
 
   function editCopy(c) {
     const ch = c.decisions && c.decisions.use_character;
-    return Object.assign(emptySheet(), JSON.parse(JSON.stringify(c.sheet)), { reference_text: c.referenceText || '',
-      use_character: (ch && ch.value) || 'AI 판단' });
+    return fitSheet(Object.assign(emptySheet(), JSON.parse(JSON.stringify(c.sheet)), { reference_text: c.referenceText || '',
+      use_character: (ch && ch.value) || 'AI 판단' }));
   }
 
   function flashFields(fields) {
@@ -606,7 +617,8 @@
       const pd = S.pending;
       if (!pd.kickoff && pd.text) out.push(`<div class="message user cnt-pending"><div class="bubble">${esc(pd.text)}</div></div>`);
       const wait = pd.interview ? (pd.kickoff ? '시트를 읽고 첫 질문을 준비하는 중…' : '답을 저장하고 다음 질문을 준비하는 중…')
-        : pd.kickoff ? '시트를 읽고 첫 제안을 준비하는 중…' : pd.force === 'image' ? '이미지 작업을 등록하는 중…' : '생각하는 중… 초안을 쓰면 30초쯤 걸려요';
+        : pd.kickoff ? '시트를 읽고 첫 제안을 준비하는 중…' : pd.force === 'image' ? '이미지 작업을 등록하는 중…'
+        : pd.force === 'video' ? '영상 작업을 등록하는 중…' : '생각하는 중… 초안을 쓰면 30초쯤 걸려요';
       out.push(`<div class="message"><div class="bot-symbol">✳</div><div class="cnt-bot"><div class="cnt-typing"><span></span><span></span><span></span>
         <em>${wait}</em></div></div></div>`);
     }
@@ -624,7 +636,7 @@
     const time = `<span class="faint small">${esc(fmt.datetime(m.createdAt))}</span>`;
     if (m.role === 'user') {
       const p = m.payload || {};
-      const tag = p.forceAction ? `<span class="cnt-msg-tag">${p.forceAction === 'image' ? '이미지 생성 버튼' : '초안 만들기 버튼'}</span>` : '';
+      const tag = p.forceAction ? `<span class="cnt-msg-tag">${{ image: '이미지 생성 버튼', video: '영상 만들기 버튼' }[p.forceAction] || '초안 만들기 버튼'}</span>` : '';
       return `<div class="message user"><div class="bubble">${esc(m.text)}</div></div>${tag ? `<div class="cnt-user-meta">${tag}</div>` : ''}`;
     }
     if (m.role === 'event') {
@@ -656,8 +668,9 @@
     if (a.status === 'done' && (a.versionIds || []).length) {
       const btns = a.versionIds.map((id, i) => `<button type="button" class="link" data-act="select-version" data-id="${esc(id)}">${esc((a.versionLabels || [])[i] || 'v' + id)}</button>`).join(' · ');
       lines.push(`<li class="ok">${icon('doc')}${a.type === 'select_version' ? '선택한 버전' : a.mode === 'edit' ? '수정본' : '초안'}: ${btns}</li>`);
+      if (String(a.type || '').startsWith('draft_')) lines.push(`<li class="info">${videoButtonHtml('btn small dark')}</li>`);
     } else if (a.status === 'queued') {
-      lines.push(`<li class="run"><span class="spinner"></span>이미지 작업을 등록했어요 — 진행 상황은 아래 '진행 과정 & 결과'에서 볼 수 있어요.</li>`);
+      lines.push(`<li class="run"><span class="spinner"></span>${a.type === 'generate_video' ? '영상' : '이미지'} 작업을 등록했어요 — 진행 상황은 아래 '진행 과정 & 결과'에서 볼 수 있어요.</li>`);
     }
     if (a.note) lines.push(`<li class="${a.status === 'failed' ? 'no' : 'info'}">${esc(a.note)}</li>`);
     return lines.length ? `<ul class="cnt-results">${lines.join('')}</ul>` : '';
@@ -716,7 +729,7 @@
     const off = ready ? '' : 'disabled title="OpenAI 키가 필요해요"';
     // 이미지·카드뉴스는 이미지 만들기가 먼저
     return `<div class="flex wrap cnt-iv-make">
-      ${canImage ? `<button type="button" class="btn small lime" data-act="make-image" ${off}>${icon('image')}이미지 만들기</button>` : ''}
+      ${canImage ? `<button type="button" class="btn small lime" data-act="make-image" ${off}>${icon('image')}이미지 만들기 · ${esc(imageProviderName())}</button>` : ''}
       <button type="button" class="btn small ${canImage ? '' : 'lime'}" data-act="iv-make" ${off}>${icon('spark')}${canImage ? '카피 초안 만들기' : '이대로 만들기'}</button>
       ${ready ? '' : '<span class="panel-note">만들기는 OpenAI 키가 필요해요. 지금은 직접 작성할 수 있어요.</span>'}</div>`;
   }
@@ -1048,7 +1061,8 @@
           ${jobs.map(jobHtml).join('')}
           <div class="flex wrap cnt-make">
             <button type="button" class="btn small lime" data-act="make-draft" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('spark')}초안 만들기</button>
-            ${canImage ? `<button type="button" class="btn small dark" data-act="make-image" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('image')}이미지 생성</button>` : ''}
+            ${canImage ? `<button type="button" class="btn small dark" data-act="make-image" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('image')}이미지 생성 · ${esc(imageProviderName())}</button>` : ''}
+            ${vs.some(v => v.kind !== 'image' && v.kind !== 'video') ? videoButtonHtml('btn small dark') : ''}
             <button type="button" class="btn small" data-act="manual-version">${icon('edit')}직접 작성</button>
           </div>
           ${sel && !complete ? `<button type="button" class="btn small dark cnt-complete-btn" data-act="complete">${icon('check')}완성하기 · ${esc(sel.label)} v${esc(sel.seq)}</button>
@@ -1175,7 +1189,8 @@
       ? `<div class="cnt-preview cnt-video"><video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 시안"></video></div>
          <p class="panel-note">${badge('시안')} 자막·로고는 영상에 넣지 않았어요. 제품 모양·라벨·장면은 게시 전에 직접 확인하세요.</p>
          ${v.body ? `<p class="panel-note">${esc(v.body)}</p>` : ''}
-         ${referencesHtml(v)}`
+         ${referencesHtml(v)}
+         ${videoEditHtml(v)}`
       : `<div class="prose cnt-doc">${ui.markdown(v.body)}</div>`;
     const cmp = complianceOf(v);
     const ai = v.review && v.review.ai;
@@ -1188,6 +1203,7 @@
       ${v.approach && !media ? `<p class="panel-note">접근: ${esc(v.approach)}</p>` : ''}
       ${body}
       ${(v.needsCheck || []).length ? `<div class="note cnt-check-list"><b>확인 필요</b><ul>${v.needsCheck.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
+      ${unitReviewsHtml(v)}
       <div class="cnt-review">
         <div class="cnt-review-row"><span>키워드 확인</span>${keywordBadge(v, false)}</div>
         ${kw && kw.items && kw.items.length ? `<ul class="cnt-review-items">${kw.items.map(i => `<li class="${esc(i.level)}">${esc(i.label)}${i.terms && i.terms.length ? ` <code>${esc(i.terms.join(', '))}</code>` : ''}</li>`).join('')}</ul>` : ''}
@@ -1243,6 +1259,51 @@
       </div>
       <p class="panel-note">AI 수정은 이 이미지를 기준으로 넣어 새 버전을 만들어요 (원본 유지 · 이미지 생성 비용). ${S.meta && S.meta.imageEdit === false ? '지금 이미지 모델은 편집을 지원하지 않아 새 시안으로 만들어요. ' : ''}직접 편집은 AI 없이 브라우저에서 해요.</p>
     </div>`;
+  }
+
+  function imageProviderName() {
+    return S.camp && S.camp.settings && S.camp.settings.image_provider === 'higgsfield' ? 'Higgsfield' : 'OpenAI';
+  }
+
+  /* 영상 (Higgsfield Seedance 2.0) — 초안·구성안 기준으로 만들기 · 만든 영상 수정(새로 생성 · 원본 유지) */
+  function hfReady() {
+    return !!(S.meta && S.meta.video && S.meta.video.higgsfieldKey);
+  }
+
+  function videoButtonHtml(cls) {
+    const off = !textReady() ? 'disabled title="OpenAI 키가 필요해요 (영상 프롬프트 작성)"'
+      : !hfReady() ? 'disabled title="Higgsfield 키가 필요해요 (설정 › 연결)"' : '';
+    return `<button type="button" class="${cls}" data-act="make-video" ${off}>${icon('video')}영상 만들기 · Higgsfield</button>`;
+  }
+
+  function videoEditHtml(v) {
+    const off = textReady() && hfReady() ? '' : 'disabled title="OpenAI · Higgsfield 키가 필요해요"';
+    return `<div class="cnt-img-edit">
+      <div class="field-label">${icon('spark')}이 영상 수정하기</div>
+      <div class="chips">${DATA.quick.video.map((q, i) => `<button type="button" class="chip" data-act="vid-quick" data-i="${i}">${esc(q.label)}</button>`).join('')}</div>
+      <div class="cnt-img-edit-row"><textarea class="input" data-ref="vid-prompt" rows="2" maxlength="1000" placeholder="어떻게 고칠까요? 예: 카메라를 더 천천히, 마지막에 제품 클로즈업" aria-label="영상 수정 요청">${esc(S.vidDraft)}</textarea>
+        <button type="button" class="btn small dark" data-act="vid-ai-edit" data-id="${esc(v.id)}" ${off}>${icon('spark')}AI로 다시 만들기</button></div>
+      <div class="flex wrap cnt-img-edit-btns">
+        <button type="button" class="btn small ghost" data-act="vid-new" ${off}>새 영상 (처음부터)</button>
+      </div>
+      <p class="panel-note">영상은 부분 수정이 안 돼서, 이 영상의 프롬프트에 수정 요청을 반영해 새로 만들어요. 원본 영상은 그대로 남고 새 버전으로 저장돼요 (Higgsfield 유료 · 몇 분 걸려요).</p>
+    </div>`;
+  }
+
+  async function makeVideo(text, opts) {
+    const ok = await ui.confirm('Higgsfield로 실제 영상을 만들어요. 720p · 4~15초 · 소리 없음 · 유료이고 몇 분 걸려요. 진행할까요?', { ok: '영상 만들기' });
+    if (ok) send(text, Object.assign({ force: 'video' }, opts || {}));
+  }
+
+  async function videoAiEdit(v) {
+    const text = S.vidDraft.trim();
+    if (!text) { toast('어떻게 고칠지 적어 주세요. 위 버튼을 누르면 예시가 채워져요.', 'error'); return; }
+    if (S.camp.selectedVersionId !== v.id) await selectVersion(v.id);
+    S.baseOff = false;
+    const ok = await ui.confirm('수정 요청을 반영해 영상을 새로 만들어요 (원본 유지 · Higgsfield 유료 · 몇 분). 진행할까요?', { ok: '다시 만들기' });
+    if (!ok) return;
+    S.vidDraft = '';
+    send(text, { force: 'video' });
   }
 
   async function imageAiEdit(v) {
@@ -1571,31 +1632,32 @@
     return ids;
   }
 
-  async function runCompliance(v) {
+  // 컴플라이언스 탭의 review()로 문구 하나 검사 — 채널·선택 제품 조합 중 가장 엄격한 판정
+  function complianceCheck(text) {
     let api = null;
     try { api = REBOOT.use('compliance'); } catch (e) { api = null; }
-    let result;
-    if (!api || typeof api.review !== 'function') {
-      result = { verdict: 'UNAVAILABLE', label: '미연동', findings: [] };
-    } else {
-      const text = v.kind === 'image' ? ((v.image && v.image.text_layers) || []).map(t => t.text).join('\n') : v.body;
-      if (!String(text || '').trim()) { toast('검사할 문구가 없어요 (이미지 속 글자는 검사하지 않아요).', 'error'); return; }
-      const channels = Array.from(new Set(S.camp.sheet.channels.map(ch => DATA.complianceChannel[ch] || 'b2c')));
-      const prods = complianceProducts();
-      try {
-        const runs = [];
-        channels.forEach(ch => (prods.length ? prods : ['']).forEach(pid => runs.push(api.review(text, pid ? { channel: ch, category: 'FOOD', product: pid } : { channel: ch, category: 'FOOD' }))));
-        const byCode = {};
-        let verdict = 'PASS';
-        runs.forEach(r => {
-          if (RANK[r.verdict] > RANK[verdict]) verdict = r.verdict;
-          (r.findings || []).forEach(f => { if (!byCode[f.code] || RANK[f.verdict] > RANK[byCode[f.code].verdict]) byCode[f.code] = f; });
-        });
-        result = { verdict, label: DATA.complianceLabels[verdict] || verdict, findings: Object.values(byCode), channel: channels.join(','), products: prods };
-      } catch (e) {
-        result = { verdict: 'ERROR', label: '미검토 (검사 오류)', findings: [] };
-      }
+    if (!api || typeof api.review !== 'function') return { verdict: 'UNAVAILABLE', label: '미연동', findings: [] };
+    const channels = Array.from(new Set(S.camp.sheet.channels.map(ch => DATA.complianceChannel[ch] || 'b2c')));
+    const prods = complianceProducts();
+    try {
+      const runs = [];
+      channels.forEach(ch => (prods.length ? prods : ['']).forEach(pid => runs.push(api.review(text, pid ? { channel: ch, category: 'FOOD', product: pid } : { channel: ch, category: 'FOOD' }))));
+      const byCode = {};
+      let verdict = 'PASS';
+      runs.forEach(r => {
+        if (RANK[r.verdict] > RANK[verdict]) verdict = r.verdict;
+        (r.findings || []).forEach(f => { if (!byCode[f.code] || RANK[f.verdict] > RANK[byCode[f.code].verdict]) byCode[f.code] = f; });
+      });
+      return { verdict, label: DATA.complianceLabels[verdict] || verdict, findings: Object.values(byCode), channel: channels.join(','), products: prods };
+    } catch (e) {
+      return { verdict: 'ERROR', label: '미검토 (검사 오류)', findings: [] };
     }
+  }
+
+  async function runCompliance(v) {
+    const text = v.kind === 'image' ? ((v.image && v.image.text_layers) || []).map(t => t.text).join('\n') : v.body;
+    if (!String(text || '').trim()) { toast('검사할 문구가 없어요 (이미지 속 글자는 검사하지 않아요).', 'error'); return; }
+    const result = complianceCheck(text);
     S.reviews[v.id] = result;
     renderResults();
     try {
@@ -1606,6 +1668,95 @@
       setCampaign(res.campaign);
       renderResults();
     } catch (e) { toast('검사 결과를 서버에 기록하지 못했어요: ' + e.message, 'error'); }
+  }
+
+  /* 문구별 컴플라이언스 — 초안을 소비자에게 보일 문구 단위(헤드라인 · 캡션 · CTA · 장 · 자막 · 이미지 레이어)로 나눠 검사.
+     화면 안에서만 판정하고 서버에는 기록하지 않음 (버전 전체 검사 결과는 기존대로 기록). */
+  const UNIT_SKIP = /^(visual( note)?|비주얼|화면|움직임|카메라|기준 ?자산|asset|시간|장면|목적|간격|발송 ?조건|조건|오디오|audio|note|메모|approach|접근|확인 ?필요|총 ?길이)/i;
+  const SUB_COL = /(자막|caption|subtitle|텍스트|text|카피|문구)/i;
+
+  function cmpUnits(v) {
+    if (v.kind === 'image') {
+      return ((v.image && v.image.text_layers) || []).filter(t => String(t.text || '').trim())
+        .map((t, i) => ({ label: t.role ? t.role.toUpperCase() : `문구 ${i + 1}`, text: String(t.text).trim() }));
+    }
+    if (v.kind === 'video') return [];
+    const units = [];
+    let section = '', cur = null, table = null, para = 0;
+    const clean = s => s.replace(/\*\*/g, '').replace(/^\s*(?:[-*]|\d+\.)\s+/, '').trim();
+    const close = () => { if (cur && cur.text.trim()) units.push({ label: cur.label, text: cur.text.trim() }); cur = null; };
+    String(v.body || '').split('\n').forEach(raw => {
+      const line = raw.trim();
+      if (!line) { close(); table = null; return; }
+      if (line.startsWith('|')) {  // 숏폼 구성안 표 — 자막 칸만
+        close();
+        const cells = line.replace(/^\||\|$/g, '').split('|').map(c => clean(c));
+        if (!table) { table = { col: cells.findIndex(c => SUB_COL.test(c)) }; return; }
+        if (cells.every(c => /^:?-{2,}:?$/.test(c) || !c)) return;
+        const t = table.col >= 0 ? cells[table.col] : '';
+        if (t && t !== '-') units.push({ label: `${cells[0] || '장면'} · 자막`, text: t });
+        return;
+      }
+      table = null;
+      const h = line.match(/^#{1,6}\s+(.*)$/);
+      if (h) { close(); section = clean(h[1]); return; }
+      const plain = clean(line);
+      const kv = plain.match(/^([A-Za-z가-힣][A-Za-z가-힣 /()·-]{0,28}?)\s*[:：]\s*(.*)$/);
+      const boldOnly = /^\*\*[^*]+\*\*:?$/.test(line);
+      if (kv || boldOnly) {
+        close();
+        const key = (kv ? kv[1] : plain.replace(/:$/, '')).trim();
+        const label = section ? `${section.split(/\s*[·:-]\s*/)[0]} · ${key}` : key;
+        cur = UNIT_SKIP.test(key) ? { label, text: '', skip: true } : { label, text: kv ? kv[2] : '' };
+        return;
+      }
+      if (cur && cur.skip) return;
+      if (cur) { cur.text += (cur.text ? ' ' : '') + plain; return; }
+      if (UNIT_SKIP.test(plain)) return;  // '총 길이 15초' · '오디오 메모' 같은 담당자용 줄
+      para += 1;
+      cur = { label: section ? `${section.split(/\s*[·:-]\s*/)[0]} · 문단 ${para}` : `문단 ${para}`, text: plain };
+    });
+    close();
+    return units.slice(0, 40);
+  }
+
+  // 걸린 단어를 문구 안에서 표시 (escape 뒤에 찾아서 HTML이 깨지지 않게)
+  function markTerms(text, findings) {
+    let html = esc(text);
+    const terms = [];
+    (findings || []).forEach(f => (f.terms || []).forEach(t => { if (t && !t.startsWith('(') && !terms.includes(t)) terms.push(t); }));
+    terms.sort((a, b) => b.length - a.length).forEach(t => {
+      const re = new RegExp(esc(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      html = html.replace(re, m => `<mark class="cnt-cmp-hit">${m}</mark>`);
+    });
+    return html;
+  }
+
+  function unitReviewsHtml(v) {
+    const units = cmpUnits(v);
+    if (!units.length) return '';
+    const done = units.filter((u, i) => S.unitReviews[`${v.id}:${i}`]).length;
+    return `<details class="cnt-units" open><summary>문구별 컴플라이언스 <span class="muted small">${units.length}개 문구${done ? ` · ${done}개 검사함` : ''}</span></summary>
+      <div class="between cnt-units-head"><span class="panel-note">채널(${esc(S.camp.sheet.channels.map(channelLabel).join(', '))}) · 선택 제품 기준 1차 참고 판정이에요. 법적 승인이 아니에요.</span>
+        <button type="button" class="btn small ghost" data-act="cmp-units" data-id="${esc(v.id)}">모두 검사</button></div>
+      <ul class="cnt-unit-list">${units.map((u, i) => {
+        const r = S.unitReviews[`${v.id}:${i}`];
+        const bad = r && r.findings && r.findings.length;
+        return `<li class="cnt-unit${r ? (bad ? ' hit' : ' ok') : ''}">
+          <div class="between"><b>${esc(u.label)}</b><span class="flex">${r ? badge(r.label || r.verdict, DATA.complianceTone[r.verdict] || '') : ''}
+            <button type="button" class="link" data-act="cmp-unit" data-id="${esc(v.id)}" data-i="${i}">${r ? '다시 검사' : '검사'}</button></span></div>
+          <p class="cnt-unit-text">${r ? markTerms(u.text, r.findings) : esc(u.text)}</p>
+          ${bad ? `<ul class="cnt-review-items">${r.findings.map(f => `<li class="${f.verdict === 'BLOCK' ? 'error' : 'warn'}">${esc(f.code)} ${esc(f.name)}${f.terms && f.terms.length ? ` <code>${esc(f.terms.join(', '))}</code>` : ''}${f.alt ? ` → ${esc(f.alt)}` : ''}</li>`).join('')}</ul>` : ''}
+        </li>`;
+      }).join('')}</ul></details>`;
+  }
+
+  function runUnitCompliance(v, idx) {
+    const units = cmpUnits(v);
+    (idx == null ? units.map((u, i) => i) : [idx]).forEach(i => {
+      if (units[i]) S.unitReviews[`${v.id}:${i}`] = complianceCheck(units[i].text);
+    });
+    renderResults();
   }
 
   async function runAiReview(btn, v) {
@@ -2124,6 +2275,8 @@
         case 'base-off': S.baseOff = true; updateComposer(); break;
         case 'final': if (v) toggleFinal(b, v); break;
         case 'compliance': if (v) runCompliance(v); break;
+        case 'cmp-unit': if (v) runUnitCompliance(v, +b.dataset.i); break;
+        case 'cmp-units': if (v) runUnitCompliance(v, null); break;
         case 'ai-review': if (v) runAiReview(b, v); break;
         case 'manual-version': manualModal(null); break;
         case 'manual-edit': if (v) manualModal(v); break;
@@ -2139,6 +2292,15 @@
         case 'toggle-layers': S.showLayers = !S.showLayers; renderResults(); break;
         case 'make-draft': send('초안 만들어줘', { force: 'draft' }); break;
         case 'make-image': send('이미지 시안 만들어줘', { force: 'image' }); break;
+        case 'make-video': makeVideo('이 초안으로 영상 만들어줘'); break;
+        case 'vid-quick': {
+          const q = DATA.quick.video[+b.dataset.i];
+          const ta = ref('vid-prompt');
+          if (q && ta) { ta.value = q.text; S.vidDraft = q.text; selectRange(ta, q.text); }
+          break;
+        }
+        case 'vid-ai-edit': if (v) videoAiEdit(v); break;
+        case 'vid-new': makeVideo('지금 결정 사항으로 새 영상 만들어줘', { noBase: true }); break;
         case 'retry-image': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = b.dataset.kind === 'video' ? '영상 다시 만들어줘' : '이미지 시안 다시 만들어줘'; inp.focus(); } break; }
         case 'cancel-job': cancelJob(b); break;
         case 'api-check': apiCheck(); break;
@@ -2172,6 +2334,7 @@
       if (el.dataset.sheetInput) { onSheetInput(el); return; }
       if (el.dataset.ref === 'iv-input') { S.ivDraft = el.value; return; }
       if (el.dataset.ref === 'img-prompt') { S.imgDraft = el.value; return; }
+      if (el.dataset.ref === 'vid-prompt') { S.vidDraft = el.value; return; }
       if (el.dataset.ref === 'search') {
         clearTimeout(S.searchTimer);
         S.searchTimer = setTimeout(() => { S.query = el.value.trim(); loadList(); }, 300);
