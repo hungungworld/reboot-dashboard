@@ -184,7 +184,7 @@
       : s.ongoing ? `${s.name}, 지금이 바로 그 시즌.`
         : s.dday === 0 ? `오늘은 ${s.name}.` : `${s.name}까지 ${s.dday}일, 준비는 지금부터.`;
     const n = S.news;
-    ref('hero-news').textContent = n ? pad2((n.signals || []).filter(x => x.surge).length) : '—';
+    ref('hero-news').textContent = n ? pad2(topSurges(n).length) : '—';
     ref('hero-todo').textContent = S.todos ? pad2(S.todos.items.filter(i => !i.done).length) : '—';
     ref('hero-season').textContent = s ? (s.ongoing ? 'NOW' : fmt.dday(s.start)) : '—';
   }
@@ -387,7 +387,7 @@
     busy(btn, false);
   }
 
-  /* ───────── 미국 주류 업계 뉴스 ───────── */
+  /* ───────── 미국 시장 브리핑 (업계 뉴스 · 트렌드) ───────── */
   function newsBadges(n) {
     const out = [];
     if (n.running) out.push(badge('수집 중…', 'blue'));
@@ -402,9 +402,14 @@
   function articleLink(a, text) {
     return isUrl(a.url) ? `<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>` : esc(text);
   }
+  // 위에는 업계 핵심 분야(자리 보장: 숙취 · 경쟁사 · 규제)의 보도 급증만, 나머지는 검색어 점검 안에서 봄
+  function topSurges(n) {
+    const core = new Set((n.groups || []).filter(g => g.kind === 'signal').map(g => g.id));
+    return (n.signals || []).filter(s => s.surge && core.has(s.group));
+  }
   function signalsHtml(n) {
-    const up = (n.signals || []).filter(s => s.surge);
-    if (!up.length) return (n.signals || []).length ? '<p class="panel-note home-signal-none">보도량 급증 키워드 없음 (최근 7일 vs 그 전 7일)</p>' : '';
+    const up = topSurges(n);
+    if (!up.length) return '';
     return `<div class="home-signals" aria-label="보도량 급증">${up.map(s =>
       `<span class="home-signal" title="최근 7일 기사 ${esc(s.recent)}건 · 그 전 7일 ${esc(s.previous)}건">${icon('up')} ${esc(s.label)} ${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '새로 등장'}</span>`).join('')}</div>`;
   }
@@ -418,14 +423,17 @@
   }
 
   // 검색어 점검 (최근 60일): 찾은 기사 · 규칙 통과 · 카드로 고른 수 · 교체 후보
-  function queryStatsHtml(list) {
+  function queryStatsHtml(list, signals) {
     if (!list.length) return '';
+    const sig = {};
+    (signals || []).forEach(s => { sig[s.group] = s; });
+    const change = q => { const s = sig[q.id]; return !s ? '' : `${s.surge ? badge('급증', 'orange') + ' ' : ''}${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '—'}`; };
     const flagged = list.filter(q => q.replace).length;
     const rows = list.map(q => `<tr><td>${esc(q.areaLabel)}${q.kind === 'signal' ? ' ' + badge('자리 보장', 'lime') : ''}</td>
       <td>${q.feed ? `${badge('RSS')} ${esc(q.label)}` : `<code>${esc(q.query)}</code>`}</td><td class="num">${fmt.num(q.found)}</td><td class="num">${fmt.num(q.kept)}</td>
-      <td class="num">${fmt.num(q.picked)}</td><td>${q.replace ? badge('교체 후보', 'orange') : ''}</td></tr>`).join('');
+      <td class="num">${fmt.num(q.picked)}</td><td class="num">${change(q)}</td><td>${q.replace ? badge('교체 후보', 'orange') : ''}</td></tr>`).join('');
     return `<details class="home-qstats"><summary>검색어 점검 (최근 60일)${flagged ? ` · 교체 후보 ${flagged}개` : ''}</summary>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어 · 피드</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th></th></tr></thead>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어 · 피드</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th class="num" title="최근 7일 vs 그 전 7일 기사 수">보도 변화</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
       <p class="panel-note">30일 넘게 돌렸는데 카드로 고른 기사가 0개면 교체 후보예요. 검색어 · 업계지 피드는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
   }
@@ -447,14 +455,14 @@
       // 업계 뉴스와 트렌드(마케팅 · 소비자 매체)는 칸을 나눠 보여 줌
       const card = a => `
         <div class="market-item${isUrl(a.url) ? ' home-news-card' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''}><div class="market-symbol">${icon(a.surge ? 'up' : a.kind === 'trend' ? 'spark' : 'globe')}</div>
-          <div><p>${articleLink(a, a.titleKo || a.title)}</p><small>${esc(a.summaryKo)}</small>
+          <div><p>${articleLink(a, a.titleKo || a.title)}${a.fallback ? ' ' + badge('요약 없음') : ''}</p>${a.summaryKo ? `<small>${esc(a.summaryKo)}</small>` : ''}
           ${a.whyKo ? `<small class="home-why"><b>${a.kind === 'trend' ? '적용점' : '왜 중요'}</b> ${esc(a.whyKo)}</small>` : ''}
           <small class="home-links">${[a.areaLabel || a.topic, a.surge ? '보도 급증' : '', a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ')}</small>
-          <small class="home-links" lang="en">${esc(a.title)}</small></div></div>`;
+          ${a.fallback ? '' : `<small class="home-links" lang="en">${esc(a.title)}</small>`}</div></div>`;
       const all = n.ai.items || [];
       const items = all.filter(a => a.kind !== 'trend').map(card);
       const trends = all.filter(a => a.kind === 'trend').map(card);
-      body.innerHTML = `${n.ai.headline ? `<div class="home-headline">${icon('spark')}<span>${esc(n.ai.headline)}</span></div>` : ''}
+      body.innerHTML = `${n.ai.headline ? `<div class="home-headline">${icon('spark')}<span>${String(n.ai.headline).split('\n').map(esc).join('<br>')}</span></div>` : ''}
         ${signalsHtml(n)}${items.length ? newsList(items) : '<p class="panel-note mt-8">이번 주에는 마케팅과 관련된 기사를 찾지 못했습니다.</p>'}
         ${trends.length ? `<p class="eyebrow mt-8">트렌드 · 마케팅 · 소비자 매체</p>${newsList(trends, 'trend', 2)}` : ''}`;
     } else {
@@ -477,7 +485,7 @@
     const errs = last && !n.running && (n.status === 'failed' || n.status === 'partial') ? (last.errors || []) : [];
     ref('news-errors').innerHTML = errs.length ? `<details class="home-errors"><summary>실패 이유 ${errs.length}건</summary><ul>${errs.slice(0, 6).map(e => `<li>${esc(e)}</li>`).join('')}</ul></details>` : '';
     ref('news-note').textContent = n.limitNote || '';
-    ref('news-stats').innerHTML = queryStatsHtml(n.queryStats || []);
+    ref('news-stats').innerHTML = queryStatsHtml(n.queryStats || [], n.signals);
     paintHero();
   }
   async function loadNews() {
@@ -626,7 +634,7 @@
               </div>
             </section>
             <section class="card">
-              <div class="card-head"><div><h2>미국 주류 업계 뉴스</h2><p class="panel-note" style="margin-top:5px">보도량과 기사 주제로 보는 업계의 움직임</p></div>
+              <div class="card-head"><div><h2>미국 시장 브리핑</h2><p class="panel-note" style="margin-top:5px">업계 소식과 마케팅 트렌드</p></div>
                 <span class="flex home-news-badges" data-ref="news-badges"></span></div>
               <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
               <div data-ref="news-errors"></div>
