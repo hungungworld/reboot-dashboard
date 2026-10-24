@@ -24,6 +24,7 @@
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
   const BUCKETS = [['low', '$3 미만'], ['mid', '$3~6'], ['high', '$6 이상']];
+  const SRC_LABEL = { amazon: 'Amazon', weee: 'Weee!', yami: 'Yami' };
   const ITEM_LABEL = { weee: 'Weee! 진열대', amazon: 'Amazon 진열대 · 리뷰', yami: 'Yami 진열대', channel_reviews: '채널 리뷰 (Olive Young · Amazon · Yami)', trends: '검색 트렌드', reviews: '리뷰 분류', actions: '이번 주 액션',
     youtube: '유튜브 수집', voc: 'VOC 분류', competitors: '경쟁사 분석', monthly: '요약 · 전략' };
   const KEY_LABEL = { SERPAPI_KEY: 'SerpApi', FIRECRAWL_API_KEY: 'Firecrawl', YOUTUBE_API_KEY: 'YouTube', OPENAI_API_KEY: 'OpenAI' };
@@ -173,6 +174,7 @@
       case 'aud-month': loadData('audience', d.month); break;
       case 'upload-reviews': uploadCsv(b, 'reviews'); break;
       case 'weee-raw': openWeeeRaw(); break;
+      case 'lines-confirm': confirmLines(b); break;
       case 'reload-sub': loadData(S.sub); break;
       default: break;
     }
@@ -183,6 +185,7 @@
     if (!t.dataset) return;
     if (t.dataset.ref === 'aud-month') { loadData('audience', t.value); return; }
     if (t.dataset.edit) editShelf(t);
+    if (t.dataset.line) editLine(t);
     if (t.dataset.memo) saveCs(t.dataset.memo, null, t.value.trim());
   }
 
@@ -223,10 +226,16 @@
     ].join('');
   }
 
+  // 시연 전용 DB일 때만 (kv 'demo') — 가짜 주차가 섞여 있음을 화면 맨 위에 표시
+  function demoNote(d) {
+    return d ? `<div class="note warn mb-16">${badge('예시 데이터', 'orange')} ${esc(d.note || '시연용 DB예요.')}</div>` : '';
+  }
+
   function factValue(v) {
     if (Array.isArray(v)) {
       return v.map(x => {
         if (x && typeof x === 'object') {
+          if ('line' in x && 'oos' in x) return esc(`${x.line} — ${x.oos.join(' · ')} 품절 (판매 채널: ${x.channels.join(' · ')})${x.again ? ' · 지난 수집부터 계속' : ''}`);
           if ('before' in x && 'after' in x) return esc(`${x.title} (${x.source}) ${money(x.before)} → ${money(x.after)} (${fmt.signed(x.pct, 0, '%')})`);
           return esc([x.title, x.source, x.price != null ? money(x.price) : null].filter(Boolean).join(' · '));
         }
@@ -268,21 +277,32 @@
         ${a.ai ? `<p class="small muted mt-8">규칙 문장 · ${esc(a.base.fact)} ${esc(a.base.why)} ${esc(a.base.todo)}</p>` : ''}</div>`).join('')}
       <p class="panel-note mt-8">판단(등급)은 규칙이 해요. AI는 키가 있을 때 문장만 다듬어요 (데이터 업데이트 › 이번 주 액션).${w.aiReady ? '' : ' 지금은 OpenAI 키가 없어 규칙 문장 그대로예요.'}</p>
     </details>` : '';
-    const stat = (label, value, tone) => `<div class="ins-stat${tone ? ' ' + tone : ''}"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
-    const weeks = Object.keys(s.weeks || {}).map(src => `${({ amazon: 'Amazon', weee: 'Weee!', yami: 'Yami' })[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
+    const stat = (label, value, tone, sub) => `<div class="ins-stat${tone ? ' ' + tone : ''}"><span>${esc(label)}</span><b>${esc(value)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+    const weeks = Object.keys(s.weeks || {}).map(src => `${SRC_LABEL[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
     const own = s.ownWeee;
+    const noPrev = s.compare ? '' : '지난 수집 없음';
+    const watch = (s.watchLines || []).map(g => {
+      const what = g.oosChannels.length ? [badge(g.oosChannels.length > 1 ? `${g.oosChannels.length}채널 품절` : '품절', 'red'), `${g.oosChannels.join(' · ')}에서 품절`]
+        : g.partialOos ? [badge('옵션 품절', 'orange'), `옵션 ${g.partialOos}개 품절 · 다른 옵션은 재고 있음`]
+          : [badge('재고 임박', 'orange'), g.low.map(v => `${v.source} ${v.servings}회분 ${v.left}개 남음`).join(' · ')];
+      return `<a class="ins-watch-row" href="#data/shelf"><span class="flex">${what[0]}<b>${esc(g.label)}</b></span><span class="small muted">${esc(what[1])}</span></a>`;
+    }).join('');
+    const reasons = shelfReasons(s);
     const shelfCard = `<section class="card">
       <div class="card-head"><h2>진열대 변화</h2><a class="link" href="#data/shelf">진열대 보기 ${icon('arrow')}</a></div>
       ${s.total ? `<div class="ins-stats">
-          ${stat('경쟁 상품 품절', s.oos, s.oos ? 'red' : '')}
-          ${stat('가격 변동 (±10%)', s.compare ? s.priceChanges : '—')}
-          ${stat('신규 진입', s.compare ? s.newEntries : '—')}
-          ${stat('자사 품절', s.ownOos, s.ownOos ? 'red' : '')}
+          ${stat('경쟁 제품 품절', s.oosLines, s.oosLines ? 'red' : '', s.restocks ? `재입고 ${s.restocks}` : `제품 ${s.lines}개 중`)}
+          ${stat(`재고 임박 (${s.lowLimit}개 이하)`, s.lowStock, s.lowStock ? 'orange' : '', s.unknownStock ? `재고 미확인 ${s.unknownStock}` : '')}
+          ${stat('가격 변동 (±10%)', s.compare ? s.priceChanges : '—', '', noPrev)}
+          ${stat('신규 진입', s.compare ? s.newEntries : '—', '', noPrev)}
         </div>
-        <p class="panel-note mt-8">${s.compare ? '지난 수집 대비' : '첫 수집이라 가격 · 품절 · 신규 변화는 다음 수집부터 비교해요.'} ${esc(weeks)}</p>
-        ${own ? `<div class="note lime mt-16">Weee!에서 자사 1회분 단가 <b>${esc(money(own.perServing))}</b> — ${esc(own.total)}개 중 ${esc(own.rank)}번째로 저렴해요 (${esc(own.bucketLabel)}).</div>`
-          : `<div class="note mt-16">Weee!에서 자사 상품의 1회분 단가 위치를 아직 계산하지 못했어요. ${s.ownCount ? '' : '설정 › 수집 설정에 알디콤 Weee! 상품 주소나 추적 ASIN을 넣고, 진열대 › 표로 보기에서 자사 표시를 확인하세요.'}</div>`}`
+        ${watch ? `<div class="ins-watch mt-16">${watch}</div>` : ''}
+        <p class="panel-note mt-8">${s.compare ? '지난 수집 대비' : '이번 수집 기준'} · ${esc(weeks)}</p>
+        ${s.ownOos ? `<div class="note error mt-16">자사 상품 ${esc(s.ownOos)}개가 품절이에요. 판매처에 재입고 일정을 확인하세요.</div>` : ''}
+        ${own ? `<div class="note lime mt-16">Weee!에서 자사 1회분 단가 <b>${esc(money(own.perServing))}</b> — ${esc(own.total)}개 중 ${esc(own.rank)}번째로 저렴해요 (${esc(own.bucketLabel)}).</div>` : ''}`
         : ui.empty('진열대 데이터가 없어요. 데이터 업데이트에서 Weee! · Amazon 진열대를 모으세요.', 'grid')}
+      ${reasons.length ? `<details class="ins-fold mt-16" data-fold="shelfWhy"${S.open.shelfWhy !== false ? ' open' : ''}><summary>데이터가 부족한 곳 (${reasons.length})</summary>
+        <div class="ins-why-list">${reasons.map(r => `<div class="ins-why"><b>${esc(r.label)}</b><div>${esc(r.text)}<small>할 일 · ${esc(r.todo)}</small></div></div>`).join('')}</div></details>` : ''}
     </section>`;
     const next = w.seasons[0];
     const ly = x => (x && x.lastYear ? `작년 같은 시기 '${x.lastYear.keyword}' 검색 평균 대비 ${fmt.signed(x.lastYear.pct, 0, '%')}` : '작년 검색 비교 없음 (검색 트렌드 수집 필요)');
@@ -293,7 +313,7 @@
         <a class="arrow" href="/dashboard/content" aria-label="콘텐츠 제작에서 캠페인 준비">${icon('up')}</a>
       </section>` : '';
     const others = w.seasons.slice(1);
-    el.innerHTML = `
+    el.innerHTML = `${demoNote(w.demo)}
       <div class="workbench">
         <div class="stack">
           <section class="card">${head}${stale}${list}${signals}</section>
@@ -317,6 +337,25 @@
           ${lastRunCard(w.lastRun)}
         </aside>
       </div>`;
+  }
+
+  // 진열대 변화 카드가 비어 보이는 이유 + 할 일 (판매처 수집 결과 · 첫 수집 · 재고 미확인 · 자사 · 묶음 확인)
+  function shelfReasons(s) {
+    const out = [];
+    const last = s.lastCollect || {};
+    ['weee', 'amazon', 'yami'].forEach(src => {
+      if ((s.weeks || {})[src]) return;
+      const lc = last[src];
+      const label = SRC_LABEL[src];
+      if (!lc) out.push({ label, text: '아직 수집한 적 없어요.', todo: `데이터 업데이트에서 ${label} 진열대를 고르세요.` });
+      else if (!lc.ok) out.push({ label, text: `마지막 수집이 실패했어요: ${lc.message}`, todo: '설정 › 연결에서 키를 확인하고 다시 수집하세요.' });
+      else out.push({ label, text: `마지막 수집(${fmt.date(lc.at)})에서 상품을 0개 읽었어요.`, todo: src === 'weee' ? '진열대 › 표로 보기 › Weee! 원문 보기로 페이지를 확인하고, 설정 › 수집 설정의 주소를 고치세요.' : '설정 › 수집 설정의 검색어 · 주소를 확인하세요.' });
+    });
+    if (s.total && !s.compare) out.push({ label: '비교', text: '첫 수집이라 가격 변동 · 신규 진입 · 재입고는 다음 수집부터 계산해요.', todo: '다음 주에 데이터 업데이트를 한 번 더 돌리세요.' });
+    if (s.unknownStock) out.push({ label: '재고', text: `경쟁 상품 ${s.unknownStock}개는 판매처가 재고를 보여 주지 않아 품절 계산에서 빠졌어요.`, todo: '꼭 볼 상품은 설정 › 수집 설정 › 추적 ASIN에 넣으면 상세 조회로 재고를 확인해요.' });
+    if (s.total && !s.ownCount) out.push({ label: '자사', text: '진열대에서 자사(알디콤) 상품을 찾지 못해 1회분 단가 위치를 계산하지 못했어요.', todo: '설정 › 수집 설정에 알디콤 Weee! 상품 주소나 추적 ASIN을 넣고, 진열대 › 표로 보기에서 자사 표시를 확인하세요.' });
+    if (s.unconfirmed) out.push({ label: '묶음', text: `제품 묶음 ${s.unconfirmed}개가 아직 확인 전이에요 (자동 묶음).`, todo: '진열대 › 표로 보기에서 묶음을 확인하거나 고치세요.' });
+    return out;
   }
 
   function lastRunCard(run) {
@@ -563,6 +602,60 @@
         <span><i class="ins-lg oos"></i>품절</span><span>점 크기 = 리뷰 수 · 점을 누르면 상세</span></div>`;
   }
 
+  // 제품 라인 카드: 옵션(회분) × 판매처 표 — 같은 제품을 채널 · 용량과 상관없이 한 장에 (lines.py)
+  const CELL = { in: ['재고', 'in'], oos: ['품절', 'oos'], partial: ['일부 품절', 'partial'], low: ['', 'low'], unknown: ['미확인', 'unknown'] };
+  function lineCell(c) {
+    if (!c) return '<td class="ins-mx-none">—</td>';
+    const [text, cls] = CELL[c.state] || CELL.unknown;
+    const label = c.state === 'low' ? `${c.left}개 남음` : c.state === 'partial' ? `${c.count}개 중 ${c.oos}개 품절` : text;
+    return `<td><button type="button" class="ins-mx-cell" data-act="prod" data-id="${esc(c.ids[0])}" title="${esc(c.titles.join('\n'))}">
+      <i class="ins-st ${cls}"></i>${esc(label)}${c.count > 1 && c.state !== 'partial' ? `<small> · ${c.count}개</small>` : ''}</button></td>`;
+  }
+  function lineStatus(g) {
+    if (g.oosChannels.length) return badge(g.oosChannels.length > 1 ? `${g.oosChannels.length}채널 품절` : `${SRC_LABEL[g.oosChannels[0]]} 품절`, 'red');
+    if (g.partialOos) return badge('옵션 품절', 'orange');
+    if (g.low.length) return badge('재고 임박', 'orange');
+    return '';
+  }
+  function lineCard(g) {
+    const avail = g.channels.length - g.oosChannels.length;
+    const ps = g.perServing ? (g.perServing.min === g.perServing.max ? money(g.perServing.min) : `${money(g.perServing.min)}–${money(g.perServing.max).replace('$', '')}`) : '—';
+    const bulk = !g.bulk ? '—' : g.bulk.suspect ? '회분 확인 필요' : Math.abs(g.bulk.pct) < 1 ? '차이 없음' : fmt.signed(g.bulk.pct, 0, '%');
+    const tip = g.low.length ? `<p class="ins-line-tip">경쟁 제품 품절에 대비하세요. ${esc(SRC_LABEL[g.low[0].source])} ${esc(g.low[0].servings)}회분이 ${esc(g.low[0].left)}개 남았어요.</p>`
+      : g.oosChannels.length ? `<p class="ins-line-tip red">${esc(g.oosChannels.map(s => SRC_LABEL[s]).join(' · '))}에서 이 제품을 찾던 고객을 데려올 기회예요. 이번 주 액션을 확인하세요.</p>` : '';
+    return `<article class="ins-line${g.own ? ' own' : ''}">
+      <div class="between"><div><b class="ins-line-name">${esc(g.label)}</b>
+        <small class="ins-sub">${g.own ? '자사 · ' : ''}판매 채널 ${g.channels.length} · 옵션 ${g.options.length} · 상품 ${g.products}${g.confirmed ? '' : ' · 자동 묶음 (확인 필요)'}</small></div>${lineStatus(g)}</div>
+      <div class="ins-line-stats"><div><span>살 수 있는 채널</span><b>${avail} / ${g.channels.length}</b></div><div><span>1회분 단가</span><b>${esc(ps)}</b></div>
+        <div><span>큰 용량 1회분</span><b>${esc(bulk)}</b></div></div>
+      <table class="ins-mx"><thead><tr><th>옵션</th>${g.channels.map(s => `<th>${esc(SRC_LABEL[s])}</th>`).join('')}<th class="num">1회분</th></tr></thead>
+        <tbody>${g.options.map(o => `<tr><td>${esc(o.label)}</td>${g.channels.map(s => lineCell(o.cells[s])).join('')}<td class="num">${esc(money(o.perServing))}</td></tr>`).join('')}</tbody></table>
+      ${tip}
+    </article>`;
+  }
+  function linesSection(d) {
+    const ls = (d.lines || []).filter(g => !g.own || g.channels.length);
+    if (!ls.length) return '';
+    const hot = ls.filter(g => g.oosChannels.length || g.partialOos || g.low.length);
+    const big = ls.filter(g => !hot.includes(g) && (g.channels.length > 1 || g.options.length > 1));
+    const first = hot.concat(big).slice(0, 6);
+    const rest = ls.filter(g => !first.includes(g));
+    return `<section class="card mt-24"><div class="card-head"><h2>제품별 재고</h2><span class="small muted">채널 · 용량이 달라도 같은 제품은 한 장 · 맛은 나누지 않아요 · 재고 임박 = ${esc(d.lowStock)}개 이하</span></div>
+      <div class="ins-lines">${first.map(lineCard).join('')}</div>
+      ${rest.length ? `<details class="ins-fold mt-16" data-fold="lines-rest"${S.open['lines-rest'] ? ' open' : ''}><summary>나머지 제품 ${rest.length}개</summary><div class="ins-lines mt-16">${rest.map(lineCard).join('')}</div></details>` : ''}
+      <div class="ins-legend small mt-16"><span><i class="ins-st in"></i>재고</span><span><i class="ins-st low"></i>재고 임박</span><span><i class="ins-st partial"></i>일부 품절</span><span><i class="ins-st oos"></i>품절</span><span><i class="ins-st unknown"></i>미확인</span></div>
+    </section>`;
+  }
+
+  function lineEdit(x, forms) {
+    const ln = x.line || {};
+    const ko = l => ((/\(([^)]*)\)/.exec(l) || [])[1] || l);   // 'Pellet (환)' → '환'
+    const opts = forms.map(([k, l]) => `<option value="${esc(k)}"${ln.edited && ln.form === k ? ' selected' : ''}>${esc(ko(l))}</option>`).join('');
+    return `<input class="input ins-line-in" data-line="brand" data-key="${esc(x.key)}" value="${ln.edited ? esc(ln.brand) : ''}" placeholder="${esc(ln.brand || '')}" aria-label="브랜드 (묶음)">
+      <select class="input ins-sel" data-line="form" data-key="${esc(x.key)}" aria-label="제형 (묶음)"><option value="">자동 (${esc(ko((forms.find(f => f[0] === ln.form) || ['', ln.form || ''])[1]))})</option>${opts}</select>
+      <small class="ins-sub">${esc(ln.label || '')} · ${ln.confirmed ? `확인됨${ln.checkedBy ? ' · ' + esc(ln.checkedBy) : ''}` : '<b class="ins-warn">확인 필요</b>'}</small>`;
+  }
+
   function shelfHtml(d) {
     const priced = d.items.filter(x => x.perServing != null);
     const top = new Set(d.items.filter(x => !x.own && x.reviews).sort((a, b) => b.reviews - a.reviews).slice(0, 3).map(x => x.id));
@@ -574,6 +667,7 @@
     const rows = d.items.map(x => `<tr>
       <td>${esc(x.sourceLabel)}${x.position ? `<small class="ins-sub">${esc(x.position)}위</small>` : ''}</td>
       <td class="ins-title-cell">${x.own ? badge('자사', 'green') + ' ' : ''}${esc(x.title)}<small class="ins-sub">${esc(x.brand)}${x.brandGuessed ? ' (브랜드 추정)' : ''}${x.editedBy ? ` · 수정 ${esc(x.editedBy)}` : ''}</small></td>
+      <td class="ins-line-cell">${lineEdit(x, d.forms || [])}</td>
       <td><input class="input ins-num" type="number" min="0" step="0.01" data-edit="price" data-id="${esc(x.id)}" value="${x.price == null ? '' : esc(x.price)}" aria-label="가격 (달러)"></td>
       <td><input class="input ins-num" type="number" min="1" max="500" data-edit="servings" data-key="${esc(x.key)}" value="${x.servingsSource === 'manual' ? esc(x.servings) : ''}" placeholder="${esc(x.servings)}" aria-label="회분 수">
         <small class="ins-sub">${esc(SERVING_SRC[x.servingsSource])}${x.servingsRule && x.servingsSource === 'parsed' ? ` · ${esc(x.servingsRule)}` : ''}</small></td>
@@ -587,11 +681,12 @@
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 수집</button>
         <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 수집</button>
         ${d.weeeRaw.length ? `<button type="button" class="btn small ghost" data-act="weee-raw">${icon('doc')}Weee! 원문 보기</button>` : ''}
-        <span class="small muted">회분 · 가격 · 재고 · 자사 표시는 바로 고칠 수 있어요. 회분 수는 한 번 고치면 모든 주차에 적용돼요.</span>
+        ${d.items.length ? `<button type="button" class="btn small" data-act="lines-confirm">${icon('check')}묶음 모두 확인</button>` : ''}
+        <span class="small muted">회분 · 가격 · 재고 · 자사 · 묶음은 바로 고칠 수 있어요. 회분 수와 묶음은 한 번 고치면 모든 주차에 적용돼요.</span>
       </div>
-      ${d.items.length ? `<div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>상품</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>자사</th><th>변화</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${d.items.length ? `<div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>상품</th><th>묶음 (브랜드 · 제형)</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>자사</th><th>변화</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : '<p class="small muted">수집된 상품이 없어요.</p>'}`;
-    return qHead('shelf', d.oneLine) + overview +
+    return demoNote(d.demo) + qHead('shelf', d.oneLine) + overview + linesSection(d) +
       (d.items.length ? `<div class="grid-3 mt-24">${cols}</div>${unknown}` : `<div class="mt-24">${ui.empty('진열대 데이터가 없어요. 데이터 업데이트에서 Weee! · Amazon 진열대를 모으세요 (Firecrawl · SerpApi 키 필요).', 'grid')}</div>`) +
       fold('shelf-table', '표로 보기 · 수집 · 고치기', table);
   }
@@ -640,6 +735,39 @@
     } catch (e) {
       toast(e.message, 'error');
       t.disabled = false;
+    }
+  }
+
+  async function afterShelfChange(msg) {
+    toast(msg);
+    S.open['shelf-table'] = true;
+    await loadData('shelf');
+    S.data.competitors = null;
+    loadWeekly();
+  }
+
+  async function editLine(t) {
+    const cell = t.closest('td');
+    const brand = $(cell, '[data-line="brand"]').value.trim();
+    const form = $(cell, '[data-line="form"]').value;
+    t.disabled = true;
+    try {
+      await api('/api/insights/lines', { key: t.dataset.key, brand: brand || null, form: form || null }, { method: 'PUT' });
+      await afterShelfChange(brand || form ? '묶음을 고쳤어요. 모든 주차에 적용돼요.' : '자동 묶음으로 되돌렸어요.');
+    } catch (e) {
+      toast(e.message, 'error');
+      t.disabled = false;
+    }
+  }
+
+  async function confirmLines(b) {
+    b.disabled = true;
+    try {
+      const r = await api('/api/insights/lines/confirm', {}, { method: 'POST' });
+      await afterShelfChange(`묶음 ${r.confirmed}개를 확인했어요.`);
+    } catch (e) {
+      toast(e.message, 'error');
+      b.disabled = false;
     }
   }
 

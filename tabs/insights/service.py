@@ -12,7 +12,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import channel_reviews, competitors, rules
+from . import channel_reviews, competitors, lines, rules
 from .classify import QUESTION_LABEL, TOPICS, expressions
 from .models import (Comment, Competitor, Monthly, Review, ReviewCS, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get,
                      load_json)
@@ -64,10 +64,11 @@ def shelf_dict(r, ovr=None, own_ovr=None, watch=None):
     else:
         servings, src = 1, "default"
     ps = per_serving(r.price, servings)
-    brand = r.brand or guess_brand(r.title)
+    known = lines.known_brand(r.brand, r.title)  # 별칭 사전 (Q.one · Easy Tomorrow → 상쾌환)
+    brand = known["name"] if known else (r.brand or guess_brand(r.title))
     return {
         "id": r.id, "week": r.week, "source": r.source, "sourceLabel": SOURCE_LABEL.get(r.source, r.source), "key": r.key,
-        "position": r.position, "queries": r.queries, "title": r.title, "brand": brand, "brandGuessed": not r.brand,
+        "position": r.position, "queries": r.queries, "title": r.title, "brand": brand, "brandGuessed": not (known or r.brand),
         "price": r.price, "priceText": r.price_text, "servings": servings, "servingsSource": src, "servingsRule": r.servings_rule,
         "perServing": ps, "bucket": bucket(ps), "rating": r.rating, "reviews": r.reviews, "availability": r.availability,
         "in_stock": r.in_stock, "link": r.link, "message": r.message, "own": bool(own_ovr.get(r.key, r.own)),
@@ -92,7 +93,7 @@ def shelf_rows(week, source):
     ovr, own_ovr, watch = shelf_maps()
     rows = ShelfItem.query.filter_by(week=week, source=source).order_by(ShelfItem.position.is_(None), ShelfItem.position,
                                                                         ShelfItem.id).all()
-    return [shelf_dict(r, ovr, own_ovr, watch) for r in rows]
+    return lines.annotate([shelf_dict(r, ovr, own_ovr, watch) for r in rows])
 
 
 def snapshots(upto=None):
@@ -151,7 +152,8 @@ def shelf_view():
         one = ""
     raw = kv_get("weee_raw", {})
     return {
-        "oneLine": one, "items": now, "groups": groups, "unknown": unknown, "info": info,
+        "oneLine": one, "items": now, "groups": groups, "unknown": unknown, "info": info, "lines": lines.build(now),
+        "lowStock": lines.LOW_STOCK, "demo": demo_info(), "forms": competitors.FORMS,
         "weekLabels": {src: week_label(i["week"]) for src, i in info.items()},
         "compare": bool(prev), "weeeRaw": [{"url": u, **v} for u, v in raw.items()],
         "bucketLabels": BUCKET_LABEL,
@@ -310,6 +312,25 @@ def last_run():
     return run_dict(r) if r else None
 
 
+def last_collect(items=SOURCES, scan=30):
+    """판매처마다 가장 최근 실행의 결과 {ok, count, message, at} (마지막 실행에 없던 항목도 찾음)."""
+    out = {}
+    for r in Run.query.order_by(Run.id.desc()).limit(scan).all():
+        res = load_json(r.results, {})
+        for k in items:
+            if k not in out and isinstance(res.get(k), dict):
+                out[k] = {key: res[k].get(key) for key in ("ok", "count", "message", "at")}
+        if len(out) == len(items):
+            break
+    return out
+
+
+def demo_info():
+    """시연 전용 DB 표시 (kv 'demo' = {weeks: [...], note}) — 실제 DB에는 없음."""
+    d = kv_get("demo", {})
+    return d if d.get("weeks") else None
+
+
 def run_dict(r):
     return {"id": r.id, "status": r.status, "items": load_json(r.items, []), "results": load_json(r.results, {}),
             "current": r.current, "usage": load_json(r.usage, {}), "startedAt": iso(r.started_at),
@@ -352,6 +373,14 @@ def weekly_view(t=None):
     if now and all(i["week"] != week_key(t) for i in info.values()):
         latest = max(i["week"] for i in info.values())
         stale = {"week": latest, "label": week_label(latest)}
+    comp = [x for x in now if not x["own"]]
+    line_list = lines.build(comp)
+    before = {(x["source"], x["key"]): x for x in prev or []}
+    restocks = [x for x in comp if before.get((x["source"], x["key"]), {}).get("in_stock") is False and x["in_stock"] is True]
+    watch_lines = [{"label": g["label"], "oosChannels": [SOURCE_LABEL[s] for s in g["oosChannels"]], "partialOos": g["partialOos"],
+                    "low": [{"source": SOURCE_LABEL[v["source"]], "left": v["left"], "servings": v["servings"]} for v in g["low"][:2]],
+                    "channels": [SOURCE_LABEL[s] for s in g["channels"]], "perServing": g["perServing"], "confirmed": g["confirmed"]}
+                   for g in line_list if g["oosChannels"] or g["low"] or g["partialOos"]][:4]
     return {
         "week": week_key(t), "weekLabel": week_label(week_key(t)), "today": t.isoformat(), "hasData": has_data, "stale": stale,
         "actions": actions, "aiUsed": any(a["ai"] for a in actions), "aiReady": insights_ai.ready(),
@@ -361,8 +390,13 @@ def weekly_view(t=None):
                   "newEntries": sum(1 for v in changes.values() if v["new"]), "compare": prev is not None,
                   "weeks": {src: {"now": week_label(i["week"]), "prev": week_label(i["prev"]) if i["prev"] else None}
                             for src, i in info.items()},
-                  "ownWeee": own_pos, "ownCount": sum(1 for x in now if x["own"])},
-        "reviews": _new_reviews(), "seasons": seasons, "lastRun": last_run(),
+                  "ownWeee": own_pos, "ownCount": sum(1 for x in now if x["own"]),
+                  "lines": len(line_list), "oosLines": sum(1 for g in line_list if g["oosChannels"]),
+                  "lowStock": sum(len(g["low"]) for g in line_list), "lowLimit": lines.LOW_STOCK, "restocks": len(restocks),
+                  "unknownStock": sum(1 for x in comp if x["in_stock"] is None), "watchLines": watch_lines,
+                  "unconfirmed": sum(1 for g in line_list if not g["confirmed"]),
+                  "lastCollect": last_collect()},
+        "reviews": _new_reviews(), "seasons": seasons, "lastRun": last_run(), "demo": demo_info(),
     }
 
 

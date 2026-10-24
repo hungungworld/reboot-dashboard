@@ -240,6 +240,32 @@ def test_rules_price_changes_and_new_entries():
     assert rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=None)) == []
 
 
+def _lined(key, line, source, in_stock=True, left=None, own=False):
+    return dict(_item(key, f"{line} 10 sticks", 20.0, source=source, own=own, in_stock=in_stock),
+                line={"id": line, "label": line}, stockLeft=left)
+
+
+def test_rules_competitor_stock_signals():
+    now = [_lined("amazon:A", "상쾌환 · 환", "amazon", in_stock=False), _lined("weee:A", "상쾌환 · 환", "weee"),     # Weee!엔 있음 → 한 채널
+           _lined("amazon:B", "컨디션 · 젤리", "amazon", in_stock=False), _lined("weee:B", "컨디션 · 젤리", "weee", in_stock=False),
+           _lined("amazon:C", "Flyby · 캡슐", "amazon", left=8), _lined("amazon:D", "Cheers · 캡슐", "amazon", left=40),
+           _lined("amazon:OWN", "알디콤 · 젤리", "amazon", left=3, own=True)]                                     # 자사는 경쟁 규칙 제외
+    acts = {a["rule"]: a for a in rules.weekly_actions(_ctx(shelf_now=now))}
+    assert set(acts) == {"comp_oos", "comp_oos_multi", "low_stock"}
+    assert acts["comp_oos"]["grade"] == "기회" and "상쾌환 · 환 — Amazon에서 품절" in acts["comp_oos"]["fact"]
+    assert "입찰" in acts["comp_oos"]["todo"] and rules.COMPLIANCE in acts["comp_oos"]["todo"]
+    assert acts["comp_oos_multi"]["grade"] == "긴급" and "Amazon · Weee!에서 모두 품절" in acts["comp_oos_multi"]["fact"]
+    assert acts["low_stock"]["grade"] == "참고" and "8개 남았어요" in acts["low_stock"]["fact"]
+    assert acts["low_stock"]["todo"].startswith("경쟁 제품 품절에 대비하세요")
+    # 지난 수집에도 품절이면 'N주째' · 지난 품절 → 이번 재고 있음 = 재입고
+    prev = [_lined("amazon:B", "컨디션 · 젤리", "amazon", in_stock=False), _lined("weee:B", "컨디션 · 젤리", "weee", in_stock=False),
+            _lined("amazon:C", "Flyby · 캡슐", "amazon", in_stock=False)]
+    acts = {a["rule"]: a for a in rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=prev))}
+    assert "계속 품절" in acts["comp_oos_multi"]["fact"] and "성과분석" in acts["comp_oos_multi"]["todo"]
+    assert acts["restock"]["grade"] == "참고" and "Flyby" in acts["restock"]["fact"] and "입찰가" in acts["restock"]["todo"]
+    assert rules.COMPLIANCE not in acts["restock"]["todo"]
+
+
 def test_comment_rules_drop_chatter_and_unknown_questions():
     from tabs.insights import classify
     noise = classify.classify_comment("anyone else extremely hungover right now?")
@@ -462,6 +488,22 @@ def test_second_week_changes_overrides_and_edits(app, auth_client, fixed_today):
     assert m["metrics"]["priceChanges"] == 1 and m["metrics"]["ownOosWeeks"] == 1
 
 
+def test_line_edit_confirm_and_weekly_shelf_fields(app, auth_client, fixed_today):
+    _seed_two_weeks(app)
+    shelf = auth_client.get("/api/insights/data/shelf").get_json()
+    patch = next(x for x in shelf["items"] if x["key"] == "amazon:B0NEW00001")
+    assert patch["line"]["confirmed"] is False and shelf["lines"] and shelf["forms"]
+    assert auth_client.put("/api/insights/lines", json={"key": "amazon:B0NEW00001", "brand": "PatchCo", "form": "other"}).status_code == 200
+    assert auth_client.put("/api/insights/lines", json={"key": "amazon:B0NEW00001", "form": "rock"}).status_code == 400
+    assert auth_client.put("/api/insights/lines", json={"key": "nope", "brand": "x"}).status_code == 404
+    patch = next(x for x in auth_client.get("/api/insights/data/shelf").get_json()["items"] if x["key"] == "amazon:B0NEW00001")
+    assert patch["line"]["label"] == "PatchCo · 기타" and patch["line"]["confirmed"] and patch["brand"] == "PatchCo"
+    assert auth_client.post("/api/insights/lines/confirm").get_json()["confirmed"] == 3
+    s = auth_client.get("/api/insights/weekly").get_json()["shelf"]
+    assert s["unconfirmed"] == 0 and s["unknownStock"] == 1 and s["lowLimit"] == 20
+    assert set(s["lastCollect"]) == set()  # 실행 기록이 없으면 빈 값
+
+
 def test_watch_toggle_marks_competitor(app, auth_client, fixed_today):
     _seed_two_weeks(app)
     assert auth_client.put("/api/insights/watch", json={"brand": "Flyby", "watch": True}).get_json()["watch"] == ["Flyby"]
@@ -583,6 +625,100 @@ def test_weee_markdown_parser():
     page = parse_product_page("# Aldicom Hangover Jelly\n\n$12.99\n\nA refreshing jelly stick made with lemon and lime for your next good moment.\n",
                               "https://www.sayweee.com/en/product/Aldicom-Jelly/67890")
     assert page["id"] == "67890" and page["price"] == 12.99 and page["in_stock"] is True and "refreshing" in page["message"]
+
+
+# 지금 Weee!: 카드 전체가 링크 [이미지 · 할인 · 가격 · 원가 · 단위 가격 · 상품명 · 배송](weee.com 주소)
+WEEE_CARDS = """## 'hangover(27)'
+
+[![weee_beverages_Oriental Raisin Tea Extract 10 ml*30 pack](https://img08.weeecdn.net/a.png)\\\\
+\\\\
+5% off\\\\
+\\\\
+$12.79\\\\
+\\\\
+$13.49\\\\
+\\\\
+$1.26/fl.oz\\\\
+\\\\
+Oriental Raisin Tea Extract 10 ml\\*30 pack\\\\
+\\\\
+![SNAP](https://img08.weeecdn.net/snap.png)\\\\
+\\\\
+SNAP](https://www.weee.com/en/product/Oriental-Raisin-Tea-Extract/112105?trace_id=1)
+
+Add to cart
+
+[6% off\\\\
+\\\\
+$13.99\\\\
+\\\\
+HOUSE Turmeric Hangover Granules 11 pack/ 1 box\\\\
+\\\\
+Sold out\\\\
+\\\\
+Ships from Sakura Charm](https://www.weee.com/en/product/HOUSE-Turmeric-Hangover-Granules-11-pack/2163335?trace_id=1)
+
+Notify me
+"""
+WEEE_PAGE = """[Skip to content](https://www.weee.com/en/product/Easy-Tomorrow-Jelly-Stick/2081684#main-content)
+
+$10 off on your first order
+
+![Easy Tomorrow Jelly Stick Before/After Drink, 2 Sticks 1 case](https://img08.weeecdn.net/x.png)
+
+$
+
+7
+
+99
+
+Sold out
+
+10 Sticks per Box (180g)
+
+## Details
+
+[Related](https://www.weee.com/en/product/Other/1) Sold out $3.00
+"""
+
+
+def test_weee_card_listing_and_split_price_page():
+    from tabs.insights.weee import parse_listing, parse_product_page, relevant
+    items = parse_listing(WEEE_CARDS)
+    assert [i["id"] for i in items] == ["112105", "2163335"]
+    assert items[0]["title"] == "Oriental Raisin Tea Extract 10 ml*30 pack" and items[0]["price"] == 12.79  # 할인가 (원가 · 단위 가격 아님)
+    assert items[0]["in_stock"] is True and items[0]["link"].startswith("https://www.weee.com/")
+    assert items[1]["price"] == 13.99 and items[1]["in_stock"] is False
+    page = parse_product_page(WEEE_PAGE, "https://www.sayweee.com/en/product/Easy-Tomorrow-Jelly-Stick/2081684")
+    assert page["price"] == 7.99 and page["in_stock"] is False and page["pack_text"].startswith("10 Sticks")  # '$10 off'는 가격 아님
+    assert page["title"].startswith("Easy Tomorrow Jelly Stick")
+    assert relevant("HOUSE Turmeric Hangover Granules") and relevant("Qone Jelly Zero Sugar") and not relevant("Coconut Jelly 4 oz")
+
+
+def test_pellet_form_and_product_lines():
+    from tabs.insights import lines
+    from tabs.insights.competitors import rule_form, rule_form_of
+    assert rule_form("Q.one Easy Tomorrow, Korean Herbal Pellets 10 Packs") == "pellet" and rule_form("상쾌환 20포") == "pellet"
+    assert rule_form("환불 안내") == ""  # '환불'의 환은 제형 아님
+    assert rule_form_of({"title": "Herbal Pellets 10 Packs", "message": "Do not chew"}) == "pellet"  # 상품명이 먼저
+    assert lines.known_brand("K FOOD KOREAN FOOD", "Korean Food Easy Tomorrow Fresh Drink Mix")["name"] == "상쾌환"
+    assert lines.known_brand("", "Qone Hangover Relief Jelly")["name"] == "상쾌환" and lines.known_brand("", "Flyby 30 Count") is None
+    assert lines.stock_left("Only 12 left in stock - order soon.") == 12 and lines.stock_left("In Stock") is None
+
+    def row(i, src, servings, ps, in_stock=True, left=None, form="pellet"):
+        return {"id": i, "key": f"{src}:{i}", "source": src, "title": f"상쾌환 {servings}포", "servings": servings, "servingsSource": "parsed",
+                "perServing": ps, "price": ps * servings, "in_stock": in_stock, "stockLeft": left, "own": False, "reviews": 10,
+                "line": {"id": f"상쾌환|{form}", "brand": "상쾌환", "form": form, "label": "상쾌환 · 환", "confirmed": True}}
+    rows = [row(1, "amazon", 10, 2.29), row(2, "amazon", 20, 2.20, left=13), row(3, "weee", 10, 2.5, in_stock=False),
+            row(4, "weee", 20, 2.4, in_stock=False)]
+    g = lines.build(rows)[0]
+    assert g["channels"] == ["amazon", "weee"] and g["oosChannels"] == ["weee"]          # Weee!는 두 옵션 모두 품절
+    assert [o["label"] for o in g["options"]] == ["10회분", "20회분"]                     # 용량이 달라도 한 제품
+    assert g["options"][1]["cells"]["amazon"]["state"] == "low" and g["low"][0]["left"] == 13
+    assert g["bulk"]["pct"] == -3.9 and not g["bulk"]["suspect"]
+    rows[2]["in_stock"] = True
+    g = lines.build(rows)[0]
+    assert g["oosChannels"] == [] and g["partialOos"] == 1 and g["options"][0]["cells"]["weee"]["state"] == "in"
 
 
 def test_amazon_search_parser_skips_ads():
