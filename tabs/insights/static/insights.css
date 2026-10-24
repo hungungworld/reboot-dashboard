@@ -34,14 +34,21 @@
 
 /* 이번 주 액션 */
 .part-insights .ins-action { border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: 12px; padding: 16px 18px; background: var(--surface); }
-.part-insights .ins-action.urgent { border-left-color: var(--red); }
-.part-insights .ins-action.chance { border-left-color: var(--green); }
-.part-insights .ins-action.info { border-left-color: var(--blue); }
-.part-insights .ins-fact { font-size: 13px; font-weight: 600; color: var(--ink); margin: 10px 0 8px; line-height: 1.6; }
-.part-insights .ins-steps { margin: 0; display: grid; gap: 6px; }
-.part-insights .ins-steps > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; font-size: 12px; }
-.part-insights .ins-steps dt { color: var(--muted); }
-.part-insights .ins-steps dd { margin: 0; color: var(--text); }
+/* 등급 색은 월간 리뷰 SWOT 테두리와 같은 연한 색 */
+.part-insights .ins-action.urgent { border-left-color: #f9cccc; }
+.part-insights .ins-action.chance { border-left-color: #bfead2; }
+.part-insights .ins-action.info { border-left-color: #c7ddf8; }
+.part-insights .ins-action-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.part-insights .ins-fact { font-size: 15px; font-weight: 700; color: var(--ink); margin: 10px 0 14px; line-height: 1.55; }
+.part-insights .ins-steps { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.part-insights .ins-steps > div { padding: 12px 14px; border-radius: 10px; background: var(--surface-2); font-size: 12.5px; line-height: 1.65; }
+.part-insights .ins-steps > div.todo { background: var(--lime-wash); box-shadow: inset 0 0 0 1px var(--lime-soft-line); }
+.part-insights .ins-steps dt { color: var(--muted); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+.part-insights .ins-steps > div.todo dt { color: var(--lime-ink); }
+.part-insights .ins-steps dd { margin: 0; color: var(--ink); }
+.part-insights .ins-action-rule { margin: 10px 0 0; font-size: 11px; color: var(--muted-2); }
+.part-insights .ins-facts a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.part-insights .ins-facts a .icon { width: 11px; height: 11px; }
 .part-insights .ins-signal { padding: 12px 0; border-bottom: 1px solid var(--line-3); }
 .part-insights .ins-signal:last-of-type { border-bottom: 0; }
 .part-insights .ins-signal b { font-size: 12px; }
@@ -122,11 +129,26 @@
 /* 월간 리뷰 */
 .part-insights .ins-month { font-size: 15px; }
 .part-insights .ins-summary { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: var(--ink-2); }
-/* 월간 리뷰 배치: 1행 요약 | 자료 출처, 2행 고객 인사이트 | 경쟁사 동향, 3행 전략 업데이트(전체 폭) — 같은 행 카드는 높이를 맞춤 */
-.part-insights .ins-mrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 20px; align-items: stretch; margin-bottom: 20px; }
+/* 월간 리뷰 배치: 1행 이달의 요약(전체 폭 · 내용 높이만큼), 2행 고객 인사이트 | 경쟁사 동향(높이 맞춤), 3행 전략 업데이트, 4행 자료 출처(가로형) */
+/* 월간 리뷰 카드들은 한 줄기(stack)로: 칸 사이 간격은 모두 20px (카드마다 margin을 따로 주지 않음) */
+.part-insights .ins-mstack { display: flex; flex-direction: column; gap: 20px; }
+.part-insights .ins-mstack > * { margin: 0; }
+.part-insights .ins-msummary { padding-top: 16px; padding-bottom: 16px; }
+.part-insights .ins-msummary .card-head { margin-bottom: 8px; }
+.part-insights .ins-msummary .ins-summary { line-height: 1.7; }
+.part-insights .ins-mrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 20px; align-items: stretch; }
 .part-insights .ins-mrow > .card { margin: 0; }
+/* 경쟁사 동향: 높이가 늘어나도 '경쟁사 보기' 링크는 카드 맨 아래 */
+.part-insights .ins-mcomp { display: flex; flex-direction: column; }
+.part-insights .ins-mcomp > .link { margin-top: auto; padding-top: 12px; align-self: flex-start; }
 @media (max-width: 1100px) { .part-insights .ins-mrow { grid-template-columns: minmax(0, 1fr); } }
-/* 자료 출처 카드: 어떤 칸이 AI 분석인지 · AI가 읽은 자료(알약, 알약 안은 줄바꿈 없음) · 실행 시각 */
+/* 자료 출처 카드: 왼쪽 = 어떤 칸이 AI 분석인지 · AI가 읽은 자료(알약, 알약 안은 줄바꿈 없음), 오른쪽 = 실행 시각 · 안내 */
+.part-insights .ins-msrc-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 24px; align-items: start; }
+.part-insights .ins-msrc-grid > .ins-msrc-note { margin: 0; padding: 0 0 0 20px; border-top: 0; border-left: 1px dashed var(--line-2); }
+@media (max-width: 1100px) {
+  .part-insights .ins-msrc-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .part-insights .ins-msrc-grid > .ins-msrc-note { margin-top: 14px; padding: 12px 0 0; border-left: 0; border-top: 1px dashed var(--line-2); }
+}
 .part-insights .ins-msrc-lead { margin: 0; font-size: 12px; line-height: 1.65; color: var(--ink-2); word-break: keep-all; }
 .part-insights .ins-msrc-lead b { font-weight: 650; color: var(--purple); }
 .part-insights .ins-msrc-label { display: block; margin-top: 16px; font-size: 11px; color: var(--muted); }
@@ -556,7 +578,8 @@
 @media (max-width: 720px) { .part-insights .ins-chg-sum { grid-template-columns: 1fr; } }
 @media (max-width: 720px) {
   .part-insights .ins-insight-body, .part-insights .ins-swot { grid-template-columns: 1fr; }
-  .part-insights .ins-steps > div, .part-insights .ins-facts > div { grid-template-columns: 1fr; gap: 2px; }
+  .part-insights .ins-steps, .part-insights .ins-facts > div { grid-template-columns: 1fr; }
+  .part-insights .ins-facts > div { gap: 2px; }
   .part-insights .ins-item { flex-wrap: wrap; }
   .part-insights .ins-bc-grid { grid-template-columns: 1fr; }
   .part-insights .ins-cost { width: 100%; text-align: left; padding-left: 28px; }
@@ -607,3 +630,8 @@
 .part-insights .ins-cf-slack .n { opacity: .6; }
 .part-insights .ins-cf-slack.on { background: var(--purple-bg); color: var(--purple); border-color: var(--purple); }
 .part-insights .ins-slack-done { color: var(--purple); border-color: var(--purple); background: var(--purple-bg); }
+
+/* 주간 리뷰: 누르면 이동하는 카드 · 이동해 온 제품 카드 강조 */
+.part-insights .ins-card-link { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.part-insights .ins-card-link:hover { border-color: var(--line-2); box-shadow: var(--shadow); }
+.part-insights .ins-line.ins-flash { box-shadow: 0 0 0 3px var(--lime); transition: box-shadow .3s; }

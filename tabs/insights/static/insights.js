@@ -155,9 +155,15 @@
     return { tab, sub };
   }
 
+  // 주소(#…)로 화면을 옮기면 항상 맨 위부터 보여 줌 (이전 화면의 스크롤 위치가 남지 않게)
   function route() {
     const h = parseHash();
     show(h.tab || S.tab || 'weekly', h.sub);
+    toTop();
+  }
+
+  function toTop() {
+    if (!S.focusLine) global.scrollTo(0, 0);
   }
 
   function setHash(h) {
@@ -197,7 +203,7 @@
   /* ───────── 이벤트 ───────── */
   function onClick(e) {
     const tabBtn = e.target.closest('[data-tab]');
-    if (tabBtn && S.root.contains(tabBtn)) { show(tabBtn.dataset.tab); return; }
+    if (tabBtn && S.root.contains(tabBtn)) { show(tabBtn.dataset.tab); toTop(); return; }
     const subBtn = e.target.closest('[data-sub]');
     if (subBtn && S.root.contains(subBtn)) { showSub(subBtn.dataset.sub); return; }
     const b = e.target.closest('[data-act]');
@@ -213,6 +219,18 @@
         break;
       }
       case 'ins-monthly-run': openUpdate('monthly'); break;
+      case 'ins-goto-line': {
+        // 주목할 제품 → 진열대 › 제품별 재고에서 그 제품 카드로
+        e.preventDefault();
+        S.focusLine = d.line;
+        S.shelfView = 'cards';
+        if (S.tab === 'data' && S.sub === 'shelf' && S.data.shelf) drawSub('shelf'); else show('data', 'shelf');
+        break;
+      }
+      case 'ins-goto-shelf':
+        // 진열대 변화 카드 아무 곳 → 진열대 (안쪽 링크 · 접기 상자는 각자 동작)
+        if (e.target.closest('a, summary, details')) return;
+        show('data', 'shelf'); toTop(); break;
       case 'persona-flip': {
         const on = b.getAttribute('aria-pressed') !== 'true';
         S.open['persona-' + d.i] = on;
@@ -333,8 +351,12 @@
       return v.map(x => {
         if (x && typeof x === 'object') {
           if ('line' in x && 'oos' in x) return esc(`${x.line} — ${x.oos.join(' · ')} 품절 (판매 채널: ${x.channels.join(' · ')})${x.again ? ' · 지난 수집부터 계속' : ''}`);
-          if ('before' in x && 'after' in x) return esc(`${x.title} (${x.source}) ${money(x.before)} → ${money(x.after)} (${fmt.signed(x.pct, 0, '%')})`);
-          return esc([x.title, x.source, x.price != null ? money(x.price) : null].filter(Boolean).join(' · '));
+          // 상품 이름은 판매처 상품 페이지로 (link 있을 때)
+          const u = safeUrl(x.link);
+          const name = u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.title)} ${icon('up')}</a>` : esc(x.title);
+          const src = SRC_LABEL[x.source] || x.source;
+          if ('before' in x && 'after' in x) return `${name} ${esc(`(${src}) ${money(x.before)} → ${money(x.after)} (${fmt.signed(x.pct, 0, '%')})`)}`;
+          return [name, ...[src, x.price != null ? money(x.price) : null].filter(Boolean).map(esc)].join(' · ');
         }
         return esc(x);
       }).join('<br>');
@@ -343,12 +365,25 @@
     return esc(v);
   }
 
+  // 액션의 근거 화면 (규칙 → 대시보드 안 주소)
+  const ACTION_SRC = {
+    own_oos_season: ['#data/shelf', '진열대'], price_cut: ['#data/shelf', '진열대'], price_up: ['#data/shelf', '진열대'],
+    comp_oos: ['#data/shelf', '진열대'], comp_oos_multi: ['#data/shelf', '진열대'], low_stock: ['#data/shelf', '진열대'],
+    restock: ['#data/shelf', '진열대'], new_entry: ['#data/competitors', '경쟁사'], own_complaint: ['#data/reviews', '구매자 리뷰'],
+    top_question: ['#data/audience', '유튜브 댓글'], season_search: ['#monthly', '월간 리뷰 · 검색 트렌드']
+  };
+
   function actionCard(a) {
+    const src = ACTION_SRC[a.rule];
     return `<article class="ins-action ${GRADE_CLASS[a.grade] || ''}">
-      <div class="between"><div class="flex">${badge(a.grade, GRADE_TONE[a.grade])}${a.ai ? badge('AI 문장', 'purple') : ''}</div>
-        <span class="small muted">${esc(a.ruleLabel)}</span></div>
+      <div class="ins-action-head"><div class="flex">${badge(a.grade, GRADE_TONE[a.grade])}${a.ai ? badge('AI 문장', 'purple') : ''}</div>
+        ${src ? `<a class="link small" href="${src[0]}">${esc(src[1])}에서 근거 보기 ${icon('arrow')}</a>` : ''}</div>
       <p class="ins-fact">${esc(a.fact)}</p>
-      <dl class="ins-steps"><div><dt>왜 중요한가</dt><dd>${esc(a.why)}</dd></div><div><dt>할 일</dt><dd>${esc(a.todo)}</dd></div></dl>
+      <dl class="ins-steps">
+        <div><dt>영향</dt><dd>${esc(a.why)}</dd></div>
+        <div class="todo"><dt>할 일</dt><dd>${esc(a.todo)}</dd></div>
+      </dl>
+      <p class="ins-action-rule">${esc(a.ruleLabel)}</p>
     </article>`;
   }
 
@@ -382,10 +417,10 @@
       const what = g.oosChannels.length ? [badge(g.oosChannels.length > 1 ? `${g.oosChannels.length}채널 품절` : '품절', 'red'), `${g.oosChannels.join(' · ')}에서 품절`]
         : g.partialOos ? [badge('옵션 품절', 'orange'), `옵션 ${g.partialOos}개 품절 · 다른 옵션은 재고 있음`]
           : [badge('곧 품절', 'orange'), g.low.map(v => `${v.source} ${v.servings}회분 ${v.left}개 남음`).join(' · ')];
-      return `<a class="ins-watch-row" href="#data/shelf"><span class="flex">${what[0]}<b>${esc(g.label)}</b></span><span class="small muted">${esc(what[1])}</span></a>`;
+      return `<a class="ins-watch-row" href="#data/shelf" data-act="ins-goto-line" data-line="${esc(g.id)}"><span class="flex">${what[0]}<b>${esc(g.label)}</b></span><span class="small muted">${esc(what[1])}</span></a>`;
     }).join('');
     const reasons = shelfReasons(s);
-    const shelfCard = `<section class="card">
+    const shelfCard = `<section class="card ins-card-link" data-act="ins-goto-shelf" title="진열대 보기">
       <div class="card-head"><h2>진열대 변화</h2><a class="link" href="#data/shelf">진열대 보기 ${icon('arrow')}</a></div>
       ${s.total ? `<div class="ins-stats">
           ${stat('경쟁 제품 품절', s.oosLines, s.oosLines ? 'red' : '', s.restocks ? `재입고 ${s.restocks}` : `제품 ${s.lines}개 중`)}
@@ -398,7 +433,7 @@
         ${s.ownOos ? `<div class="note error mt-16">자사 상품 ${esc(s.ownOos)}개가 품절이에요. 판매처에 재입고 일정을 확인하세요.</div>` : ''}
         ${own ? `<div class="note lime mt-16">Weee!에서 자사 1회분 단가 <b>${esc(money(own.perServing))}</b> — ${esc(own.total)}개 중 ${esc(own.rank)}번째로 저렴해요 (${esc(own.bucketLabel)}).</div>` : ''}`
         : ui.empty('진열대 데이터가 없어요. 데이터 업데이트에서 Weee! · Amazon 진열대를 모으세요.', 'grid')}
-      ${reasons.length ? `<details class="ins-fold mt-16" data-fold="shelfWhy"${S.open.shelfWhy !== false ? ' open' : ''}><summary>데이터가 부족한 곳 (${reasons.length})</summary>
+      ${reasons.length ? `<details class="ins-fold mt-16" data-fold="shelfWhy"${S.open.shelfWhy ? ' open' : ''}><summary>데이터가 부족한 곳 (${reasons.length})</summary>
         <div class="ins-why-list">${reasons.map(r => `<div class="ins-why"><b>${esc(r.label)}</b><div>${esc(r.text)}<small>할 일 · ${esc(r.todo)}</small></div></div>`).join('')}</div></details>` : ''}
     </section>`;
     el.innerHTML = `${demoNote(w.demo)}
@@ -460,7 +495,7 @@
   /* ═════════ 월간 리뷰 ═════════ */
   async function loadMonthly(month) {
     const el = panel('monthly');
-    if (!S.monthly && el) el.innerHTML = `<div class="kpis">${'<div class="kpi"><div class="skeleton ins-skel-sm"></div></div>'.repeat(4)}</div>${skel}`;
+    if (!S.monthly && el) el.innerHTML = skel;
     try {
       S.monthly = await api('/api/insights/monthly' + (month ? `?month=${encodeURIComponent(month)}` : ''));
       S.month = S.monthly.month;
@@ -572,7 +607,7 @@
       </span></button>`;
   }
 
-  // 자료 출처 카드 (이달의 요약 오른쪽): 어떤 칸이 AI 분석인지 + AI가 읽은 자료 개수(월간 분석 실행 때 실제로 넘긴 값 · 0개는 뺌)
+  // 자료 출처 카드 (월간 리뷰 맨 아래, 가로형): 어떤 칸이 AI 분석인지 + AI가 읽은 자료 개수(월간 분석 실행 때 실제로 넘긴 값 · 0개는 뺌)
   function sourcesCard(m) {
     const ai = [m.summary.length && '이달의 요약', m.insightsAi && '고객 인사이트', m.competitorAi && '경쟁사 동향', m.strategy && '전략 업데이트'].filter(Boolean);
     const rule = [!m.insightsAi && m.insights.length && '고객 인사이트', !m.competitorAi && m.competitorTrends.length && '경쟁사 동향'].filter(Boolean);
@@ -592,30 +627,17 @@
       body = '<p class="ins-msrc-note">월간 분석을 다시 실행하면 AI가 읽은 자료 개수가 여기에 보여요.</p>';
     }
     const meta = m.ai ? `${esc(fmt.datetime(m.createdAt))} 실행 · ${esc(m.model || 'AI')}<br>` : '';
-    return `<section class="card"><div class="card-head"><h2>자료 출처</h2></div>
-      <p class="ins-msrc-lead">${lead}</p>${body}
-      <p class="ins-msrc-note">${meta}진열대 · 리뷰는 분석을 실행한 시점의 최신 수집분이에요. 판단 전에 데이터 탭의 원본과 함께 확인하세요.</p></section>`;
+    return `<section class="card ins-msrc"><div class="card-head"><h2>자료 출처</h2></div>
+      <div class="ins-msrc-grid"><div><p class="ins-msrc-lead">${lead}</p>${body}</div>
+      <p class="ins-msrc-note">${meta}진열대 · 리뷰는 분석을 실행한 시점의 최신 수집분이에요. 판단 전에 데이터 탭의 원본과 함께 확인하세요.</p></div></section>`;
   }
 
   function drawMonthly() {
     const el = panel('monthly');
     const m = S.monthly;
     if (!el || !m) return;
-    const mt = m.metrics;
-    const se = mt.search;
-    const pc = mt.priceChanges;
     const thisMonth = REBOOT.today().slice(0, 7);
     const aiBadge = on => (on ? badge('AI 분석', 'purple') : badge('규칙 요약'));
-    const kpis = [
-      ui.kpi({ label: '자사 품절 주수', value: mt.ownOosWeeks == null ? '—' : mt.ownOosWeeks, unit: mt.ownOosWeeks == null ? '' : '주', featured: true,
-        icon: 'clock', foot: mt.hasShelf ? '이달 수집한 주 기준' : '이달 진열대 데이터 없음' }),
-      ui.kpi({ label: '경쟁사 가격 변동', value: pc == null ? '—' : pc, unit: pc == null ? '' : '회', icon: 'dollar',
-        foot: pc == null ? '2주차부터 계산 (비교할 지난주 필요)' : '±10% 이상 변동' }),
-      ui.kpi({ label: '새 리뷰', value: mt.newReviews.total, unit: '개', icon: 'chat', foot: `자사 ${mt.newReviews.own} · 경쟁사 ${mt.newReviews.other}` }),
-      ui.kpi({ label: '검색 지수', value: se ? fmt.num(se.value, 1) : '—', icon: 'chart',
-        change: se && se.changePct != null ? fmt.signed(se.changePct, 0, '%') : '', tone: se && se.changePct < 0 ? 'down' : '',
-        foot: se ? `지난달 대비 · 키워드 ${se.keywords}개 평균` : '검색 트렌드 데이터 없음' })
-    ].map((html, i) => kpiLink(['#data/shelf', '#data/shelf', '#data/reviews', '/dashboard/home#calendar'][i], html)).join('');
     const summary = m.summary.length
       ? `<ol class="ins-summary">${m.summary.map(s => `<li>${esc(s)}</li>`).join('')}</ol>`
       : `<div class="empty-art">${icon('spark')}<span><b>AI 요약이 아직 없어요</b><br>${m.aiReady ? '월간 분석 실행에서 \'요약 · 전략\'을 고르면 3줄 요약이 생겨요.' : 'OpenAI 키를 설정 › 연결에 넣으면 월간 분석 실행으로 3줄 요약을 만들 수 있어요.'}</span>
@@ -651,18 +673,17 @@
         </div>
         <span class="small muted">매월 첫 주(1~7일)에는 지난달을 보여줘요.</span>
       </div>
-      <div class="kpis">${kpis}</div>
-      <div class="ins-mrow">
-        <section class="card tinted"><div class="card-head"><h2>이달의 요약</h2>${m.summary.length ? badge('AI 분석', 'purple') : ''}</div>${summary}</section>
-        ${sourcesCard(m)}
-      </div>
+      <div class="ins-mstack">
+      <section class="card tinted ins-msummary"><div class="card-head"><h2>이달의 요약</h2>${m.summary.length ? badge('AI 분석', 'purple') : ''}</div>${summary}</section>
       <div class="ins-mrow">
         <section class="card"><div class="card-head"><h2>고객 인사이트</h2>${aiBadge(m.insightsAi)}</div>${insights}</section>
-        <section class="card"><div class="card-head"><h2>경쟁사 동향</h2>${aiBadge(m.competitorAi)}</div>
+        <section class="card ins-mcomp"><div class="card-head"><h2>경쟁사 동향</h2>${aiBadge(m.competitorAi)}</div>
           ${m.competitorTrends.length ? `<ul class="ins-ul">${m.competitorTrends.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="small muted">경쟁사 데이터가 없어요.</p>'}
           <a class="link mt-8" href="#data/competitors">경쟁사 보기 ${icon('arrow')}</a></section>
       </div>
-      <section class="card"><div class="card-head"><h2>전략 업데이트</h2>${st ? badge('AI 분석', 'purple') : ''}</div>${strategy}</section>`;
+      <section class="card"><div class="card-head"><h2>전략 업데이트</h2>${st ? badge('AI 분석', 'purple') : ''}</div>${strategy}</section>
+      ${sourcesCard(m)}
+      </div>`;
     fillPeeps(el);
   }
 
@@ -707,7 +728,19 @@
     const d = S.data[sub];
     body.innerHTML = { shelf: shelfHtml, competitors: competitorsHtml, reviews: reviewsHtml, audience: audienceHtml, news: newsHtml }[sub](d);
     if (sub === 'news') drawNewsList();
-    if (sub === 'shelf') fitSwarm();
+    if (sub === 'shelf') { fitSwarm(); focusLine(); }
+  }
+
+  // 주간 리뷰에서 고른 제품 카드로 스크롤하고 잠깐 강조
+  function focusLine() {
+    const id = S.focusLine;
+    if (!id) return;
+    S.focusLine = null;
+    const card = $$(S.root, '[data-line-id]').find(el => el.dataset.lineId === id);
+    if (!card) { global.scrollTo(0, 0); return; }
+    card.scrollIntoView({ block: 'center' });
+    card.classList.add('ins-flash');
+    setTimeout(() => card.classList.remove('ins-flash'), 2000);
   }
 
   // more = 요약 줄 아래에 붙일 HTML (예: 진열대 요약 숫자 칸) — oneLine 없이 more만 주면 요약 줄은 생략
@@ -896,7 +929,7 @@
     const bulk = bulkText(g.bulk);
     const tip = g.low.length ? `<p class="ins-line-tip">경쟁 제품 품절에 대비하세요. ${esc(SRC_LABEL[g.low[0].source])} ${esc(g.low[0].servings)}회분이 ${esc(g.low[0].left)}개 남았어요.</p>`
       : g.oosChannels.length ? `<p class="ins-line-tip red">${esc(g.oosChannels.map(s => SRC_LABEL[s]).join(' · '))}에서 이 제품을 찾던 고객을 데려올 기회예요. 이번 주 액션을 확인하세요.</p>` : '';
-    return `<article class="ins-line${g.own ? ' own' : ''}">
+    return `<article class="ins-line${g.own ? ' own' : ''}" data-line-id="${esc(g.id)}">
       <div class="between"><div><b class="ins-line-name">${esc(g.label)}</b>
         <small class="ins-sub">${g.own ? '자사 · ' : ''}판매처 ${g.channels.length} · 용량 ${g.options.length} · 상품 ${g.products}${g.confirmed ? '' : ' · 같은 제품인지 확인 필요'}</small></div>${lineStatus(g)}</div>
       <div class="ins-line-stats"><div><span>판매 중인 곳</span><b>${avail} / ${g.channels.length}</b></div><div><span>1회분 가격 ${infoTip(TIP.perServing)}</span><b>${esc(ps)}</b></div>
@@ -913,6 +946,7 @@
     const big = ls.filter(g => !hot.includes(g) && (g.channels.length > 1 || g.options.length > 1));
     const first = hot.concat(big).slice(0, 6);
     const rest = ls.filter(g => !first.includes(g));
+    if (S.focusLine && rest.some(g => g.id === S.focusLine)) S.open['lines-rest'] = true;
     return `<section class="card mt-24"><div class="card-head"><h2>제품별 재고</h2><span class="small muted">판매처 · 용량이 달라도 같은 제품은 한 장 · 맛은 나누지 않아요 · 곧 품절 = ${esc(d.lowStock)}개 이하 남음 ${infoTip(TIP.low)}</span></div>
       <div class="ins-lines">${first.map(lineCard).join('')}</div>
       ${rest.length ? `<details class="ins-fold mt-16" data-fold="lines-rest"${S.open['lines-rest'] ? ' open' : ''}><summary>나머지 제품 ${rest.length}개</summary><div class="ins-lines mt-16">${rest.map(lineCard).join('')}</div></details>` : ''}

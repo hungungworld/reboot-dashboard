@@ -134,7 +134,7 @@ def weekly_actions(ctx):
             f"자사(알디콤) 상품 {len(oos)}개가 품절이에요: {names}.",
             f"{s['name']}까지 {d}일 남았어요 (D-{d}). 수요가 몰리는 시기에 살 수 없으면 고객이 경쟁 제품으로 넘어가요.",
             "판매처에 재입고 일정을 확인하고, 시즌 전 재입고가 어렵다면 캠페인 링크를 재고가 있는 판매처로 바꾸세요.",
-            {"품절 상품": [x["title"] for x in oos], "시즌": s["name"], "시즌 시작": s["start"], "남은 날": d}, weight=100 - d))
+            {"품절 상품": [{"title": x["title"], "source": x.get("source"), "link": x.get("link")} for x in oos], "시즌": s["name"], "시즌 시작": s["start"], "남은 날": d}, weight=100 - d))
 
     # 2) 경쟁사 가격 ±10% · 3) 신규 진입 — 지난 수집이 있어야 비교 가능
     if prev is not None:
@@ -148,7 +148,8 @@ def weekly_actions(ctx):
             if not p or not p.get("price") or not x.get("price"):
                 continue
             pct = (x["price"] - p["price"]) / p["price"] * 100
-            row = {"title": x["title"], "source": x.get("source"), "before": p["price"], "after": x["price"], "pct": round(pct, 1)}
+            row = {"title": x["title"], "source": x.get("source"), "before": p["price"], "after": x["price"], "pct": round(pct, 1),
+                   "link": x.get("link")}
             if pct <= -PRICE_PCT:
                 cuts.append(row)
             elif pct >= PRICE_PCT:
@@ -179,7 +180,7 @@ def weekly_actions(ctx):
                 f"진열대에 새 상품 {len(new)}개가 들어왔어요: {names}{more}.",
                 "같은 검색어 · 카테고리에서 고객의 선택지가 늘어요.",
                 "데이터 › 경쟁사에서 새 상품의 가격 · 메시지를 확인하고 주시할지 정하세요.",
-                {"새 상품": [{"title": x["title"], "source": x.get("source"), "price": x.get("price")} for x in new[:10]]},
+                {"새 상품": [{"title": x["title"], "source": x.get("source"), "price": x.get("price"), "link": x.get("link")} for x in new[:10]]},
                 weight=len(new)))
 
     # 7) 경쟁 제품 라인 품절 — 한 채널 = 기회 · 2채널 이상 = 긴급 (지난 수집에도 품절이면 'N주째')
@@ -228,7 +229,7 @@ def weekly_actions(ctx):
             "곧 품절될 수 있어요. 품절이 뜬 뒤에 소재를 만들면 늦어요.",
             "경쟁 제품 품절에 대비하세요. 경쟁 키워드 광고 세트와 '즉시 출고' 소재를 미리 만들어 두고, "
             "다음 수집에서 품절이 확인되면 바로 켜세요. " + COMPLIANCE,
-            {"재고 임박": [{"title": i["title"], "source": i.get("source"), "price": i.get("price")} for i in low[:10]],
+            {"재고 임박": [{"title": i["title"], "source": i.get("source"), "price": i.get("price"), "link": i.get("link")} for i in low[:10]],
              "남은 개수": [i["stockLeft"] for i in low[:10]], "기준": f"{LOW_STOCK}개 이하"}, weight=LOW_STOCK - x["stockLeft"]))
 
     # 9) 경쟁 상품 재입고
@@ -244,7 +245,8 @@ def weekly_actions(ctx):
                 f"{_line(x)[1]} ({_src(x)}) — 다시 들어왔어요{more}.",
                 "경쟁 제품이 돌아오면 올려 둔 입찰가는 클릭 값만 비싸지고 전환은 줄어요.",
                 "경쟁 제품이 돌아왔어요. 품절 때 올렸던 입찰가를 평소대로 낮추고, 보류했던 쿠폰을 다시 켤지 정하세요.",
-                {"재입고": [{"title": i["title"], "source": i.get("source"), "price": i.get("price")} for i in back[:10]]},
+                {"재입고": [{"title": i["title"], "source": i.get("source"), "price": i.get("price"), "link": i.get("link")}
+                         for i in back[:10]]},
                 weight=len(back)))
 
     # 4) 작년 검색 +20% 시즌이 30일 안

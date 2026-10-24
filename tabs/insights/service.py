@@ -377,7 +377,7 @@ def weekly_view(t=None):
     line_list = lines.build(comp)
     before = {(x["source"], x["key"]): x for x in prev or []}
     restocks = [x for x in comp if before.get((x["source"], x["key"]), {}).get("in_stock") is False and x["in_stock"] is True]
-    watch_lines = [{"label": g["label"], "oosChannels": [SOURCE_LABEL[s] for s in g["oosChannels"]], "partialOos": g["partialOos"],
+    watch_lines = [{"id": g["id"], "label": g["label"], "oosChannels": [SOURCE_LABEL[s] for s in g["oosChannels"]], "partialOos": g["partialOos"],
                     "low": [{"source": SOURCE_LABEL[v["source"]], "left": v["left"], "servings": v["servings"]} for v in g["low"][:2]],
                     "channels": [SOURCE_LABEL[s] for s in g["channels"]], "perServing": g["perServing"], "confirmed": g["confirmed"]}
                    for g in line_list if g["oosChannels"] or g["low"] or g["partialOos"]][:4]
