@@ -173,6 +173,16 @@
 .part-insights .ins-reviews li { padding: 12px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
 .part-insights .ins-reviews li:last-child { border-bottom: 0; }
 .part-insights .ins-reviews p { margin-top: 6px; }
+.part-insights .ins-rvf { display: flex; gap: 10px; align-items: baseline; margin-top: 8px; }
+.part-insights .ins-rvf-l { flex: 0 0 34px; font-size: 11px; font-weight: 700; color: var(--ink-2); }
+.part-insights .ins-reviews li.ins-cs { padding-left: 12px; border-left: 3px solid transparent; }
+.part-insights .ins-reviews li.ins-cs.todo { border-left-color: var(--red); }
+.part-insights .ins-cs.done, .part-insights .ins-cs.skip { opacity: .65; }
+.part-insights .ins-stars { color: var(--orange); font-size: 12px; letter-spacing: 1px; }
+.part-insights .ins-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.part-insights .ins-tag { font-size: 11px; color: var(--blue); }
+.part-insights .ins-cs-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.part-insights .ins-memo { flex: 1 1 220px; min-width: 0; padding: 7px 9px; font-size: 12px; }
 
 /* 데이터 업데이트 창 */
 .part-insights .ins-item { display: flex; gap: 12px; align-items: flex-start; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; cursor: pointer; }
@@ -194,5 +204,6 @@
   .part-insights .ins-item { flex-wrap: wrap; }
   .part-insights .ins-comp-top { grid-template-columns: 1fr; }
   .part-insights .ins-cost { width: 100%; text-align: left; padding-left: 28px; }
+  .part-insights .ins-rvf { flex-direction: column; gap: 4px; }
   .part-insights .ins-stats.three { grid-template-columns: 1fr; }
 }

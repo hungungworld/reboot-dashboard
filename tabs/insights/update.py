@@ -17,7 +17,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import amazon, competitors, rules, service, trends, weee, youtube
+from . import amazon, channel_reviews, competitors, rules, service, trends, weee, youtube
 from .http import CollectError
 from .models import Comment, Monthly, Review, Run, load_json
 from .util import review_month, week_key
@@ -28,6 +28,8 @@ ITEMS = [
      "desc": "목록 · 상품 페이지에서 가격 · 품절 · 핵심 메시지"},
     {"id": "amazon", "label": "Amazon 진열대 · 리뷰", "group": "weekly", "needs": ["SERPAPI_KEY"],
      "desc": "검색 상위(광고 제외) · 리뷰 많은 상품 상세 · 대표 리뷰"},
+    {"id": "channel_reviews", "label": "채널 리뷰 (Olive Young · Amazon · Yami)", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
+     "desc": "알디콤 상품의 구매자 리뷰 · 별점 (Olive Young 영어 리뷰 전부 · Amazon 대표 리뷰는 SerpApi)"},
     {"id": "trends", "label": "검색 트렌드", "group": "weekly", "needs": ["SERPAPI_KEY"],
      "desc": "트렌드 키워드마다 미국 12개월 (키가 없으면 CSV 올리기)"},
     {"id": "reviews", "label": "리뷰 분류", "group": "weekly", "needs": [], "ai": True,
@@ -44,7 +46,7 @@ ITEMS = [
      "desc": "이달의 요약 3줄 · 고객 인사이트 · 페르소나 · SWOT"},
 ]
 BY_ID = {i["id"]: i for i in ITEMS}
-ORDER = ["weee", "amazon", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly"]
+ORDER = ["weee", "amazon", "channel_reviews", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly"]
 LIMITS = {"serpapi": 250, "firecrawl": 1000, "youtube": 10000}
 REVIEW_BATCH, REVIEW_MAX = 40, 200
 COMMENT_BATCH, COMMENT_MAX = 80, 400
@@ -68,6 +70,12 @@ def estimate(item_id, cfg):
     if item_id == "amazon":
         return {"serpapi": len(cfg.get("amazon_queries") or []) + int(cfg.get("amazon_product_lookups") or 0)
                 + len(cfg.get("tracked_asins") or [])}
+    if item_id == "channel_reviews":  # Olive Young은 첫 페이지 + 더 보기 = 상품마다 약 2
+        src = channel_reviews.load_sources()
+        cost = {"firecrawl": sum(2 if s["channel"] == "oliveyoung" else 1 for s in src if s["channel"] != "amazon")}
+        if envkeys.has("SERPAPI_KEY"):
+            cost["serpapi"] = sum(1 for s in src if s["channel"] == "amazon")
+        return {k: v for k, v in cost.items() if v}
     if item_id == "trends":
         return {"serpapi": len(cfg.get("trend_keywords") or [])}
     if item_id == "youtube":
@@ -123,6 +131,8 @@ def plan():
             note = "AI 키가 없어 규칙으로만 처리해요 (무료)."
         if it["id"] == "weee" and not cfg.get("weee_urls"):
             ready, note = False, "설정 › 수집 설정에 Weee! 주소가 없어요."
+        if it["id"] == "channel_reviews" and not channel_reviews.load_sources():
+            ready, note = False, "리뷰 상품 주소가 없어요 (data/review_sources.json)."
         items.append(dict(it, ready=ready, missing=missing, cost=estimate(it["id"], cfg), note=note))
     return {"items": items, "keys": keys, "usage": month_usage(), "limits": LIMITS, "running": jobs.is_running(JOB),
             "lastRun": service.last_run(), "reviewMonth": review_month(service.today()), "week": week_key(service.today())}
@@ -173,6 +183,15 @@ def _run_amazon(cfg, ctx):
     r = amazon.collect(cfg, envkeys.get("SERPAPI_KEY"), ctx["week"])
     r["usage"] = {"serpapi": r["calls"]}
     r["message"] = f"Amazon 상품 {r['count']}개 · 새 리뷰 {r['reviews']}개를 모았어요 (SerpApi {r['calls']}회)."
+    return r
+
+
+def _run_channel_reviews(cfg, ctx):
+    serp = envkeys.get("SERPAPI_KEY") if envkeys.has("SERPAPI_KEY") else None
+    r = channel_reviews.collect(envkeys.get("FIRECRAWL_API_KEY"), ctx["week"], serp)
+    r["usage"] = {"firecrawl": r["credits"], "serpapi": r["serpapi"]}
+    r["message"] = (f"채널 리뷰 {r['count']}개를 읽고 새 리뷰 {r['reviews']}개를 넣었어요 "
+                    f"(Firecrawl 약 {r['credits']} 크레딧 · SerpApi {r['serpapi']}회).")
     return r
 
 
@@ -280,9 +299,9 @@ def _run_monthly(cfg, ctx):
     return {"ok": True, "count": 1, "message": f"{month} 월간 요약 · 전략을 만들었어요.", "usage": {"openai": 1}}
 
 
-RUNNERS = {"weee": _run_weee, "amazon": _run_amazon, "trends": _run_trends, "youtube": _run_youtube, "reviews": _run_reviews,
+RUNNERS = {"weee": _run_weee, "amazon": _run_amazon, "channel_reviews": _run_channel_reviews, "trends": _run_trends, "youtube": _run_youtube, "reviews": _run_reviews,
            "voc": _run_voc, "competitors": _run_competitors, "actions": _run_actions, "monthly": _run_monthly}
-COLLECTORS = {"weee", "amazon", "trends", "youtube"}
+COLLECTORS = {"weee", "amazon", "channel_reviews", "trends", "youtube"}
 
 
 def run_update(run_id, items, user, options=None):
