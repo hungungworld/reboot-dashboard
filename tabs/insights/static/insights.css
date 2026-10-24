@@ -263,7 +263,40 @@
 .part-insights .ins-chg-main del { color: var(--muted-2); }
 .part-insights .ins-chg-title { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .part-insights .ins-chg-impact { margin: 8px 0 0; padding-top: 6px; border-top: 1px dashed var(--line); color: var(--text); line-height: 1.45; }
-.part-insights .ins-comp-more { width: 100%; justify-content: center; }
+.part-insights .ins-comp-filter { display: flex; align-items: center; gap: 8px; flex: 1 1 460px; min-width: 0; }
+.part-insights .ins-comp-filter .chips { flex: none; }
+.part-insights .ins-comp-filter .ins-tbl-q { flex: 1 1 160px; min-width: 0; max-width: 320px; }
+/* 경쟁사 비교 표: 한 줄 행 · 필터 · 정렬 · 고정 페이지 */
+.part-insights .ins-comp-table td { height: 48px; padding-top: 0; padding-bottom: 0; vertical-align: middle; }
+.part-insights .ins-1l { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
+.part-insights .ins-1l > * { flex: none; }
+.part-insights .ins-field .ins-1l { display: block; }
+.part-insights .ins-1l .ins-chans { display: flex; gap: 4px; flex-wrap: nowrap; }
+.part-insights .ins-th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.part-insights .ins-th-sort i { font-style: normal; font-size: 10px; color: var(--muted-2); }
+.part-insights th.sorted, .part-insights th.sorted .ins-th-sort i { color: var(--ink); }
+.part-insights .ins-link { all: unset; cursor: pointer; color: var(--blue); display: inline-flex; align-items: center; gap: 3px; }
+.part-insights .ins-link:hover { text-decoration: underline; }
+.part-insights .ins-link svg { width: 12px; height: 12px; }
+.part-insights .ins-cf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 12px; font-size: 12px; }
+.part-insights .ins-cf-icon { color: var(--muted); display: inline-flex; }
+.part-insights .ins-cf-icon svg { width: 15px; height: 15px; }
+.part-insights .ins-cf { font: inherit; font-size: 12px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 5px 12px; cursor: pointer; }
+.part-insights .ins-cf.on { background: var(--blue-bg); color: var(--blue); border-color: var(--blue); }
+.part-insights .ins-cf.sort { border-radius: var(--radius-sm); }
+.part-insights .ins-cf-gap { flex: 1; }
+.part-insights .ins-pg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; min-height: 32px; }
+.part-insights .ins-pg-nav { display: flex; gap: 4px; }
+.part-insights .ins-pg { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
+.part-insights .ins-pg:hover:not(:disabled) { border-color: var(--ink); }
+.part-insights .ins-pg.on { background: var(--ink); border-color: var(--ink); color: #fff; cursor: default; }
+.part-insights .ins-pg:disabled:not(.on) { opacity: .35; cursor: default; }
+.part-insights .ins-export { position: relative; }
+.part-insights .ins-export > summary { list-style: none; }
+.part-insights .ins-export > summary::-webkit-details-marker { display: none; }
+.part-insights .ins-export-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; min-width: 96px; }
+.part-insights .ins-export-menu a { display: block; padding: 6px 10px; border-radius: 5px; font-size: 12px; color: var(--text); }
+.part-insights .ins-export-menu a:hover { background: var(--soft); }
 .part-insights .ins-bc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .part-insights .ins-bc-item { background: var(--soft-2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; font-size: 12px; line-height: 1.5; }
 .part-insights .ins-reason { margin: 8px 0; color: var(--text); }
