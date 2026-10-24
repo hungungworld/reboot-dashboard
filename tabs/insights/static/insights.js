@@ -24,12 +24,13 @@
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
   const BUCKETS = [['low', '$3 미만'], ['mid', '$3~6'], ['high', '$6 이상']];
-  const ITEM_LABEL = { weee: 'Weee! 진열대', amazon: 'Amazon 진열대 · 리뷰', trends: '검색 트렌드', reviews: '리뷰 분류', actions: '이번 주 액션',
+  const ITEM_LABEL = { weee: 'Weee! 진열대', amazon: 'Amazon 진열대 · 리뷰', channel_reviews: '채널 리뷰 (Olive Young · Amazon · Yami)', trends: '검색 트렌드', reviews: '리뷰 분류', actions: '이번 주 액션',
     youtube: '유튜브 수집', voc: 'VOC 분류', competitors: '경쟁사 분석', monthly: '요약 · 전략' };
   const KEY_LABEL = { SERPAPI_KEY: 'SerpApi', FIRECRAWL_API_KEY: 'Firecrawl', YOUTUBE_API_KEY: 'YouTube', OPENAI_API_KEY: 'OpenAI' };
   const USE_LABEL = { serpapi: 'SerpApi', firecrawl: 'Firecrawl', youtube: 'YouTube', openai: 'OpenAI' };
   const USE_UNIT = { serpapi: '회', firecrawl: ' 크레딧', youtube: ' units', openai: '회' };
   const SERVING_SRC = { manual: '직접 수정', parsed: '문구에서 읽음', default: '확인 필요 (1회분으로 계산)' };
+  const RVF_EMPTY = { source: '', line: '', topic: '', s: '', cs: '' };
 
   const $ = (el, sel) => (el ? el.querySelector(sel) : null);
   const $$ = (el, sel) => (el ? Array.from(el.querySelectorAll(sel)) : []);
@@ -51,7 +52,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', sub: 'shelf', weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, loading: {}
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, rvf: Object.assign({}, RVF_EMPTY)
   };
   const panel = id => $(S.root, `[data-panel="${id}"]`);
   const skel = '<div class="skeleton ins-skel"></div>';
@@ -164,6 +165,9 @@
       case 'comp-detail': openCompDetail(findComp(d.id)); break;
       case 'comp-point': jumpComp(d.brand); break;
       case 'rv': openReviews(d.brand, d.topic, d.s); break;
+      case 'rvf': S.rvf[d.k] = S.rvf[d.k] === d.v ? '' : d.v; drawCs(); break;
+      case 'cs-set': saveCs(d.id, d.status, null, b); break;
+      case 'rv-ko': showKo(b, d.id); break;
       case 'month': S.monthly = null; S.month = d.month; loadMonthly(d.month); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'upload-reviews': uploadCsv(b, 'reviews'); break;
@@ -178,6 +182,7 @@
     if (!t.dataset) return;
     if (t.dataset.ref === 'aud-month') { loadData('audience', t.value); return; }
     if (t.dataset.edit) editShelf(t);
+    if (t.dataset.memo) saveCs(t.dataset.memo, null, t.value.trim());
   }
 
   /* ═════════ 주간 리뷰 ═════════ */
@@ -834,9 +839,9 @@
     const upload = `<section class="card"><div class="card-head"><h2>Weee! 리뷰 CSV 올리기</h2><a class="link" href="/api/insights/templates/weee-reviews.csv" download>${icon('download')}양식 받기</a></div>
       <p class="small muted">Weee!는 상품 페이지에 리뷰가 없어 직접 모아 올려요. 열: product · brand · rating(1~5) · date · title · text · own(자사면 Y). 고객 이름 · 연락처는 넣지 마세요.</p>
       <div class="flex wrap mt-16"><input type="file" accept=".csv,text/csv" data-ref="file-reviews" aria-label="Weee! 리뷰 CSV 파일"><button type="button" class="btn small lime" data-act="upload-reviews">${icon('upload')}올리기</button></div></section>`;
-    const latest = d.items.slice(0, 60).map(r => `<li><div class="flex wrap">${badge(r.source === 'amazon' ? 'Amazon' : 'Weee!')}${r.own ? badge('자사', 'green') : ''}${sentBadge(r.sentiment)}<b>${esc(r.brand)}</b>${r.rating != null ? `<span class="small muted">별점 ${esc(r.rating)}</span>` : ''}${r.by === 'ai' ? badge('AI 분류', 'purple') : ''}</div>
+    const latest = d.items.slice(0, 60).map(r => `<li><div class="flex wrap">${badge(r.sourceLabel || r.source)}${r.own ? badge('자사', 'green') : ''}${sentBadge(r.sentiment)}<b>${esc(r.brand)}</b>${r.rating != null ? `<span class="small muted">별점 ${esc(r.rating)}</span>` : ''}${r.by === 'ai' ? badge('AI 분류', 'purple') : ''}</div>
       ${r.summaryKo ? `<p>${esc(r.summaryKo)}</p>` : ''}<p class="small muted">${esc(r.title ? r.title + ' — ' : '')}${esc(r.text)}</p></li>`).join('');
-    return qHead('reviews', d.oneLine, d.stats.total ? badge(`AI 분류 ${d.stats.ai} · 규칙 ${d.stats.total - d.stats.ai}`) : '') +
+    return qHead('reviews', d.oneLine, d.stats.total ? badge(`AI 분류 ${d.stats.ai} · 규칙 ${d.stats.total - d.stats.ai}`) : '') + csHtml(d) +
       `<section class="card mt-24"><div class="card-head"><h2>브랜드 × 주제</h2><span class="small muted">+칭찬 / −불만을 누르면 리뷰가 보여요</span></div>
         ${d.table.length ? `<div class="table-wrap"><table class="data-table ins-matrix"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`
           : ui.empty('리뷰가 없어요. Amazon 수집(대표 리뷰)이나 Weee! CSV로 모으세요.', 'chat')}
@@ -845,12 +850,112 @@
       fold('reviews-raw', `원본 리뷰 (최근 ${Math.min(60, d.items.length)}개)`, latest ? `<ul class="ins-reviews">${latest}</ul>` : '<p class="small muted">없음</p>');
   }
 
+  /* 알디콤 리뷰 CS — 채널 · 제품 라인 · 주제 · 칭찬/불만 · 대응 상태 버튼으로 거르기 (그룹마다 하나, 그룹끼리는 함께) */
+  function rvMatch(x, f) {
+    return (!f.source || x.source === f.source) && (!f.line || x.line === f.line) && (!f.topic || x.topics.includes(f.topic)) &&
+      (!f.s || x.sentiment === f.s) && (!f.cs || x.cs === f.cs);
+  }
+  const hashTag = t => `#${String(t).replace(/\s+/g, '')}`;
+
+  function csFilters(d) {
+    const f = S.rvf;
+    const count = (k, v) => d.cs.filter(x => rvMatch(x, Object.assign({}, f, { [k]: v }))).length;
+    const group = (k, label, opts) => `<div class="ins-rvf"><span class="ins-rvf-l">${esc(label)}</span><div class="chips">${[['', '전체'], ...opts].map(([v, l]) =>
+      `<button type="button" class="chip${f[k] === v ? ' selected' : ''}" data-act="rvf" data-k="${k}" data-v="${esc(v)}" aria-pressed="${f[k] === v}">${esc(l)}<span class="n">${count(k, v)}</span></button>`).join('')}</div></div>`;
+    const sources = Array.from(new Map(d.cs.map(x => [x.source, x.sourceLabel])).entries());
+    const lines = d.lines.filter(l => d.cs.some(x => x.line === l)).map(l => [l, hashTag(l)]);
+    return group('source', '채널', sources) + group('line', '제품', lines) + group('topic', '주제', d.topics.map(t => [t, hashTag(t)])) +
+      group('s', '반응', [['+', '칭찬'], ['-', '불만'], ['0', '중립']]) + group('cs', '대응', d.csStatus);
+  }
+
+  function csCard(x, st) {
+    const r = x.rating == null ? null : Math.round(x.rating);
+    const stars = r == null ? '' : `<span class="ins-stars" title="별점 ${esc(x.rating)}" aria-label="별점 ${esc(x.rating)}">${'★'.repeat(r)}${'☆'.repeat(Math.max(0, 5 - r))}</span>`;
+    const seg = st.map(([k, l]) => `<button type="button" data-act="cs-set" data-id="${esc(x.id)}" data-status="${k}"${x.cs === k ? ' class="selected"' : ''} aria-pressed="${x.cs === k}">${esc(l)}</button>`).join('');
+    return `<li class="ins-cs ${esc(x.cs)}">
+      <div class="flex wrap">${badge(x.sourceLabel)}${stars}${sentBadge(x.sentiment)}${x.date ? `<span class="small muted">${esc(x.date)}</span>` : ''}${x.cs === 'todo' && x.csAuto ? badge('자동 표시', 'red') : ''}</div>
+      <div class="ins-tags">${[x.line, ...x.topics].map(t => `<span class="ins-tag">${esc(hashTag(t))}</span>`).join('')}</div>
+      ${x.summaryKo ? `<p><b>${esc(x.summaryKo)}</b> ${badge('AI 요약', 'purple')}</p>` : ''}
+      <p class="ins-quote">${esc(x.title ? x.title + ' — ' : '')}${esc(x.text)}</p>
+      <div class="ins-quote ins-ko" data-ko="${esc(x.id)}" hidden></div>
+      <div class="ins-cs-bar"><div class="seg" role="group" aria-label="대응 상태">${seg}</div>
+        <input class="input ins-memo" data-memo="${esc(x.id)}" value="${esc(x.memo)}" maxlength="1000" placeholder="메모 (예: 답글 남김 · 교환 안내)" aria-label="메모">
+        <button type="button" class="btn small" data-act="rv-ko" data-id="${esc(x.id)}">번역 보기</button>
+        ${x.csBy ? `<span class="small muted">${esc(x.csBy)} · ${esc(fmt.datetime(x.csAt))}</span>` : ''}</div>
+    </li>`;
+  }
+
+  function csList(d) {
+    const order = { todo: 0, new: 1, done: 2, skip: 3 };
+    const list = d.cs.filter(x => rvMatch(x, S.rvf)).sort((a, b) => order[a.cs] - order[b.cs]);
+    return list.map(x => csCard(x, d.csStatus)).join('') || '<li class="muted">조건에 맞는 리뷰가 없어요.</li>';
+  }
+
+  function csHtml(d) {
+    if (!d.cs.length) {
+      return `<section class="card mt-24"><div class="card-head"><h2>알디콤 리뷰 CS</h2></div>${ui.empty('아직 알디콤 리뷰가 없어요. 데이터 업데이트에서 \'채널 리뷰 (Olive Young · Amazon · Yami)\'를 고르세요 (Firecrawl 키 필요 · Amazon은 SerpApi 키).', 'chat')}</section>`;
+    }
+    const ch = d.channels.map(c => `<tr><td>${esc(c.channelLabel)}</td><td>${esc(hashTag(c.line))}</td><td>${extLink(c.url, c.title || '상품')}</td>
+      <td class="num">${c.total == null ? '—' : esc(c.total)}</td><td class="num">${c.avg == null ? '—' : esc(c.avg)}</td><td class="num">${esc(c.got)}</td><td class="small muted">${esc(fmt.date(c.at))}</td></tr>`).join('');
+    return `<section class="card mt-24"><div class="card-head"><h2>알디콤 리뷰 CS</h2><span class="flex wrap">${badge(`대응 필요 ${d.stats.csTodo}`, d.stats.csTodo ? 'red' : '')}${badge(`전체 ${d.cs.length}`)}</span></div>
+        <div data-ref="rvf">${csFilters(d)}</div>
+        <ul class="ins-reviews mt-16" data-ref="cs-list">${csList(d)}</ul>
+        <p class="panel-note mt-8">불만 · 부작용 · 배송/파손 말이 있으면 '대응 필요'가 자동으로 붙어요(자동 표시). 상태 · 메모는 이름 · 시간과 함께 저장돼요. 답글은 각 사이트에서 직접 남겨 주세요.</p></section>` +
+      (ch ? fold('cs-channels', '채널별 리뷰 수 (사이트 숫자 · 모은 수)', `<div class="table-wrap"><table class="data-table"><thead><tr><th>채널</th><th>제품</th><th>상품</th><th class="num">사이트 리뷰</th><th class="num">평균 별점</th><th class="num">모은 수</th><th>확인</th></tr></thead><tbody>${ch}</tbody></table></div>
+        <p class="panel-note mt-8">Olive Young은 영어 리뷰(Global Reviews)만, Amazon은 대표 리뷰(최대 8개 · 매주 새 것만 더함)를 모아요. Amazon '사이트 리뷰'는 별점 평가 수예요.</p>`) : '');
+  }
+
+  function drawCs() {
+    const d = S.data.reviews;
+    const p = panel('data');
+    const f = $(p, '[data-ref="rvf"]');
+    const l = $(p, '[data-ref="cs-list"]');
+    if (!d || !f || !l) return;
+    f.innerHTML = csFilters(d);
+    l.innerHTML = csList(d);
+  }
+
+  function csItem(id) { return ((S.data.reviews || {}).cs || []).find(x => String(x.id) === String(id)); }
+
+  async function saveCs(id, status, memo, btn) {
+    const x = csItem(id);
+    if (!x) return;
+    if (btn) ui.busy(btn, true);
+    try {
+      const res = await api(`/api/insights/reviews/${encodeURIComponent(id)}/cs`, { status: status || x.cs, memo: memo == null ? x.memo : memo });
+      Object.assign(x, { cs: res.cs, csAuto: res.csAuto, memo: res.memo, csBy: res.csBy, csAt: res.csAt });
+      S.data.reviews.stats.csTodo = S.data.reviews.cs.filter(y => y.cs === 'todo').length;
+      if (status) drawCs(); else toast('메모를 저장했어요.');
+    } catch (e) {
+      if (btn) ui.busy(btn, false);
+      toast(e.message, 'error');
+    }
+  }
+
+  async function showKo(btn, id) {
+    const box = $(btn.closest('.ins-cs'), '[data-ko]');
+    if (!box) return;
+    if (box.dataset.loaded) { box.hidden = !box.hidden; btn.textContent = box.hidden ? '번역 보기' : '번역 숨기기'; return; }
+    ui.busy(btn, true);
+    try {
+      const res = await api(`/api/insights/reviews/${encodeURIComponent(id)}/translate`, {});
+      box.innerHTML = `${badge('AI 번역 · 참고용', 'purple')}<p>${esc(res.textKo)}</p>`;
+      box.dataset.loaded = '1';
+      box.hidden = false;
+      ui.busy(btn, false);
+      btn.textContent = '번역 숨기기';
+    } catch (e) {
+      ui.busy(btn, false);
+      toast(e.message, 'error');
+    }
+  }
+
   function sentBadge(s) { return s === '+' ? badge('칭찬', 'green') : s === '-' ? badge('불만', 'red') : badge('중립'); }
 
   function openReviews(brand, topic, s) {
     const items = ((S.data.reviews || {}).items || []).filter(r => r.brand === brand && r.topics.includes(topic) && r.sentiment === s);
     const body = `<div class="part-insights ins-modal"><p>${esc(brand)} · ${esc(topic)} · ${s === '+' ? '칭찬' : '불만'} ${items.length}개</p>
-      <ul class="ins-reviews">${items.map(r => `<li><div class="flex wrap">${badge(r.source === 'amazon' ? 'Amazon' : 'Weee!')}${r.rating != null ? `<span class="small muted">별점 ${esc(r.rating)}</span>` : ''}<span class="small muted">${esc(r.product)}</span></div>
+      <ul class="ins-reviews">${items.map(r => `<li><div class="flex wrap">${badge(r.sourceLabel || r.source)}${r.rating != null ? `<span class="small muted">별점 ${esc(r.rating)}</span>` : ''}<span class="small muted">${esc(r.product)}</span></div>
         ${r.summaryKo ? `<p><b>${esc(r.summaryKo)}</b> ${badge('AI 요약', 'purple')}</p>` : ''}
         <p class="ins-quote">${esc(r.title ? r.title + ' — ' : '')}${esc(r.text)}</p></li>`).join('') || '<li class="muted">없음</li>'}</ul>
       ${items.some(r => r.summaryKo) ? '' : '<p class="panel-note">한국어 요약은 OpenAI 키가 있을 때 \'리뷰 분류\'에서 만들어져요.</p>'}</div>`;

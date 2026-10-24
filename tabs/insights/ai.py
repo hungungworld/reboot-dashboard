@@ -102,6 +102,36 @@ def classify_reviews(rows):
     return {str(i["id"]): i for i in out.get("items") or []}
 
 
+TRANSLATE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["text_ko"],
+    "properties": {"text_ko": {"type": "string"}},
+}
+
+
+def is_korean(text):
+    """한글이 글자의 30% 이상이면 한국어 (번역하지 않음)."""
+    letters = [c for c in str(text or "") if c.isalpha()]
+    return bool(letters) and sum(1 for c in letters if "가" <= c <= "힣") / len(letters) >= 0.3
+
+
+def translate_review(text):
+    """리뷰 원문 → 한국어 번역. 같은 원문은 저장된 번역을 씀 (비용 없음). 한국어면 그대로."""
+    text = str(text or "")[:4000]
+    if is_korean(text):
+        return text
+    payload = {"text": text}
+    hit, _ = cache_get("review_ko", payload)
+    if hit and hit.get("text_ko"):
+        return hit["text_ko"]
+    system = ("구매자 리뷰를 자연스러운 한국어로 번역해. 뜻을 더하거나 빼지 말고 말투(구어 · 이모지)는 살려. 번역문만 text_ko에 넣어. " + SAFE)
+    out = openai_json(system, payload, schema=TRANSLATE_SCHEMA, schema_name="review_ko", part=PART, action="리뷰 번역",
+                      max_tokens=2000)
+    text_ko = str(out.get("text_ko") or "")[:6000]
+    if text_ko:
+        cache_put("review_ko", payload, {"text_ko": text_ko})
+    return text_ko
+
+
 COMMENT_TOPICS = [k for k, _l, _w in QUESTION_TOPICS] + ["none"]
 COMMENT_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],

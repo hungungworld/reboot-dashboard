@@ -21,8 +21,12 @@ IMG_ALT_RE = re.compile(r"!\[([^\[\]]{2,300})\]\([^()]*\)\]\($")
 
 
 def scrape(key, url):
-    status, data = http.post_json("Firecrawl", FIRECRAWL, {"url": url, "formats": ["markdown"], "onlyMainContent": True},
-                                  headers={"Authorization": f"Bearer {key}"})
+    return str(firecrawl(key, {"url": url, "formats": ["markdown"], "onlyMainContent": True}).get("markdown") or "")
+
+
+def firecrawl(key, payload):
+    """Firecrawl v1/scrape 한 번 → data(dict: markdown · rawHtml · json · metadata). 채널 리뷰 수집도 같이 씀."""
+    status, data = http.post_json("Firecrawl", FIRECRAWL, payload, headers={"Authorization": f"Bearer {key}"})
     if status in (401, 403):
         raise CollectError("Firecrawl이 키를 거절했어요. 설정 › 연결에서 키를 확인하세요.")
     if status == 402:
@@ -31,7 +35,7 @@ def scrape(key, url):
         raise CollectError("Firecrawl 요청이 많아요. 잠시 뒤 다시 시도하세요.")
     if status != 200 or not isinstance(data, dict) or data.get("success") is False:
         raise CollectError(f"Firecrawl이 페이지를 읽지 못했어요 ({status}).")
-    return str(((data.get("data") or {}).get("markdown")) or "")
+    return data.get("data") if isinstance(data.get("data"), dict) else {}
 
 
 def _slug_title(slug):

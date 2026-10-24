@@ -730,3 +730,151 @@ def test_competitor_edit_archive_and_website(app, auth_client, fixed_today):
     assert auth_client.patch(f"/api/insights/competitors/{cid}", json={"status": "gone"}).status_code == 400
     assert auth_client.patch("/api/insights/competitors/9999", json={"status": "active"}).status_code == 404
     assert auth_client.post("/api/insights/competitors/9999/research", json={}).status_code == 404
+
+
+# ───────── 채널 리뷰 (Olive Young · Yami) · CS ─────────
+
+def _oy_unit(stars, text, date):
+    full = '<div class="icon-star coral-50 left filled"></div><div class="icon-star coral-50 right filled"></div>' * stars
+    gray = '<div class="icon-star gray-50 left filled"></div>'  # 항목별 별점 (전체 별점에 안 셈)
+    return (f'<div class="product-review-unit"><div class="product-review-unit-main notranslate"><div class="review-star-rating">{full}</div>'
+            f'<button>Report</button><div class="review-unit-option"><span>Aldicom 4 Sticks</span></div><ul><li>{gray}</li></ul>'
+            f'<div class="review-unit-cont-comment -flip notranslate">{text}</div></div>'
+            f'<span class="review-write-info-date notranslate">{date}</span><span>by. ab*****</span></div>')
+
+
+def _oy_page(units, total):
+    return (f"<html><h3>Global Reviews ({total})</h3><h3>Korean Reviews (800)</h3><div>4.6</div><div><b>{total}</b> reviews</div>"
+            + "".join(units) + '<button class="review-list-more-btn">More (1/2)</button></html>')
+
+
+def test_product_line_ignores_pack_size():
+    from tabs.insights.channel_reviews import product_line
+    assert product_line("Aldicom Hangover Helper 15g 4 Sticks") == "알디콤 A"
+    assert product_line("Aldicom A Hangover Helper 15ml 1 Stick") == "알디콤 A"
+    assert product_line("Aldicom V Hangover Helper 20ml 4 Sticks (4-day supply)") == "알디콤 V"
+    assert product_line("Aldicom Plus Hangover Helper 21ml*4 Sticks") == "알디콤 Plus"
+    assert product_line("ALDICOM Plus (4 boxs) 5 pack*4 boxes") == "알디콤 Plus"
+    assert product_line("Aldicom Boost Daily Energy Gel Green Zest 30g * 8 Sticks") == "부스트 그린"
+    assert product_line("Aldicom Boost Daily Energy Gel Pink Citrus 30g") == "부스트 핑크"
+
+
+def test_oliveyoung_parser_reads_stars_text_date_without_names():
+    from tabs.insights.channel_reviews import parse_oliveyoung
+    p = parse_oliveyoung(_oy_page([_oy_unit(5, "Works great!<br>Buying again &amp; again", "2026/10/14"),
+                                   _oy_unit(2, "The taste is too strong", "2026/09/01")], 12))
+    assert p["total"] == 12 and p["avg"] == 4.6
+    assert [r["rating"] for r in p["reviews"]] == [5.0, 2.0]
+    assert p["reviews"][0]["text"] == "Works great! Buying again & again" and p["reviews"][1]["date"] == "2026/09/01"
+    assert "ab***" not in json.dumps(p)
+
+
+def test_oliveyoung_without_english_reviews_reads_nothing(monkeypatch):
+    """영어 리뷰가 0개면 사이트가 한국 리뷰를 보여 줌 → 읽지 않음."""
+    from tabs.insights import channel_reviews
+    korean_shown = _oy_page([_oy_unit(5, "Translated Korean review", "2026/10/01")], 0)
+    monkeypatch.setattr(channel_reviews, "firecrawl", lambda key, payload: {"rawHtml": korean_shown, "metadata": {"title": "Boost | OLIVE YOUNG"}})
+    res = channel_reviews._oliveyoung("k", "https://global.oliveyoung.com/product/detail?prdtNo=GA1")
+    assert res["reviews"] == [] and res["total"] == 0 and res["avg"] is None and res["calls"] == 1
+
+
+def test_channel_reviews_amazon_marks_shelf_review_as_own(app, monkeypatch):
+    """진열대(Amazon) 수집이 같은 리뷰를 경쟁사로 먼저 넣었어도 채널 리뷰가 자사로 바꿈 · SerpApi 키가 없으면 Amazon은 건너뜀."""
+    from server.extensions import db
+    from tabs.insights import channel_reviews, store
+    from tabs.insights.models import Review
+    monkeypatch.setattr(channel_reviews, "load_sources", lambda: [{"channel": "amazon", "asin": "B0DTYS4BP4"}])
+    row = {"source": "amazon", "product_key": "amazon:B0DTYS4BP4", "product_title": "ALDICOM A", "brand": "", "own": False,
+           "rating": 5.0, "title": "Works", "text": "No hangover", "date_text": "June 9, 2025"}
+    monkeypatch.setattr(channel_reviews.amazon, "product", lambda key, asin: {
+        "title": "ALDICOM A", "rating": 3.9, "reviews": 28, "review_rows": [dict(row, date_text=row["date_text"])]})
+    with app.app_context():
+        store.save_reviews([row], "2026-W43")
+        with pytest.raises(http.CollectError):  # 키 없음 → Amazon만 있으면 읽은 게 없음
+            channel_reviews.collect("fc", "2026-W43", None)
+        res = channel_reviews.collect("fc", "2026-W43", "serp")
+        assert res["reviews"] == 0 and res["serpapi"] == 1
+        assert [r.own for r in Review.query.all()] == [True]
+        db.session.remove()
+
+
+def test_channel_reviews_collect_cs_and_translate(app, auth_client, monkeypatch, fixed_today, sync_jobs):
+    from tabs.insights import ai as insights_ai
+    from tabs.insights import channel_reviews
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "fc-test-key-zzzz")
+    monkeypatch.setenv("SERPAPI_KEY", "serp-test-key-zzzz")
+    monkeypatch.setattr(channel_reviews, "load_sources", lambda: [
+        {"channel": "oliveyoung", "url": "https://global.oliveyoung.com/product/detail?prdtNo=GA240222422"},
+        {"channel": "amazon", "asin": "B0DTYS4BP4"},
+        {"channel": "yami", "url": "https://www.yami.com/us/en/p/aldicom-a/1174080301"}])
+    first = [_oy_unit(5, f"Great hangover helper {i}", "2026/10/1%d" % i) for i in range(10)]
+    more = first + [_oy_unit(1, "Box arrived crushed and one stick was leaking", "2026/08/01"),
+                    _oy_unit(4, "Nice taste", "2026/07/01")]
+    posts = []
+
+    def fake_post(url, json=None, headers=None, timeout=90):
+        posts.append(dict(json or {}))
+        meta = {"title": "Aldicom Hangover Helper 15g 4 Sticks | OLIVE YOUNG Global"}
+        if "oliveyoung" in json["url"]:
+            raw = _oy_page(more if json.get("actions") else first, 12)
+        else:
+            raw, meta = '<section id="pdp-comment-section" class="commentSection_containerNoComment__x">Have your say</section>', {"title": "ALDICOM | Yami"}
+        return FakeRes(200, {"success": True, "data": {"rawHtml": raw, "metadata": meta}})
+
+    def fake_get(url, params=None, headers=None, timeout=25):
+        assert params["engine"] == "amazon_product" and params["asin"] == "B0DTYS4BP4"
+        return FakeRes(200, {"product_results": {"title": "ALDICOM A | Before Drinking, Travel Size Liquid 5-Pack", "rating": 3.9,
+                                                 "reviews": 28},
+                             "reviews_information": {"authors_reviews": [
+                                 {"title": "Disgusting Taste", "text": "Such a disgusting taste, I almost vomited.", "rating": 1,
+                                  "date": "August 6, 2025"},
+                                 {"title": "Made Me a Tank", "text": "No hangover in the morning!!", "rating": 5, "date": "October 6, 2026"}]}})
+
+    monkeypatch.setattr(http, "post", fake_post)
+    monkeypatch.setattr(http, "get", fake_get)
+    plan = {i["id"]: i for i in auth_client.get("/api/insights/update/plan").get_json()["items"]}
+    assert plan["channel_reviews"]["ready"] and plan["channel_reviews"]["cost"] == {"firecrawl": 3, "serpapi": 1}
+    assert auth_client.post("/api/insights/update", json={"items": ["channel_reviews"]}).status_code == 202
+    run = auth_client.get("/api/insights/update/status").get_json()["run"]
+    assert run["status"] == "done", run["results"]
+    clicks = [a for a in posts[1]["actions"] if a["type"] == "executeJavascript"]
+    assert len(clicks) == 1 and ".review-list-more-btn" in clicks[0]["script"]  # 12개 → 더 보기 1번 (한국 탭은 안 누름)
+
+    d = auth_client.get("/api/insights/data/reviews").get_json()
+    assert len(d["cs"]) == 14 and d["stats"]["oliveyoung"] == 12 and d["stats"]["amazon"] == 2 and d["stats"]["yami"] == 0
+    assert {x["line"] for x in d["cs"]} == {"알디콤 A"} and {x["sourceLabel"] for x in d["cs"]} == {"Olive Young", "Amazon"}
+    bad = next(x for x in d["cs"] if "crushed" in x["text"])
+    assert bad["cs"] == "todo" and bad["csAuto"] and d["stats"]["csTodo"] == 2  # 상자 파손 + 아마존 1점
+    amz = next(x for x in d["cs"] if x["source"] == "amazon" and x["rating"] == 1)
+    assert amz["title"] == "Disgusting Taste" and amz["cs"] == "todo"
+    ch = {c["channel"]: c for c in d["channels"]}
+    assert ch["oliveyoung"]["total"] == 12 and ch["oliveyoung"]["got"] == 12 and ch["yami"]["total"] == 0
+    assert ch["amazon"]["total"] == 28 and ch["amazon"]["avg"] == 3.9 and ch["amazon"]["got"] == 2
+
+    # 다시 모아도 같은 리뷰는 한 번만
+    auth_client.post("/api/insights/update", json={"items": ["channel_reviews"]})
+    assert len(auth_client.get("/api/insights/data/reviews").get_json()["cs"]) == 14
+
+    # CS 상태 · 메모
+    res = auth_client.post(f"/api/insights/reviews/{bad['id']}/cs", json={"status": "done", "memo": "교환 안내함"})
+    assert res.status_code == 200 and res.get_json()["cs"] == "done" and res.get_json()["csAuto"] is False
+    assert auth_client.post(f"/api/insights/reviews/{bad['id']}/cs", json={"status": "nope"}).status_code == 400
+    again = next(x for x in auth_client.get("/api/insights/data/reviews").get_json()["cs"] if x["id"] == bad["id"])
+    assert again["cs"] == "done" and again["memo"] == "교환 안내함" and again["csBy"]
+
+    # 번역: 키 없으면 안내, 있으면 한 번만 부르고 저장된 번역을 씀
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert auth_client.post(f"/api/insights/reviews/{bad['id']}/translate", json={}).status_code == 400
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
+    seen = []
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        seen.append(schema_name)
+        return {"text_ko": "상자가 찌그러져 왔고 한 포가 새고 있었어요"}
+
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    for _ in range(2):
+        res = auth_client.post(f"/api/insights/reviews/{bad['id']}/translate", json={})
+        assert res.status_code == 200 and res.get_json()["textKo"].startswith("상자가")
+    assert seen == ["review_ko"]
+    assert auth_client.post("/api/insights/reviews/999999/translate", json={}).status_code == 404
