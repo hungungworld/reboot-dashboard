@@ -14,7 +14,7 @@
 from datetime import date, timedelta
 
 GRADE_ORDER = {"긴급": 0, "기회": 1, "참고": 2}
-SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!"}
+SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!", "yami": "Yami"}
 RULE_LABEL = {
     "own_oos_season": "자사 품절 + 45일 안에 시즌 → 긴급",
     "price_cut": "경쟁사 가격 10% 이상 인하 → 긴급",
