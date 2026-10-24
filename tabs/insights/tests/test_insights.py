@@ -477,7 +477,10 @@ def test_second_week_changes_overrides_and_edits(app, auth_client, fixed_today):
     by = {a["rule"]: a for a in week["actions"]}
     assert by["price_cut"]["grade"] == "긴급" and "$30.00 → $24.00" in by["price_cut"]["fact"]
     assert by["new_entry"]["grade"] == "참고" and week["shelf"]["compare"] is True
-    assert week["shelf"]["priceChanges"] == 1 and week["shelf"]["newEntries"] == 2
+    cc = week["shelf"]["compChanges"]
+    assert cc["price"] == 1 and cc["new"] == 2 and cc["threat"] == 3 and cc["demo"] is False
+    comp = auth_client.get("/api/insights/data/competitors").get_json()
+    assert cc["total"] == len(comp["changes"])  # 주간 요약과 경쟁사 탭이 같은 숫자
     shelf = auth_client.get("/api/insights/data/shelf").get_json()
     mystery = next(x for x in shelf["items"] if x["key"] == "amazon:B0NOSERVE1")
     assert mystery["servingsSource"] == "default" and mystery["perServing"] == 9.0  # 못 읽으면 1회분으로 (확인 필요)
