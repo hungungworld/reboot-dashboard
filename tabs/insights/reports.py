@@ -101,7 +101,7 @@ def weekly_docx(t=None):
         r.bold, r.font.color.rgb = True, GRADE_COLOR[a["grade"]]
         p.add_run(a["fact"]).bold = True
         p.paragraph_format.space_after = Pt(1)
-        _p(d, f"왜 중요한가: {a['why']}")
+        _p(d, f"영향: {a['why']}")
         _p(d, f"할 일: {a['todo']}" + ("  (AI 문장 · 참고용)" if a.get("ai") else ""))
     s = v["shelf"]
     d.add_heading("진열대 요약", level=2)
@@ -242,7 +242,7 @@ def data_xlsx(t=None):
     xlsx.add_sheet(wb, "경쟁사 분석", [label for _, label in EXPORT_HEAD],
                    [[r[k] for k, _ in EXPORT_HEAD] for r in competitor_export()], widths={4: 40, 11: 40, 12: 30, 13: 40, 14: 40})
     wk = weekly_view(t)
-    xlsx.add_sheet(wb, "이번 주 액션", ["주차", "등급", "규칙", "사실", "왜 중요한가", "할 일", "AI 문장", "규칙에 걸린 신호"],
+    xlsx.add_sheet(wb, "이번 주 액션", ["주차", "등급", "규칙", "사실", "영향", "할 일", "AI 문장", "규칙에 걸린 신호"],
                    [[wk["week"], a["grade"], a["ruleLabel"], a["fact"], a["why"], a["todo"], a["ai"],
                      json.dumps(a["facts"], ensure_ascii=False)[:2000]] for a in wk["actions"]], widths={4: 50, 5: 50, 6: 50, 8: 60})
     logs = WorkLog.query.filter_by(part="insights").order_by(WorkLog.id.desc()).limit(500).all()
