@@ -24,7 +24,7 @@
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
   const BUCKETS = [['low', '$3 미만'], ['mid', '$3~6'], ['high', '$6 이상']];
-  const ITEM_LABEL = { weee: 'Weee! 진열대', amazon: 'Amazon 진열대 · 리뷰', channel_reviews: '채널 리뷰 (Olive Young · Amazon · Yami)', trends: '검색 트렌드', reviews: '리뷰 분류', actions: '이번 주 액션',
+  const ITEM_LABEL = { weee: 'Weee! 진열대', amazon: 'Amazon 진열대 · 리뷰', yami: 'Yami 진열대', channel_reviews: '채널 리뷰 (Olive Young · Amazon · Yami)', trends: '검색 트렌드', reviews: '리뷰 분류', actions: '이번 주 액션',
     youtube: '유튜브 수집', voc: 'VOC 분류', competitors: '경쟁사 분석', monthly: '요약 · 전략' };
   const KEY_LABEL = { SERPAPI_KEY: 'SerpApi', FIRECRAWL_API_KEY: 'Firecrawl', YOUTUBE_API_KEY: 'YouTube', OPENAI_API_KEY: 'OpenAI' };
   const USE_LABEL = { serpapi: 'SerpApi', firecrawl: 'Firecrawl', youtube: 'YouTube', openai: 'OpenAI' };
@@ -90,6 +90,7 @@
     }
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
+    root.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('tr[data-act]')) e.target.click(); });
     root.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.fold) S.open[d.dataset.fold] = d.open; }, true);
     global.addEventListener('hashchange', route);
     route();
@@ -162,8 +163,8 @@
       case 'comp-research-all': compAction(b, 'all'); break;
       case 'comp-research': compAction(b, 'one', d.id); break;
       case 'comp-status': compAction(b, 'status', d.id, d.status); break;
-      case 'comp-detail': openCompDetail(findComp(d.id)); break;
-      case 'comp-point': jumpComp(d.brand); break;
+      case 'comp-detail': if (!e.target.closest('a')) openCompDetail(findComp(d.id)); break;
+      case 'comp-chan': S.compChannel = d.ch; drawSub('competitors'); break;
       case 'rv': openReviews(d.brand, d.topic, d.s); break;
       case 'rvf': S.rvf[d.k] = S.rvf[d.k] === d.v ? '' : d.v; drawCs(); break;
       case 'cs-set': saveCs(d.id, d.status, null, b); break;
@@ -268,7 +269,7 @@
       <p class="panel-note mt-8">판단(등급)은 규칙이 해요. AI는 키가 있을 때 문장만 다듬어요 (데이터 업데이트 › 이번 주 액션).${w.aiReady ? '' : ' 지금은 OpenAI 키가 없어 규칙 문장 그대로예요.'}</p>
     </details>` : '';
     const stat = (label, value, tone) => `<div class="ins-stat${tone ? ' ' + tone : ''}"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
-    const weeks = Object.keys(s.weeks || {}).map(src => `${src === 'amazon' ? 'Amazon' : 'Weee!'} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
+    const weeks = Object.keys(s.weeks || {}).map(src => `${({ amazon: 'Amazon', weee: 'Weee!', yami: 'Yami' })[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
     const own = s.ownWeee;
     const shelfCard = `<section class="card">
       <div class="card-head"><h2>진열대 변화</h2><a class="link" href="#data/shelf">진열대 보기 ${icon('arrow')}</a></div>
@@ -649,119 +650,128 @@
     ui.modal({ title: 'Weee! 원문 (앞부분)', body, wide: true });
   }
 
-  /* 경쟁사 — 포지셔닝 매트릭스 · 블루오션 후보 · 분석 표 (competitors.py) */
-  const CHECK = '{확인 필요}';
-  const TIMING = { pre: 'Pre', post: 'Post', both: '둘 다' };
-  function sigChips(c) {
-    if (!c.signals) return '';
-    const sig = (label, v) => `<span class="ins-sig${v ? ' on' : ''}">${v ? icon('check') : ''}${esc(label)}${typeof v === 'number' && v ? ` ${v}` : ''}</span>`;
-    return `<div class="ins-sigs">${sig('같은 판매처', c.signals.sameSeller)}${sig('고객 언급', c.signals.mention)}${sig('가격대 비슷', c.signals.similarPrice)}</div>`;
+  /* 경쟁사 — 이번 주 변화 · 비교 표(알디콤 맨 위) · 브랜드 카드 (competitors.py) */
+  const NOT_FOUND = '공개 자료에서 찾지 못함';
+  const CHANGE_TONE = { price: 'red', new: 'blue', oos: 'orange', back: 'green', message: 'purple' };
+  function fieldText(c, key) {
+    const v = (c.analysis || {})[key] || {};
+    return Array.isArray(v.values) && v.values.length ? v.values.join(', ') : (v.text || '');
   }
-  function fieldHtml(c, key) {
+  function fieldHtml(c, key, withSrc) {
     if (!c.analyzed) return '<span class="muted small">분석 전</span>';
-    const v = c.analysis[key] || {};
-    const text = Array.isArray(v.values) ? (v.values.join(', ') || CHECK) : (v.text || CHECK);
-    const src = (v.sources || []).length ? ` <span class="ins-src">${esc(v.sources.join(' '))}</span>` : '';
-    return text === CHECK ? `<span class="ins-check">${esc(CHECK)}</span>` : `${esc(text)}${src}`;
+    const text = fieldText(c, key);
+    if (!text || text === NOT_FOUND) return `<span class="ins-none">${esc(NOT_FOUND)}</span>`;
+    const src = ((c.analysis[key] || {}).sources || []);
+    return esc(text) + (withSrc && src.length ? ` <span class="ins-src">${esc(src.join(' '))}</span>` : '');
+  }
+  function chanChips(c) {
+    return (c.channels || []).map(ch => {
+      const label = `${ch.label}${ch.minPrice != null ? ' ' + money(ch.minPrice) : ''}${ch.sold ? ' · ' + ch.sold : ''}${ch.inStock ? '' : ' · 품절'}`;
+      const u = safeUrl(ch.link);
+      return u ? `<a class="ins-chan ${esc(ch.source)}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`
+        : `<span class="ins-chan ${esc(ch.source)}">${esc(label)}</span>`;
+    }).join('') || '<span class="muted small">이번 진열대에 없음</span>';
+  }
+  function feedbackHtml(fb) {
+    if (!fb || !fb.reviews) return '<span class="muted small">리뷰 없음</span>';
+    const p = fb.praise ? `<span class="ins-fb pos">+ ${esc(fb.praise.topic)} ${fb.praise.count}</span>` : '';
+    const n = fb.complaint ? `<span class="ins-fb neg">− ${esc(fb.complaint.topic)} ${fb.complaint.count}</span>` : '';
+    return `${p}${n}<div class="small muted">리뷰 ${fmt.num(fb.reviews)}개</div>`;
   }
   function findComp(id) {
     const d = S.data.competitors || {};
-    return [].concat(d.table || [], d.substitutes || [], d.archived || []).find(c => String(c.id) === String(id));
+    if (id === 'own') return d.own;
+    const all = [].concat(d.table || [], d.substitutes || [], d.archived || []);
+    if (String(id).startsWith('b:')) return all.find(c => c.id == null && c.brand === String(id).slice(2));
+    return all.find(c => String(c.id) === String(id));
   }
 
-  function matrixSvg(m) {
-    const W = 640, H = 400, P = 34;
-    const iw = W - P * 2, ih = H - P * 2;
-    const cell = k => m.cells.find(c => c.key === k) || {};
-    const blue = m.blueOcean ? m.blueOcean.key : '';
-    const quad = (k, x, y) => {
-      const c = cell(k);
-      const delta = c.delta == null ? '' : ` (지난달 대비 ${c.delta >= 0 ? '+' : ''}${c.delta})`;
-      return `<g class="ins-quad${k === blue ? ' blue' : ''}"><rect x="${x}" y="${y}" width="${iw / 2}" height="${ih / 2}" rx="6"></rect>
-        <text x="${x + 10}" y="${y + 18}" class="ins-quad-t">${esc(c.label || k)}</text>
-        <text x="${x + 10}" y="${y + 33}" class="ins-quad-n">제품 ${c.products || 0} · 리뷰 ${fmt.num(c.reviews || 0)}${esc(delta)}</text></g>`;
-    };
-    const dots = m.points.slice().sort((a, b) => b.reviews - a.reviews).map(p => {
-      const r = Math.min(18, 4 + Math.sqrt(p.reviews || 0) / 12);
-      const cx = P + p.x * iw, cy = P + (1 - p.y) * ih;
-      const cls = ['ins-dot', p.own ? 'own' : '', p.watched ? 'watched' : '', p.wellness ? 'well' : ''].filter(Boolean).join(' ');
-      const tip = `${p.brand} · ${p.title} · ${TIMING[p.timing]} × ${p.form === 'liquid' ? 'Liquid' : 'Powder/Gummy'} · 리뷰 ${fmt.num(p.reviews)}${p.wellness ? ' · 웰니스' : ''}${p.by === 'ai' ? ' · AI 분류' : ''}`;
-      return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" data-act="comp-point" data-brand="${esc(p.brand)}"><title>${esc(tip)}</title></circle>`;
-    }).join('');
-    return `<svg class="ins-matrix-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="포지셔닝 매트릭스: 가로 섭취 타이밍, 세로 제형">
-      ${quad('pre-liquid', P, P)}${quad('post-liquid', P + iw / 2, P)}${quad('pre-solid', P, P + ih / 2)}${quad('post-solid', P + iw / 2, P + ih / 2)}
-      <text x="${P}" y="${H - 10}" class="ins-axis">← Pre (음주 전)</text>
-      <text x="${W - P}" y="${H - 10}" class="ins-axis" text-anchor="end">Post (음주 후 · 회복) →</text>
-      <text x="${P}" y="20" class="ins-axis">▲ Liquid (샷 · 음료)</text>
-      <text x="${W - P}" y="20" class="ins-axis" text-anchor="end">▼ Powder/Gummy (분말 · 구미 · 젤리)</text>
-      ${dots}</svg>`;
+  function compRow(c) {
+    const flags = c.own ? badge('자사', 'green') : [c.isNew ? badge('새', 'blue') : '', c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '',
+      c.analyzed ? badge('AI 분석', 'purple') : ''].join(' ');
+    const forms = (c.forms || []).map(f => esc(f.label.split(' (')[0])).join(', ') || '—';
+    return `<tr class="${c.own ? 'ins-own-row' : ''}" data-act="comp-detail" data-id="${c.own ? 'own' : esc(c.id == null ? 'b:' + c.brand : c.id)}" tabindex="0">
+      <td><strong>${esc(c.brand)}</strong><div class="flex wrap mt-4">${flags}</div><div class="small muted">${esc(c.tierLabel)}</div></td>
+      <td><div class="ins-chans">${chanChips(c)}</div></td>
+      <td class="num nowrap">${c.perServing != null ? esc(money(c.perServing)) : '—'}</td>
+      <td class="small ins-forms">${forms}</td>
+      <td class="ins-field">${c.own ? '<span class="muted small">—</span>' : fieldHtml(c, 'message')}</td>
+      <td class="ins-field">${c.own ? '<span class="muted small">—</span>' : fieldHtml(c, 'ingredients')}</td>
+      <td>${feedbackHtml(c.feedback)}</td>
+      <td class="num">${c.youtube == null ? '—' : fmt.num(c.youtube)}</td></tr>`;
   }
 
-  function compRow(c, fields) {
-    const flags = [c.isNew ? badge('새', 'blue') : '', c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '',
-      c.deep ? badge(`상위 ${S.data.competitors.deepTop}`, 'lime') : '', c.analyzed ? badge('AI 분석', 'purple') : ''].join(' ');
-    const acts = c.id == null ? '<span class="small muted">새 경쟁사 찾기로 등록</span>' : `<div class="flex wrap">
-      <button type="button" class="btn small" data-act="comp-research" data-id="${c.id}">${icon('refresh')}다시 조사</button>
-      <button type="button" class="btn small ghost" data-act="comp-detail" data-id="${c.id}">자세히</button>
-      <button type="button" class="btn small ghost" data-act="watch" data-brand="${esc(c.brand)}" data-on="${c.watched ? '0' : '1'}">${c.watched ? '주시 해제' : '★ 주시'}</button>
-      <button type="button" class="btn small ghost" data-act="comp-status" data-id="${c.id}" data-status="${c.status === 'archived' ? 'active' : 'archived'}">${c.status === 'archived' ? '복원' : '보관'}</button></div>`;
-    return `<tr data-comp-row="${esc(c.brand.toLowerCase())}">
-      <td><strong>${esc(c.brand)}</strong><div class="flex wrap mt-4">${flags}</div>
-        <div class="small muted">${esc(c.tierLabel)} · 리뷰 ${fmt.num(c.reviews)}${c.onShelf ? '' : ' · 이번 진열대에 없음'}</div></td>
-      ${fields.map(f => `<td class="ins-field">${fieldHtml(c, f.key)}</td>`).join('')}
-      <td class="small nowrap">${c.researchedAt ? esc(fmt.date(c.researchedAt)) : '—'}</td>
-      <td>${acts}</td></tr>`;
+  function changesHtml(list) {
+    if (list == null) return '<p class="small muted">지난주 진열대와 비교할 수 있을 때부터 보여요 (2주차부터).</p>';
+    if (!list.length) return '<p class="small muted">이번 주 경쟁사 변화가 없어요.</p>';
+    return `<ul class="ins-changes">${list.map(x => `<li>${badge(x.label, CHANGE_TONE[x.kind])}<b>${esc(x.brand)}</b><span>${esc(x.text)}</span>${extLink(x.link, '보기')}</li>`).join('')}</ul>`;
   }
 
   function competitorsHtml(d) {
-    const m = d.matrix;
-    const fields = d.fields;
-    const head = `<tr><th>브랜드</th>${fields.map(f => `<th>${esc(f.label)}</th>`).join('')}<th>조사일</th><th></th></tr>`;
-    const table = rows => `<div class="table-wrap"><table class="data-table ins-table ins-comp-table"><thead>${head}</thead><tbody>${rows.map(c => compRow(c, fields)).join('')}</tbody></table></div>`;
-    const blue = m.blueOcean;
-    const tools = `<div class="flex wrap mb-16">
-      <button type="button" class="btn" data-act="comp-discover">${icon('search')}새 경쟁사 찾기</button>
-      <button type="button" class="btn dark" data-act="comp-research-all"${d.aiReady ? '' : ' disabled'}>${icon('refresh')}전체 다시 조사 (상위 ${d.deepTop})</button>
-      <a class="btn ghost" href="/api/insights/competitors.csv" download>${icon('download')}CSV</a>
-      <a class="btn ghost" href="/api/insights/competitors.json" download>${icon('download')}JSON</a></div>`;
-    const notes = [!d.aiReady ? '<div class="note warn mt-16">OpenAI 키가 없어 브랜드 분석과 애매한 상품의 AI 분류는 할 수 없어요. 매트릭스는 상품명 규칙으로만 그려요 (설정 › 연결).</div>' : '',
-      d.aiReady && !d.firecrawlReady ? '<div class="note mt-16">Firecrawl 키가 없어 브랜드 홈페이지는 읽지 않고, Amazon · Weee! 자료로만 분석해요.</div>' : '',
-      d.ownFound ? '' : '<div class="note warn mt-16">자사 상품이 진열대에 없어 \'같은 판매처 · 가격대 비슷\' 신호와 매트릭스의 알디콤 점이 빠져요. 설정 › 수집 설정에서 추적 ASIN을 넣거나 진열대 표에서 자사 표시를 하세요.</div>'].join('');
-    const matrix = `<section class="card"><div class="card-head"><h2>포지셔닝 매트릭스</h2>${badge(`상품 ${m.points.length}개`)}</div>
-      ${m.points.length ? matrixSvg(m) : ui.empty('제형과 섭취 타이밍을 알 수 있는 상품이 아직 없어요.', 'grid')}
-      <div class="ins-legend small"><span><i class="ins-lg own"></i>알디콤</span><span><i class="ins-lg watched"></i>주시 중</span><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg well"></i>점선 테두리 = 기능성 웰니스</span><span>점 크기 = 리뷰 수</span></div>
-      <p class="panel-note">점 하나 = 상품 하나. 제형은 상품명 규칙, 섭취 타이밍은 판매 문구 규칙으로 정하고 애매한 것만 AI가 분류해요 (마우스를 올리면 보여요). 점을 누르면 아래 표에서 그 브랜드로 가요.${m.unknown ? ` 제형이나 타이밍을 알 수 없는 상품 ${m.unknown}개는 찍지 않았어요.` : ''} 대체재 브랜드는 찍지 않아요.</p></section>`;
-    const blueCard = `<section class="card ins-blue"><div class="card-head"><h2>블루오션 후보</h2>${badge('규칙 · 참고용', 'blue')}</div>
-      ${blue ? `<p><b>${esc(blue.label)}</b></p><p class="small">${esc(blue.reason)}</p>${blue.own ? '<p class="small muted">알디콤 상품도 이 칸에 있어요.</p>' : ''}` : '<p class="small muted">매트릭스에 찍힌 경쟁 상품이 없어 판단하지 못했어요.</p>'}
-      <p class="panel-note">경쟁 상품이 적다는 뜻이지 수요가 있다는 뜻은 아니에요. 검색 수요(Google Trends)를 더하는 건 2단계예요.${m.prevMonth ? ` 칸별 변화는 ${esc(m.prevMonth)} 대비예요.` : ' 칸별 변화는 다음 달부터 보여요.'}</p></section>`;
-    const list = `<section class="card mt-24"><div class="card-head"><h2>경쟁사 분석</h2>${badge(`${d.table.length}개`)}</div>${tools}
-      ${d.table.length ? table(d.table) : `<div class="mt-16">${ui.empty('아직 등록된 경쟁사가 없어요. 진열대를 모은 뒤 새 경쟁사 찾기를 누르세요.', 'users')}</div>`}
-      <p class="panel-note mt-8">7개 항목은 AI가 모은 근거(P = 진열대 상품 · S = 리뷰 요약 · R = 구매자 리뷰 · W = 브랜드 홈페이지) 안에서만 채우고, 근거가 없으면 ${esc(CHECK)}로 남겨요. 사람이 확정하지 않은 AI 분석이라 참고용이에요. 리뷰 상위 ${d.deepTop}개 브랜드만 분석하고, 데이터 업데이트 때 25일이 지난 곳을 다시 조사해요.</p></section>`;
-    const subs = d.substitutes.length ? fold('comp-subs', `대체재 ${d.substitutes.length}개 (전해질 음료 · 간 영양제 등 · 매트릭스 제외)`, table(d.substitutes)) : '';
+    const ch = S.compChannel || 'all';
+    const inChan = c => ch === 'all' || (c.channels || []).some(x => x.source === ch);
+    const head = '<tr><th>브랜드</th><th>판매 채널 (최저가)</th><th class="num">1회분</th><th>제형</th><th>핵심 메시지</th><th>주력 성분</th><th>고객 칭찬 / 불만</th><th class="num">유튜브 언급</th></tr>';
+    const table = rows => `<div class="table-wrap"><table class="data-table ins-table ins-comp-table"><thead>${head}</thead><tbody>${rows.map(compRow).join('')}</tbody></table></div>`;
+    const rows = d.table.filter(inChan);
+    const own = d.own && inChan(d.own) ? [d.own] : [];
+    const chips = [['all', '전체']].concat(Object.entries(d.channelLabels)).map(([k, l]) =>
+      `<button type="button" class="chip${ch === k ? ' selected' : ''}" aria-pressed="${ch === k}" data-act="comp-chan" data-ch="${esc(k)}">${esc(l)}</button>`).join('');
+    const tools = `<div class="flex wrap">
+      <button type="button" class="btn small" data-act="comp-discover">${icon('search')}새 경쟁사 찾기</button>
+      <button type="button" class="btn small dark" data-act="comp-research-all"${d.aiReady ? '' : ' disabled'}>${icon('refresh')}전체 다시 조사 (상위 ${d.deepTop})</button>
+      <a class="btn small ghost" href="/api/insights/competitors.csv" download>${icon('download')}CSV</a>
+      <a class="btn small ghost" href="/api/insights/competitors.json" download>${icon('download')}JSON</a></div>`;
+    const notes = [!d.aiReady ? '<div class="note warn mt-16">OpenAI 키가 없어 핵심 메시지 · 성분 분석은 할 수 없어요. 판매 채널 · 단가 · 칭찬/불만은 그대로 보여요 (설정 › 연결).</div>' : '',
+      d.aiReady && !d.firecrawlReady ? '<div class="note mt-16">Firecrawl 키가 없어 홈페이지 · 뉴스는 읽지 않고, 진열대 자료와 AI 웹 검색으로 채워요.</div>' : ''].join('');
+    const changes = `<section class="card mt-24"><div class="card-head"><h2>이번 주 경쟁사 변화</h2>${d.changes && d.changes.length ? badge(`${d.changes.length}건`, 'blue') : ''}</div>${changesHtml(d.changes)}</section>`;
+    const list = `<section class="card mt-24"><div class="card-head"><h2>경쟁사 비교</h2>${badge(`${rows.length}개`)}</div>
+      <div class="between wrap mb-16"><div class="chips">${chips}</div>${tools}</div>
+      ${rows.length || own.length ? table(own.concat(rows)) : `<div class="mt-16">${ui.empty(d.table.length ? '이 채널에서 찾은 경쟁사가 없어요.' : '아직 등록된 경쟁사가 없어요. 진열대를 모은 뒤 새 경쟁사 찾기를 누르세요.', 'users')}</div>`}
+      <p class="panel-note mt-8">행을 누르면 브랜드 카드가 열려요. 판매 채널 · 1회분 · 제형 · 칭찬/불만 · 유튜브 언급은 수집한 데이터 그대로예요. 핵심 메시지 · 주력 성분은 리뷰 상위 ${d.deepTop}개 브랜드만 AI가 진열대 · 홈페이지 · 뉴스에서 찾고, 못 찾은 칸은 AI 웹 검색(출처 링크 포함)으로 채워요.</p></section>`;
+    const subs = d.substitutes.length ? fold('comp-subs', `대체재 ${d.substitutes.length}개 (전해질 음료 · 간 영양제 등)`, table(d.substitutes)) : '';
     const arch = d.archived.length ? fold('comp-arch', `보관함 ${d.archived.length}개`, table(d.archived)) : '';
-    return qHead('competitors', d.oneLine, d.watch.length ? badge(`주시 ${d.watch.length}개`, 'lime') : '') + notes +
-      `<div class="ins-comp-top mt-24">${matrix}${blueCard}</div>` + list + subs + arch;
+    return qHead('competitors', d.oneLine, d.watch.length ? badge(`주시 ${d.watch.length}개`, 'lime') : '') + notes + changes + list + subs + arch;
   }
 
   function openCompDetail(c) {
     if (!c) return;
-    const src = (c.sources || []).map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('');
+    const srcs = c.sources || [];
+    const srcLink = ids => (ids || []).map(id => { const s = srcs.find(x => x.id === id); const u = s && safeUrl(s.url);
+      return u ? `<a class="ins-src" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(id)}</a>` : `<span class="ins-src">${esc(id)}</span>`; }).join(' ');
+    const fact = (key, label) => `<div class="ins-bc-item"><span class="field-label">${esc(label)}</span>
+      <div>${fieldHtml(c, key)} ${srcLink(((c.analysis || {})[key] || {}).sources)}</div></div>`;
+    const fb = c.feedback || {};
+    const topics = Object.entries(fb.topics || {}).map(([t, v]) => `${esc(t)} +${v.pos} / −${v.neg}`).join(' · ');
+    const prods = (c.products || []).map(p => `<li>${esc(p.title)} <span class="muted small">· ${esc(p.source)} · ${esc(money(p.price))}${p.perServing != null ? ` (1회분 ${esc(money(p.perServing))})` : ''} · ${esc(p.form)}${p.availability ? ' · ' + esc(p.availability) : ''}</span> ${extLink(p.link)}</li>`).join('');
     const hist = (c.history || []).map(h => `<li>${esc(fmt.date(h.savedAt))}: ${h.changed.length ? esc(h.changed.join(', ')) + ' 바뀜' : '바뀐 항목 없음'}</li>`).join('');
-    const prods = (c.products || []).map(p => `<li>${esc(p.title)} <span class="muted small">· ${esc(p.source)} · ${esc(money(p.price))}</span> ${extLink(p.link)}</li>`).join('');
+    const ai = c.own ? '' : `<h3 class="ins-h3">무슨 말로 파나 ${c.analyzed ? badge('AI 분석', 'purple') : ''}</h3>
+      <div class="ins-bc-grid">${fact('message', '핵심 메시지')}${fact('ingredients', '주력 성분')}${fact('retail', '기타 판매처 (오프라인 · 자사몰)')}${fact('news', '최근 소식')}</div>
+      <h3 class="ins-h3">알디콤은 ${badge('AI 의견', 'purple')}</h3>
+      <div class="ins-bc-grid">${fact('use', '쓸 말')}${fact('avoid', '피할 말 · 주의 표현')}</div>`;
     const body = `<div class="part-insights ins-modal">
-      <p class="small muted">${esc(c.tierLabel)} · 발견 검색어: ${esc((c.keywords || []).join(', ') || '—')}${c.model ? ` · ${esc(c.model)}` : ''}</p>
-      ${c.reason ? `<p class="small ins-reason">${esc(c.reason)}</p>${sigChips(c)}` : ''}
+      <div class="ins-chans mb-16">${chanChips(c)}</div>
+      <p class="small muted">${esc(c.tierLabel)} · 1회분 최저 ${c.perServing != null ? esc(money(c.perServing)) : '—'} · 진열대 리뷰 ${fmt.num(c.reviews || 0)}개${c.rating ? ` · 별점 ${c.rating}` : ''} · 유튜브 언급 ${c.youtube == null ? '—' : fmt.num(c.youtube)}건</p>
+      ${ai}
+      <h3 class="ins-h3">고객은 어떻게 보나</h3>
+      ${fb.reviews ? `<div class="ins-bc-grid">
+        <div class="ins-bc-item"><span class="field-label">칭찬 ${fb.praise ? `· ${esc(fb.praise.topic)} ${fb.praise.count}건` : ''}</span><div>${fb.praise ? esc(fb.praise.example) : '<span class="ins-none">칭찬 리뷰 없음</span>'}</div></div>
+        <div class="ins-bc-item"><span class="field-label">불만 ${fb.complaint ? `· ${esc(fb.complaint.topic)} ${fb.complaint.count}건` : ''}</span><div>${fb.complaint ? esc(fb.complaint.example) : '<span class="ins-none">불만 리뷰 없음</span>'}</div></div></div>
+        <p class="small muted">주제별: ${topics || '—'} (리뷰 ${fmt.num(fb.reviews)}개 기준)</p>` : '<p class="small muted">수집한 구매자 리뷰가 없어요.</p>'}
+      ${prods ? `<h3 class="ins-h3">진열대 상품</h3><ul class="ins-ul">${prods}</ul>` : ''}
+      ${c.own ? '' : `<h3 class="ins-h3">근거 자료</h3>${srcs.length ? `<ul class="ins-ul">${srcs.map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('')}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}
       <label class="field-label mt-8" for="comp-site">브랜드 홈페이지 (자동으로 찾고, 틀리면 고치세요)</label>
       <div class="flex"><input id="comp-site" class="grow" data-ref="site" value="${esc(c.website || '')}" placeholder="https://"><button type="button" class="btn small" data-ref="site-save">저장</button></div>
-      <h3 class="ins-h3">근거 자료</h3>${src ? `<ul class="ins-ul">${src}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}
-      ${prods ? `<h3 class="ins-h3">이번 진열대 상품</h3><ul class="ins-ul">${prods}</ul>` : ''}
       <h3 class="ins-h3">다시 조사 기록</h3>${hist ? `<ul class="ins-ul">${hist}</ul>` : '<p class="small muted">기록이 없어요.</p>'}
-      ${c.brandGuessed ? '<p class="panel-note">브랜드는 상품명 첫 단어로 추정했어요. 틀릴 수 있어요.</p>' : ''}</div>`;
+      ${c.id != null ? `<div class="flex wrap mt-16">
+        <button type="button" class="btn small" data-ref="research">${icon('refresh')}다시 조사</button>
+        <button type="button" class="btn small ghost" data-ref="watch">${c.watched ? '주시 해제' : '★ 주시'}</button>
+        <button type="button" class="btn small ghost" data-ref="status">${c.status === 'archived' ? '복원' : '보관'}</button></div>` : ''}`}</div>`;
     ui.modal({
       title: c.brand, body, wide: true,
       onOpen: el => {
-        const btn = $(el, '[data-ref="site-save"]');
-        btn.addEventListener('click', async () => {
+        const close = () => { const x = el.closest('.modal-backdrop'); const b = x && x.querySelector('[data-modal-close]'); if (b) b.click(); };
+        const on = (ref, fn) => { const b = $(el, `[data-ref="${ref}"]`); if (b) b.addEventListener('click', () => fn(b)); };
+        on('site-save', async btn => {
           ui.busy(btn, true);
           try {
             await api(`/api/insights/competitors/${c.id}`, { website: $(el, '[data-ref="site"]').value }, { method: 'PATCH' });
@@ -770,17 +780,20 @@
           } catch (e) { toast(e.message, 'error'); }
           ui.busy(btn, false);
         });
+        on('research', btn => { close(); compAction(btn, 'one', c.id); });
+        on('watch', btn => { close(); toggleWatch(btn, c.brand, !c.watched); });
+        on('status', btn => { close(); compAction(btn, 'status', c.id, c.status === 'archived' ? 'active' : 'archived'); });
       }
     });
   }
 
   async function compAction(btn, act, id, status) {
-    if (act === 'all' && !(await ui.confirm(`리뷰 상위 ${S.data.competitors.deepTop}개 브랜드를 모두 다시 조사해요. 브랜드마다 OpenAI 1회 · Firecrawl 1~2회를 써요. 진행할까요?`))) return;
+    if (act === 'all' && !(await ui.confirm(`리뷰 상위 ${S.data.competitors.deepTop}개 브랜드를 모두 다시 조사해요. 브랜드마다 OpenAI 1~2회 · Firecrawl 2~3회를 써요. 진행할까요?`))) return;
     ui.busy(btn, true);
     try {
       if (act === 'discover') {
         const r = await api('/api/insights/competitors/discover', {});
-        toast(r.added.length ? `새 경쟁사 ${r.added.length}개를 등록했어요: ${r.added.slice(0, 5).join(', ')}` : '새로 등록할 경쟁사가 없어요. 새 상품을 모으려면 데이터 업데이트 › Amazon 진열대를 돌리세요.');
+        toast(r.added.length ? `새 경쟁사 ${r.added.length}개를 등록했어요: ${r.added.slice(0, 5).join(', ')}` : '새로 등록할 경쟁사가 없어요. 새 상품을 모으려면 데이터 업데이트에서 Amazon · Yami 진열대를 돌리세요.');
         await loadData('competitors');
         return;
       }
@@ -799,15 +812,6 @@
       ui.busy(btn, false);
       toast(e.message, 'error');
     }
-  }
-
-  function jumpComp(brand) {
-    const key = String(brand).toLowerCase();
-    const row = $$(panel('data'), '[data-comp-row]').find(r => r.dataset.compRow === key);
-    if (!row) { toast(`${brand}는 대체재이거나 표에 없어요.`); return; }
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    row.classList.add('flash');
-    setTimeout(() => row.classList.remove('flash'), 1600);
   }
 
   async function toggleWatch(btn, brand, on) {

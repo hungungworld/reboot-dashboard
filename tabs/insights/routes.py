@@ -252,20 +252,18 @@ def competitor_edit(cid):
 
 @bp.get("/competitors.json")
 def competitors_json():
-    body = json.dumps(competitors.export_rows(), ensure_ascii=False, indent=2)
+    body = json.dumps(service.competitor_export(), ensure_ascii=False, indent=2)
     return Response(body, content_type="application/json; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.json"})
 
 
 @bp.get("/competitors.csv")
 def competitors_csv():
-    rows = competitors.export_rows()
     buf = io.StringIO()
-    head = ["brand", "tier", "status"] + [f for f, _ in competitors.FIELDS] + ["website", "keywords", "sources", "researched_at", "ai"]
     w = csv.writer(buf)
-    w.writerow(["브랜드", "구분", "상태"] + [label for _, label in competitors.FIELDS] + ["홈페이지", "발견 검색어", "출처", "조사일", "AI 분석"])
-    for r in rows:
-        w.writerow([r[k] for k in head])
+    w.writerow([label for _, label in service.EXPORT_HEAD])
+    for r in service.competitor_export():
+        w.writerow(["" if r[k] is None else r[k] for k, _ in service.EXPORT_HEAD])
     return Response("﻿" + buf.getvalue(), content_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.csv"})
 
