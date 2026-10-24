@@ -7,6 +7,8 @@
 수정 · 올리기
   PATCH /api/insights/shelf/<id>               진열대 한 줄 고치기 {price, in_stock, own}
   PUT   /api/insights/servings                 회분 수 고치기 {key, servings|null} (모든 주차에 적용)
+  PUT   /api/insights/lines                    제품 라인 묶음 고치기 {key, brand, form} (둘 다 null이면 자동으로)
+  POST  /api/insights/lines/confirm            지금 묶음을 모두 '확인함'으로 기억
   PUT   /api/insights/watch                    주시 브랜드 {brand, watch}
 경쟁사 분석
   POST  /api/insights/competitors/discover     새 경쟁사 찾기 (지금 진열대 기준 · 무료)
@@ -42,7 +44,7 @@ from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
 from . import ai as insights_ai
-from . import competitors, reports, service, store, trends, update
+from . import competitors, lines, reports, service, store, trends, update
 from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
 
@@ -170,6 +172,28 @@ def servings_edit():
     title = (ShelfItem.query.filter_by(key=key).order_by(ShelfItem.id.desc()).first() or ShelfItem(title=key)).title
     worklog.add("insights", "기타", f"회분 수 수정: {title[:60]} → {n}회분")
     return jsonify(key=key, servings=n)
+
+
+@bp.put("/lines")
+def line_edit():
+    data = json_body()
+    key = clip(data.get("key"), 200)
+    if not key or db.session.query(ShelfItem.id).filter_by(key=key).first() is None:
+        raise ApiError("없는 상품입니다.", 404)
+    brand, form = clean(data.get("brand"), 60) or None, data.get("form") or None
+    if form is not None and form not in competitors.FORM_LABEL:
+        raise ApiError("제형은 목록에서 고르세요.")
+    lines.set_override(key, brand, form, _who())
+    worklog.add("insights", "기타", f"제품 묶음 수정: {key} → {brand or '자동'} · {form or '자동'}")
+    return jsonify(ok=True)
+
+
+@bp.post("/lines/confirm")
+def line_confirm():
+    now, _, _ = service.snapshots()
+    n = lines.confirm(now, _who())
+    worklog.add("insights", "승인 · 선정", f"제품 묶음 확인 {n}개", approval=_who())
+    return jsonify(ok=True, confirmed=n)
 
 
 @bp.put("/watch")

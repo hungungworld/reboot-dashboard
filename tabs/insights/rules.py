@@ -7,9 +7,13 @@
   4. 작년에 검색이 평균보다 20% 이상 늘었던 시즌이 30일 안 → 기회
   5. 잠재 고객(유튜브 댓글) 최다 질문                    → 기회
   6. 자사 리뷰 불만 1위                                 → 긴급
+  7. 경쟁 제품 라인 품절 (한 채널)                       → 기회 · 같은 라인이 2채널 이상 품절 → 긴급
+  8. 경쟁 상품 재고 임박 (Amazon 'Only N left', N ≤ 20)  → 참고
+  9. 경쟁 상품 재입고 (지난 수집 품절 → 이번 재고 있음)   → 참고
 
 입력(ctx)은 화면 · 테스트가 같은 모양으로 넘기는 dict입니다 (DB를 직접 읽지 않음):
   today(date) · shelf_now · shelf_prev(None이면 첫 주 = 비교 불가) · seasons · trends{키워드: 점} · questions · own_complaints
+  진열대 한 줄의 line({id, label}) · stockLeft는 있으면 씀 (없으면 상품 하나 = 라인 하나)
 """
 from datetime import date, timedelta
 
@@ -23,7 +27,13 @@ RULE_LABEL = {
     "season_search": "작년 검색이 평균보다 20% 이상 늘었던 시즌이 30일 안 → 기회",
     "top_question": "잠재 고객 최다 질문 → 기회",
     "own_complaint": "자사 리뷰 불만 1위 → 긴급",
+    "comp_oos": "경쟁 제품 한 채널 품절 → 기회",
+    "comp_oos_multi": "경쟁 제품 2채널 이상 동시 품절 → 긴급",
+    "low_stock": "경쟁 상품 재고 20개 이하 → 참고",
+    "restock": "경쟁 상품 재입고 → 참고",
 }
+COMPLIANCE = "광고 문구에 효능 표현이나 경쟁 브랜드 이름을 넣을 때는 컴플라이언스 탭 검토를 거쳐요."
+LOW_STOCK = 20
 PRICE_PCT = 10
 OOS_DAYS = 45
 SEASON_DAYS = 30
@@ -67,6 +77,31 @@ def season_lift(points, season_start, window=7):
         return None
     peak = max(near, key=lambda p: p["value"])
     return {"pct": round((peak["value"] - avg) / avg * 100, 1), "peak": peak["value"], "avg": round(avg, 1), "date": peak["date"]}
+
+
+def _src(x):
+    return SOURCE_LABEL.get(x.get("source"), x.get("source"))
+
+
+def _line(x):
+    ln = x.get("line") or {}
+    return ln.get("id") or x.get("key"), ln.get("label") or _short(x.get("title"))
+
+
+def line_oos(rows):
+    """경쟁 상품 rows → {라인 id: {label, channels(판매처 전체), oos(그 판매처 상품이 모두 품절인 판매처)}}."""
+    by = {}
+    for x in rows or []:
+        if x.get("own"):
+            continue
+        lid, label = _line(x)
+        g = by.setdefault(lid, {"label": label, "items": {}})
+        g["items"].setdefault(x.get("source"), []).append(x)
+    out = {}
+    for lid, g in by.items():
+        oos = [s for s, its in g["items"].items() if all(i.get("in_stock") is False for i in its)]
+        out[lid] = {"label": g["label"], "channels": list(g["items"]), "oos": oos}
+    return out
 
 
 def _action(rule, grade, fact, why, todo, facts, weight=0):
@@ -146,6 +181,71 @@ def weekly_actions(ctx):
                 "데이터 › 경쟁사에서 새 상품의 가격 · 메시지를 확인하고 주시할지 정하세요.",
                 {"새 상품": [{"title": x["title"], "source": x.get("source"), "price": x.get("price")} for x in new[:10]]},
                 weight=len(new)))
+
+    # 7) 경쟁 제품 라인 품절 — 한 채널 = 기회 · 2채널 이상 = 긴급 (지난 수집에도 품절이면 'N주째')
+    was = line_oos(prev) if prev is not None else {}
+    single, multi = [], []
+    for lid, g in line_oos(now).items():
+        if not g["oos"]:
+            continue
+        row = {"line": g["label"], "oos": [SOURCE_LABEL.get(s, s) for s in g["oos"]],
+               "channels": [SOURCE_LABEL.get(s, s) for s in g["channels"]],
+               "again": bool(set(g["oos"]) & set((was.get(lid) or {}).get("oos") or []))}
+        (multi if len(g["oos"]) >= 2 else single).append(row)
+    if multi:
+        top = multi[0]
+        more = f" 외 {len(multi) - 1}개 제품" if len(multi) > 1 else ""
+        again = " 지난 수집부터 계속 품절이에요." if top["again"] else ""
+        acts.append(_action(
+            "comp_oos_multi", "긴급",
+            f"{top['line']} — {' · '.join(top['oos'])}에서 모두 품절이에요{more}.{again}",
+            "여러 채널에서 한꺼번에 비면 공백이 길어질 수 있어요. 이 제품을 찾던 고객이 다른 제품을 처음 사 보는 시기예요.",
+            "외부 광고(IG · TikTok) 랜딩을 재고가 넉넉한 자사 채널로 모으고, 처음 산 고객이 계속 사도록 묶음 구성이나 공구 일정 앞당기기를 검토하세요. "
+            "품절 원인은 판매처 공지로 확인하세요."
+            + (" 늘린 광고가 실제로 팔리고 있는지 성과분석에서 확인하세요." if top["again"] else "") + " " + COMPLIANCE,
+            {"품절 제품": multi[:10]}, weight=200 + len(multi)))
+    if single:
+        top = single[0]
+        ch = top["oos"][0]
+        more = f" 외 {len(single) - 1}개 제품" if len(single) > 1 else ""
+        acts.append(_action(
+            "comp_oos", "기회",
+            f"{top['line']} — {ch}에서 품절이에요{more}." + (" 지난 수집부터 계속 품절이에요." if top["again"] else ""),
+            f"{ch}에서 이 제품을 찾던 고객이 바로 살 수 있는 다른 제품을 찾아요. 이 채널에서 고객을 데려올 기회예요.",
+            f"{ch}에서 경쟁 브랜드 키워드 입찰 상향을 검토하고, 소재에 '재고 있음 · 즉시 출고'를 넣으세요. "
+            "이 기간에는 할인 쿠폰 없이도 팔릴 수 있으니 쿠폰 보류도 검토하세요. " + COMPLIANCE,
+            {"품절 제품": single[:10]}, weight=len(single)))
+
+    # 8) 경쟁 상품 재고 임박 (Only N left)
+    low = sorted((x for x in now if not x.get("own") and x.get("in_stock") is not False
+                  and x.get("stockLeft") is not None and x["stockLeft"] <= LOW_STOCK), key=lambda x: x["stockLeft"])
+    if low:
+        x = low[0]
+        more = f" 외 {len(low) - 1}개" if len(low) > 1 else ""
+        acts.append(_action(
+            "low_stock", "참고",
+            f"{_line(x)[1]} ({_src(x)}) — {x['stockLeft']}개 남았어요{more}.",
+            "곧 품절될 수 있어요. 품절이 뜬 뒤에 소재를 만들면 늦어요.",
+            "경쟁 제품 품절에 대비하세요. 경쟁 키워드 광고 세트와 '즉시 출고' 소재를 미리 만들어 두고, "
+            "다음 수집에서 품절이 확인되면 바로 켜세요. " + COMPLIANCE,
+            {"재고 임박": [{"title": i["title"], "source": i.get("source"), "price": i.get("price")} for i in low[:10]],
+             "남은 개수": [i["stockLeft"] for i in low[:10]], "기준": f"{LOW_STOCK}개 이하"}, weight=LOW_STOCK - x["stockLeft"]))
+
+    # 9) 경쟁 상품 재입고
+    if prev is not None:
+        before = {(x.get("source"), x.get("key")): x for x in prev}
+        back = [x for x in now if not x.get("own") and x.get("in_stock") is True
+                and (before.get((x.get("source"), x.get("key"))) or {}).get("in_stock") is False]
+        if back:
+            x = back[0]
+            more = f" 외 {len(back) - 1}개" if len(back) > 1 else ""
+            acts.append(_action(
+                "restock", "참고",
+                f"{_line(x)[1]} ({_src(x)}) — 다시 들어왔어요{more}.",
+                "경쟁 제품이 돌아오면 올려 둔 입찰가는 클릭 값만 비싸지고 전환은 줄어요.",
+                "경쟁 제품이 돌아왔어요. 품절 때 올렸던 입찰가를 평소대로 낮추고, 보류했던 쿠폰을 다시 켤지 정하세요.",
+                {"재입고": [{"title": i["title"], "source": i.get("source"), "price": i.get("price")} for i in back[:10]]},
+                weight=len(back)))
 
     # 4) 작년 검색 +20% 시즌이 30일 안
     trends = ctx.get("trends") or {}

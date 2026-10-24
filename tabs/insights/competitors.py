@@ -41,9 +41,10 @@ FACT_FIELDS = ("message", "ingredients", "retail", "news")   # 출처가 있어�
 LIST_FIELDS = ("ingredients",)
 
 FORMS = [("liquid", "Liquid (샷 · 음료)"), ("powder", "Powder (분말 · 스틱)"), ("gummy", "Gummy/Jelly (구미 · 젤리)"),
-         ("tablet", "Tablet/Capsule (정제 · 캡슐)"), ("other", "기타")]
+         ("pellet", "Pellet (환)"), ("tablet", "Tablet/Capsule (정제 · 캡슐)"), ("other", "기타")]
 FORM_LABEL = dict(FORMS)
 FORM_RULES = [  # 앞에서부터 먼저 맞는 것 (예: 'Jelly … Powder'는 젤리, 'Drink Mix Powder'는 분말)
+    ("pellet", re.compile(r"\bpellets?\b|(?<![가-힣])환(?![가-힣])|상쾌환|컨디션\s?환|여명환", re.I)),   # 한국식 환 (알갱이를 삼킴)
     ("tablet", re.compile(r"\b(tablets?|capsules?|caps|pills?|softgels?|veggie caps)\b", re.I)),
     ("gummy", re.compile(r"\b(gumm(?:y|ies)|jell(?:y|ies)|chews?|chewables?)\b|젤리|구미", re.I)),
     ("powder", re.compile(r"\b(powders?|drink mix|granules?|packets?|sachets?)\b|분말|가루", re.I)),
@@ -97,12 +98,21 @@ def stored_positions():
     return {p.key: p for p in ProductPosition.query.all()}
 
 
+def rule_form_of(x):
+    """상품명이 먼저, 못 정하면 판매 문구 ('Do not chew' 같은 문구가 상품명보다 앞서지 않게)."""
+    return rule_form(x.get("title", "")) or rule_form(x.get("message", ""))
+
+
 def form_of(x, stored=None):
-    """진열대 한 줄 → 제형. 저장된 분류(문구가 같을 때) → 상품명 규칙 → 기타."""
+    """진열대 한 줄 → 제형. 규칙이 정하면 규칙 → 저장된 AI 분류(문구가 같을 때) → 기타.
+    규칙 결과는 저장값보다 앞섬 (규칙을 고치면 예전 상품도 바로 바뀜)."""
+    form = rule_form_of(x)
+    if form:
+        return form
     row = (stored or {}).get(x["key"])
-    if row is not None and row.sig == _sig(x) and row.form in FORM_LABEL:  # 예전 값(solid 등)은 다시 규칙으로
+    if row is not None and row.sig == _sig(x) and row.form in FORM_LABEL:  # 예전 값(solid 등)은 기타
         return row.form
-    return rule_form(f"{x.get('title', '')} {x.get('message', '')}") or "other"
+    return "other"
 
 
 def classify_products(rows):
@@ -114,7 +124,7 @@ def classify_products(rows):
         if row is not None and row.sig == sig and row.form in FORM_LABEL and (row.form != "other" or not insights_ai.ready()
                                                                 or row.classified_by == "ai"):
             continue
-        form = rule_form(f"{x.get('title', '')} {x.get('message', '')}")
+        form = rule_form_of(x)
         row = row or ProductPosition(key=x["key"][:200])
         row.brand, row.sig, row.updated_at = (x["brand"] or "")[:120], sig, utcnow()
         row.form, row.timing, row.wellness, row.classified_by = form or "other", "", False, "rule"
