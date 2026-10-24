@@ -419,3 +419,20 @@
 .part-insights .ins-news-why b { color: var(--lime-deep); margin-right: 4px; }
 .part-insights .ins-news-unsave { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--lime-deep); border-color: var(--lime-deep); }
 .part-insights .ins-news-unsave .icon { width: 13px; height: 13px; fill: currentColor; }
+
+/* 유튜브 댓글: 사기 전에 묻는 것 (주제별 막대) */
+.part-insights .ins-aud-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
+.part-insights .ins-aq-list { margin-top: 12px; }
+.part-insights .ins-aq { display: grid; grid-template-columns: 22px minmax(120px, 190px) minmax(0, 1fr) 82px; align-items: center; gap: 12px;
+  width: 100%; padding: 11px 6px; border: 0; border-bottom: 1px solid var(--line-3); background: none; font: inherit; font-size: 12px; text-align: left; cursor: pointer; border-radius: 6px; }
+.part-insights .ins-aq:last-child { border-bottom: 0; }
+.part-insights .ins-aq:hover { background: var(--soft-2); }
+.part-insights .ins-aq .progress-track { height: 10px; }
+.part-insights .ins-aq-rank { color: var(--muted); font-weight: 700; text-align: center; }
+.part-insights .ins-aq-n { text-align: right; font-weight: 700; }
+.part-insights .ins-aq-n small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+@media (max-width: 900px) { .part-insights .ins-aud-grid { grid-template-columns: 1fr; } }
+.part-insights .ins-aud-cm { display: block; color: inherit; text-decoration: none; margin: -4px -8px; padding: 4px 8px; border-radius: 6px; }
+.part-insights .ins-aud-cm:hover { background: var(--soft-2); }
+.part-insights .ins-aud-cm:hover small { color: var(--lime-deep); }
+.part-insights .ins-aud-cm .icon { width: 11px; height: 11px; vertical-align: -1px; }

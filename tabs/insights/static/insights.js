@@ -1,5 +1,5 @@
 /* 시장 · 고객 인사이트 (담당: 이현경) — tabs/insights/docs/README.md '3번째 대시보드'.
-   탭: 주간 리뷰 · 월간 리뷰 · 데이터(진열대 · 경쟁사 · 구매자 리뷰 · 잠재 고객 · 뉴스 수집 · 정확도 검증)
+   탭: 주간 리뷰 · 월간 리뷰 · 데이터(진열대 · 경쟁사 · 구매자 리뷰 · 유튜브 댓글 · 뉴스 수집 · 정확도 검증)
    - 뉴스 수집: 홈 › 미국 시장 브리핑에서 '보관'한 기사 (홈 API /api/home/news/saved를 읽기만 · 보관 해제)
    - 검색 수요 탭은 2026-10-25 삭제 → '다음 급등 예상'은 홈 › 콘텐츠 캘린더 맨 아래로 옮김
    - 판단은 규칙(서버 rules.py), AI는 문장 · 분류 · 요약만 (AI 배지 · 참고용)
@@ -17,7 +17,7 @@
   const store = REBOOT.store('insights');   // 저장 키: reboot:insights:summary (메뉴 숫자용)
 
   const TABS = [['weekly', '주간 리뷰'], ['monthly', '월간 리뷰'], ['data', '데이터']];
-  const DATA_TABS = [['shelf', '진열대'], ['competitors', '경쟁사'], ['reviews', '구매자 리뷰'], ['audience', '잠재 고객 (유튜브)'],
+  const DATA_TABS = [['shelf', '진열대'], ['competitors', '경쟁사'], ['reviews', '구매자 리뷰'], ['audience', '유튜브 댓글'],
     ['news', '뉴스 수집'], ['accuracy', '정확도 검증']];
   const QUESTIONS = {
     shelf: '누가 얼마에, 무슨 말로 팔고 있나', competitors: '누구와 경쟁하고 있나', reviews: '고객은 무엇에 만족하고, 무엇에 실망하나',
@@ -228,6 +228,7 @@
       case 'lines-confirm': confirmLines(b); break;
       case 'reload-sub': loadData(S.sub); break;
       case 'news-unsave': unsaveNews(b, d.id); break;
+      case 'aud-q': openAudQuestion(Number(d.i)); break;
       default: break;
     }
   }
@@ -507,7 +508,7 @@
           <section class="card"><div class="card-head"><h2>경쟁사 동향</h2>${aiBadge(m.competitorAi)}</div>
             ${m.competitorTrends.length ? `<ul class="ins-ul">${m.competitorTrends.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="small muted">경쟁사 데이터가 없어요.</p>'}
             <a class="link mt-8" href="#data/competitors">경쟁사 보기 ${icon('arrow')}</a></section>
-          <section class="card"><div class="card-head"><h2>협업 후보 크리에이터</h2></div>${creators}<a class="link mt-8" href="#data/audience">잠재 고객 보기 ${icon('arrow')}</a></section>
+          <section class="card"><div class="card-head"><h2>협업 후보 크리에이터</h2></div>${creators}<a class="link mt-8" href="#data/audience">유튜브 댓글 보기 ${icon('arrow')}</a></section>
         </aside>
       </div>`;
   }
@@ -1490,13 +1491,18 @@
     ui.modal({ title: `${brand} · ${topic}`, body, wide: true });
   }
 
-  /* 잠재 고객 (유튜브) */
+  /* 유튜브 댓글: 숙취해소 영상 댓글 중 구매 전 질문을 주제별로 셈 */
   function audienceHtml(d) {
     if (!d.month) {
       return qHead('audience', '') + `<div class="mt-24">${ui.empty('유튜브 데이터가 없어요. 월간 분석 실행에서 \'유튜브 수집\'을 고르세요 (YouTube 키 필요 · 약 1,000 units).', 'video')}</div>`;
     }
     const months = d.months.length > 1 ? `<select class="input ins-sel" data-ref="aud-month" aria-label="월">${d.months.map(m => `<option${m === d.month ? ' selected' : ''}>${esc(m)}</option>`).join('')}</select>` : '';
-    const q = d.questions.map(x => `<li><div class="between"><b>${esc(x.label)}</b>${badge(`${x.count}건`)}</div>${x.examples.slice(0, 2).map(e => `<small>"${esc(e)}"</small>`).join('')}</li>`).join('');
+    const qTotal = d.questions.reduce((s, x) => s + x.count, 0);
+    const qMax = d.questions.length ? d.questions[0].count : 1;
+    const q = d.questions.map((x, i) => `<button type="button" class="ins-aq" data-act="aud-q" data-i="${i}">
+        <span class="ins-aq-rank">${i + 1}</span><b>${esc(x.label)}</b>
+        <span class="progress-track"><i style="width:${Math.round(x.count / qMax * 100)}%"></i></span>
+        <span class="ins-aq-n">${esc(x.count)}건 <small>${Math.round(x.count / qTotal * 100)}%</small></span></button>`).join('');
     const ex = d.expressions.map(x => `<li><div class="between"><b>"${esc(x.phrase)}"</b>${badge(`${x.count}개 댓글`)}</div><small>${esc(x.example)}</small></li>`).join('');
     const cr = d.creators.map(c => `<li><div class="between"><b>${esc(c.channel)}</b>${extLink(c.url, '채널')}</div><small>영상 ${esc(c.videos)}개 · 조회수 ${esc(fmt.num(c.views))} · 관련 댓글 ${esc(c.relevant)}</small></li>`).join('');
     const p = d.process;
@@ -1506,13 +1512,15 @@
       ${ui.row(`조회수 ${fmt.num(p.minViews)} 이상`, esc(`${p.kept}개`))}
       ${ui.row('댓글', esc(`${p.comments}개 중 관련 ${p.relevant}개 (AI 분류 ${p.ai}개)`))}
       <p class="panel-note mt-8">무관한 댓글(유튜버 칭찬 · 잡담)은 규칙으로 거르고, OpenAI 키가 있으면 'VOC 분류'가 AI로 다시 걸러요. 작성자 이름은 저장하지 않아요.</p>`;
-    const comments = d.comments.map(c => `<li><p>${esc(c.text)}</p><small class="muted">${c.question ? `질문 · ${esc(c.topic)} · ` : ''}좋아요 ${esc(c.likes == null ? 0 : c.likes)} · ${esc(c.video)}</small></li>`).join('');
+    const comments = d.comments.map(c => audComment(c, true)).join('');
     return qHead('audience', d.oneLine, months) +
-      `<div class="grid-3 mt-24">
-        <section class="card"><div class="card-head"><h2>자주 묻는 질문</h2>${badge('Top 5')}</div>${q ? `<ul class="ins-list">${q}</ul>` : '<p class="small muted">질문 댓글이 없어요.</p>'}</section>
-        <section class="card"><div class="card-head"><h2>자주 쓰는 표현</h2>${badge('Top 5')}</div>${ex ? `<ul class="ins-list">${ex}</ul>` : '<p class="small muted">반복되는 표현이 없어요.</p>'}</section>
+      `<div class="ins-aud-grid mt-24">
+        <section class="card"><div class="card-head"><h2>사기 전에 묻는 것</h2>${badge(`질문 ${qTotal}건`)}</div>
+          <p class="small muted">숙취해소 영상 댓글 중 질문만 주제별로 셌어요. 누르면 실제 댓글을 볼 수 있어요.</p>
+          ${q ? `<div class="ins-aq-list">${q}</div>` : '<p class="small muted mt-16">질문 댓글이 없어요.</p>'}</section>
         <section class="card"><div class="card-head"><h2>협업 후보 크리에이터</h2>${badge('Top 5')}</div>${cr ? `<ul class="ins-list">${cr}</ul>` : '<p class="small muted">기준을 넘은 영상이 없어요.</p>'}</section>
-      </div>` + fold('aud-comments', `댓글 원문 (관련 ${d.comments.length}개)`, comments ? `<ul class="ins-reviews">${comments}</ul>` : '<p class="small muted">없음</p>') +
+      </div>` + fold('aud-expr', '자주 쓰는 표현', ex ? `<ul class="ins-list">${ex}</ul>` : '<p class="small muted">반복되는 표현이 없어요.</p>') +
+      fold('aud-comments', `댓글 원문 (${d.comments.length}개)`, comments ? `<ul class="ins-reviews">${comments}</ul>` : '<p class="small muted">없음</p>') +
       fold('aud-process', '수집 과정', proc);
   }
 
@@ -1525,6 +1533,24 @@
     if (!items.length) {
       return head.replace('오른쪽 위 데이터 업데이트를 눌러 주세요.', '홈 › 미국 시장 브리핑의 기사 카드에서 보관을 눌러 주세요.');
     }
+  /* 댓글 한 줄: 누르면 유튜브 영상의 그 댓글 위치로 (lc=댓글 id) */
+  function audComment(c, withTopic) {
+    const url = c.videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(c.videoId)}${c.id ? `&lc=${encodeURIComponent(c.id)}` : ''}` : '';
+    const inner = `<p>${esc(c.text)}</p><small class="muted">${withTopic && c.question && c.topic ? `질문 ·${esc(c.topic)} · ` : ''}좋아요 ${esc(c.likes == null ? 0 : c.likes)} · ${esc(c.video)}${url ? ` ${icon('up')}` : ''}</small>`;
+    return url ? `<li><a class="ins-aud-cm" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="유튜브에서 보기">${inner}</a></li>` : `<li>${inner}</li>`;
+  }
+
+  function openAudQuestion(i) {
+    const d = S.data.audience || {};
+    const x = (d.questions || [])[i];
+    if (!x) return;
+    const items = (d.comments || []).filter(c => c.question && c.topic === x.label);
+    const list = items.length ? items.map(c => audComment(c, false))
+      : x.examples.map(e => `<li><p>${esc(e)}</p></li>`);
+    const body = `<div class="part-insights ins-modal"><p>${esc(x.label)} · 질문 ${esc(x.count)}건</p><ul class="ins-reviews">${list.join('')}</ul></div>`;
+    ui.modal({ title: x.label, body, wide: true });
+  }
+
     const li = x => `<li class="ins-news"><div class="ins-news-main">
         <b>${safeUrl(x.url) ? `<a href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener noreferrer">${esc(x.titleKo || x.title)}</a>` : esc(x.titleKo || x.title)}</b>
         ${x.summaryKo ? `<small>${esc(x.summaryKo)}</small>` : ''}
