@@ -7,11 +7,14 @@
   GET    /api/content/campaigns/<id>                복원: 시트 · 결정 · 대화 · 버전 · 작업 · 제품 근거
   PATCH  /api/content/campaigns/<id>                {expected_revision, sheet?, title?, status?, settings?, reference_text?} (다르면 409)
   DELETE /api/content/campaigns/<id>                만든 사람·관리자만
+  POST   /api/content/campaigns/<id>/copy           {channel} 다른 채널로 만들기 — 시트·정한 내용 복사, 대화·버전·파일은 복사 안 함
   POST   /api/content/campaigns/<id>/decisions      {expected_revision, changes:[{field, value, status}], source} 후보 선택·직접 입력·되돌리기
   POST   /api/content/campaigns/<id>/chat           {message, expected_revision, base_version_id?, client_request_id?, force_action?, kickoff?}
   POST   /api/content/campaigns/<id>/interview      {action: start|answer|skip|finish, expected_revision, option?|value?, client_request_id?}
   POST   /api/content/campaigns/<id>/versions       직접 작성 {kind, body, label?, title?, parent_id?}
   POST   /api/content/campaigns/<id>/images         브라우저 편집기 PNG (multipart: file, parent_id, text_layers, edits, baked)
+  POST   /api/content/campaigns/<id>/references     레퍼런스 이미지 (multipart: file, note?) — 최대 3장 · AI 요약 · 대화에서만 씀
+  DELETE /api/content/campaigns/<id>/references/<rid>
   POST   /api/content/campaigns/<id>/select         {version_id|null} 기준 결과물
   GET    /api/content/campaigns/<id>/export         ZIP (?version=<id> 한 버전만)
   POST   /api/content/suggest                       {field: goal|extra, sheet} → 후보 3개 (키 없으면 예시 추천)
@@ -37,7 +40,7 @@ from server.security import ApiError, clip, json_body
 from . import assets, brandkit, conversation, higgsfield, media, prompts, providers, repository, review, schemas
 from . import options as O
 from .export import build_zip
-from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
+from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentReference, ContentVersion
 
 bp = Blueprint("content", __name__, url_prefix="/api/content")
 
@@ -102,7 +105,8 @@ def meta():
         defaults=O.DEFAULT_SETTINGS, answerLengths=O.ANSWER_LENGTHS, promptVersion=prompts.PROMPT_BUNDLE_VERSION,
         contentTypes=[{"id": k, "label": v["label"], "kind": v["kind"]} for k, v in O.CONTENT_TYPES.items()],
         channels=[{"id": k, "label": v["label"]} for k, v in O.CHANNELS.items()], statuses=list(O.STATUSES),
-        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS,
+        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS, flows=O.CONTENT_FLOWS,
+        references={"max": media.REF_PER_CAMPAIGN, "maxBytes": media.REF_MAX_BYTES},
         character={"choices": list(assets.CHARACTER_CHOICES), "contentTypes": list(assets.CHARACTER_TYPES), "name": "Rebu"},
         productKit={pid: {"form": p.get("form"), "flavors": (p.get("flavors") or {}).get("value")}
                     for pid, p in brandkit.load()["products"].items()})
@@ -175,6 +179,10 @@ def campaigns_create():
     # 소비자용 결과물 언어는 영어를 '초기 제안'으로 (README 5.4) — 사용자 확정이 아님
     c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
                                 "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    ratio = O.default_ratio(sheet)
+    if ratio:  # 채널 기본 비율도 '초기 제안' — 대화에서 바꿀 수 있음
+        c.decisions = dict(c.decisions, ratio={"value": ratio, "status": "proposed", "source": "default", "by": "채널 기본값",
+                                               "at": iso(utcnow()), "revision": 1, "messageId": None})
     if character is not None:  # 시트에서 고른 캐릭터 Rebu 사용 여부 → 확정 결정
         c.decisions = dict(c.decisions, use_character={"value": character, "status": "confirmed", "source": "sheet",
                                                        "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
@@ -267,14 +275,67 @@ def campaigns_delete(cid):
         raise ApiError("캠페인을 만든 사람이나 관리자만 삭제할 수 있어요.", 403)
     files = [n for (n,) in db.session.query(ContentVersion.image_file).filter(
         ContentVersion.campaign_id == cid, ContentVersion.image_file.isnot(None))]
+    files += [r.file for r in repository.references_of(cid)]
     title = c.title
-    for model in (ContentVersion, ContentMessage, ContentDecisionEvent, ContentJob):
+    for model in (ContentVersion, ContentMessage, ContentDecisionEvent, ContentJob, ContentReference):
         model.query.filter_by(campaign_id=cid).delete()
     db.session.delete(c)
     db.session.commit()
     media.delete_files(files)
     worklog.add("content", "기타", f"캠페인 삭제: {title}", detail={"campaign": cid, "files": len(files)})
     return jsonify(ok=True)
+
+
+# 다른 채널로 만들기 — 채널마다 달라지는 값(비율 · 캡션 · 멘트)은 복사하지 않음 (비율은 새 채널 기본값 제안)
+COPY_SKIP_DECISIONS = ("ratio", "caption", "hook")
+
+
+@bp.post("/campaigns/<int:cid>/copy")
+def campaigns_copy(cid):
+    src = _campaign(cid)
+    data = json_body()
+    channel = str(data.get("channel") or "").strip()
+    if channel not in O.CHANNELS:
+        raise ApiError("게시 채널을 골라 주세요.")
+    if src.content_type == O.CRM_TYPE or channel == O.CRM_CHANNEL:
+        raise ApiError("CRM 메시지는 CRM 채널하고만 만들 수 있어 다른 채널로 바꿀 수 없어요.")
+    if channel in src.channels:
+        raise ApiError("지금과 같은 채널이에요. 다른 채널을 골라 주세요.")
+    products = repository.products_index()
+    try:
+        sheet = repository.build_sheet(dict(repository.sheet_of(src), channels=[channel]), products)
+    except ValueError as e:
+        raise ApiError(str(e))
+    user, now = _who(), iso(utcnow())
+    # 원래 캠페인의 최종본(텍스트가 아니면 가장 최근 텍스트 버전) 문구를 참고 문구로 넘겨 새 채널에 맞게 고쳐 쓰게 함
+    texts = ContentVersion.query.filter(ContentVersion.campaign_id == cid, ContentVersion.kind.in_(O.TEXT_KINDS))
+    base = (texts.filter(ContentVersion.id == src.final_version_id).first() if src.final_version_id else None) \
+        or texts.order_by(ContentVersion.id.desc()).first()
+    ref = (f"[원래 캠페인 '{src.title}'의 {base.label} v{base.seq} 문구 — {O.CHANNELS[channel]['label']}에 맞게 고쳐 쓰기]\n{base.body}"
+           if base else src.reference_text or "")
+    c = ContentCampaign(title=repository.auto_title(sheet), content_type=sheet["content_type"], brand_focus=sheet["brand_focus"],
+                        goal=sheet["goal"], extra_request=sheet["extra_request"],
+                        reference_text=repository.clip_text(ref, repository.REFERENCE_MAX),
+                        status="제작 중", revision=1, created_by=user, created_by_id=current_user.id, updated_by=user)
+    c.channels, c.product_ids = sheet["channels"], sheet["product_ids"]
+    c.settings = repository.settings_of(src)
+    decisions = {k: dict(d, revision=1, messageId=None) for k, d in (src.decisions or {}).items()
+                 if k not in COPY_SKIP_DECISIONS and (d or {}).get("value")}
+    ratio = O.default_ratio(sheet)
+    if ratio:
+        decisions["ratio"] = {"value": ratio, "status": "proposed", "source": "default", "by": "채널 기본값",
+                              "at": now, "revision": 1, "messageId": None}
+    c.decisions = decisions
+    db.session.add(c)
+    db.session.flush()
+    old = ", ".join(O.CHANNELS[ch]["label"] for ch in src.channels if ch in O.CHANNELS)
+    repository.add_event(c, f"'{src.title}'에서 채널만 바꿔 복사했어요 — {old} → {O.CHANNELS[channel]['label']} "
+                            f"(정한 내용 {len(decisions)}개 · 대화와 버전은 복사하지 않음)",
+                         {"kind": "created", "copiedFrom": src.id}, user=user)
+    db.session.commit()
+    worklog.add("content", "기타", f"캠페인 복사: {src.title} → {c.title}", detail={
+        "campaign": c.id, "from": src.id, "channel": channel})
+    return _state(c.id, 201)
 
 
 @bp.post("/campaigns/<int:cid>/decisions")
@@ -421,6 +482,66 @@ def versions_create(cid):
     repository.add_event(c, f"초안을 직접 작성했어요 — {v.label} (v{v.seq})", {"kind": "manual_version", "versionId": v.id}, user=user)
     db.session.commit()
     return _state(cid, 201, versionId=v.id)
+
+
+@bp.post("/campaigns/<int:cid>/references")
+def references_upload(cid):
+    """레퍼런스 이미지 (multipart: file, note?) → 저장 → 대화 AI가 한 번 보고 요약. 이미지 생성 참고 사진으로는 쓰지 않음."""
+    c = _campaign(cid)
+    if len(repository.references_of(cid)) >= media.REF_PER_CAMPAIGN:
+        raise ApiError(f"레퍼런스는 캠페인마다 {media.REF_PER_CAMPAIGN}장까지예요. 하나를 지우고 올려 주세요.")
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("이미지 파일이 없습니다.")
+    data = f.read(media.REF_MAX_BYTES + 1)
+    if len(data) > media.REF_MAX_BYTES:
+        raise ApiError("이미지가 너무 큽니다 (5MB 이하).", 413)
+    try:
+        name, dims = media.save_reference(data, cid)
+    except ValueError as e:
+        raise ApiError(str(e))
+    if not name:
+        raise ApiError("이미지를 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+    user = _who()
+    note = clip(request.form.get("note"), 300).strip()
+    ref = ContentReference(campaign_id=cid, file=name, width=dims[0], height=dims[1], note=note, created_by=user)
+    db.session.add(ref)
+    repository.add_event(c, "레퍼런스 이미지를 올렸어요" + (f" — {note}" if note else ""), {"kind": "reference"}, user=user)
+    db.session.commit()
+    rid = ref.id
+    # AI 요약 (DB에 쓰지 않는 동안 호출 · 실패해도 이미지는 남고 다음 대화에서 직접 봄)
+    summary, warn = "", None
+    if providers.ready():
+        try:
+            out = providers.call_json_images(prompts.REFERENCE_V1, prompts.dumps({"note": note or None}),
+                                             [(data, media.REF_MIMES[media.file_ext(data)])], schema=schemas.REFERENCE,
+                                             name="content_reference", action="레퍼런스 이미지 요약", max_tokens=700,
+                                             timeout=60)
+            summary = clip(out.get("summary"), 1500).strip()
+        except AIError as e:
+            warn = f"이미지는 올렸지만 AI가 보지 못했어요: {e}"
+    else:
+        warn = "OpenAI 키가 없어 AI 요약 없이 저장했어요."
+    if summary:
+        ref = db.session.get(ContentReference, rid)
+        if ref is not None:
+            ref.summary, ref.summary_model = summary, providers.text_model()
+            db.session.commit()
+    worklog.add("content", "기타", f"레퍼런스 이미지 업로드: {c.title}", detail={"campaign": cid, "summary": bool(summary)})
+    return _state(cid, 201, warning=warn)
+
+
+@bp.delete("/campaigns/<int:cid>/references/<int:rid>")
+def references_delete(cid, rid):
+    _campaign(cid)
+    ref = db.session.get(ContentReference, rid)
+    if ref is None or ref.campaign_id != cid:
+        raise ApiError("없는 레퍼런스입니다.", 404)
+    name = ref.file
+    db.session.delete(ref)
+    db.session.commit()
+    media.delete_files([name])
+    return _state(cid)
 
 
 @bp.post("/campaigns/<int:cid>/select")
@@ -630,7 +751,8 @@ def assets_file(name):
 def files(name):
     if not media.FILE_RE.match(name or ""):
         raise ApiError("없는 파일입니다.", 404)
-    if ContentVersion.query.filter_by(image_file=name).first() is None:
+    if (ContentVersion.query.filter_by(image_file=name).first() is None
+            and ContentReference.query.filter_by(file=name).first() is None):
         raise ApiError("없는 파일입니다.", 404)
     folder = media.upload_dir()
     if not (folder / name).is_file():

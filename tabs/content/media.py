@@ -131,6 +131,9 @@ def _fallback_plan(snap, job):
             bits.append(f"{k.capitalize()} (Korean note): {dec[k]}.")
     if job.instructions:
         bits.append(f"Art direction (Korean): {job.instructions[:400]}")
+    copy = snap.get("copy_draft")
+    if copy:
+        bits.append(f"Leave clear space for the copy of this draft (Korean): {copy['body'][:300]}")
     layers = [{"role": "slogan", "text": SLOGAN}]
     if dec.get("headline"):
         layers.insert(0, {"role": "headline", "text": dec["headline"][:120]})
@@ -148,6 +151,7 @@ def _plan(snap, job, base):
         "sheet": snap.get("labels"), "decisions": snap.get("decisions"),
         "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
         "base_version": ({"label": base.label, "notes": base.body[:1500], "image": snap.get("base_image")} if base else None),
+        "copy_draft": snap.get("copy_draft"),
         "request": snap.get("request"), "instructions": job.instructions,
         "size": job.size, "character_use": assets.character_choice(snap.get("decisions")),
         "reference_photos": _provider(job) == "higgsfield" or providers.image_supports_edit(job.model),
@@ -322,6 +326,9 @@ def run_image_job(job_id):
         note_bits.append(f"{base.label} · v{base.seq}을 기준 이미지로 넣어 편집 (모델 편집 — 영역 밖 픽셀 완전 보존은 보장하지 않음)")
     elif job.base_version_id:
         note_bits.append("새 시안 (원본 편집 아님)")
+    copy = snap.get("copy_draft")
+    if copy and not edit:
+        note_bits.append(f"카피 초안 {copy['label']} · v{copy['seq']} 문구 기준")
     if requested_ratio and (not requested_ratio.replace(" ", "").startswith(job.size) if hf
                             else image_size(requested_ratio) != "1024x1024"):
         note_bits.append(f"요청 비율 {requested_ratio} → {job.size}로 생성 · 게시 전 크롭 필요할 수 있음")
@@ -614,6 +621,68 @@ def clean_layers(raw):
         if len(out) >= 6:
             break
     return out
+
+
+# ───────── 레퍼런스 이미지 (사용자가 올림 · 대화 AI가 봄 · 생성 참고 사진으로는 안 씀) ─────────
+
+REF_MAX_BYTES = 5 * 1024 * 1024   # 화면이 긴 쪽 1024px JPEG로 줄여 보내므로 넉넉한 상한
+REF_PER_CAMPAIGN = 3
+REF_MIMES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def image_dims(data):
+    """JPEG · PNG · WebP 머리에서 가로·세로 (못 읽으면 None)."""
+    size = png_size(data)
+    if size:
+        return size
+    if data[:3] == b"\xff\xd8\xff":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                return None
+            marker = data[i + 1]
+            seg = int.from_bytes(data[i + 2:i + 4], "big")
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+            i += 2 + seg
+        return None
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 30:
+        chunk = data[12:16]
+        if chunk == b"VP8X":
+            return int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1
+        if chunk == b"VP8 ":
+            return int.from_bytes(data[26:28], "little") & 0x3FFF, int.from_bytes(data[28:30], "little") & 0x3FFF
+        if chunk == b"VP8L":
+            b = int.from_bytes(data[21:25], "little")
+            return (b & 0x3FFF) + 1, ((b >> 14) & 0x3FFF) + 1
+    return None
+
+
+def save_reference(data, campaign_id):
+    """검사 통과한 레퍼런스 바이트 → (파일 이름, (가로, 세로)). 형식이 아니면 ValueError."""
+    ext = file_ext(data)
+    if ext not in REF_MIMES:
+        raise ValueError("레퍼런스는 JPG · PNG · WebP 이미지만 올릴 수 있어요.")
+    dims = image_dims(data)
+    if dims is None or not (16 <= dims[0] <= 4096 and 16 <= dims[1] <= 4096):
+        raise ValueError("이미지 크기를 읽지 못했거나 너무 커요 (가로·세로 16~4096px).")
+    name = f"c{campaign_id}-ref-{secrets.token_hex(8)}{ext}"
+    try:
+        (upload_dir() / name).write_bytes(data)
+    except OSError:
+        current_app.logger.exception("콘텐츠 레퍼런스 저장 실패")
+        return None, dims
+    return name, dims
+
+
+def read_reference(name):
+    """대화 AI에 보낼 (바이트, MIME) — 파일이 없으면 None."""
+    if not FILE_RE.match(name or ""):
+        return None
+    path = upload_dir() / name
+    if not path.is_file():
+        return None
+    return path.read_bytes(), REF_MIMES.get("." + name.rsplit(".", 1)[1], "image/jpeg")
 
 
 def save_upload(data, campaign_id):

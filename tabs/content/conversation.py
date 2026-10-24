@@ -28,6 +28,8 @@ NO_KEY = ("OpenAI 키가 없어 AI 대화를 쓸 수 없습니다. 설정 › �
           "지금은 시트·결정 사항 정리와 초안 직접 작성으로 진행할 수 있어요.")
 TURN_BUDGET = 150  # 초 — 이 시간이 지나면 선택 단계(자동 재작성)는 건너뜀 (gunicorn timeout 300초 안에서)
 REQ_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
+CHIPS_MAX = 3  # AI가 질문하면 추천 답 ①②③
+OFFER_TYPES = tuple(t for t in O.ACTION_TYPES if t not in ("none", "select_version"))
 DONE_PATCH_RE = re.compile(r"(반영했|반영해\s*뒀|반영되었|반영됐|적용했|적용됐|저장했|저장됐|변경했|변경됐|바꿨|바꿔\s*뒀|업데이트했|확정했)")
 DONE_MAKE_RE = re.compile(r"(만들었|생성했|생성됐|생성되었|작성했|완성했|그렸|완료했|완료됐)")
 FILLED_Q = {
@@ -57,7 +59,21 @@ def _msg_line(m):
     return line + (" (" + " · ".join(extra) + ")" if extra else "")
 
 
-def build_context(c, sheet, decisions, settings, facts, labels, versions, base, message, sig, kickoff):
+def flow_context(sheet, decisions):
+    """흐름 가이드 — 항목 key · 이름 · 현재 값 · 안내 (순서는 권장 · 서버는 강제하지 않음)."""
+    out = []
+    for key in O.flow_of(sheet):
+        d = decisions.get(key) or {}
+        out.append({"key": key, "label": O.DECISION_LABELS.get(key, key), "hint": prompts.FLOW_HINTS.get(key, ""),
+                    "value": d.get("value"), "status": d.get("status") or "undecided"})
+    return out
+
+
+def references_context(refs):
+    return [{"id": r.id, "summary": r.summary or "(요약 없음 — AI가 아직 보지 못함)", "note": r.note or None} for r in refs] or None
+
+
+def build_context(c, sheet, decisions, settings, facts, labels, versions, base, message, sig, kickoff, refs=()):
     recent = (ContentMessage.query.filter_by(campaign_id=c.id).order_by(ContentMessage.id.desc()).limit(12).all())
     total = ContentMessage.query.filter_by(campaign_id=c.id).count()
     vlist = sorted(versions, key=lambda v: v.id, reverse=True)[:12]
@@ -81,6 +97,9 @@ def build_context(c, sheet, decisions, settings, facts, labels, versions, base, 
         "selected_version": ({"id": base.id, "label": base.label, "kind": base.kind, "body": base.body[:5000],
                               "image": bool(base.image_file)} if base else None),
         "user_materials": {"reference_text": c.reference_text[:4000]} if c.reference_text else None,
+        "user_references": references_context(refs),
+        "flow": flow_context(sheet, decisions),
+        "channel_profile": prompts.CHANNEL_PROFILES.get((sheet["channels"] or [""])[0]),
         "recent_messages": [_msg_line(m) for m in reversed(recent)],
         "older_messages_omitted": max(0, total - len(recent)),
         "upcoming_seasons": upcoming,
@@ -92,6 +111,9 @@ def build_context(c, sheet, decisions, settings, facts, labels, versions, base, 
             "video_generation": ("가능 (명확한 요청 시 · Higgsfield Seedance 2.0 720p · 유료)" if video_ready(settings)
                                  else "꺼짐 — 숏폼은 구성안(실제 영상 아님)만"),
             "active_image_job": media.has_active_job(c.id),
+            "pending_offer": sig.get("pending_offer"),
+            "agreed_to_offer": bool(sig.get("pending_offer")) and sig.get("agreement", False),
+            "reference_images_attached": sig.get("reference_images", 0),
         },
         "user_message": None if kickoff else message,
         "task": prompts.KICKOFF_TASK if kickoff else prompts.TURN_TASK,
@@ -130,13 +152,43 @@ def sanitize_turn(raw):
         if len(cands) >= 3:
             break
     questions = [clip(q, 200).strip() for q in raw.get("clarification_questions") or [] if isinstance(q, str) and q.strip()]
+    chips = []
+    for ch in raw.get("chips") or []:
+        if isinstance(ch, dict) and clip(ch.get("value"), 200).strip():
+            value = clip(ch.get("value"), 200).strip()
+            label = clip(ch.get("label"), 30).strip() or value[:30]
+            if all(x["value"] != value for x in chips):
+                chips.append({"label": label, "value": value, "reason": clip(ch.get("reason"), 160).strip()})
+        if len(chips) >= CHIPS_MAX:
+            break
+    of = raw.get("offer") if isinstance(raw.get("offer"), dict) else None
+    offer = ({"type": of["type"], "summary": clip(of.get("summary"), 300).strip()}
+             if of and of.get("type") in OFFER_TYPES else None)
     ar = raw.get("action_request") if isinstance(raw.get("action_request"), dict) else {}
     t = ar.get("type") if ar.get("type") in O.ACTION_TYPES else "none"
     tv = ar.get("target_version_id")
     tv = tv if isinstance(tv, int) and not isinstance(tv, bool) else None
     return {"intent": intent, "assistant_text": text, "decision_patch": patches, "candidates": cands,
-            "clarification_questions": questions,
+            "clarification_questions": questions, "chips": chips, "offer": offer,
             "action_request": {"type": t, "target_version_id": tv, "instructions": clip(ar.get("instructions"), 1000).strip()}}
+
+
+def last_offer(cid):
+    """직전 AI 답의 만들기 제안 (그 뒤 사용자 말이 이번 메시지뿐일 때만 유효)."""
+    m = (ContentMessage.query.filter(ContentMessage.campaign_id == cid, ContentMessage.role != "event")
+         .order_by(ContentMessage.id.desc()).first())
+    return (m.payload or {}).get("offer") if m is not None and m.role == "assistant" else None
+
+
+def references_for_turn(refs, message, kickoff):
+    """이번 턴에 이미지를 직접 보여 줄 레퍼런스: 마지막 AI 답 뒤에 새로 올린 것 · 사용자가 레퍼런스를 말하면 전부."""
+    if kickoff or not refs:
+        return []
+    if heuristics.mentions_reference(message):
+        return list(refs)
+    last = (ContentMessage.query.filter_by(campaign_id=refs[0].campaign_id, role="assistant")
+            .order_by(ContentMessage.id.desc()).first())
+    return [r for r in refs if last is None or r.created_at > last.created_at]
 
 
 def filter_questions(questions, sheet):
@@ -245,7 +297,12 @@ def decide_action(turn, sig, sheet, base, versions, force, settings=None):
             t, out["note"] = "generate_image", "기준 이미지가 없어 새 시안으로 만들어요."
         elif t == "edit_image" and not image_edit_supported(settings):
             t, out["note"] = "generate_image", "선택한 이미지 모델은 기준 이미지 편집을 지원하지 않아 새 시안으로 만들어요 (원본 수정 아님)."
-        out.update(run="image", type=t, target=img if t == "edit_image" else None, status="queued")
+        # 새 시안은 카피 초안을 먼저 만들었으면 그 문구로: 가리킨·기준 텍스트 버전 → 가장 최근 텍스트 버전
+        copy = None
+        if t == "generate_image":
+            texts = [v for v in (target, base) if v is not None and v.kind not in ("image", "video")]
+            copy = texts[0] if texts else next((v for v in reversed(versions) if v.kind not in ("image", "video")), None)
+        out.update(run="image", type=t, target=img if t == "edit_image" else None, copy=copy, status="queued")
         return out
     if t in O.ACTION_KINDS:
         kind = O.ACTION_KINDS[t]
@@ -303,12 +360,30 @@ def run_turn(c, data, user):
     labels = repository.labels_of(sheet, products)
     facts = brandkit.product_facts(sheet["product_ids"])
     sig = heuristics.signals(message, has_base=base is not None, force=force, kickoff=kickoff)
+    # 직전 AI가 "이대로 만들까요?"(offer)라고 했고 사용자가 '좋아요'처럼 동의함 → 그 제안대로 실행
+    offer = None if kickoff else last_offer(cid)
+    agreed = bool(offer) and not force and heuristics.is_agreement(message)
+    if agreed:
+        sig.update(explicit_request=True, vague_ack=False)
+    sig.update(pending_offer=offer, agreement=agreed)
+    refs = repository.references_of(cid)
+    shown = references_for_turn(refs, message, kickoff)
+    images = [x for x in (media.read_reference(r.file) for r in shown) if x]
+    sig["reference_images"] = len(images)
 
     # 2·3 맥락 → 판단
-    ctx = build_context(c, sheet, decisions, settings, facts, labels, versions, base, message, sig, kickoff)
-    raw = providers.call_json(prompts.turn_system(settings), ctx, schema=schemas.TURN, name="content_turn",
-                              action="콘텐츠 대화 (첫 답변)" if kickoff else "콘텐츠 대화", max_tokens=2500, timeout=60)
+    ctx = build_context(c, sheet, decisions, settings, facts, labels, versions, base, message, sig, kickoff, refs)
+    action_name = "콘텐츠 대화 (첫 답변)" if kickoff else "콘텐츠 대화"
+    if images:
+        raw = providers.call_json_images(prompts.turn_system(settings), prompts.dumps(ctx), images, schema=schemas.TURN,
+                                         name="content_turn", action=action_name + " · 레퍼런스 이미지", max_tokens=2500,
+                                         timeout=60)
+    else:
+        raw = providers.call_json(prompts.turn_system(settings), ctx, schema=schemas.TURN, name="content_turn",
+                                  action=action_name, max_tokens=2500, timeout=60)
     turn = sanitize_turn(raw)
+    if agreed and turn["action_request"]["type"] == "none":  # 모델이 실행안을 빠뜨려도 동의한 제안은 실행
+        turn["action_request"].update(type=offer["type"], instructions=turn["action_request"]["instructions"] or offer["summary"])
 
     # 4 검증 — 결정 변경안
     plan = repository.plan_changes(sheet, decisions, turn["decision_patch"], user=user, source="chat", revision=rev0,
@@ -321,8 +396,9 @@ def run_turn(c, data, user):
             candidates.append({"field": d["field"], "label": d["value"][:80], "value": d["value"],
                                "reason": "AI 제안 — 고르면 시트에 반영돼요"})
     questions = filter_questions(turn["clarification_questions"], new_sheet)
-    if kickoff:  # 첫 답변: 실행 없음 · 시트 제안은 후보 카드로만 (거절 줄은 숨김)
+    if kickoff:  # 첫 답변: 실행 없음 · 제안 없음 · 시트 제안은 후보 카드로만 (거절 줄은 숨김)
         turn["action_request"]["type"] = "none"
+        turn["offer"] = None
         plan["rejected"] = [r for r in plan["rejected"] if not r["field"].startswith("sheet.")]
 
     # 5 실행
@@ -346,6 +422,8 @@ def run_turn(c, data, user):
             job_spec = act
 
     made = bool(drafts_out) or job_spec is not None
+    if act["status"] not in ("none", "skipped"):  # 이번 턴에 실행했으면 새 제안은 띄우지 않음
+        turn["offer"] = None
     text = strip_unsupported_claims(turn["assistant_text"], patched=bool(plan["applied"]), made=made)
     if not text:
         text = "요청을 확인했어요." if not kickoff else "기본 정보 시트를 확인했어요."
@@ -421,7 +499,7 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
     job = None
     if job_spec is not None:
         jsnap, jhash = repository.make_snapshot(new_sheet, new_dec, settings, facts.get("facts_version"))
-        tgt = job_spec["target"]
+        tgt, cp = job_spec["target"], job_spec.get("copy")
         kind = "video" if job_spec["run"] == "video" else "image_edit" if job_spec["type"] == "edit_image" else "image"
         job = media.new_job(
             c, kind=kind, base=tgt, provider=settings.get("image_provider") or "openai",
@@ -429,6 +507,8 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
             snapshot={"sheet": new_sheet, "labels": labels, "decisions": new_dec, "facts": facts,
                       "request": message[:1000], "snapshot": jsnap, "snapshot_hash": jhash,
                       "base_image": {"label": tgt.label, "seq": tgt.seq} if tgt is not None else None,
+                      "copy_draft": ({"label": cp.label, "seq": cp.seq, "title": cp.title, "body": cp.body[:1500]}
+                                     if cp is not None else None),
                       "selected_at_request": c.selected_version_id},
             request_key=f"{cid}:{req_id}" if req_id else None, user=user, message_id=msg_id)
         db.session.add(job)
@@ -442,9 +522,12 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
     bot = ContentMessage(campaign_id=cid, role="assistant", text=text, revision=rev0 + (1 if plan["applied"] else 0),
                          user_name="REBOOT AI")
     bot.payload = {"intent": turn["intent"], "candidates": candidates, "questions": questions,
+                   "chips": turn["chips"], "offer": turn["offer"], "referenceImages": sig.get("reference_images", 0),
+                   "agreedOffer": sig.get("pending_offer") if sig.get("agreement") else None,
                    "applied": plan["applied"], "rejected": plan["rejected"], "factRequests": plan["fact_requests"],
                    "action": action_payload, "model": providers.text_model(), "kickoff": kickoff,
-                   "signals": {"explicit": sig["explicit_request"], "vagueAck": sig["vague_ack"]},
+                   "signals": {"explicit": sig["explicit_request"], "vagueAck": sig["vague_ack"],
+                               "agreement": sig.get("agreement", False)},
                    "promptVersion": prompts.PROMPT_BUNDLE_VERSION}
     db.session.add(bot)
     c.updated_at, c.updated_by = utcnow(), user
@@ -522,7 +605,7 @@ EXAMPLE_QUESTIONS = {
                    ("한국어", "한국어", "한국어 채널용이에요")),
 }
 EXAMPLE_ORDER = {
-    "image": ["goal", "concept", "background", "ratio", "tone", "language"],
+    "image": ["goal", "concept", "background", "tone", "language"],
     "cardnews": ["goal", "concept", "tone", "slide_count", "target", "language"],
     "shortform": ["goal", "concept", "duration", "tone", "target"],
     "crm": ["goal", "format", "tone", "cta", "target"],
@@ -539,11 +622,13 @@ def interview_messages(cid):
 
 
 def _taken(sheet, decisions, asked_fields):
-    """다시 묻지 않을 항목: 이번 인터뷰에서 물은 것 · 시트 목적이 이미 있음 · 이미 확정된 결정."""
+    """다시 묻지 않을 항목: 이번 인터뷰에서 물은 것 · 시트 목적이 이미 있음 · 이미 확정된 결정 · 채널 기본 비율."""
     out = set(asked_fields)
     if sheet["goal"]:
         out.add("sheet.goal")
     out.update("decisions." + k for k, d in decisions.items() if (d or {}).get("status") == "confirmed")
+    if (decisions.get("ratio") or {}).get("source") == "default":  # 채널 기본값 제안 — 바꾸고 싶으면 대화에서
+        out.add("decisions.ratio")
     return out
 
 
@@ -596,6 +681,8 @@ def next_question(sheet, decisions, facts, labels, asked):
                "asked": [{"field": a["field"], "question": a["question"],
                           "answer": a["answer"] if a["status"] == "answered" else "(건너뜀)"} for a in asked],
                "avoid_fields": sorted(taken),
+               "flow": flow_context(sheet, decisions),
+               "channel_profile": prompts.CHANNEL_PROFILES.get((sheet["channels"] or [""])[0]),
                "language": prompts.language_of(decisions)}
         try:
             raw = providers.call_json(prompts.interview_system(), prompts.dumps(ctx), schema=schemas.INTERVIEW,
@@ -708,7 +795,7 @@ def run_interview(c, data, user):
         else:
             n_ans = sum(1 for a in asked if a["status"] == "answered")
             bot.text = ((intro + "\n\n") if intro else "") + (
-                f"질문을 마쳤어요 (답 {n_ans}개). 오른쪽 '답 정리' 표를 확인하고, 괜찮으면 [이대로 만들기]를 눌러 주세요. "
+                f"질문을 마쳤어요 (답 {n_ans}개). 오른쪽 '브리프' 표를 확인하고, 괜찮으면 [이대로 만들기]를 눌러 주세요. "
                 "표의 답은 언제든 고칠 수 있고, 아래 입력창으로 자유롭게 더 이야기해도 돼요.")
             bot.payload = {"interviewDone": {"answered": n_ans, "asked": len(asked)}}
         db.session.add(bot)

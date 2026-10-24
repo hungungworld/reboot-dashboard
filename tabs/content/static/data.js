@@ -55,7 +55,15 @@
       language: '결과물 언어', cta: 'CTA', headline: '헤드라인', message: '핵심 메시지', target: '타깃', length: '길이',
       format: '형식', season: '시즌', accent_color: '포인트 색', featured_product: '메인 제품', slide_count: '장 수',
       duration: '영상 길이', lighting: '조명', composition: '구도', mood: '분위기', caption: '캡션', hashtags: '해시태그',
-      subtitle: '자막', use_character: '캐릭터 Rebu', flavor: '맛'
+      subtitle: '자막', use_character: '캐릭터 Rebu', flavor: '맛',
+      story: '스토리', design_note: '시안 설명', emphasis: '강조할 내용', content_points: '담을 내용', hook: '멘트'
+    },
+    // 오른쪽 '브리프' 표의 항목 설명 (흐름 순서는 서버 options.CONTENT_FLOWS → campaign.flow)
+    flowHints: {
+      concept: '컨셉 · 레퍼런스', story: '담을 이야기 · 장면', design_note: '글로 쓰는 시안', emphasis: '꼭 강조할 것',
+      ratio: '이미지 크기', content_points: '꼭 넣을 내용', slide_count: '카드뉴스 장 수', duration: '영상 길이',
+      format: '이메일 · SMS · 시퀀스', tone: '말투', cta: '행동 유도 문구', target: '받는 고객',
+      caption: '게시글 캡션', hook: '첫 줄 훅 · 고정 댓글'
     },
     // 오른쪽 '현재 결정 사항'에 미정으로 보여 줄 항목 (콘텐츠별)
     decisionHints: {

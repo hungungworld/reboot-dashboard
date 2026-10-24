@@ -68,6 +68,7 @@
 .part-content .cnt-sheet-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 28px;
   background: var(--surface-2); border-top: 1px solid var(--line); }
 .part-content .cnt-sheet-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-content .cnt-start-btns { gap: 8px; flex-shrink: 0; }
 .part-content .cnt-summary-text { font-size: 12px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; }
 
 /* 수정용 시트 (오른쪽 접이식 · 좁은 폭) */
@@ -76,7 +77,6 @@
 .part-content .cnt-sheet.compact .cnt-q { margin-top: 16px; }
 .part-content .cnt-sheet.compact .cnt-q-row { margin-top: 16px; }
 .part-content .cnt-edit-foot { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-3); }
-.part-content .cnt-edit-foot .flex { justify-content: flex-end; }
 
 /* ───────── 2단계: 대화 ───────── */
 .part-content .cnt-studio-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 22px;
@@ -183,7 +183,27 @@
 .part-content .cnt-brief td:last-child { text-align: right; white-space: nowrap; }
 .part-content .cnt-brief .link { font-size: 10px; }
 .part-content .cnt-brief .badge { margin-left: 2px; }
-.part-content .cnt-brief-card .cnt-iv-make { margin: 0 0 8px; }
+.part-content .cnt-brief td small { display: block; color: var(--muted-2); font-size: 9px; margin-top: 2px; white-space: normal; }
+.part-content .cnt-brief tr.todo td:nth-child(3) { font-style: italic; }
+/* 합쳐진 대화: 보기 칩 · 만들기 제안 · 레퍼런스 */
+.part-content .cnt-chips { margin: 10px 0 2px; align-items: center; }
+.part-content .cnt-chips .panel-note { margin-left: 4px; }
+.part-content .cnt-offer { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 4px; padding: 12px 14px; border-radius: 12px;
+  background: var(--lime-soft); border: 1px solid var(--lime-soft-line); font-size: 12px; }
+.part-content .cnt-offer b { display: block; margin-bottom: 2px; }
+.part-content .cnt-offer span { color: var(--muted); }
+.part-content .cnt-offer-old { margin-top: 8px; }
+.part-content .cnt-ref-seen { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+.part-content .cnt-refs-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.part-content .cnt-refs-bar:not(:empty) { margin: 0 0 8px; }
+.part-content .cnt-ref-chip { position: relative; display: inline-block; }
+.part-content .cnt-ref-img { display: block; width: 48px; height: 48px; padding: 0; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden;
+  background: var(--soft-2); cursor: zoom-in; }
+.part-content .cnt-ref-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.part-content .cnt-ref-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-2);
+  background: var(--surface); color: var(--muted); font-size: 9px; line-height: 1; cursor: pointer; padding: 0; }
+.part-content .cnt-ref-busy { display: inline-flex; align-items: center; gap: 6px; }
+.part-content .cnt-ref-full { display: block; max-width: 100%; max-height: 60vh; margin: 0 auto; border-radius: 10px; }
 
 /* ───────── 대화 아래: 진행 과정 & 결과 (넓게) ───────── */
 .part-content .cnt-main-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
@@ -228,23 +248,10 @@
 .part-content .cnt-ed-bake { display: flex; gap: 6px; align-items: flex-start; font-size: 11px; margin-top: 10px; }
 .part-content .cnt-ed-bake small { display: block; color: var(--muted-2); font-size: 10px; }
 
-/* ───────── 오른쪽: 결정 · 결과 · 접이식 ───────── */
+/* ───────── 오른쪽: 브리프 · 결과 ───────── */
 .part-content .cnt-aside { min-width: 0; }
-.part-content .cnt-dval { min-width: 0; overflow-wrap: anywhere; }
-.part-content .cnt-dact { gap: 6px; flex-shrink: 0; }
-.part-content .cnt-dact .link { font-size: 10px; }
 .part-content .cnt-x { color: var(--faint); }
 .part-content .cnt-undecided { background: transparent; border: 1px dashed var(--line-2); color: var(--faint); }
-.part-content .cnt-flash { animation: cnt-flash 2.4s ease-out; border-radius: 8px; }
-@keyframes cnt-flash { 0% { background: var(--lime-soft); box-shadow: 0 0 0 6px var(--lime-soft); } 100% { background: transparent; box-shadow: 0 0 0 6px transparent; } }
-.part-content .cnt-dlinks { gap: 14px; margin-top: 16px; }
-.part-content .cnt-recent { margin-top: 14px; font-size: 11px; }
-.part-content .cnt-recent summary { cursor: pointer; color: var(--muted-2); }
-.part-content .cnt-recent ul { list-style: none; padding: 0; margin: 8px 0 0; }
-.part-content .cnt-recent li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; padding: 7px 0; border-bottom: 1px solid var(--line-3); }
-.part-content .cnt-recent li:last-child { border-bottom: 0; }
-.part-content .cnt-recent li small { grid-column: 1; color: var(--faint); font-size: 10px; }
-.part-content .cnt-recent li .link { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: 10px; }
 .part-content .cnt-step-st { margin-left: auto; font-size: 10px; }
 .part-content .cnt-make { gap: 6px; margin: 4px 0 16px; }
 .part-content .cnt-empty { min-height: 170px; }
@@ -279,6 +286,15 @@
 .part-content .cnt-check-list { margin: 8px 0; font-size: 11px; }
 .part-content .cnt-check-list ul { margin: 4px 0 0; padding-left: 18px; }
 .part-content .cnt-review { border-top: 1px solid var(--line-3); margin-top: 10px; padding-top: 10px; }
+.part-content .cnt-check-sum { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line); }
+.part-content .cnt-check-sum.lv-block { border-color: var(--red); }
+.part-content .cnt-check-sum.lv-revise { border-color: var(--orange); }
+.part-content .cnt-check-sum .btn { margin-left: auto; }
+.part-content .cnt-check-sum .panel-note { flex-basis: 100%; margin: 0; }
+.part-content .cnt-check-title { font-size: 12px; font-weight: 700; color: var(--ink); }
+.part-content .cnt-review-more { margin-top: 8px; }
+.part-content .cnt-review-more > summary { cursor: pointer; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .part-content .cnt-review-row { display: flex; align-items: center; gap: 8px; font-size: 11px; margin: 6px 0; flex-wrap: wrap; }
 .part-content .cnt-review-row > span:first-child { color: var(--muted); min-width: 74px; }
 .part-content .cnt-review-row .link { margin-left: auto; font-size: 10px; }
@@ -310,14 +326,6 @@
 .part-content .cnt-vlabel { grid-area: label; font-weight: 700; color: var(--ink); }
 .part-content .cnt-vmeta { grid-area: meta; color: var(--muted); font-size: 10px; }
 .part-content .cnt-vbadges { grid-area: badges; display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
-.part-content .cnt-fold { padding: 0; }
-.part-content .cnt-fold > summary { display: flex; align-items: center; gap: 8px; padding: 16px 20px; cursor: pointer; font-size: 13px; font-weight: 650;
-  list-style: none; color: var(--ink); }
-.part-content .cnt-fold > summary::-webkit-details-marker { display: none; }
-.part-content .cnt-fold > summary::after { content: "⌄"; margin-left: auto; color: var(--muted); transition: transform .15s; }
-.part-content .cnt-fold[open] > summary::after { transform: rotate(180deg); }
-.part-content .cnt-fold > summary .icon { width: 16px; height: 16px; color: var(--lime-deep); }
-.part-content .cnt-fold > div { padding: 0 20px 20px; }
 .part-content .cnt-fact { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line-3); border-radius: 10px; }
 .part-content .cnt-fact > b { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; margin-bottom: 4px; }
 .part-content .cnt-fact .row { font-size: 11px; padding: 6px 0; }
@@ -398,6 +406,7 @@
   .part-content .cnt-messages { padding: 20px 16px 8px; }
   .part-content .cnt-dock { padding: 0 14px 16px; }
   .part-content .cnt-sheet-footer { flex-direction: column; align-items: stretch; padding: 16px 20px; }
+  .part-content .cnt-start-btns > .btn { flex: 1; justify-content: center; }
   .part-content .cnt-concepts { grid-template-columns: 1fr; }
   .part-content .cnt-campaign-grid { grid-template-columns: 1fr; }
   .part-content .cnt-search { min-width: 0; width: 100%; }

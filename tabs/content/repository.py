@@ -17,7 +17,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from . import brandkit
 from . import options as O
-from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
+from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentReference, ContentVersion
 
 EMPTY_SHEET = {"content_type": "", "channels": [], "brand_focus": False, "product_ids": [], "goal": "", "extra_request": ""}
 SHEET_FIELDS = tuple(EMPTY_SHEET)
@@ -483,6 +483,15 @@ def file_url(name):
     return f"/api/content/files/{name}" if name else None
 
 
+def reference_dict(r):
+    return {"id": r.id, "url": file_url(r.file), "width": r.width, "height": r.height, "note": r.note, "summary": r.summary,
+            "createdBy": r.created_by, "createdAt": iso(r.created_at)}
+
+
+def references_of(campaign_id):
+    return ContentReference.query.filter_by(campaign_id=campaign_id).order_by(ContentReference.id).all()
+
+
 def version_dict(v, cur_core=None, final_id=None, selected_id=None):
     snap = v.snapshot
     stale = stale_fields(snap.get("core"), cur_core) if cur_core is not None else []
@@ -530,6 +539,8 @@ def campaign_state(c, *, message_limit=200):
         "jobs": [job_dict(j) for j in jobs_],
         "recentChanges": [event_dict(e) for e in events],
         "facts": brandkit.product_facts(sheet["product_ids"]),
+        "references": [reference_dict(r) for r in references_of(c.id)],
+        "flow": O.flow_of(sheet),
         "currentHash": snapshot_hash(cur),
     }
 

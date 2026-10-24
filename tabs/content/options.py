@@ -56,7 +56,35 @@ DECISION_LABELS = {
     "featured_product": "메인 제품", "slide_count": "장 수", "duration": "영상 길이", "lighting": "조명",
     "composition": "구도", "mood": "분위기", "caption": "캡션", "hashtags": "해시태그", "subtitle": "자막",
     "use_character": "캐릭터 Rebu", "flavor": "맛",
+    "story": "스토리", "design_note": "시안 설명", "emphasis": "강조할 내용", "content_points": "담을 내용", "hook": "멘트",
 }
+
+# 콘텐츠별 대화 흐름 가이드 (순서를 강제하지 않는 체크리스트 · 화면 '브리프' 표 순서) — data.js flows와 같은 키
+CONTENT_FLOWS = {
+    "image": ["concept", "story", "design_note", "emphasis"],
+    "cardnews": ["content_points", "concept", "emphasis", "slide_count"],
+    "shortform": ["concept", "duration", "story", "design_note", "emphasis"],
+    "crm": ["format", "tone", "cta", "target"],
+}
+# 이 채널이면 초안을 만든 뒤 캡션 · 멘트(게시글 첫 줄 훅 · 고정 댓글)를 다듬자고 제안 (흐름 질문에는 넣지 않음)
+SOCIAL_CHANNELS = ("instagram", "tiktok")
+
+# 이미지 · 카드뉴스 캠페인을 만들 때 채널 기본 비율을 '제안'으로 넣음 — 비율은 따로 묻지 않음
+RATIO_TYPES = ("image", "cardnews")
+CHANNEL_RATIOS = {
+    "instagram": "4:5 세로", "tiktok": "9:16 세로", "amazon": "1:1 정사각", "weee": "1:1 정사각",
+    "yamibuy": "1:1 정사각", "oliveyoung": "1:1 정사각",
+}
+
+
+def flow_of(sheet):
+    return list(CONTENT_FLOWS.get(sheet.get("content_type"), []))
+
+
+def default_ratio(sheet):
+    if sheet.get("content_type") not in RATIO_TYPES:
+        return None
+    return next((CHANNEL_RATIOS[ch] for ch in sheet.get("channels") or [] if ch in CHANNEL_RATIOS), None)
 # 모델이 한국어 키를 줄 때
 DECISION_ALIASES = {
     "배경": "background", "톤": "tone", "말투": "tone", "콘셉트": "concept", "컨셉": "concept", "언어": "language",
@@ -65,6 +93,8 @@ DECISION_ALIASES = {
     "구도": "composition", "조명": "lighting", "분위기": "mood", "자막": "subtitle",
     "캐릭터": "use_character", "리부": "use_character", "rebu": "use_character", "character": "use_character",
     "mascot": "use_character", "맛": "flavor",
+    "스토리": "story", "시안": "design_note", "시안설명": "design_note", "시안 설명": "design_note", "강조": "emphasis",
+    "강조점": "emphasis", "담을내용": "content_points", "담을 내용": "content_points", "멘트": "hook", "훅": "hook",
 }
 
 # 제품·브랜드 사실에 해당하는 키 — 대화로 바꾸지 않고 '확인 대기'로 기록 (README 3.4)

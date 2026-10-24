@@ -59,17 +59,26 @@ class FakeAI:
 
     def __init__(self):
         self.queue = {"content_turn": [], "content_draft": [], "content_image_plan": [], "content_suggest": [],
-                      "content_review": [], "content_interview": [], "content_video_plan": []}
+                      "content_review": [], "content_interview": [], "content_video_plan": [], "content_reference": []}
         self.calls = []
 
     def add(self, name, *items):
         self.queue[name].extend(items)
 
-    def __call__(self, system, user, *, schema, name, action, max_tokens=3000, timeout=120):
-        self.calls.append({"name": name, "system": system, "user": user, "action": action})
+    def __call__(self, system, user, *, schema, name, action, max_tokens=3000, timeout=120, images=0):
+        self.calls.append({"name": name, "system": system, "user": user, "action": action, "images": images})
         if not self.queue.get(name):
             raise AssertionError(f"예상하지 못한 AI 호출: {name}")
         return self.queue[name].pop(0)
+
+    def with_images(self, system, user, images, *, schema, name, action, max_tokens=3000, timeout=90):
+        """providers.call_json_images 대역 — 받은 이미지 수를 기록."""
+        assert all(isinstance(b, bytes) and mime.startswith("image/") for b, mime in images)
+        return self(system, user, schema=schema, name=name, action=action, images=len(images))
+
+    def ctx(self, i=-1):
+        u = self.calls[i]["user"]
+        return u if isinstance(u, dict) else json.loads(u)
 
     def names(self):
         return [c["name"] for c in self.calls]
@@ -80,6 +89,7 @@ def ai(monkeypatch):
     fake = FakeAI()
     monkeypatch.setattr(providers, "ready", lambda: True)
     monkeypatch.setattr(providers, "call_json", fake)
+    monkeypatch.setattr(providers, "call_json_images", fake.with_images)
     return fake
 
 
@@ -774,16 +784,16 @@ def test_interview_example_flow_without_key(auth_client):
                                              source="manual")
     assert open_question(c)["ready"] is False  # 답 2개 — 아직 윤곽 전
     c = iv(auth_client, c, "skip").get_json()["campaign"]
-    assert "background" not in c["decisions"] and open_question(c)["field"] == "decisions.ratio"
-    c = iv(auth_client, c, "answer", option=1).get_json()["campaign"]
-    assert open_question(c)["field"] == "decisions.tone" and open_question(c)["ready"] is True  # 답 3개 → 만들기 제안
+    # 비율은 채널 기본값(제안)이 있어 묻지 않음
+    assert "background" not in c["decisions"] and open_question(c)["field"] == "decisions.tone"
     c = iv(auth_client, c, "answer", option=2).get_json()["campaign"]
-    assert open_question(c)["field"] == "decisions.language"  # 5개에서 멈추지 않음
+    assert open_question(c)["field"] == "decisions.language" and open_question(c)["ready"] is True  # 답 3개 → 만들기 제안
     c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
     assert open_question(c) is None  # 예시 질문을 다 쓰면 끝
     done = [m for m in c["messages"] if (m["payload"] or {}).get("interviewDone")]
-    assert len(done) == 1 and done[0]["payload"]["interviewDone"] == {"answered": 5, "asked": 6}
-    assert c["decisions"]["ratio"]["value"] == "4:5 세로" and c["decisions"]["tone"]["value"] == "친근하고 따뜻하게"
+    assert len(done) == 1 and done[0]["payload"]["interviewDone"] == {"answered": 4, "asked": 5}
+    assert c["decisions"]["ratio"] == dict(c["decisions"]["ratio"], value="4:5 세로", status="proposed")
+    assert c["decisions"]["tone"]["value"] == "친근하고 따뜻하게"
     assert c["decisions"]["language"]["status"] == "confirmed"
     assert iv(auth_client, c, "answer", option=0).status_code == 400  # 끝난 뒤에는 답하지 않음
 
@@ -976,6 +986,30 @@ def test_image_character_choice_controls_rebu(auth_client, ai, sync_jobs, monkey
     img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
     assert [Path(x).name for x in sent[-1][0]] == ["rebu-poses-fullbody.jpg"] and "Rebu, the Reboot mascot" in sent[-1][1]
     assert img["image"]["references"] == ["rebu-poses-fullbody"] and "캐릭터 Rebu 포함" in img["note"]
+
+
+def test_new_image_uses_copy_draft_made_first(auth_client, ai, sync_jobs, monkeypatch):
+    monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (PNG, {}))
+    plan = {"prompt_en": "Neon lime on black.", "keep": [], "change": [], "text_layers": [], "notes_ko": "시안", "flavors": [],
+            "include_character": False}
+    # 초안 없이 바로 이미지 → 카피 초안 정보 없음
+    camp = create(auth_client)
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", dict(plan))
+    camp = chat(auth_client, camp, "이미지 만들어줘").get_json()["campaign"]
+    assert ai.ctx()["copy_draft"] is None
+    # 카피 초안 → 이미지: 가장 최근 초안 문구를 이미지 기획에 넘김 (기준 이미지 편집은 아님)
+    ai.add("content_turn", turn(intent="generate", action="draft_copy"))
+    ai.add("content_draft", {"note": "", "drafts": [draft("**Headline** A neon start.\n**CTA** Try it today")]})
+    camp = chat(auth_client, camp, "카피 초안 만들어줘").get_json()["campaign"]
+    copy_v = next(v for v in camp["versions"] if v["kind"] not in ("image", "video"))
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", dict(plan))
+    chat(auth_client, camp, "이 초안으로 이미지 만들어줘", force="image")
+    sent = ai.ctx()["copy_draft"]
+    assert sent["label"] == copy_v["label"] and "A neon start" in sent["body"] and ai.ctx()["mode"] == "generate"
+    imgs = [v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image"]
+    assert f"카피 초안 {copy_v['label']} · v{copy_v['seq']} 문구 기준" in imgs[0]["note"]
 
 
 def test_keyword_check_zero_sugar_rebu_and_known_prices():
@@ -1182,3 +1216,216 @@ def test_higgsfield_helpers():
     assert media.file_ext(MP4) == ".mp4" and media.file_ext(JPG) == ".jpg" and media.file_ext(PNG) == ".png"
     assert media.file_ext(b"nope") is None
     assert higgsfield.check_connection()["checked"] is False  # 키 없으면 네트워크 호출 없음
+
+
+# ───────── 합쳐진 대화: 흐름 · 채널 · 보기 칩 · 만들기 제안 (2026-10-24) ─────────
+
+def kickoff(client, camp):
+    res = client.post(f"/api/content/campaigns/{camp['id']}/chat", json={"kickoff": True, "expected_revision": camp["revision"]})
+    assert res.status_code == 200, res.get_json()
+    return res.get_json()
+
+
+def test_flow_and_channel_profile_in_context(auth_client, ai):
+    camp = create(auth_client, content_type="image", channels=["instagram"])
+    assert camp["flow"] == ["concept", "story", "design_note", "emphasis"]
+    assert camp["decisions"]["ratio"]["value"] == "4:5 세로" and camp["decisions"]["ratio"]["status"] == "proposed"
+    ai.add("content_turn", dict(turn("인스타 이미지로 시작할게요. 원하는 컨셉이나 레퍼런스가 있나요?"),
+                                offer={"type": "generate_image", "summary": "x"}))
+    out = kickoff(auth_client, camp)
+    ctx = ai.ctx()
+    assert [f["key"] for f in ctx["flow"]] == camp["flow"] and ctx["flow"][0]["status"] == "undecided"
+    assert ctx["channel_profile"].startswith("Instagram") and ctx["user_references"] is None
+    assert out["reply"]["payload"]["offer"] is None  # 첫 답변에는 만들기 제안 없음
+    assert "흐름" in ai.calls[-1]["system"] and "offer" in ai.calls[-1]["system"]
+    # 캡션 · 멘트 · 비율은 흐름 질문에 없음 (비율은 채널 기본값 제안) · 카드뉴스 · 숏폼 · CRM 흐름
+    amazon = create(auth_client, content_type="image", channels=["amazon"])
+    assert amazon["flow"] == ["concept", "story", "design_note", "emphasis"] and amazon["decisions"]["ratio"]["value"] == "1:1 정사각"
+    assert "ratio" not in create(auth_client, content_type="shortform", channels=["instagram"])["decisions"]
+    assert create(auth_client, content_type="cardnews", channels=["oliveyoung"])["flow"] == ["content_points", "concept", "emphasis", "slide_count"]
+    assert create(auth_client, content_type="shortform", channels=["tiktok"])["flow"][:2] == ["concept", "duration"]
+    assert "caption" not in create(auth_client, content_type="crm", channels=["crm"])["flow"]
+    from tabs.content import prompts
+    assert set(prompts.CHANNEL_PROFILES) == set(O.CHANNELS)
+    assert "확인 필요" not in prompts.CHANNEL_PROFILES["oliveyoung"] and "입점" in prompts.CHANNEL_PROFILES["oliveyoung"]
+    assert all(k in prompts.FLOW_HINTS for steps in O.CONTENT_FLOWS.values() for k in steps)
+
+
+def test_chips_and_offer_are_sanitized(auth_client, ai):
+    camp = create(auth_client)
+    ai.add("content_turn", dict(turn("비율은 어떻게 할까요?"),
+                                chips=[{"label": "4:5", "value": "4:5 세로로", "reason": "피드에서 크게 보여요"},
+                                       {"label": "중복", "value": "4:5 세로로", "reason": ""},
+                                       {"label": "", "value": "1:1", "reason": ""}, {"label": "x", "value": " ", "reason": ""},
+                                       {"label": "9:16", "value": "9:16", "reason": ""}, {"label": "넘침", "value": "16:9", "reason": ""}],
+                                offer={"type": "select_version", "summary": "안 됨"}))
+    pay = chat(auth_client, camp, "비율 추천해줘").get_json()["reply"]["payload"]
+    # 추천 답은 ①②③ 세 개까지 · 이유 한 줄 함께
+    assert [c["value"] for c in pay["chips"]] == ["4:5 세로로", "1:1", "9:16"] and pay["chips"][1]["label"] == "1:1"
+    assert pay["chips"][0]["reason"] == "피드에서 크게 보여요"
+    assert pay["offer"] is None  # 허용하지 않은 제안 종류는 버림
+
+
+def test_offer_then_agreement_runs_offer(auth_client, ai):
+    camp = create(auth_client)
+    summary = "검정 배경 · 네온 · 아침 루틴 장면 · 4:5"
+    ai.add("content_turn", dict(turn("정리하면 이래요. 이대로 만들까요?"), offer={"type": "draft_copy", "summary": summary}))
+    out = chat(auth_client, camp, "배경은 검정으로 하고 아침 루틴 느낌이면 좋겠어").get_json()
+    assert out["reply"]["payload"]["offer"]["type"] == "draft_copy" and out["reply"]["payload"]["action"]["status"] == "none"
+    # '좋아요'만 해도 실행 (모델이 실행안을 빠뜨려도 서버가 제안대로)
+    ai.add("content_turn", turn("만들어 볼게요."))
+    ai.add("content_draft", {"note": "", "drafts": [draft("**Headline** Restart Your Day")]})
+    out = chat(auth_client, out["campaign"], "좋아요").get_json()
+    pay = out["reply"]["payload"]
+    assert pay["action"]["type"] == "draft_copy" and pay["action"]["status"] == "done" and len(out["newVersionIds"]) == 1
+    assert pay["agreedOffer"]["summary"] == summary and pay["offer"] is None and pay["signals"]["agreement"] is True
+    assert ai.ctx(-2)["server_signals"]["agreed_to_offer"] is True
+    # 제안이 이미 쓰였으니 다음 '좋아요'는 실행 아님
+    ai.add("content_turn", turn("고마워요!", action="draft_copy"))
+    pay = chat(auth_client, out["campaign"], "좋아요").get_json()["reply"]["payload"]
+    assert pay["action"]["status"] == "skipped" and "not_explicit" not in json.dumps(pay)  # 이유 코드는 화면에 안 나감
+
+
+def test_agreement_needs_offer_and_no_changes(auth_client, ai):
+    camp = create(auth_client)
+    ai.add("content_turn", turn("좋아요!", action="draft_copy"))
+    out = chat(auth_client, camp, "좋아요").get_json()
+    assert out["reply"]["payload"]["action"]["status"] == "skipped" and out["newVersionIds"] == []
+    ai.add("content_turn", dict(turn("이대로 만들까요?"), offer={"type": "draft_copy", "summary": "s"}))
+    out = chat(auth_client, out["campaign"], "컨셉은 네온으로").get_json()
+    ai.add("content_turn", turn("흰색으로 바꿀게요."))
+    out = chat(auth_client, out["campaign"], "좋아요 근데 배경은 흰색으로").get_json()  # 수정이 섞이면 동의가 아님
+    assert out["reply"]["payload"]["action"]["status"] == "none" and out["newVersionIds"] == []
+
+
+def test_agreement_heuristics():
+    for t in ("좋아요", "네", "응 만들어줘", "ㄱㄱ", "좋아요, 이대로 만들어줘", "ok", "진행해 주세요"):
+        assert heuristics.is_agreement(t), t
+    for t in ("", "아니요", "좋아요 근데 배경은 흰색으로", "잠깐만", "좋아요?", "이거 말고 다른 거", "네" * 41):
+        assert not heuristics.is_agreement(t), t
+    assert heuristics.mentions_reference("아까 올린 레퍼런스처럼") and heuristics.mentions_reference("참고 이미지 느낌으로")
+    assert not heuristics.mentions_reference("검정 배경으로 해줘")
+
+
+# ───────── 레퍼런스 이미지 ─────────
+
+def jpeg(w=60, h=40):
+    """SOF0 머리만 있는 작은 JPEG (가로·세로를 읽을 수 있음)."""
+    return (b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00"
+            + b"\xff\xc0\x00\x11\x08" + h.to_bytes(2, "big") + w.to_bytes(2, "big") + b"\x03" + b"\x00" * 9 + b"\xff\xd9")
+
+
+def upload_ref(client, camp, data=None, name="ref.jpg", note=""):
+    return client.post(f"/api/content/campaigns/{camp['id']}/references",
+                       data={"file": (io.BytesIO(jpeg() if data is None else data), name), "note": note},
+                       content_type="multipart/form-data")
+
+
+def test_image_dims():
+    assert media.image_dims(jpeg(60, 40)) == (60, 40)
+    assert media.image_dims(PNG) == (1, 1)
+    webp = b"RIFF\x00\x00\x00\x00WEBPVP8X" + b"\x00" * 8 + (99).to_bytes(3, "little") + (49).to_bytes(3, "little")
+    assert media.image_dims(webp) == (100, 50)
+    assert media.image_dims(b"\xff\xd8\xff\x00junk") is None
+
+
+def test_reference_upload_summary_and_chat_images(app, auth_client, ai):
+    camp = create(auth_client)
+    ai.add("content_reference", {"summary": "어두운 배경 · 제품 클로즈업 · 네온 조명"})
+    res = upload_ref(auth_client, camp, note="이 느낌")
+    assert res.status_code == 201, res.get_json()
+    c = res.get_json()["campaign"]
+    assert res.get_json()["warning"] is None
+    ref = c["references"][0]
+    assert ref["summary"].startswith("어두운") and ref["note"] == "이 느낌" and (ref["width"], ref["height"]) == (60, 40)
+    assert ai.calls[-1]["images"] == 1 and ai.calls[-1]["name"] == "content_reference"
+    assert c["messages"][-1]["role"] == "event" and "레퍼런스" in c["messages"][-1]["text"]
+    assert auth_client.get(ref["url"]).status_code == 200  # 업로드 폴더 파일 제공
+    # 올린 뒤 첫 대화: 이미지를 직접 보여 줌 · 요약도 맥락에
+    ai.add("content_turn", turn("레퍼런스처럼 어두운 배경에 네온으로 가 볼까요?"))
+    out = chat(auth_client, c, "이 느낌 어때?").get_json()
+    assert ai.calls[-1]["images"] == 1 and out["reply"]["payload"]["referenceImages"] == 1
+    assert ai.ctx()["user_references"][0]["summary"].startswith("어두운")
+    assert ai.ctx()["server_signals"]["reference_images_attached"] == 1
+    # 그다음엔 요약만 (비용 절약) · 레퍼런스를 말하면 다시 이미지
+    ai.add("content_turn", turn("네."), turn("다시 볼게요."))
+    out = chat(auth_client, out["campaign"], "배경은 검정").get_json()
+    assert ai.calls[-1]["images"] == 0 and out["reply"]["payload"]["referenceImages"] == 0
+    chat(auth_client, out["campaign"], "레퍼런스 구도를 더 따라가 줘")
+    assert ai.calls[-1]["images"] == 1
+    # 지우면 파일도 지움
+    folder = Path(app.config["DATA_DIR"]) / "uploads" / "content"
+    name = ref["url"].rsplit("/", 1)[1]
+    assert (folder / name).is_file()
+    res = auth_client.delete(f"/api/content/campaigns/{camp['id']}/references/{ref['id']}")
+    assert res.status_code == 200 and res.get_json()["campaign"]["references"] == []
+    assert not (folder / name).exists() and auth_client.get(ref["url"]).status_code == 404
+
+
+def test_reference_limits_and_types(auth_client, ai, monkeypatch):
+    camp = create(auth_client)
+    assert upload_ref(auth_client, camp, data=b"GIF89a" + b"\x00" * 30, name="a.gif").status_code == 400
+    assert upload_ref(auth_client, camp, data=jpeg(8000, 10)).status_code == 400  # 너무 큼
+    assert upload_ref(auth_client, camp, data=b"\xff\xd8\xff" + b"\x00" * (media.REF_MAX_BYTES)).status_code == 413
+    other = create(auth_client)
+    assert auth_client.delete(f"/api/content/campaigns/{other['id']}/references/999").status_code == 404
+    ai.add("content_reference", {"summary": "a"}, {"summary": "b"}, {"summary": "c"})
+    for _ in range(3):
+        assert upload_ref(auth_client, camp).status_code == 201
+    res = upload_ref(auth_client, camp)
+    assert res.status_code == 400 and "3장" in res.get_json()["error"]
+    # 다른 캠페인의 레퍼런스는 지울 수 없음
+    rid = get(auth_client, camp["id"])["references"][0]["id"]
+    assert auth_client.delete(f"/api/content/campaigns/{other['id']}/references/{rid}").status_code == 404
+
+
+def test_reference_without_key_or_ai_failure_keeps_image(auth_client, monkeypatch):
+    camp = create(auth_client)
+    monkeypatch.setattr(providers, "ready", lambda: False)
+    res = upload_ref(auth_client, camp)
+    assert res.status_code == 201 and "키가 없어" in res.get_json()["warning"]
+    assert res.get_json()["campaign"]["references"][0]["summary"] == ""
+    monkeypatch.setattr(providers, "ready", lambda: True)
+
+    def boom(*a, **k):
+        raise providers.AIError("모델이 이미지를 못 읽음")
+    monkeypatch.setattr(providers, "call_json_images", boom)
+    res = upload_ref(auth_client, camp)
+    assert res.status_code == 201 and "AI가 보지 못했어요" in res.get_json()["warning"]
+    assert len(res.get_json()["campaign"]["references"]) == 2
+
+
+def test_delete_campaign_removes_reference_files(app, auth_client, ai):
+    camp = create(auth_client)
+    ai.add("content_reference", {"summary": "s"})
+    name = upload_ref(auth_client, camp).get_json()["campaign"]["references"][0]["url"].rsplit("/", 1)[1]
+    folder = Path(app.config["DATA_DIR"]) / "uploads" / "content"
+    assert (folder / name).is_file()
+    assert auth_client.delete(f"/api/content/campaigns/{camp['id']}").status_code == 200
+    assert not (folder / name).exists()
+
+
+def test_copy_campaign_to_other_channel(auth_client, app):
+    camp = create(auth_client, goal="구매 유도")
+    camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
+        "expected_revision": camp["revision"], "changes": [
+            {"field": "decisions.concept", "value": "검정 배경 네온", "status": "confirmed"},
+            {"field": "decisions.caption", "value": "인스타 캡션", "status": "confirmed"}]}).get_json()["campaign"]
+    out = _manual(auth_client, camp["id"], "copy", "**Headline** Restart Your Day", "A안")
+    v = next(x for x in out["campaign"]["versions"] if x["id"] == out["versionId"])
+    url = f"/api/content/campaigns/{camp['id']}/copy"
+    res = auth_client.post(url, json={"channel": "tiktok"})
+    assert res.status_code == 201, res.get_json()
+    new = res.get_json()["campaign"]
+    assert new["id"] != camp["id"] and new["sheet"]["channels"] == ["tiktok"] and new["sheet"]["goal"] == "구매 유도"
+    assert new["decisions"]["concept"]["value"] == "검정 배경 네온" and "caption" not in new["decisions"]
+    assert new["decisions"]["ratio"] == dict(new["decisions"]["ratio"], value="9:16 세로", status="proposed")  # 새 채널 기본값
+    assert "Restart Your Day" in new["referenceText"] and f"{v['label']} v{v['seq']}" in new["referenceText"]
+    assert new["versions"] == [] and [m["role"] for m in new["messages"]] == ["event"]
+    # 같은 채널 · CRM · 없는 채널은 거절, 로그인 없이는 안 됨
+    assert auth_client.post(url, json={"channel": "instagram"}).status_code == 400
+    assert auth_client.post(url, json={"channel": "crm"}).status_code == 400
+    assert auth_client.post(url, json={"channel": "nope"}).status_code == 400
+    crm = create(auth_client, content_type="crm", channels=["crm"])
+    assert auth_client.post(f"/api/content/campaigns/{crm['id']}/copy", json={"channel": "instagram"}).status_code == 400
+    assert app.test_client().post(url, json={"channel": "tiktok"}).status_code in (302, 401, 403)
