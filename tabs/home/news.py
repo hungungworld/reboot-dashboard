@@ -558,7 +558,7 @@ def payload():
                 continue
             d = a.to_dict()
             items.append(dict(d, titleKo=it.get("title_ko", ""), summaryKo=it.get("summary_ko", ""),
-                              whyKo=it.get("why_ko", ""), score=it.get("score"), areaLabel=areas.get(it.get("area"), ""),
+                              whyKo=it.get("why_ko", ""), score=it.get("score"), area=it.get("area", ""), areaLabel=areas.get(it.get("area"), ""),
                               topic=it.get("topic", ""), kind=kinds.get(it.get("area"), "flow"), fallback=bool(it.get("fallback")), groupLabel=labels.get(a.group_id, ""),
                               surge=bool(surging & set(d["groups"]))))
         ai = {"headline": s.get("headline", ""), "items": items, "at": iso(ai_run.finished_at), "model": ai_run.model}
@@ -578,6 +578,8 @@ def payload():
         "status": status, "running": bool(running), "aiReady": ai_ready,
         "lastRun": latest.to_dict() if latest else None,
         "lastSuccessAt": iso(last_ok.finished_at) if last_ok else None,
+        # 화면 '마켓 레터' 호수: 성공한 수집 횟수 (배송 시각은 lastSuccessAt)
+        "issueNo": HomeNewsRun.query.filter(HomeNewsRun.status.in_(("ok", "partial"))).count(),
         "aiStatus": (latest.ai_status if latest and latest.status != "running" else (last_ok.ai_status if last_ok else "")),
         "aiError": latest.ai_error if latest and latest.ai_status == "error" else "",
         "ai": ai,
