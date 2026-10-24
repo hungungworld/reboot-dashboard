@@ -1473,7 +1473,7 @@
       const kinds = {};
       its.forEach(x => { kinds[x.label] = (kinds[x.label] || 0) + 1; });
       return `<button type="button" class="ins-chg-tile ${g}${S.chg === g ? ' on' : ''}" data-act="chg-group" data-g="${g}" aria-pressed="${S.chg === g}"${its.length ? '' : ' disabled'}>
-        <span>${esc(name)} · ${esc(desc)}</span><b>${its.length}</b><small>${esc(Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(' · ') || '없음')}</small></button>`;
+        <span class="ins-chg-t"><b>${esc(name)}</b>${esc(desc)}</span><strong>${its.length}</strong><small>${esc(Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(' · ') || '없음')}</small></button>`;
     }).join('');
     const groups = S.chg === 'all' ? CHG_GROUPS : CHG_GROUPS.filter(g => g[0] === S.chg);
     const cols = groups.map(([g, name]) => {
@@ -1484,10 +1484,7 @@
       return `<div class="ins-chg-col"><p class="ins-chg-h ${g}">${esc(name)} ${its.length}</p>
         ${(all ? its : its.slice(0, CHG_FIRST)).map(chgCard).join('') || '<p class="small muted">없음</p>'}${more}</div>`;
     }).join('');
-    const demoNote = demo ? `<details class="note warn ins-fold ins-demo mb-16" data-fold="demo-prev"${S.open['demo-prev'] ? ' open' : ''}>
-        <summary>예시 지난주와 비교한 결과예요 <span>자세히 보기</span></summary>
-        <p>지난주 수집이 아직 없어 이번 주 진열대로 만든 예시와 비교했어요. 실제 변화가 아니에요.<br>다음 주 수집부터 실제 비교로 바뀌어요.</p></details>` : '';
-    return `${demoNote}<div class="ins-chg-sum">${tiles}</div><div class="ins-chg-cols${S.chg === 'all' ? '' : ' one'}">${cols}</div>
+    return `<div class="ins-chg-sum">${tiles}</div><div class="ins-chg-cols${S.chg === 'all' ? '' : ' one'}">${cols}</div>
       <p class="panel-note mt-8">지난주 같은 상품과 비교했어요. '→'는 알디콤에 주는 의미예요. 위협 · 기회 · 관찰 칸을 누르면 그것만 보여요.</p>`;
   }
 
@@ -1586,7 +1583,10 @@
         <div class="ins-export-menu"><a href="/api/insights/competitors.csv" download>CSV</a><a href="/api/insights/competitors.json" download>JSON</a></div></details></div>`;
     const notes = [!d.aiReady ? '<div class="note warn mt-16">OpenAI 키가 없어 핵심 메시지 · 성분 분석은 할 수 없어요. 판매 채널 · 단가 · 칭찬/불만은 그대로 보여요 (설정 › 연결).</div>' : '',
       d.aiReady && !d.firecrawlReady ? '<div class="note mt-16">Firecrawl 키가 없어 홈페이지 · 뉴스는 읽지 않고, 진열대 자료와 AI 웹 검색으로 채워요.</div>' : ''].join('');
-    const changes = `<section class="card mt-24"><div class="card-head"><h2>이번 주 경쟁사 변화 ${d.changesDemo ? badge('예시', 'orange') : ''}</h2>${d.changes && d.changes.length ? badge(`${d.changes.length}건`, 'blue') : ''}</div>${changesHtml(d.changes, d.changesDemo)}</section>`;
+    // 예시 비교면 제목 옆에 '예시' 배지 + 작은 회색 한 줄 (자세한 설명은 마우스를 올리면)
+    const demoTip = d.changesDemo ? badge('예시', 'orange') + `<span class="ins-tip ins-demo-tip" tabindex="0"
+      data-tip="지난주 수집이 아직 없어 이번 주 진열대로 만든 예시와 비교했어요. 실제 변화가 아니에요.&#10;다음 주 수집부터 실제 비교로 바뀌어요."><i aria-hidden="true">i</i>예시 지난주와 비교한 결과예요</span>` : '';
+    const changes = `<section class="card mt-24"><div class="card-head"><div class="ins-head-title"><h2>이번 주 경쟁사 변화</h2>${demoTip}</div>${d.changes && d.changes.length ? badge(`${d.changes.length}건`, 'blue') : ''}</div>${changesHtml(d.changes, d.changesDemo)}</section>`;
     // 제목 줄 한 줄에: 제목 · 개수 · 검색창 (왼쪽) / 다시 불러오기 · AI 분석 · 내보내기 (오른쪽)
     const list = `<section class="card mt-24"><div class="card-head wrap"><div class="ins-comp-filter"><div class="ins-head-title"><h2>경쟁사 비교</h2>${badge(`${d.table.length}개`)}</div></div>${tools}</div>
       <div data-ref="comp-body">${compTable(d)}</div>
