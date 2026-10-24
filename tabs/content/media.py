@@ -5,6 +5,7 @@
 - 편집: 기준 이미지 파일을 실제로 넣어 고침 (GPT 이미지 계열). 지원하지 않으면 '새 시안'으로 표시하고 원본 수정이라 하지 않음
 - 글자·로고는 이미지 안에 그리지 않고 텍스트 레이어로 따로 둠 (PL01 · README 7.2)
 - 파일: DATA_DIR/uploads/content/<이름>.png → GET /api/content/files/<이름>.png (로그인 필요)
+- 브라우저 편집기(자르기·밝기·텍스트 레이어)에서 만든 PNG도 같은 곳에 새 버전으로 보관 (AI 호출 없음)
 """
 import re
 import secrets
@@ -238,6 +239,59 @@ def run_image_job(job_id):
                 detail={"model": job.model, "size": job.size, "prompt": job.prompt[:1500], "campaign": c.id,
                         "version": v.id, "usage": usage, "seconds": image_meta["seconds"]},
                 user_name=job.created_by)
+
+
+# ───────── 브라우저 편집기에서 저장 (AI 아님 · 비용 없음) ─────────
+
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+UPLOAD_MAX = 12 * 1024 * 1024
+LAYER_ROLES = ("headline", "slogan", "cta", "text")
+COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+EDIT_KEYS = ("crop", "offset", "brightness", "contrast", "saturation")  # 기록용 편집 값 (화면에서 보낸 것 중 이것만)
+
+
+def png_size(data):
+    """PNG 머리(IHDR)에서 가로·세로 — PNG가 아니면 None."""
+    if len(data) < 24 or not data.startswith(PNG_MAGIC) or data[12:16] != b"IHDR":
+        return None
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def _num(v, lo, hi, default):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    return min(hi, max(lo, f)) if f == f else default
+
+
+def clean_layers(raw):
+    """편집기 텍스트 레이어 → 허용 값만. 슬로건은 원문 그대로 (README 7.2)."""
+    out = []
+    for t in raw if isinstance(raw, list) else []:
+        if not isinstance(t, dict):
+            continue
+        role = t.get("role") if t.get("role") in LAYER_ROLES else "text"
+        text = SLOGAN if role == "slogan" else str(t.get("text") or "").strip()[:160]
+        if not text:
+            continue
+        out.append({"role": role, "text": text, "x": _num(t.get("x"), 0, 1, .06), "y": _num(t.get("y"), 0, 1, .06),
+                    "size": _num(t.get("size"), .02, .2, .06),
+                    "color": t.get("color") if COLOR_RE.match(str(t.get("color") or "")) else "#ffffff",
+                    "align": t.get("align") if t.get("align") in ("left", "center", "right") else "left"})
+        if len(out) >= 6:
+            break
+    return out
+
+
+def save_upload(data, campaign_id):
+    name = f"c{campaign_id}-edit-{secrets.token_hex(8)}.png"
+    try:
+        (upload_dir() / name).write_bytes(data)
+    except OSError:
+        current_app.logger.exception("콘텐츠 편집 이미지 저장 실패")
+        return None
+    return name
 
 
 def delete_files(names):

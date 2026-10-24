@@ -55,6 +55,17 @@ IMAGE_PLAN = _obj({
     "character_draft": {"type": "boolean"},
 })
 
+# 인터뷰 질문 하나 (interview_v1) — 보기는 서버가 정확히 3개만 씀
+INTERVIEW = _obj({
+    "done": {"type": "boolean"},
+    "ready": {"type": "boolean"},
+    "intro": _STR,
+    "field": _STR,
+    "label": _STR,
+    "question": _STR,
+    "options": {"type": "array", "items": _obj({"label": _STR, "value": _STR, "reason": _STR})},
+})
+
 # 보조 검토 (review_v2)
 REVIEW = _obj({
     "summary": _STR,

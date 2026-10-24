@@ -1,6 +1,7 @@
 """콘텐츠 제작 API (담당: 나원). 모두 로그인 필요 · 쓰기는 CSRF (core.js가 자동).
 
   GET    /api/content/meta                          모델·연결 상태 · 선택지
+  GET    /api/content/meta/check                    연결 테스트 (OpenAI 모델 조회만 · 비용 없음 / Higgsfield는 키 유무)
   GET    /api/content/campaigns?q=&status=          내 캠페인 목록 (+ 상태별 개수)
   POST   /api/content/campaigns                     시트로 캠페인 시작 {content_type, channels, brand_focus, product_ids, goal, extra_request}
   GET    /api/content/campaigns/<id>                복원: 시트 · 결정 · 대화 · 버전 · 작업 · 제품 근거
@@ -8,7 +9,9 @@
   DELETE /api/content/campaigns/<id>                만든 사람·관리자만
   POST   /api/content/campaigns/<id>/decisions      {expected_revision, changes:[{field, value, status}], source} 후보 선택·직접 입력·되돌리기
   POST   /api/content/campaigns/<id>/chat           {message, expected_revision, base_version_id?, client_request_id?, force_action?, kickoff?}
+  POST   /api/content/campaigns/<id>/interview      {action: start|answer|skip|finish, expected_revision, option?|value?, client_request_id?}
   POST   /api/content/campaigns/<id>/versions       직접 작성 {kind, body, label?, title?, parent_id?}
+  POST   /api/content/campaigns/<id>/images         브라우저 편집기 PNG (multipart: file, parent_id, text_layers, edits, baked)
   POST   /api/content/campaigns/<id>/select         {version_id|null} 기준 결과물
   GET    /api/content/campaigns/<id>/export         ZIP (?version=<id> 한 버전만)
   POST   /api/content/suggest                       {field: goal|extra, sheet} → 후보 3개 (키 없으면 예시 추천)
@@ -18,6 +21,8 @@
   GET    /api/content/jobs/<id>                     이미지 작업 상태
   GET    /api/content/files/<이름>.png              생성 이미지 (로그인 필요)
 """
+import json
+
 from flask import Blueprint, Response, jsonify, request, send_from_directory
 from flask_login import current_user
 
@@ -86,10 +91,25 @@ def meta():
         imageModel=providers.image_model(), imageReady=providers.ready(), imageEdit=providers.image_supports_edit(),
         video={"mode": "plan_only", "label": "구성안만 (실제 영상 생성은 Higgsfield 연동 예정)",
                "higgsfieldKey": envkeys.has("HIGGSFIELD_API_KEY")},
+        # 연결 상태 칸 — Higgsfield는 앱 연동 전이라 키가 있는지만 (실제 호출 확인 없음)
+        connections={"openai": {"key": providers.ready(), "textModel": providers.text_model(),
+                                "imageModel": providers.image_model(), "imageEdit": providers.image_supports_edit()},
+                     "higgsfield": {"key": envkeys.has("HIGGSFIELD_API_KEY"), "wired": False}},
         defaults=O.DEFAULT_SETTINGS, answerLengths=O.ANSWER_LENGTHS, promptVersion=prompts.PROMPT_BUNDLE_VERSION,
         contentTypes=[{"id": k, "label": v["label"], "kind": v["kind"]} for k, v in O.CONTENT_TYPES.items()],
         channels=[{"id": k, "label": v["label"]} for k, v in O.CHANNELS.items()], statuses=list(O.STATUSES),
         kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS)
+
+
+@bp.get("/meta/check")
+def meta_check():
+    """연결 테스트 — OpenAI는 모델 조회만 (생성 비용 없음). Higgsfield는 어댑터가 없어 키 유무만."""
+    out = providers.check_connection()
+    hf = envkeys.has("HIGGSFIELD_API_KEY")
+    return jsonify(openai=out, higgsfield={
+        "key": hf, "checked": False,
+        "message": ("키는 있어요. 앱에 Higgsfield 연동 코드가 아직 없어 실제 호출 확인은 연동 후에 할 수 있어요." if hf
+                    else "HIGGSFIELD_API_KEY가 없어요 (설정 › 연결).")})
 
 
 # ───────── 캠페인 ─────────
@@ -279,6 +299,73 @@ def campaigns_chat(cid):
     data = json_body(max_bytes=64 * 1024)
     out = conversation.run_turn(c, data, _who())
     return jsonify(out)
+
+
+@bp.post("/campaigns/<int:cid>/interview")
+def campaigns_interview(cid):
+    c = _campaign(cid)
+    data = json_body()
+    return jsonify(conversation.run_interview(c, data, _who()))
+
+
+@bp.post("/campaigns/<int:cid>/images")
+def images_upload(cid):
+    """브라우저 편집기 결과 PNG → 새 이미지 버전 (부모 연결 · 원본 보존 · AI 아님)."""
+    c = _campaign(cid)
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("이미지 파일이 없습니다.")
+    data = f.read(media.UPLOAD_MAX + 1)
+    if len(data) > media.UPLOAD_MAX:
+        raise ApiError("이미지가 너무 큽니다 (12MB 이하).", 413)
+    size = media.png_size(data)
+    if size is None or not (16 <= size[0] <= 4096 and 16 <= size[1] <= 4096):
+        raise ApiError("PNG 이미지만 저장할 수 있어요 (가로·세로 16~4096px).")
+    try:
+        parent = db.session.get(ContentVersion, int(request.form.get("parent_id") or 0))
+    except (TypeError, ValueError):
+        parent = None
+    if parent is None or parent.campaign_id != cid or parent.kind != "image":
+        raise ApiError("편집한 원본 이미지 버전을 찾지 못했습니다.")
+    try:
+        layers = media.clean_layers(json.loads(request.form.get("text_layers") or "[]"))
+        edits = json.loads(request.form.get("edits") or "{}")
+    except ValueError:
+        raise ApiError("편집 정보를 읽지 못했습니다.")
+    edits = {k: clip(v, 40) for k, v in (edits.items() if isinstance(edits, dict) else []) if k in media.EDIT_KEYS}
+    baked = request.form.get("baked") == "1"
+    name = media.save_upload(data, cid)
+    if not name:
+        raise ApiError("이미지를 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+    user = _who()
+    sheet = repository.sheet_of(c)
+    from server.catalog import service as catalog
+    facts = catalog.product_facts(sheet["product_ids"])
+    snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
+                                           model=None, mode="manual")
+    snap["image"] = {"model": None, "size": f"{size[0]}x{size[1]}", "mode": "manual_edit", "text_layers": layers,
+                     "baked": baked, "edits": edits, "base": {"label": parent.label, "seq": parent.seq}}
+    note = [f"{parent.label} · v{parent.seq}을 브라우저 편집기로 수정 (AI 아님)"]
+    if baked:
+        note.append("글자를 이미지에 합성")
+    note.append("제품 형태는 시안 (실제 패키지 아님)")
+    v = ContentVersion(campaign_id=cid, seq=repository.next_seq(cid), kind="image", label=parent.label,
+                       title=parent.title, body=parent.body, image_file=name, parent_id=parent.id, source="manual",
+                       approach=", ".join(f"{k} {val}" for k, val in edits.items())[:300], note=" · ".join(note)[:500],
+                       facts_version=facts.get("facts_version") or "", snapshot_hash=shash, created_by=user)
+    v.snapshot = snap
+    v.review = {"keyword": review.keyword_check("\n".join(t["text"] for t in layers), "copy", sheet, facts),
+                "imageScope": "이미지 속 픽셀·글자는 검사하지 않음 (텍스트 레이어만 확인)"}
+    db.session.add(v)
+    db.session.flush()
+    c.selected_version_id = v.id
+    c.updated_by, c.updated_at = user, utcnow()
+    repository.add_event(c, f"이미지를 직접 편집했어요 · {v.label} (v{v.seq})", {"kind": "manual_version", "versionId": v.id},
+                         user=user)
+    db.session.commit()
+    worklog.add("content", "기타", f"이미지 직접 편집: {c.title} · {v.label} v{v.seq}",
+                detail={"campaign": cid, "version": v.id, "parent": parent.id, "edits": edits})
+    return _state(cid, 201, versionId=v.id)
 
 
 @bp.post("/campaigns/<int:cid>/versions")

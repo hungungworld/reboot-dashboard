@@ -1,5 +1,6 @@
 """콘텐츠 제작 API — 인터넷·키 없이 (AI·이미지 호출은 tabs.content.providers를 바꿔 끼움)."""
 import base64
+import json
 import io
 import re
 import zipfile
@@ -56,7 +57,7 @@ class FakeAI:
 
     def __init__(self):
         self.queue = {"content_turn": [], "content_draft": [], "content_image_plan": [], "content_suggest": [],
-                      "content_review": []}
+                      "content_review": [], "content_interview": []}
         self.calls = []
 
     def add(self, name, *items):
@@ -630,3 +631,168 @@ def test_delete_only_creator_or_admin(app, auth_client):
     assert member.delete(f"/api/content/campaigns/{mine['id']}").status_code == 200
     assert auth_client.delete(f"/api/content/campaigns/{camp['id']}").status_code == 200
     assert auth_client.get(f"/api/content/campaigns/{camp['id']}").status_code == 404
+
+
+# ───────── API 연결 상태 ─────────
+
+def test_meta_connections_and_check(auth_client, monkeypatch):
+    meta = auth_client.get("/api/content/meta").get_json()
+    assert meta["connections"]["openai"]["key"] is False and meta["connections"]["higgsfield"]["wired"] is False
+    out = auth_client.get("/api/content/meta/check").get_json()
+    assert out["openai"]["ok"] is False and "키가 없습니다" in out["openai"]["message"]  # 키 없으면 네트워크 호출 없음
+    assert out["higgsfield"]["checked"] is False
+    monkeypatch.setattr(providers, "check_connection", lambda: {"ok": True, "message": "확인", "models": {"m": True}})
+    assert auth_client.get("/api/content/meta/check").get_json()["openai"]["ok"] is True
+
+
+# ───────── 후보 선택 취소 (고르기 전 값으로) ─────────
+
+def test_candidate_cancel_restores_previous_values(auth_client):
+    camp = create(auth_client, goal="제품 소개")
+    url = f"/api/content/campaigns/{camp['id']}/decisions"
+    c = auth_client.post(url, json={"expected_revision": 1, "source": "candidate",
+                                    "changes": [{"field": "sheet.goal", "value": "구매 유도", "status": "confirmed"}]}).get_json()["campaign"]
+    assert c["sheet"]["goal"] == "구매 유도"
+    c = auth_client.post(url, json={"expected_revision": c["revision"], "source": "undo",
+                                    "changes": [{"field": "sheet.goal", "value": "제품 소개", "status": "confirmed"}]}).get_json()["campaign"]
+    assert c["sheet"]["goal"] == "제품 소개"
+    c = auth_client.post(url, json={"expected_revision": c["revision"], "source": "undo",
+                                    "changes": [{"field": "sheet.goal", "value": "", "status": "confirmed"}]}).get_json()["campaign"]
+    assert c["sheet"]["goal"] == ""  # 목적은 비워도 시작 조건(콘텐츠·채널·대상)은 그대로
+
+
+# ───────── 인터뷰 (질문 하나씩 · 보기 3개 · 최대 5개) ─────────
+
+def iv(client, camp, action, **kw):
+    body = {"action": action, "expected_revision": camp["revision"]}
+    body.update(kw)
+    return client.post(f"/api/content/campaigns/{camp['id']}/interview", json=body)
+
+
+def open_question(camp):
+    qs = [m for m in camp["messages"] if (m["payload"] or {}).get("interview")]
+    return qs[-1]["payload"]["interview"] if qs and qs[-1]["payload"]["interview"]["status"] == "open" else None
+
+
+def test_interview_example_flow_without_key(auth_client):
+    camp = create(auth_client)
+    c = iv(auth_client, camp, "start").get_json()["campaign"]
+    q = open_question(c)
+    assert q["step"] == 1 and q["field"] == "sheet.goal" and q["source"] == "example" and len(q["options"]) == 3
+    assert iv(auth_client, c, "start").get_json()["started"] is False  # 두 번 눌러도 같은 질문을 또 만들지 않음
+    c = iv(auth_client, c, "answer", option=0, value="무시됨").get_json()["campaign"]
+    assert c["sheet"]["goal"] == "브랜드 알리기"  # 보기 값은 서버가 저장해 둔 것
+    assert [m["text"] for m in c["messages"] if m["role"] == "user"] == ["① 브랜드 알리기"]
+    q = open_question(c)
+    assert q["step"] == 2 and q["field"] == "decisions.concept"
+    c = iv(auth_client, c, "answer", value="검정 배경의 미니멀 무드").get_json()["campaign"]  # 직접 입력
+    assert c["decisions"]["concept"] == dict(c["decisions"]["concept"], value="검정 배경의 미니멀 무드", status="confirmed",
+                                             source="manual")
+    assert open_question(c)["ready"] is False  # 답 2개 — 아직 윤곽 전
+    c = iv(auth_client, c, "skip").get_json()["campaign"]
+    assert "background" not in c["decisions"] and open_question(c)["field"] == "decisions.ratio"
+    c = iv(auth_client, c, "answer", option=1).get_json()["campaign"]
+    assert open_question(c)["field"] == "decisions.tone" and open_question(c)["ready"] is True  # 답 3개 → 만들기 제안
+    c = iv(auth_client, c, "answer", option=2).get_json()["campaign"]
+    assert open_question(c)["field"] == "decisions.language"  # 5개에서 멈추지 않음
+    c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
+    assert open_question(c) is None  # 예시 질문을 다 쓰면 끝
+    done = [m for m in c["messages"] if (m["payload"] or {}).get("interviewDone")]
+    assert len(done) == 1 and done[0]["payload"]["interviewDone"] == {"answered": 5, "asked": 6}
+    assert c["decisions"]["ratio"]["value"] == "4:5 세로" and c["decisions"]["tone"]["value"] == "친근하고 따뜻하게"
+    assert c["decisions"]["language"]["status"] == "confirmed"
+    assert iv(auth_client, c, "answer", option=0).status_code == 400  # 끝난 뒤에는 답하지 않음
+
+
+def test_interview_skips_filled_and_validates_ai(auth_client, ai):
+    camp = create(auth_client, goal="구매 유도")
+    camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
+        "expected_revision": 1, "changes": [{"field": "decisions.concept", "value": "네온", "status": "confirmed"}]}).get_json()["campaign"]
+    opts = [{"label": f"보기{i}", "value": f"값{i}", "reason": "이유"} for i in range(3)]
+    ai.add("content_interview",
+           {"done": False, "intro": "반영했어요. 인스타 이미지로 시작할게요.", "field": "decisions.price", "label": "가격",
+            "question": "가격은?", "options": opts})  # 사실 항목 → 예시 질문으로
+    c = iv(auth_client, camp, "start").get_json()["campaign"]
+    q = open_question(c)
+    assert q["field"] == "decisions.background" and q["source"] == "example"  # 목적·콘셉트는 이미 있어 건너뜀
+    assert "반영했어요" not in q["intro"] and "시작할게요" in q["intro"]
+    ai.add("content_interview", {"done": False, "intro": "", "field": "decisions.mood", "label": "분위기",
+                                 "question": "분위기는?", "options": opts})
+    c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
+    q = open_question(c)
+    assert q["field"] == "decisions.mood" and q["source"] == "ai" and q["options"][2]["value"] == "값2"
+    ai.add("content_interview", {"done": True, "intro": "충분해요.", "field": "", "label": "", "question": "", "options": []})
+    c = iv(auth_client, c, "answer", option=1).get_json()["campaign"]
+    assert open_question(c) is None and c["decisions"]["mood"]["value"] == "값1"
+    assert "충분해요." in c["messages"][-1]["text"] and ai.names() == ["content_interview"] * 3
+
+
+def test_interview_ai_ready_and_safety_cap(auth_client, ai):
+    camp = create(auth_client)
+    opts = [{"label": f"보기{i}", "value": f"값{i}", "reason": "이유"} for i in range(3)]
+    for n in range(conversation.INTERVIEW_MAX):  # AI가 계속 새 질문을 주더라도
+        ai.add("content_interview", {"done": False, "ready": n >= 2, "intro": "", "field": f"decisions.item_{n}",
+                                     "label": f"항목{n}", "question": f"질문{n}?", "options": opts})
+    c = iv(auth_client, camp, "start").get_json()["campaign"]
+    assert open_question(c)["ready"] is False
+    for n in range(1, conversation.INTERVIEW_MAX):
+        c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
+        assert open_question(c)["step"] == n + 1 and open_question(c)["ready"] is (n >= 2)
+    c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
+    assert open_question(c) is None  # 안전 상한 10개 — 11번째 질문은 AI에 묻지도 않음
+    assert len(ai.names()) == conversation.INTERVIEW_MAX == 10
+    assert c["messages"][-1]["payload"]["interviewDone"] == {"answered": 10, "asked": 10}
+
+
+def test_interview_finish_and_conflict(auth_client):
+    camp = create(auth_client, content_type="crm", channels=["crm"])
+    c = iv(auth_client, camp, "start").get_json()["campaign"]
+    assert iv(auth_client, dict(c, revision=c["revision"] + 5), "skip").status_code == 409
+    c = iv(auth_client, c, "finish").get_json()["campaign"]
+    assert open_question(c) is None
+    qs = [m for m in c["messages"] if (m["payload"] or {}).get("interview")]
+    assert qs[0]["payload"]["interview"]["status"] == "skipped"
+    assert c["messages"][-1]["payload"]["interviewDone"]["answered"] == 0
+
+
+# ───────── 이미지 직접 편집 (AI 없음 · 새 버전) ─────────
+
+def _png(w, h):
+    head = PNG[:16] + w.to_bytes(4, "big") + h.to_bytes(4, "big")
+    return head + PNG[24:]
+
+
+def test_image_editor_upload_makes_child_version(auth_client, ai, sync_jobs, monkeypatch):
+    monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (PNG, {}))
+    camp = create(auth_client)
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Neon on black.", "keep": [], "change": [], "text_layers": [],
+                                  "notes_ko": "시안", "character_draft": False})
+    chat(auth_client, camp, "이미지 만들어줘")
+    c = get(auth_client, camp["id"])
+    img = next(v for v in c["versions"] if v["kind"] == "image")
+    url = f"/api/content/campaigns/{camp['id']}/images"
+
+    def post(data, parent=img["id"], **form):
+        fields = {"file": (io.BytesIO(data), "edit.png"), "parent_id": str(parent)}
+        fields.update(form)
+        return auth_client.post(url, data=fields, content_type="multipart/form-data")
+
+    assert post(b"not a png").status_code == 400
+    assert post(_png(8000, 10)).status_code == 400
+    text_v = _manual(auth_client, camp["id"], "copy", "본문", "A안")["versionId"]
+    res = post(_png(20, 20), parent=text_v)
+    assert res.status_code == 400 and "원본 이미지" in res.get_json()["error"]  # 이미지 버전만 편집
+    layers = [{"role": "slogan", "text": "Restart!!", "x": 0.9, "y": 0.9, "size": 0.05, "color": "#d7ff3f", "align": "right"},
+              {"role": "headline", "text": "Hello", "x": 5, "y": -1, "size": 1, "color": "red", "align": "?"}]
+    res = post(_png(20, 25), text_layers=json.dumps(layers), edits=json.dumps({"crop": "4:5", "evil": "x"}), baked="0")
+    assert res.status_code == 201
+    c = res.get_json()["campaign"]
+    v = next(x for x in c["versions"] if x["id"] == res.get_json()["versionId"])
+    assert v["parentId"] == img["id"] and v["label"] == img["label"] and v["source"] == "manual"
+    assert v["image"]["mode"] == "manual_edit" and v["image"]["size"] == "20x25" and v["image"]["edits"] == {"crop": "4:5"}
+    assert v["image"]["text_layers"][0]["text"] == "Restart Your Day"  # 슬로건은 원문 고정
+    h = v["image"]["text_layers"][1]
+    assert (h["x"], h["y"], h["size"], h["color"], h["align"]) == (1, 0, 0.2, "#ffffff", "left")  # 범위 밖 값은 잘라냄
+    assert "AI 아님" in v["note"] and c["selectedVersionId"] == v["id"]
+    assert auth_client.get(v["imageUrl"]).status_code == 200 and auth_client.get(img["imageUrl"]).status_code == 200

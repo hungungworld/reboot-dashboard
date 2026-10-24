@@ -417,3 +417,279 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
         repository.guarded_bump(cid, rev0)
     db.session.commit()
     return bot, user_msg, new_versions, job
+
+
+# ───────── 인터뷰 (한 번에 질문 하나 · 보기 ①②③ + 직접 입력 · 개수는 AI가 판단) ─────────
+#
+# 상태는 따로 표를 두지 않고 대화 메시지에 둡니다 — 질문 메시지 payload.interview, 끝 메시지 payload.interviewDone.
+# 답은 기존 결정 사항(확정)으로 저장하므로 오른쪽 표·시트·다음 대화가 같은 값을 봅니다.
+# 질문 수는 AI가 정하고(윤곽이 잡히면 ready → 화면이 만들기를 제안), 끝없이 이어지지 않게 안전 상한만 둡니다.
+# AI가 없거나 실패하면 아래 예시 질문으로 이어 갑니다 (화면에 '예시 질문' 표시 · 답 READY_AFTER개부터 ready).
+
+INTERVIEW_MAX = 10   # 안전 상한 (화면에는 표시하지 않음)
+READY_AFTER = 3
+CIRCLED = "①②③"
+
+
+def _q(field, label, question, *options):
+    return {"field": field, "label": label, "question": question,
+            "options": [{"label": a, "value": b, "reason": c} for a, b, c in options]}
+
+
+EXAMPLE_QUESTIONS = {
+    "goal": _q("sheet.goal", "목적", "이번 콘텐츠로 가장 얻고 싶은 건 무엇인가요?",
+               ("브랜드 알리기", "브랜드 알리기", "Reboot를 처음 보는 사람에게 첫인상을 남겨요"),
+               ("제품 소개", "제품 소개", "어떤 제품인지 한눈에 알게 해요"),
+               ("구매 유도", "구매 유도", "바로 사러 가게 만드는 데 집중해요")),
+    "target": _q("decisions.target", "타깃", "누구에게 가장 보여주고 싶나요? (가설)",
+                 ("바쁜 아침 직장인", "아침을 바쁘게 시작하는 20~30대 직장인", "슬로건 Restart Your Day와 장면이 잘 맞아요"),
+                 ("간식 찾는 대학생", "새로운 간식을 찾는 대학생", "가볍고 재미있는 톤이 잘 통해요"),
+                 ("K-푸드 관심층", "K-푸드에 관심 있는 미국 소비자", "브랜드 첫인상을 넓게 알리기 좋아요")),
+    "concept": _q("decisions.concept", "콘셉트", "어떤 콘셉트로 갈까요?",
+                  ("네온 모닝", "검정 배경에 네온 라임으로 하루를 켜는 느낌", "브랜드 색(검정 & 네온)을 가장 잘 보여줘요"),
+                  ("다시 시작 의식", "하루를 다시 시작하는 작은 의식", "슬로건 Restart Your Day를 이야기로 풀어요"),
+                  ("팝 & 플레이", "밝고 경쾌한 팝 그래픽", "SNS 피드에서 눈에 잘 띄어요")),
+    "tone": _q("decisions.tone", "말투·톤", "말투와 톤은 어떻게 할까요?",
+               ("경쾌하고 위트 있게", "경쾌하고 위트 있게", "짧은 SNS 콘텐츠에 잘 맞아요"),
+               ("깔끔하고 미니멀하게", "깔끔하고 미니멀하게", "브랜드 색이 돋보여요"),
+               ("친근하고 따뜻하게", "친근하고 따뜻하게", "처음 보는 사람도 편하게 받아들여요")),
+    "background": _q("decisions.background", "배경", "배경은 어떤 느낌이 좋을까요?",
+                     ("검정 + 네온", "검정 배경에 네온 라임 포인트", "브랜드 색 그대로예요"),
+                     ("아침 햇살", "밝은 아침 햇살이 드는 공간", "하루의 시작 느낌을 줘요"),
+                     ("단색 스튜디오", "단색 컬러 스튜디오 배경", "제품과 문구가 또렷하게 보여요")),
+    "ratio": _q("decisions.ratio", "비율", "이미지 비율은 어떻게 할까요?",
+                ("1:1 정사각", "1:1 정사각", "피드 기본 비율이에요"),
+                ("4:5 세로", "4:5 세로", "피드에서 화면을 더 많이 차지해요"),
+                ("9:16 세로", "9:16 세로 (스토리·릴스)", "스토리·릴스에 맞아요")),
+    "slide_count": _q("decisions.slide_count", "장 수", "카드뉴스는 몇 장으로 할까요?",
+                      ("3장", "3장", "짧고 빠르게 읽혀요"),
+                      ("5장", "5장", "훅 → 내용 → CTA 흐름이 자연스러워요"),
+                      ("7장", "7장", "이야기를 자세히 풀 수 있어요")),
+    "duration": _q("decisions.duration", "영상 길이", "숏폼 길이는 어느 정도가 좋을까요?",
+                   ("15초", "15초", "끝까지 보기 쉬워요"),
+                   ("30초", "30초", "장면을 조금 더 보여줄 수 있어요"),
+                   ("60초", "60초", "이야기를 담을 수 있어요")),
+    "message": _q("decisions.message", "핵심 메시지", "가장 먼저 전할 메시지는 무엇인가요?",
+                  ("슬로건 중심", "슬로건 Restart Your Day 중심", "확인된 브랜드 문구라 안전해요"),
+                  ("브랜드 무드 중심", "검정 & 네온 브랜드 무드 중심", "제품 사실 없이도 쓸 수 있어요"),
+                  ("제품 형태 중심", "제품 형태(스틱 젤리·비탄산 음료) 중심", "제공된 제품 정보만 써요")),
+    "cta": _q("decisions.cta", "CTA", "마지막 행동 유도 문구는 어떻게 할까요?",
+              ("Shop now", "Shop now", "바로 구매로 이어져요"),
+              ("Learn more", "Learn more", "부담 없이 더 알아보게 해요"),
+              ("Try it today", "Try it today", "처음 써 보는 사람에게 맞아요")),
+    "format": _q("decisions.format", "형식", "CRM은 어떤 형식으로 쓸까요? (발송은 하지 않아요)",
+                 ("이메일 1통", "이메일 1통", "가장 간단해요"),
+                 ("SMS 1통", "SMS 1통", "짧고 빠르게 전달해요"),
+                 ("이메일 3통 시퀀스", "이메일 3통 시퀀스", "단계적으로 관심을 이어 가요")),
+    "language": _q("decisions.language", "결과물 언어", "소비자에게 보일 문구는 어떤 언어로 쓸까요?",
+                   ("미국 영어", "미국 영어 (US English)", "미국 소비자 대상이라 기본으로 제안해요"),
+                   ("영어 + 한국어", "영어 + 한국어 병기", "한인 고객도 함께 겨냥해요"),
+                   ("한국어", "한국어", "한국어 채널용이에요")),
+}
+EXAMPLE_ORDER = {
+    "image": ["goal", "concept", "background", "ratio", "tone", "language"],
+    "cardnews": ["goal", "concept", "tone", "slide_count", "target", "language"],
+    "shortform": ["goal", "concept", "duration", "tone", "target"],
+    "product_desc": ["goal", "message", "tone", "cta", "language"],
+    "crm": ["goal", "format", "tone", "cta", "target"],
+    "plan": ["goal", "target", "concept", "tone", "language"],
+}
+FIELD_RE = re.compile(r"^decisions\.[a-z][a-z0-9_]{1,39}$")
+
+
+def interview_messages(cid):
+    """이 캠페인의 인터뷰 질문 메시지들과 끝났는지."""
+    msgs = ContentMessage.query.filter_by(campaign_id=cid, role="assistant").order_by(ContentMessage.id).all()
+    qs = [m for m in msgs if (m.payload or {}).get("interview")]
+    done = any((m.payload or {}).get("interviewDone") for m in msgs)
+    return qs, done
+
+
+def _taken(sheet, decisions, asked_fields):
+    """다시 묻지 않을 항목: 이번 인터뷰에서 물은 것 · 시트 목적이 이미 있음 · 이미 확정된 결정."""
+    out = set(asked_fields)
+    if sheet["goal"]:
+        out.add("sheet.goal")
+    out.update("decisions." + k for k, d in decisions.items() if (d or {}).get("status") == "confirmed")
+    return out
+
+
+def _clean_question(raw, taken):
+    """AI 질문 검증 → dict · 'done' · None(못 씀 → 예시 질문으로)."""
+    raw = raw if isinstance(raw, dict) else {}
+    if raw.get("done") is True:
+        return "done"
+    field = str(raw.get("field") or "").strip()
+    if field.startswith("decisions."):
+        try:
+            field = "decisions." + repository.decision_key(field[10:])
+        except (ValueError, repository.FactChange):
+            return None
+    if not (field == "sheet.goal" or FIELD_RE.match(field)) or field in taken:
+        return None
+    question = clip(raw.get("question"), 200).strip()
+    opts = []
+    for o in raw.get("options") or []:
+        if isinstance(o, dict) and clip(o.get("value"), 300).strip():
+            value = clip(o.get("value"), 300).strip()
+            opts.append({"label": clip(o.get("label"), 40).strip() or value[:40], "value": value,
+                         "reason": clip(o.get("reason"), 160).strip()})
+    if not question or len(opts) < 3:
+        return None
+    return {"field": field, "label": clip(raw.get("label"), 30).strip() or repository.field_label(field),
+            "question": question, "options": opts[:3], "ready": raw.get("ready") is True}
+
+
+def _example_question(content_type, taken):
+    for key in EXAMPLE_ORDER.get(content_type, EXAMPLE_ORDER["image"]):
+        q = EXAMPLE_QUESTIONS[key]
+        if q["field"] not in taken:
+            return dict(q, options=[dict(o) for o in q["options"]])
+    return None
+
+
+def next_question(sheet, decisions, facts, labels, asked):
+    """다음 질문 하나와 짧은 인사말. 질문이 None이면 끝. asked: [{field, question, status, answer}]"""
+    taken = _taken(sheet, decisions, [a["field"] for a in asked])
+    intro = ""
+    if providers.ready():
+        brand = facts.get("brand") or {}
+        ctx = {"first": not asked, "step": len(asked) + 1, "max": INTERVIEW_MAX,
+               "sheet": {"content_type": labels["contentType"], "channels": labels["channels"], "target": labels["target"],
+                         "brand_focus": sheet["brand_focus"], "goal": sheet["goal"] or None,
+                         "extra_request": sheet["extra_request"] or None},
+               "decisions": {k: {"value": v.get("value"), "status": v.get("status")} for k, v in decisions.items()},
+               "brand_facts": {k: brand.get(k) for k in ("name", "slogan", "colors", "character", "cm_song")},
+               "product_facts": facts.get("products") or [],
+               "asked": [{"field": a["field"], "question": a["question"],
+                          "answer": a["answer"] if a["status"] == "answered" else "(건너뜀)"} for a in asked],
+               "avoid_fields": sorted(taken),
+               "language": prompts.language_of(decisions)}
+        try:
+            raw = providers.call_json(prompts.interview_system(), prompts.dumps(ctx), schema=schemas.INTERVIEW,
+                                      name="content_interview", action="콘텐츠 인터뷰 질문", max_tokens=900, timeout=60)
+        except AIError:
+            raw = None
+        if isinstance(raw, dict):
+            intro = strip_unsupported_claims(clip(raw.get("intro"), 400).strip(), patched=False, made=False)
+            q = _clean_question(raw, taken)
+            if q == "done" and asked:
+                return None, intro
+            if isinstance(q, dict):
+                return dict(q, source="ai"), intro
+    q = _example_question(sheet["content_type"], taken)
+    ready = sum(1 for a in asked if a["status"] == "answered") >= READY_AFTER
+    return (dict(q, source="example", ready=ready) if q else None), intro
+
+
+def _asked_list(qs):
+    return [{"field": m.payload["interview"]["field"], "question": m.payload["interview"]["question"],
+             "status": m.payload["interview"]["status"],
+             "answer": (m.payload["interview"].get("answer") or {}).get("value")} for m in qs]
+
+
+def run_interview(c, data, user):
+    """action: start(첫 질문) · answer(답 → 결정 확정 → 다음 질문) · skip(건너뛰기) · finish(바로 끝내기)."""
+    action = data.get("action")
+    if action not in ("start", "answer", "skip", "finish"):
+        raise ApiError("인터뷰 동작은 start · answer · skip · finish 중 하나입니다.")
+    expected = parse_revision(data)
+    if expected != c.revision:
+        raise repository.Conflict(c.id)
+    req_id = _request_id(data.get("client_request_id") or data.get("clientRequestId"))
+    if req_id and ContentMessage.query.filter_by(campaign_id=c.id, client_request_id=req_id).first():
+        raise repository.Duplicate(c.id)
+    cid, rev0 = c.id, c.revision
+    qs, done = interview_messages(cid)
+    open_q = qs[-1] if qs and qs[-1].payload["interview"]["status"] == "open" else None  # 열린 질문은 늘 마지막 하나
+    if action == "start":
+        if qs or done:  # 이미 시작함 — 같은 질문을 또 만들지 않음
+            return {"campaign": repository.campaign_state(c), "applied": [], "started": False}
+    elif done:
+        raise ApiError("인터뷰가 이미 끝났어요. 오른쪽 표에서 답을 고칠 수 있어요.")
+    elif open_q is None and action != "finish":
+        raise ApiError("지금 답할 질문이 없어요.")
+
+    products = repository.products_index()
+    sheet, decisions = repository.sheet_of(c), c.decisions
+    plan, answer, user_text = None, None, None
+    source = "manual"
+    if action == "answer":
+        iv = open_q.payload["interview"]
+        opt = data.get("option")
+        if isinstance(opt, int) and not isinstance(opt, bool) and 0 <= opt < len(iv["options"]):
+            o = iv["options"][opt]  # 보기 값은 서버가 저장해 둔 것을 씀 (화면이 보낸 글자 대신)
+            answer = {"value": o["value"], "label": o["label"], "option": opt}
+            user_text, source = f"{CIRCLED[opt]} {o['label']}", "candidate"
+        else:
+            value = clip(data.get("value"), 300).strip()
+            if not value:
+                raise ApiError("답을 고르거나 직접 입력하세요.")
+            answer = {"value": value, "label": value[:40], "option": None}
+            user_text = value
+        plan = repository.plan_changes(sheet, decisions, [{"field": iv["field"], "value": value_of(answer), "status": "confirmed"}],
+                                       user=user, source=source, revision=rev0, products=products)
+        if plan["rejected"]:
+            raise ApiError(plan["rejected"][0]["reason"])
+        sheet, decisions = plan["sheet"], plan["decisions"]
+    elif action == "skip":
+        user_text = "이 질문은 건너뛸게요"
+
+    # 다음 질문 (AI를 부르는 동안 DB에 쓰지 않음)
+    asked = _asked_list(qs)
+    if open_q is not None:
+        asked[-1].update(status="answered" if action == "answer" else "skipped", answer=value_of(answer))
+    nxt, intro = None, ""
+    if action != "finish" and len(asked) < INTERVIEW_MAX:
+        labels = repository.labels_of(sheet, products)
+        nxt, intro = next_question(sheet, decisions, catalog.product_facts(sheet["product_ids"]), labels, asked)
+
+    # 저장 (짧은 트랜잭션)
+    c = db.session.get(ContentCampaign, cid)
+    if c is None:
+        raise ApiError("캠페인이 삭제되었습니다.", 404)
+    if c.revision != rev0:
+        raise repository.Conflict(cid)
+    applied = bool(plan and plan["applied"])
+    try:
+        msg_id = None
+        if user_text:
+            um = ContentMessage(campaign_id=cid, role="user", text=user_text, revision=rev0, client_request_id=req_id,
+                                user_name=user)
+            um.payload = {"interviewAnswer": action}
+            db.session.add(um)
+            db.session.flush()
+            msg_id = um.id
+        if applied:
+            repository.commit_changes(c, plan, source=source, user=user, message_id=msg_id)
+        if open_q is not None:
+            p = dict(open_q.payload)
+            p["interview"] = dict(p["interview"], status="answered" if action == "answer" else "skipped", answer=answer)
+            open_q.payload = p
+        bot = ContentMessage(campaign_id=cid, role="assistant", text="", revision=rev0 + (1 if applied else 0),
+                             user_name="REBOOT AI")
+        if nxt is not None:
+            bot.text = nxt["question"]
+            bot.payload = {"interview": dict(nxt, step=len(qs) + 1, status="open", answer=None, intro=intro),
+                           "model": providers.text_model() if nxt["source"] == "ai" else None,
+                           "promptVersion": prompts.PROMPT_BUNDLE_VERSION}
+        else:
+            n_ans = sum(1 for a in asked if a["status"] == "answered")
+            bot.text = ((intro + "\n\n") if intro else "") + (
+                f"질문을 마쳤어요 (답 {n_ans}개). 오른쪽 '답 정리' 표를 확인하고, 괜찮으면 [이대로 만들기]를 눌러 주세요. "
+                "표의 답은 언제든 고칠 수 있고, 아래 입력창으로 자유롭게 더 이야기해도 돼요.")
+            bot.payload = {"interviewDone": {"answered": n_ans, "asked": len(asked)}}
+        db.session.add(bot)
+        c.updated_at, c.updated_by = utcnow(), user
+        if applied:
+            repository.guarded_bump(cid, rev0)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise repository.Duplicate(cid)
+    c = db.session.get(ContentCampaign, cid)
+    return {"campaign": repository.campaign_state(c), "applied": plan["applied"] if plan else []}
+
+
+def value_of(answer):
+    return answer["value"] if answer else None
