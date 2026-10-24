@@ -6,14 +6,15 @@ import re
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 
+from server import envkeys
 from server.catalog import service as catalog
 from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import rules
+from . import competitors, rules
 from .classify import QUESTION_LABEL, TOPICS, expressions
-from .models import Comment, Monthly, Review, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get, load_json
+from .models import Comment, Competitor, Monthly, Review, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get, load_json
 from .util import (BUCKET_LABEL, bucket, month_key, month_range, per_serving, prev_month, review_month, week_key, week_label,
                    week_range)
 
@@ -541,10 +542,42 @@ def competitors_view(limit_text=False):
         for x in col:
             x["recommended"] = x["brand"] in recommended
     total = sum(len(v) for v in cols.values())
-    one = (f"진열대 브랜드 {total}개 · 직접 경쟁 {len(cols['direct'])} / 카테고리 {len(cols['category'])} / 대체재 {len(cols['substitute'])}"
-           + (f" · 주시 중 {len(watch)}개" if watch else "")) if total else ""
-    return {"oneLine": one, "columns": cols, "tierLabels": TIER_LABEL, "watch": kv_get("watch", []), "ownFound": bool(own),
-            "recommended": recommended}
+    out = {"columns": cols, "tierLabels": TIER_LABEL, "watch": kv_get("watch", []), "ownFound": bool(own), "recommended": recommended}
+    if limit_text:  # 월간 리뷰 · Excel은 열 묶음만 씀
+        out["oneLine"] = ""
+        return out
+    return dict(out, **_analysis_view(now, cols, watch, total))
+
+
+def _analysis_view(now, cols, watch, total):
+    """경쟁사 분석 표 · 포지셔닝 매트릭스 · 대체재 목록 (competitors.py)."""
+    shelf = {x["brand"].lower(): x for col in cols.values() for x in col}
+    regs = {c.brand.lower(): c for c in Competitor.query.all()}
+    rule_sub = {b for b, x in shelf.items() if x["tier"] == "substitute"}
+    sub_set = {b for b, c in regs.items() if c.tier == "substitute" or c.status == "archived"} | (rule_sub - set(regs))
+    targets = {c.id for c in competitors.deep_targets(now)}
+    rows, subs, archived = [], [], []
+    for b in set(shelf) | set(regs):
+        c, s = regs.get(b), shelf.get(b)
+        d = competitors.comp_dict(c) if c else {"id": None, "brand": s["brand"], "tier": s["tier"], "status": "active",
+                                                  "analysis": {}, "analyzed": False, "sources": [], "keywords": [],
+                                                  "website": "", "isNew": True, "history": [], "researchedAt": None}
+        d.update(tierLabel=TIER_LABEL.get(d["tier"], d["tier"]), deep=bool(c and c.id in targets), onShelf=s is not None,
+                 watched=b in watch, recommended=bool(s and s["recommended"]), score=s["score"] if s else 0,
+                 signals=s["signals"] if s else None, reason=s["reason"] if s else "이번 진열대에는 없어요.",
+                 reviews=s["reviews"] if s else 0, products=s["products"] if s else [], brandGuessed=bool(s and s["brandGuessed"]))
+        (archived if d["status"] == "archived" else subs if b in sub_set else rows).append(d)
+    order = lambda d: (not d["watched"], not d["deep"], not d["analyzed"], -d["reviews"], d["brand"].lower())  # noqa: E731
+    rows.sort(key=order)
+    subs.sort(key=lambda d: -d["reviews"])
+    m = competitors.with_trend(competitors.matrix(now, sub_set), month_key(today()))
+    analyzed = sum(1 for d in rows if d["analyzed"])
+    one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 대체재 {len(subs)}개 · 매트릭스 상품 {len(m['points'])}개"
+           + (f" · 블루오션 후보 {m['blueOcean']['label']}" if m["blueOcean"] else "")
+           + (f" · 주시 중 {len(watch)}개" if watch else "")) if total or rows else ""
+    return {"oneLine": one, "table": rows, "substitutes": subs, "archived": archived, "matrix": m,
+            "fields": [{"key": k, "label": label} for k, label in competitors.FIELDS],
+            "aiReady": insights_ai.ready(), "firecrawlReady": envkeys.has("FIRECRAWL_API_KEY"), "deepTop": competitors.DEEP_TOP}
 
 
 # ───────── 구매자 리뷰 ─────────
