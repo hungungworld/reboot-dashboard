@@ -34,6 +34,7 @@ AI_MAX_ARTICLES = 220
 AI_PER_GROUP = 20  # 검색어마다 최신 20개까지 → 기사가 많은 분야가 AI 입력을 다 차지하지 않게
 MAX_ITEMS = 8
 TREND_ITEMS = 4    # 트렌드 칸 최대
+TREND_PER_SOURCE = 2  # 트렌드 칸은 한 매체 최대 (다른 매체 후보가 모자라면 넘을 수 있음)
 AI_CANDIDATES = 20
 # 막연한 문구 거르기 (켜 보고 별로면 False): 이 표현이 든 '왜 중요' · 요약 줄은 버림
 STRICT_COPY = True
@@ -65,7 +66,7 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
 - 버릴 기사: 'hangover'를 비유로 쓴 기사(예: AI hangover, tariff hangover, DOGE hangover, post-election hangover — 술과 무관하면 모두 뺌),
   음주 사고·범죄, 주가·인물 가십, 인사 소식, 미국 밖 시장만 다룬 기사, 무관한 산업.
 - relevant_ids: 관련 있는 기사 id 전부.
-- articles: section news면 후보 12~16개 — 관련 기사가 있는 분야는 분야마다 2개 이상. section trend면 후보 4~6개. 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
+- articles: section news면 후보 12~16개 — 관련 기사가 있는 분야는 분야마다 2개 이상. section trend면 후보 4~6개 — 가능하면 서로 다른 매체에서. 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
   (특히 숙취 카테고리 · 경쟁사 · 규제는 기사 수가 적어도 꼭 확인). 기사마다 점수를 매깁니다 (점수 합으로 서버가 최종 8개를 고름).
   distance(REBOOT와의 거리): 2 = 숙취 제품·성분 · 경쟁 브랜드 · 영양제/식품 규제, 1 = 음주 행태 · 무알코올·기능성 음료 · K-푸드, 0 = 주류 업계 일반
   action(실행 가능성): 2 = 이번 주 카피·캠페인·채널에 바로 반영할 수 있음, 1 = 참고, 0 = 없음
@@ -283,7 +284,15 @@ def pick(cands, kind_of, limit=MAX_ITEMS, trend_limit=TREND_ITEMS):
     """점수순 후보 → 업계 뉴스: signal 분야는 SIGNAL_SLOTS개씩 먼저, 한 분야는 AREA_CAP개까지, 나머지는 점수순 (최대 limit개)
     + 트렌드(kind trend): 점수순 최대 trend_limit개 (업계 뉴스 뒤에 붙임)."""
     cands = sorted(cands, key=lambda c: -c["score"])
-    trends = [c for c in cands if kind_of(c["area"]) == "trend"][:trend_limit]
+    trend_all = [c for c in cands if kind_of(c["area"]) == "trend"]
+    trends, per_src = [], {}
+    for c in trend_all:  # 한 매체 TREND_PER_SOURCE개까지 먼저
+        src = c.get("domain", "")
+        if len(trends) < trend_limit and per_src.get(src, 0) < TREND_PER_SOURCE:
+            trends.append(c)
+            per_src[src] = per_src.get(src, 0) + 1
+    trends += [c for c in trend_all if c not in trends][:trend_limit - len(trends)]  # 모자라면 점수순으로 채움
+    trends.sort(key=lambda c: -c["score"])
     cands = [c for c in cands if kind_of(c["area"]) != "trend"]
     out, per = [], {}
 
@@ -322,6 +331,7 @@ def _ask(section, articles, cfg):
     relevant = {i for i in (raw.get("relevant_ids") or []) if isinstance(i, int) and i in ids}
     cands, used = [], set()
     titles = {a.id: a.title for a in articles}
+    domains = {a.id: a.domain for a in articles}
     for it in raw.get("articles") or []:
         if not isinstance(it, dict):
             continue
@@ -337,7 +347,7 @@ def _ask(section, articles, cfg):
         if (kinds.get(area) == "trend") != (section == "trend"):
             area = "trend" if section == "trend" else area_of[aid]  # 칸을 넘나들지 않게
         why = str(it.get("why_ko") or "").strip()[:200]
-        cands.append({"id": aid, "title_ko": title_ko, "summary_ko": str(it.get("summary_ko") or "").strip()[:300],
+        cands.append({"id": aid, "domain": domains[aid], "title_ko": title_ko, "summary_ko": str(it.get("summary_ko") or "").strip()[:300],
                       "why_ko": "" if vague(why) else why,
                       "topic": it.get("topic") if it.get("topic") in TOPICS else "업계 일반",
                       "score": score_of(it), "area": area})
