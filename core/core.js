@@ -309,7 +309,7 @@
         wrap.className = 'modal-backdrop';
         const actions = (o.actions && o.actions.length ? o.actions : [{ label: '확인', value: true, tone: 'lime' }]);
         wrap.innerHTML = `<section class="modal${o.wide ? ' wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(o.title || '')}">
-          <div class="between"><h2>${esc(o.title || '')}</h2><button type="button" class="icon-btn" data-modal-close aria-label="닫기">${icon('x')}</button></div>
+          <div class="between modal-head"><h2>${esc(o.title || '')}</h2><button type="button" class="modal-close" data-modal-close aria-label="닫기">${icon('x')}</button></div>
           <div class="modal-body"></div>
           <div class="modal-actions">${actions.map((a, i) => `<button type="button" class="btn ${esc(a.tone || '')}" data-modal-act="${i}">${esc(a.label)}</button>`).join('')}</div>
         </section>`;
@@ -351,7 +351,8 @@
         doc.body.appendChild(wrap);
         if (o.onOpen) o.onOpen(bodyEl);
         const first = wrap.querySelector('input,select,textarea') || wrap.querySelector('[data-modal-act]');
-        if (first) first.focus();
+        if (first) first.focus({ preventScroll: true });  // 버튼에 포커스가 가도 창은 맨 위부터 보이게
+        wrap.querySelector('.modal').scrollTop = 0;
       });
     },
     /** 코드에서 맨 위 모달 닫기 (ui.modal의 Promise는 value로 끝남) */
