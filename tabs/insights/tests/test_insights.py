@@ -644,6 +644,10 @@ def test_ai_rewrite_and_monthly_with_mocked_openai(app, auth_client, monkeypatch
     assert seen.count("weekly_actions") == 1
     m = auth_client.get("/api/insights/monthly").get_json()
     assert m["ai"] and m["summary"] == ["한 줄", "두 줄", "세 줄"] and len(m["strategy"]["personas"]) == 3
+    # 화면 'AI가 읽은 자료': 실행 때 넘긴 개수 그대로
+    src = m["sources"]
+    assert set(src) == {"shelf", "reviews", "questions", "expressions", "competitors", "trends", "lastMonth"}
+    assert src["shelf"] > 0 and src["reviews"] >= 1 and src["lastMonth"] is False
     personas = auth_client.get("/api/insights/personas").get_json()
     assert personas[0] == {"name": "파티 다음 날 직장인", "oneLine": "아침 회의가 걱정", "needs": "간편함", "message": "가볍게 챙기는 리추얼"}
     rv = auth_client.get("/api/insights/data/reviews").get_json()
@@ -933,6 +937,25 @@ def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today
     assert msg["group"] == "watch" and msg["added"] == ["DHM and electrolytes in a shot"] and msg["removed"] == ["DHM shot"]
     assert next(c for c in d["changes"] if c["kind"] == "new")["group"] == "threat"
     assert not any(c["source"] == "Yami" for c in d["changes"])  # 지난주 Yami 수집이 없으면 비교 안 함
+    assert d["changesDemo"] is False  # 실제 지난주가 있으면 예시를 쓰지 않음
+
+
+def test_competitor_changes_demo_when_no_last_week(app, auth_client, fixed_today):
+    """지난주 수집이 없으면 이번 주 실제 진열대로 만든 예시 지난주와 비교 — 화면 표시만, DB에는 안 남음."""
+    from server.extensions import db
+    from tabs.insights.models import ShelfItem
+    _seed_competitors(app)
+    with app.app_context():
+        ShelfItem.query.filter(ShelfItem.week != "2026-W43").delete()
+        db.session.commit()
+        before = ShelfItem.query.count()
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    assert d["changesDemo"] is True and d["changes"]
+    assert {c["kind"] for c in d["changes"]} <= {"new", "price", "oos", "back", "message"}
+    again = auth_client.get("/api/insights/data/competitors").get_json()
+    assert [(c["brand"], c["kind"]) for c in again["changes"]] == [(c["brand"], c["kind"]) for c in d["changes"]]  # 새로고침해도 같음
+    with app.app_context():
+        assert ShelfItem.query.count() == before  # 예시 지난주는 저장하지 않음
 
 
 def test_competitor_research_fills_from_evidence_then_web(app, auth_client, monkeypatch, fixed_today, sync_jobs):

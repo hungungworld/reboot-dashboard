@@ -62,36 +62,39 @@
     const tone = d => (d == null ? 'flat' : d > 0 ? '' : d < 0 ? 'down' : 'flat');
     const foot = w ? `${w.compare ? w.compare.label : '비교 없음'} · ${w.sample ? '샘플 데이터' : `${md(w.start)}—${md(w.end)}`}` : '성과 데이터 없음';
     const cards = [];
-    cards.push(ui.kpi({
+    const link = (href, html) => `<a class="home-kpi-link" href="${href}">${html}</a>`;
+    cards.push(link('/dashboard/performance', ui.kpi({
       label: '이번 주 매출', icon: 'dollar', featured: true, value: w ? fmt.num(w.revenue) : '—', unit: w ? '원' : '',
       change: w && w.change && w.change.revenue != null ? `${arrow(w.change.revenue)} ${fmt.num(Math.abs(w.change.revenue), 1)}%` : '',
       tone: w && w.change ? tone(w.change.revenue) : 'flat', foot
-    }));
-    cards.push(ui.kpi({
+    })));
+    cards.push(link('/dashboard/performance', ui.kpi({
       label: '광고 수익률 (ROAS)', icon: 'chart', value: w && w.roas != null ? fmt.num(w.roas, 0) : '—', unit: w && w.roas != null ? '%' : '',
       change: w && w.change && w.change.roas != null ? `${arrow(w.change.roas)} ${fmt.num(Math.abs(w.change.roas), 1)}%` : '',
       tone: w && w.change ? tone(w.change.roas) : 'flat', foot
-    }));
+    })));
     if (camp && Number.isFinite(Number(camp.active))) {
-      cards.push(ui.kpi({ label: '진행 중인 캠페인', icon: 'spark', value: fmt.num(camp.active), unit: '개', foot: `전체 ${fmt.num(camp.total || 0)}개 · 콘텐츠 제작` }));
+      cards.push(link('/dashboard/content', ui.kpi({ label: '진행 중인 캠페인', icon: 'spark', value: fmt.num(camp.active), unit: '개', foot: `전체 ${fmt.num(camp.total || 0)}개 · 콘텐츠 제작` })));
     } else {
       const list = seasons().filter(s => s.inLead || s.ongoing).sort((a, b) => a.dday - b.dday);
       const near = list[0];
-      cards.push(ui.kpi({
+      cards.push(link('/dashboard/content', ui.kpi({
         label: '준비 중인 시즌', icon: 'calendar', value: fmt.num(list.length), unit: '개', tone: 'flat',
         change: near ? `${near.name} ${near.ongoing ? '진행 중' : fmt.dday(near.start)}` : '', foot: '준비 기간에 들어온 시즌'
-      }));
+      })));
     }
     const cs = csStats();
     const comp = compliancePending();
     const parts = [];
     if (cs && Number.isFinite(Number(cs.open))) parts.push(`CS ${cs.open}`);
     if (comp != null) parts.push(`카피 ${comp}`);
-    const total = (cs && Number(cs.open) || 0) + (comp || 0);
-    cards.push(ui.kpi({
+    const csOpen = cs && Number(cs.open) || 0;
+    const total = csOpen + (comp || 0);
+    // 대기 건수가 더 많은 파트로 (같으면 컴플라이언스)
+    cards.push(link(csOpen > (comp || 0) ? '/dashboard/cs' : '/dashboard/compliance', ui.kpi({
       label: '검토가 필요한 업무', icon: 'clock', value: parts.length ? fmt.num(total) : '—', unit: parts.length ? '건' : '', tone: 'flat',
       change: parts.join(' · '), foot: parts.length ? '담당자 확인 필요' : '연결된 파트 없음'
-    }));
+    })));
     box.innerHTML = cards.join('');
   }
 

@@ -495,6 +495,7 @@ def monthly_view(month=None, t=None):
         "competitorTrends": data.get("competitor_trends") or rule_comp, "competitorAi": bool(data.get("competitor_trends")),
         "strategy": {k: data.get(k) for k in ("changes", "personas", "swot", "target", "positioning")} if row else None,
         "prevStrategy": bool(prev_row),
+        "sources": data.get("sources"),
         "questions": q, "expressions": ex,
     }
 
@@ -519,6 +520,14 @@ def monthly_payload(month, t=None):
         "trends": trends_view(t)["next"][:5],
         "lastMonthStrategy": {k: prev.get(k) for k in ("personas", "swot", "target", "positioning")} if prev else None,
     }
+
+
+def monthly_sources(payload):
+    """월간 AI에 넘긴 자료 개수 (화면 'AI가 읽은 자료')."""
+    return {"shelf": len(payload["shelf"]), "reviews": len(payload["reviews"]),
+            "questions": sum(q["count"] for q in payload["questions"]), "expressions": len(payload["expressions"]),
+            "competitors": len(payload["competitors"]), "trends": len(payload["trends"]),
+            "lastMonth": bool(payload["lastMonthStrategy"])}
 
 
 # ───────── 경쟁사 ─────────
@@ -620,12 +629,15 @@ def _analysis_view(now, prev, cols, watch, total):
         own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤 (자사)", own=True,
                    tierLabel="자사", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
     changes = competitors.weekly_changes(now, prev)
+    changes_demo = False
+    if changes is None and any(not x["own"] for x in now):   # 지난주 수집이 없으면 시연용 예시 지난주와 비교 (화면에 '예시' 배지)
+        changes, changes_demo = competitors.weekly_changes(now, competitors.demo_prev(now)), True
     analyzed = sum(1 for d in rows if d["analyzed"])
     chans = sorted({ch["label"] for d in rows for ch in d["channels"]})
     one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 판매 채널 {' · '.join(chans) or '없음'}"
-           + (f" · 이번 주 변화 {len(changes)}건" if changes else "")
+           + (f" · 이번 주 변화 {len(changes)}건" + (" (예시)" if changes_demo else "") if changes else "")
            + (f" · 주시 중 {len(watch)}개" if watch else "")) if total or rows else ""
-    return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes,
+    return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes, "changesDemo": changes_demo,
             "fields": [{"key": k, "label": label} for k, label in competitors.FIELDS],
             "channelLabels": competitors.CHANNEL_LABEL, "formLabels": competitors.FORM_LABEL,
             "aiReady": insights_ai.ready(), "firecrawlReady": envkeys.has("FIRECRAWL_API_KEY"), "deepTop": competitors.DEEP_TOP}
