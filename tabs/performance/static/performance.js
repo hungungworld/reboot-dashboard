@@ -403,9 +403,25 @@
       <td class="num">${esc(fmt.pct(t.cvr, 2))}</td><td class="num">${esc(cash(t.cpa))}</td><td class="num">${esc(cash(t.revenue))}</td>
       <td class="num">${esc(fmt.pct(t.roas, 0))}</td><td class="num${t.profit < 0 ? ' perf-loss' : ''}">${esc(cash(t.profit))}</td></tr>`;
     return `<table class="data-table"><caption class="sr-only">채널별 성과 (${esc(M.fmtPeriod(s.start, s.end))})</caption>
-      <thead><tr>${head.map((h, i) => `<th${i ? ' class="num"' : ''} scope="col">${h}</th>`).join('')}</tr></thead>
+      <thead><tr>${head.map((h, i) => {
+        const tip = !forReport && HEAD_TIPS[h];
+        return `<th${i ? ' class="num"' : ''} scope="col">${tip ? `<span class="perf-tip" tabindex="0" data-tip="${esc(tip)}">${h}</span>` : h}</th>`;
+      }).join('')}</tr></thead>
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>`;
   }
+  // 채널별 성과 표 머리글에 마우스를 올리면 보이는 설명
+  const HEAD_TIPS = {
+    광고비: '이 기간에 광고에 쓴 돈',
+    노출수: '광고가 화면에 보인 횟수',
+    클릭수: '광고를 누른 횟수',
+    CTR: '클릭률 = 클릭수 ÷ 노출수. 광고를 본 사람 중 누른 비율',
+    전환수: '광고를 통해 구매(전환)한 건수',
+    CVR: '전환율 = 전환수 ÷ 클릭수. 광고를 누른 사람 중 구매한 비율',
+    CPA: '전환당 비용 = 광고비 ÷ 전환수. 구매 1건을 얻는 데 든 광고비 (낮을수록 좋음)',
+    매출: '광고를 통해 발생한 매출',
+    ROAS: '광고비 대비 매출 = 매출 ÷ 광고비. 100%보다 높으면 쓴 광고비보다 매출이 큼',
+    순수익: '매출 − 광고비. 제품 원가·배송비 등은 빼지 않은 값'
+  };
   function renderTable() {
     const box = ref('table');
     if (box && S.sum) box.innerHTML = tableHtml(false);
@@ -425,7 +441,7 @@
       <section class="card perf-info" data-ref="info" aria-label="기본 정보"></section>
       <div class="kpis six" data-ref="kpis"></div>
       <section class="card">
-        <div class="card-head"><h2>채널별 성과 <span class="muted small" data-ref="unit"></span></h2>
+        <div class="card-head"><h2><button type="button" class="perf-fold" data-act="fold-table" aria-expanded="${S.tableOpen !== false}" aria-controls="perf-table-body">채널별 성과</button> <span class="muted small" data-ref="unit"></span></h2>
           <div class="perf-table-tools">
             <div class="seg" role="group" aria-label="통화">
               <button type="button" data-cur="KRW" class="${S.currency === 'KRW' ? 'selected' : ''}" aria-pressed="${S.currency === 'KRW'}">원화</button>
@@ -434,11 +450,11 @@
             <button type="button" class="btn small" data-act="fx">${icon('refresh')} 환율 확인</button>
             <span class="perf-fx" data-ref="fx-label"></span>
           </div></div>
-        <div class="table-wrap" data-ref="table"></div>
-        <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나옵니다. 여러 채널을 고를 수 있고, 다시 누르면 해제됩니다. 달러 표시는 이 표에만 적용됩니다.</p>
+        <div id="perf-table-body"${S.tableOpen === false ? ' hidden' : ''}><div class="table-wrap" data-ref="table"></div>
+        <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나옵니다. 여러 채널을 고를 수 있고, 다시 누르면 해제됩니다. 달러 표시는 이 표에만 적용됩니다.</p></div>
       </section>
       <div class="grid-2">
-        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출</h2><span class="small muted">원</span></div>
+        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출</h2><span class="small muted">단위: 원 (만 원 표시)</span></div>
           <div class="perf-chart"><canvas data-ref="bar" role="img" aria-label="채널별 광고비와 매출 막대 차트 (숫자는 위 표에 있음)"></canvas></div></section>
         <section class="card"><div class="card-head"><h2>일별 매출 추이</h2><span class="small muted" data-ref="line-note"></span></div>
           <div class="perf-chart"><canvas data-ref="line" role="img" aria-label="일별 매출 추이 선 차트 (범례를 누르면 선을 숨기거나 보임)"></canvas></div></section>
@@ -743,6 +759,11 @@
       else if (a === 'template') ui.download('reboot-performance-template.csv', ui.csv([M.HEADER]), 'text/csv;charset=utf-8');
       else if (a === 'report') global.location.href = `/dashboard/performance?view=report&start=${encodeURIComponent(S.period.start)}&end=${encodeURIComponent(S.period.end)}`;
       else if (a === 'fx') loadFx(true, act);
+      else if (a === 'fold-table') {   // 채널별 성과 표 접기·펴기
+        S.tableOpen = act.getAttribute('aria-expanded') !== 'true';
+        act.setAttribute('aria-expanded', String(S.tableOpen));
+        S.root.querySelector('#perf-table-body').hidden = !S.tableOpen;
+      }
       else if (a === 'ai-again') scheduleAdvice(true);
       else if (a === 'reset') resetToSample();
       else if (a === 'print') global.print();

@@ -227,7 +227,7 @@
   function cell(h, key) {
     switch (key) {
       case 'at': return `<td class="nowrap">${esc(fmt.datetime(h.at))}</td>`;
-      case 'partner': return `<td><strong>${esc(h.partnerName || '—')}</strong><small class="ptn-rec-sub">${esc(h.partnerType || '구분 없음')}${h.partnerId ? ' · ' + esc(h.partnerId) : ''}</small></td>`;
+      case 'partner': return `<td><button type="button" class="ptn-rec-who" data-rec-thread="${h.id}" title="이 업체와 주고받은 메일 전체 보기"><strong>${esc(h.partnerName || '—')}</strong></button><small class="ptn-rec-sub">${esc(h.partnerType || '구분 없음')}${h.partnerId ? ' · ' + esc(h.partnerId) : ''}</small></td>`;
       case 'kind': return `<td>${kindBadge(h.kind)}</td>`;
       case 'activity': return `<td class="nowrap">${esc(h.activity || '—')}</td>`;
       case 'mailStatus': return `<td class="nowrap">${h.mailStatus === '회신 받음' && h.reply
@@ -290,6 +290,8 @@
       }
       const ed = t.closest('[data-rec-edit]');
       if (ed) return editRecord(st, st.items.find(h => h.id === Number(ed.dataset.recEdit)));
+      const th = t.closest('[data-rec-thread]');
+      if (th) return openThread(st, st.items.find(h => h.id === Number(th.dataset.recThread)));
       const rp = t.closest('[data-rec-reply]');
       if (rp) return replyPopover(st, rp, st.items.find(h => h.id === Number(rp.dataset.recReply)));
       const act = t.closest('[data-rec-act]');
@@ -568,6 +570,35 @@
     pop.querySelector('[data-pop="open"]').focus();
   }
 
+  /* 업체 이름 클릭 → 그 업체와 주고받은 메일 전체 (보냄 · 받음 · 답장) 시간순 */
+  function threadOf(st, h) {
+    const same = x => (h.partnerId ? x.partnerId === h.partnerId : x.partnerName === h.partnerName);
+    const out = [];
+    st.items.filter(same).forEach(x => {
+      if (x.subject || x.body) out.push({ dir: 'out', at: x.at, who: x.owner || 'REBOOT', to: x.to, label: x.activity || '메일 발송', subject: x.subject, body: x.body, status: x.mailStatus, error: x.error });
+      if (x.reply) out.push({ dir: 'in', at: x.reply.at, who: x.reply.from, label: '회신 받음', subject: x.reply.subject, body: x.reply.body, estimated: x.reply.estimated });
+    });
+    return out.sort((a, b) => String(a.at || '').localeCompare(String(b.at || '')));
+  }
+  function openThread(st, h) {
+    if (!h) return;
+    const list = threadOf(st, h);
+    const body = doc.createElement('div');
+    body.className = 'part-partners';
+    body.innerHTML = list.length ? `
+      <p class="small muted mb-16">${esc(h.partnerType || '')}${h.partnerId ? ' · ' + esc(h.partnerId) : ''} · 보냄 ${fmt.num(list.filter(m => m.dir === 'out').length)}통 · 받음 ${fmt.num(list.filter(m => m.dir === 'in').length)}통 · 오래된 순</p>
+      <ol class="ptn-thread">${list.map((m, i) => `
+        <li class="ptn-thread-item ${m.dir}">
+          <div class="between"><span><b>${m.dir === 'in' ? '📥 받음' : '📤 보냄'}</b> · ${esc(m.label)}${m.dir === 'out' && m.status ? ' ' + mailBadge(m.status) : ''}${m.estimated ? ' ' + badge('추정 매칭', 'orange') : ''}</span>
+            <span class="small muted nowrap">${esc(fmt.datetime(m.at))}</span></div>
+          <p class="small muted">${m.dir === 'in' ? 'From ' + esc(m.who || '') : esc(m.who || '') + (m.to ? ' → ' + esc(m.to) : '')}</p>
+          <details${i === list.length - 1 ? ' open' : ''}><summary class="small"><b>${esc(m.subject || '(제목 없음)')}</b></summary>
+            <pre class="ptn-rec-pre">${esc(m.body || '(본문 없음)')}</pre></details>
+          ${m.error ? `<span class="ptn-rec-err">${esc(m.error)}</span>` : ''}
+        </li>`).join('')}</ol>` : ui.empty('주고받은 메일이 없습니다. (수기 기록만 있음)', 'mail');
+    ui.modal({ title: `✉️ ${h.partnerName || ''} — 메일 히스토리`, body, wide: true, actions: [{ label: '닫기', value: false }] });
+  }
+
   /* 🟢 회신 창: AI 요약 · AI 답장 초안 · 같은 대화로 답장 발송 */
   async function openReplyPanel(st, h, opts = {}) {
     if (!h || !h.reply) return;
@@ -748,7 +779,7 @@
   function chartTheme(el) {
     const cs = global.getComputedStyle(el);
     const v = (name, fb) => (cs.getPropertyValue(name) || '').trim() || fb;
-    return { series: v('--ptn-chart', '#637c13'), grid: v('--line', '#e9ece4'), text: v('--muted', '#858981'), surface: v('--surface', '#ffffff') };
+    return { series: v('--ptn-chart', '#637c13'), accent: v('--red', '#a5432e'), grid: v('--line', '#e9ece4'), text: v('--muted', '#858981'), surface: v('--surface', '#ffffff') };
   }
   function alpha(hex, a) {
     const m = String(hex).trim().match(/^#?([0-9a-f]{6})$/i);
@@ -780,7 +811,7 @@
   }
 
   async function renderSales(el) {
-    const st = { el, data: null, pref: getSalesPref() };
+    const st = { el, data: null, pref: getSalesPref(), picked: [] };
     el.innerHTML = `
       <div class="filters ptn-rec-salesbar">
         <div class="flex wrap">${badge('🧪 더미 데이터', 'orange')}<span class="panel-note">Shopify 할인코드 주문 · UTM 방문 연동 전 가상값입니다 (환불 주문 제외).</span></div>
@@ -800,6 +831,7 @@
         return;
       }
       if (e.target.closest('[data-sales-act="csv"]')) downloadCsv(st);
+      if (e.target.closest('[data-sales-act="all"]')) { st.picked = []; updateLine(st); }
     });
     el.addEventListener('change', e => {
       if (!e.target.matches('[data-ref="start"], [data-ref="end"]')) return;
@@ -862,22 +894,26 @@
       <div class="grid-2 ptn-rec-charts">
         <section class="card"><div class="card-head"><h2>크리에이터별 매출</h2>${badge('더미', 'orange')}</div>
           <div class="ptn-rec-chart" data-ref="bar-box"><canvas data-ref="bar" role="img" aria-label="크리에이터별 매출 막대 그래프 (표는 아래)"></canvas></div></section>
-        <section class="card"><div class="card-head"><h2>일별 매출 추이</h2>${badge('더미', 'orange')}</div>
+        <section class="card"><div class="card-head"><h2>일별 매출 추이<span data-ref="line-who"></span></h2>
+            <div class="flex"><button type="button" class="btn small soft" data-sales-act="all" data-ref="line-all" hidden>전체 보기</button>${badge('더미', 'orange')}</div></div>
+          <p class="ptn-rec-change" data-ref="line-change"></p>
           <div class="ptn-rec-chart ptn-rec-chart-line"><canvas data-ref="line" role="img" aria-label="일별 매출 선 그래프 (일별 표는 아래)"></canvas></div>
           <details class="mt-8"><summary class="small">일별 표 보기</summary>
             <div class="table-wrap ptn-rec-daily"><table class="data-table"><thead><tr><th scope="col">날짜</th><th class="num" scope="col">접속량</th><th class="num" scope="col">주문</th><th class="num" scope="col">판매량</th><th class="num" scope="col">매출</th></tr></thead>
             <tbody>${d.daily.map(x => `<tr><td>${esc(x.date)}</td><td class="num">${fmt.num(x.visits)}</td><td class="num">${fmt.num(x.orders)}</td><td class="num">${fmt.num(x.units)}</td><td class="num">${usd(x.revenue)}</td></tr>`).join('')}</tbody></table></div>
           </details></section>
       </div>
-      <section class="card mt-24 ptn-rec-salestable">
-        <div class="card-head"><h2>크리에이터별 실적</h2>${badge('🧪 더미 데이터', 'orange')}</div>
+      <details class="card mt-24 ptn-rec-salestable" data-ref="sales-table"${st.tableOpen === false ? '' : ' open'}>
+        <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('🧪 더미 데이터', 'orange')}</summary>
         <div class="table-wrap"><table class="data-table">
           <thead><tr><th scope="col">크리에이터</th><th scope="col">할인코드</th><th class="num" scope="col">접속량</th><th class="num" scope="col">주문 수</th><th class="num" scope="col">판매량</th><th class="num" scope="col">매출</th><th class="num" scope="col">전환율</th></tr></thead>
           <tbody>${d.creators.map(c => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.code)}</code></td><td class="num">${fmt.num(c.visits)}</td><td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${usd(c.revenue)}</td><td class="num">${fmt.pct(c.conversion, 2)}</td></tr>`).join('')}</tbody>
           <tfoot><tr><td>합계</td><td></td><td class="num">${fmt.num(t.visits)}</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${usd(t.revenue)}</td><td class="num">${fmt.pct(t.conversion, 2)}</td></tr></tfoot>
         </table></div>
         <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify Orders API(discount_codes) · UTM 집계로 바뀝니다.</p>
-      </section>`;
+      </details>`;
+    el.querySelector('[data-ref="sales-table"]').addEventListener('toggle', ev => { st.tableOpen = ev.target.open; });
+    st.picked = (st.picked || []).filter(n => d.creators.some(c => c.name === n));
     drawCharts(st);
   }
 
@@ -892,7 +928,7 @@
     const t = chartTheme(el);
     const rows = d.creators;
     el.querySelector('[data-ref="bar-box"]').style.height = `${Math.max(220, rows.length * 30 + 48)}px`;
-    charts.push(new Chart(el.querySelector('[data-ref="bar"]'), {
+    st.bar = new Chart(el.querySelector('[data-ref="bar"]'), {
       type: 'bar',
       data: {
         labels: rows.map(r => r.name),
@@ -903,16 +939,26 @@
         indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { title: items => rows[items[0].dataIndex].name, label: c => `매출 ${usd(c.parsed.x)} · 주문 ${fmt.num(rows[c.dataIndex].orders)}건 · ${rows[c.dataIndex].code}` } }
+          tooltip: { callbacks: { title: items => rows[items[0].dataIndex].name, label: c => `매출 ${usd(c.parsed.x)} · 주문 ${fmt.num(rows[c.dataIndex].orders)}건 · ${rows[c.dataIndex].code}`, footer: () => '누르면 일별 매출 추이' } }
         },
+        // 막대(또는 이름)를 누르면 오른쪽 선 그래프가 그 크리에이터의 일별 매출로 바뀜 · 다시 누르면 전체
+        onClick: (evt, els, chart) => {
+          const hit = els.length ? els[0].index : chart.scales.y.getValueForPixel(evt.y);
+          if (hit == null || !rows[hit]) return;
+          const name = rows[hit].name;   // 여러 명 고를 수 있음 · 다시 누르면 빠짐
+          st.picked = st.picked.includes(name) ? st.picked.filter(n => n !== name) : st.picked.concat(name);
+          updateLine(st);
+        },
+        onHover: (evt, els) => { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
         scales: {
           x: { beginAtZero: true, grid: { color: t.grid }, border: { display: false }, ticks: { color: t.text, maxTicksLimit: 5, callback: v => usdCompact(v) } },
           y: { grid: { display: false }, border: { color: t.grid }, ticks: { color: t.text, autoSkip: false, callback: (v, i) => clipName(rows[i] ? rows[i].name : '', 18) } }
         }
       }
-    }));
+    });
+    charts.push(st.bar);
     const days = d.daily;
-    charts.push(new Chart(el.querySelector('[data-ref="line"]'), {
+    st.line = new Chart(el.querySelector('[data-ref="line"]'), {
       type: 'line',
       data: {
         labels: days.map(x => x.date),
@@ -924,8 +970,11 @@
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { title: items => days[items[0].dataIndex].date, label: c => `매출 ${usd(c.parsed.y)} · 주문 ${fmt.num(days[c.dataIndex].orders)}건 · 접속 ${fmt.num(days[c.dataIndex].visits)}` } }
+          legend: { display: false, position: 'top', align: 'end', labels: { color: t.text, boxWidth: 10, boxHeight: 2, filter: i => !!i.text } },
+          tooltip: { callbacks: { title: items => days[items[0].dataIndex].date, label: c => {
+            const x = (c.dataset.creator ? c.dataset.creator.daily : days)[c.dataIndex];
+            return `${c.dataset.label} ${usd(c.parsed.y)} · 주문 ${fmt.num(x.orders)}건 · 접속 ${fmt.num(x.visits)}`;
+          } } }
         },
         scales: {
           x: { grid: { display: false }, border: { color: t.grid }, ticks: { color: t.text, maxTicksLimit: 8, maxRotation: 0, callback: (v, i) => shortDate(days[i] ? days[i].date : '') } },
@@ -933,7 +982,52 @@
         }
       },
       plugins: [crosshair(t)]
-    }));
+    });
+    charts.push(st.line);
+    updateLine(st);
+  }
+
+  // 크리에이터별 비교선 색 (전체 매출 초록과 겹치지 않게, 순서대로 돌려 씀)
+  const CREATOR_COLORS = ['#d9534f', '#3b7dd8', '#e8902a', '#8e5cc9', '#1aa39a', '#d64f9b', '#6d8a1f', '#c9a227', '#4a5190', '#b5651d', '#2f9e44', '#7a7d85'];
+  const creatorColor = (st, name) => CREATOR_COLORS[Math.max(0, st.data.creators.findIndex(x => x.name === name)) % CREATOR_COLORS.length];
+
+  // 막대에서 고른 크리에이터들 (고른 순서)
+  function pickedOf(st) {
+    return (st.picked || []).map(n => st.data.creators.find(x => x.name === n)).filter(Boolean);
+  }
+  // 상승률 한 줄: ▲ 빨강 · ▼ 파랑, 크리에이터 이름 앞에 선 색 점
+  function changeItem(name, change, revenue, color) {
+    if (change == null) return '';
+    const dot = color ? `<i style="background:${color}" aria-hidden="true"></i>` : '';
+    return `<li class="${change < 0 ? 'down' : ''}">${dot}<b>${change >= 0 ? '▲' : '▼'} ${fmt.num(Math.abs(change), 1)}%</b> <span>${esc(name)} · ${usd(revenue)}</span></li>`;
+  }
+  function updateLine(st) {
+    const el = st.el;
+    const picked = pickedOf(st);
+    const t = chartTheme(el);
+    const days = st.data.end ? (new Date(st.data.end) - new Date(st.data.start)) / 864e5 + 1 : 0;
+    el.querySelector('[data-ref="line-who"]').textContent = picked.length ? ` · ${picked.length}명 비교` : '';
+    el.querySelector('[data-ref="line-all"]').hidden = !picked.length;
+    el.querySelector('[data-ref="line-change"]').innerHTML = `<ul>${changeItem('전체', st.data.totals.change, st.data.totals.revenue)}${
+      picked.map(c => changeItem(c.name, c.change, c.revenue, creatorColor(st, c.name))).join('')}</ul><small>이전 ${fmt.num(days)}일 대비 매출</small>`;
+    if (st.line) {
+      const sets = st.line.data.datasets;
+      sets.length = 1;   // 전체 매출 선은 그대로 두고 비교선만 다시 만듦
+      picked.forEach(c => {
+        const col = creatorColor(st, c.name);
+        sets.push({ label: c.name, creator: c, data: c.daily.map(x => x.revenue), borderColor: col, backgroundColor: col, fill: false,
+          borderWidth: 2, tension: 0.25, pointRadius: 0, pointHitRadius: 12,
+          pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: t.surface, pointHoverBackgroundColor: col });
+      });
+      sets[0].label = picked.length ? '전체 매출' : '일별 매출';
+      st.line.options.plugins.legend.display = picked.length > 0;
+      st.line.update('none');
+    }
+    if (st.bar) {   // 고른 크리에이터 막대만 선과 같은 색으로
+      st.bar.data.datasets[0].backgroundColor = st.bar.data.datasets[0].hoverBackgroundColor =
+        st.data.creators.map(x => (st.picked.includes(x.name) ? creatorColor(st, x.name) : t.series));
+      st.bar.update('none');
+    }
   }
 
   function downloadCsv(st) {
