@@ -139,7 +139,7 @@ def weekly_docx(t=None):
     d.add_heading("출처", level=2)
     srcs = [f"{SOURCE_LABEL.get(src, src)} {w['now']}" for src, w in s["weeks"].items()]
     _p(d, "진열대: " + (" · ".join(srcs) if srcs else "없음") + " · Amazon은 SerpApi(검색 상위 · 광고 제외), Weee!는 Firecrawl")
-    _p(d, "리뷰: Amazon 대표 리뷰(SerpApi) · Weee! CSV · 검색 수요: Google Trends(SerpApi, 미국 12개월)")
+    _p(d, "리뷰: Amazon 대표 리뷰(SerpApi) · Weee!(공개 리뷰 페이지) · 검색 수요: Google Trends(SerpApi, 미국 12개월)")
     return _save(d), f"reboot-insights-weekly-{v['week']}.docx"
 
 

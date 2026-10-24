@@ -16,16 +16,16 @@
   POST  /api/insights/competitors/research-all    상위 15개 모두 다시 조사 (뒤에서 실행)
   PATCH /api/insights/competitors/<id>         {status: active|archived, website}
   GET   /api/insights/competitors.csv · /competitors.json
-  POST  /api/insights/reviews/upload           Weee! 리뷰 CSV {csv}
   POST  /api/insights/reviews/<id>/translate   리뷰 한국어 번역 (OpenAI · 같은 원문은 저장된 번역)
   POST  /api/insights/reviews/<id>/cs          자사 리뷰 CS 대응 {status: new · todo · done · skip, memo}
+  POST  /api/insights/reviews/<id>/slack       슬랙 채널로 보내기 {note, preview} (preview면 글만 돌려줌 · 웹훅 SLACK_WEBHOOK_URL)
   POST  /api/insights/trends/upload            Google Trends CSV {csv} (SerpApi 키가 없을 때)
 데이터 업데이트
   GET   /api/insights/update/plan              항목 · 필요한 키 · 예상 비용 · 이번 달 쓴 양
   POST  /api/insights/update                   {items:[…]} → 뒤에서 실행
   GET   /api/insights/update/status            진행 상황
 내려받기
-  GET   /api/insights/report/weekly.docx · /report/monthly.docx · /export.xlsx · /templates/weee-reviews.csv
+  GET   /api/insights/report/weekly.docx · /report/monthly.docx · /export.xlsx
 다른 파트 공개 (REBOOT.use('insights'))
   GET   /api/insights/trends                   {keywords:[{keyword, points:[{date, value}]}], updatedAt}
   GET   /api/insights/personas                 [{name, oneLine, needs, message}]
@@ -39,29 +39,18 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from flask_login import current_user
 
 from server import worklog
-from server.config import ROOT
 from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
 from . import ai as insights_ai
-from . import competitors, lines, reports, service, store, trends, update
+from . import competitors, lines, reports, service, slack, store, trends, update
+from .http import CollectError
 from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
 
 bp = Blueprint("insights", __name__, url_prefix="/api/insights")
 
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-TEMPLATE = ROOT / "tabs" / "insights" / "data" / "weee_reviews_template.csv"
-CSV_HEAD = {
-    "product": ("product", "product_title", "제품", "상품", "상품명", "제품명"),
-    "brand": ("brand", "브랜드"),
-    "rating": ("rating", "stars", "별점", "평점"),
-    "date": ("date", "날짜", "작성일"),
-    "title": ("title", "제목"),
-    "text": ("text", "review", "body", "내용", "리뷰", "본문"),
-    "own": ("own", "자사"),
-}
-YES = {"y", "yes", "true", "1", "예", "o", "자사"}
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -292,53 +281,6 @@ def competitors_csv():
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.csv"})
 
 
-def _csv_rows(text):
-    reader = csv.reader(io.StringIO(text.replace("﻿", "")))
-    try:
-        header = [h.strip().lower() for h in next(reader)]
-    except StopIteration:
-        raise ApiError("CSV가 비어 있어요.")
-    idx = {}
-    for field, names in CSV_HEAD.items():
-        for i, h in enumerate(header):
-            if h in names:
-                idx[field] = i
-                break
-    if "text" not in idx:
-        raise ApiError("CSV 첫 줄에 리뷰 내용 열(text 또는 내용)이 있어야 해요. 양식을 내려받아 쓰세요.")
-    rows = []
-    for n, r in enumerate(reader, start=2):
-        if not any(c.strip() for c in r):
-            continue
-        get = lambda f: r[idx[f]].strip() if f in idx and idx[f] < len(r) else ""  # noqa: E731
-        rating = None
-        if get("rating"):
-            try:
-                rating = float(get("rating"))
-            except ValueError:
-                raise ApiError(f"{n}번째 줄: 별점은 1~5 숫자로 입력하세요.")
-            if not 1 <= rating <= 5:
-                raise ApiError(f"{n}번째 줄: 별점은 1~5 사이예요.")
-        product = get("product")
-        rows.append({"source": "weee", "product_key": "weee-csv:" + product.lower()[:150], "product_title": product,
-                     "brand": get("brand"), "rating": rating, "date_text": get("date"), "title": get("title"),
-                     "text": get("text"), "own": get("own").lower() in YES})
-        if len(rows) > 2000:
-            raise ApiError("한 번에 2,000줄까지 올릴 수 있어요.")
-    if not rows:
-        raise ApiError("올릴 리뷰가 없어요.")
-    return rows
-
-
-@bp.post("/reviews/upload")
-def reviews_upload():
-    data = json_body(max_bytes=2 * 1024 * 1024)
-    rows = _csv_rows(str(data.get("csv", "")))
-    added = store.save_reviews(rows, week_key(service.today()))
-    worklog.add("insights", "수집", "Weee! 리뷰 CSV 올리기", detail={"rows": len(rows), "added": added})
-    return jsonify(ok=True, rows=len(rows), added=added)
-
-
 def _review(rid):
     r = db.session.get(Review, rid)
     if r is None:
@@ -373,6 +315,22 @@ def review_cs(rid):
     db.session.add(row)
     db.session.commit()
     return jsonify(ok=True, **service.cs_dict(r, row))
+
+
+@bp.post("/reviews/<int:rid>/slack")
+def review_slack(rid):
+    r = _review(rid)
+    data = json_body()
+    note = clip(str(data.get("note") or "").strip(), 500)
+    cs = db.session.get(ReviewCS, rid) if r.own else None
+    if data.get("preview"):
+        return jsonify(ok=True, ready=slack.ready(), text=slack.message(r, cs, note, _who()))
+    try:
+        shared = slack.send(r, cs, note, _who()[:100])
+    except CollectError as e:
+        raise ApiError(str(e))
+    worklog.add("insights", "기타", "리뷰 슬랙 보내기", detail={"review": rid, "own": r.own, "note": bool(note)})
+    return jsonify(ok=True, **shared)
 
 
 @bp.post("/trends/upload")
@@ -437,13 +395,6 @@ def report_monthly():
 def export_xlsx():
     buf, name = reports.data_xlsx()
     return send_file(buf, as_attachment=True, download_name=name, mimetype=XLSX)
-
-
-@bp.get("/templates/weee-reviews.csv")
-def weee_template():
-    text = TEMPLATE.read_text(encoding="utf-8") if TEMPLATE.exists() else "product,brand,rating,date,title,text,own\n"
-    return Response("﻿" + text, content_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": "attachment; filename=reboot-insights-weee-reviews-template.csv"})
 
 
 # ───────── 다른 파트 공개 ─────────

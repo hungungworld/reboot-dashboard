@@ -19,13 +19,13 @@ from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
 from . import amazon, channel_reviews, competitors, rules, service, trends, weee, yami, youtube
 from .http import CollectError
-from .models import Comment, Monthly, Review, Run, load_json
+from .models import Comment, Monthly, Review, Run, ShelfItem, load_json
 from .util import review_month, week_key
 
 JOB = "insights-update"
 ITEMS = [
-    {"id": "weee", "label": "Weee! 진열대", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
-     "desc": "목록 · 상품 페이지에서 가격 · 품절 · 핵심 메시지"},
+    {"id": "weee", "label": "Weee! 진열대 · 리뷰", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
+     "desc": "목록 · 상품 페이지에서 가격 · 품절 · 핵심 메시지 · 상품별 구매자 리뷰"},
     {"id": "amazon", "label": "Amazon 진열대 · 리뷰", "group": "weekly", "needs": ["SERPAPI_KEY"],
      "desc": "검색 상위(광고 제외) · 리뷰 많은 상품 상세 · 대표 리뷰"},
     {"id": "yami", "label": "Yami 진열대", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
@@ -67,8 +67,10 @@ def estimate(item_id, cfg):
     ai = envkeys.has("OPENAI_API_KEY")
     sets = sum(len(v) for v in (cfg.get("search_sets") or {}).values())
     per = int(cfg.get("videos_per_query") or 0)
-    if item_id == "weee":
-        return {"firecrawl": len(cfg.get("weee_urls") or [])}
+    if item_id == "weee":  # 진열대 페이지 + 지난번 상품 수만큼 리뷰 페이지 (리뷰가 있으면 JSON 추출 더)
+        last = db.session.query(db.func.max(ShelfItem.week)).filter(ShelfItem.source == "weee").scalar()
+        n = ShelfItem.query.filter_by(source="weee", week=last).count() if last else 0
+        return {"firecrawl": len(cfg.get("weee_urls") or []) + n}
     if item_id == "yami":
         return {"firecrawl": len(yami.queries())}
     if item_id == "amazon":
@@ -178,8 +180,8 @@ def _collect_log(label, res, user, failed=False, collector=True):
 
 def _run_weee(cfg, ctx):
     r = weee.collect(cfg, envkeys.get("FIRECRAWL_API_KEY"), ctx["week"])
-    r["usage"] = {"firecrawl": r["calls"]}
-    r["message"] = f"Weee! 상품 {r['count']}개를 모았어요 (페이지 {r['calls']}개)."
+    r["usage"] = {"firecrawl": r["credits"]}
+    r["message"] = f"Weee! 상품 {r['count']}개 · 리뷰 {r['reviews']}개(새 리뷰 {r['newReviews']}개)를 모았어요 (페이지 {r['calls']}개)."
     return r
 
 
