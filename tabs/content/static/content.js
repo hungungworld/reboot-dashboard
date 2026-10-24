@@ -22,16 +22,20 @@
     sheet: emptySheet(),     // 새 캠페인 시트
     edit: null,              // 열린 캠페인의 시트 수정본
     camp: null,              // 열린 캠페인 (서버 상태)
-    list: null, listMeta: null, listErr: '', filter: '전체', query: '',
+    list: null, listMeta: null, listErr: '', filter: '전체', query: '', folder: '전체',
     meta: null, health: null,
     sending: false, pending: null, retryId: null, retryText: '',
     baseOff: false, showLayers: true,
     flash: new Set(), flashTimer: null,
     reviews: {},             // versionId → 컴플라이언스 판정 (이번 화면에서 실행)
-    folds: { sheet: false, ai: false, facts: false },
+    folds: { sheet: false },
     pollTimer: null, searchTimer: null,
-    personas: null
+    personas: null,
+    apiCheck: null, apiChecking: false,   // 연결 테스트 결과
+    ivBusy: false, ivDraft: '',          // 인터뷰: 보내는 중 · 직접 입력 칸
+    imgDraft: ''                         // 이미지 AI 수정 입력 칸
   };
+  const CIRCLED = ['①', '②', '③'];
 
   /* ───────── 작은 도우미 ───────── */
 
@@ -132,17 +136,58 @@
   function setupActions() {
     const el = REBOOT.page.actions();
     if (!el) return;
-    el.innerHTML = `<button type="button" class="btn" data-act="ai-settings">${icon('settings')}AI 설정</button>`;
+    el.innerHTML = `<button type="button" class="btn" data-act="facts">${icon('shield')}제품 근거</button>
+      <button type="button" class="btn" data-act="ai-settings">${icon('settings')}AI 설정</button>`;
     el.addEventListener('click', e => {
-      const b = e.target.closest('[data-act="ai-settings"]');
-      if (b) aiSettingsModal();
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'ai-settings') aiSettingsModal();
+      else if (b.dataset.act === 'facts') factsModal();
+    });
+  }
+
+  function factsModal() {
+    modal({
+      title: '제품 근거',
+      wide: true,
+      body: S.camp ? factsInner()
+        : '<p class="panel-note">제작 대상을 고르고 <b>이 정보로 시작</b>하면, 선택한 브랜드·제품의 근거가 여기에 보여요. AI는 이 값만 사실 근거로 써요.</p>',
+      actions: [{ label: '닫기', value: null }]
     });
   }
 
   async function loadMeta() {
     try { S.meta = await REBOOT.api(`${API}/meta`); } catch (e) { S.meta = null; }
     try { S.health = await REBOOT.health(); } catch (e) { S.health = null; }
-    if (S.tab === 'create') { renderAsideParts(); updateComposer(); renderMessages(); }
+    if (S.tab === 'create') { renderApi(); renderAsideParts(); updateComposer(); renderMessages(); }
+  }
+
+  /* ───────── API 연결 상태 (OpenAI · Higgsfield) ───────── */
+
+  function apiStatusHtml() {
+    const con = S.meta && S.meta.connections;
+    const keys = (S.health && S.health.keys) || {};
+    const oa = con ? con.openai : { key: !!(S.health && S.health.openai), textModel: textModel(), imageModel: '—' };
+    const hf = con ? con.higgsfield : { key: !!keys.HIGGSFIELD_API_KEY };
+    const chk = S.apiCheck;
+    const oaSt = !oa.key ? ['off', '키 없음'] : chk ? (chk.openai.ok ? ['on', '연결 확인됨'] : ['bad', '확인 실패']) : ['on', '키 있음'];
+    const hfSt = hf.key ? ['wait', '키 있음 · 앱 연동 전'] : ['off', '키 없음'];
+    const item = (st, name, sub, title) => `<span class="cnt-api-item ${st[0]}" title="${esc(title)}"><i aria-hidden="true"></i><b>${esc(name)}</b>${sub ? `<span class="cnt-api-sub">${esc(sub)}</span>` : ''}<span class="cnt-api-st">${esc(st[1])}</span></span>`;
+    return `<span class="cnt-api-label">API 연결</span>
+      ${item(oaSt, 'OpenAI', oa.textModel || '', `대화·제작 ${oa.textModel || '—'} · 이미지 ${oa.imageModel || '—'}${oa.imageEdit ? ' (기준 이미지 편집 가능)' : ''}`)}
+      ${item(hfSt, 'Higgsfield', '', '이미지·영상 — 앱에 연동 코드가 아직 없어 키가 있는지만 보여요')}
+      <button type="button" class="link cnt-api-test" data-act="api-check" ${S.apiChecking ? 'disabled' : ''}>${S.apiChecking ? '확인 중…' : '연결 테스트'}</button>
+      ${chk ? `<span class="cnt-api-msg">${esc(chk.openai.message)}</span>` : ''}`;
+  }
+  function renderApi() { const el = ref('api'); if (el) el.innerHTML = apiStatusHtml(); }
+
+  async function apiCheck() {
+    S.apiChecking = true;
+    renderApi();
+    try {
+      S.apiCheck = await REBOOT.api(`${API}/meta/check`);
+      toast(S.apiCheck.openai.message + (S.apiCheck.higgsfield.key ? ' · Higgsfield는 키만 확인' : ''), S.apiCheck.openai.ok ? '' : 'error');
+    } catch (e) { toast(e.message, 'error'); } finally { S.apiChecking = false; renderApi(); }
   }
 
   async function loadList() {
@@ -201,10 +246,19 @@
       renderCampaignGrid();
       return;
     }
-    el.innerHTML = `<div class="workbench cnt-bench">
-      <section class="card cnt-studio" data-ref="studio">${S.camp ? studioHtml() : sheetStudioHtml()}</section>
-      <aside class="stack cnt-aside" data-ref="aside">${S.camp ? studioAsideHtml() : sheetAsideHtml()}</aside>
-    </div>`;
+    // 대화 중에는 '진행 과정 & 결과'를 대화창 바로 아래에 넓게 (오른쪽은 답 정리 · 결정 사항 · 접이식)
+    el.innerHTML = S.camp
+      ? `<div class="workbench cnt-bench">
+          <div class="cnt-main-col">
+            <section class="card cnt-studio" data-ref="studio">${studioHtml()}</section>
+            <section class="card cnt-results-card" data-ref="results">${resultsInner()}</section>
+          </div>
+          <aside class="stack cnt-aside" data-ref="aside">${studioAsideHtml()}</aside>
+        </div>`
+      : `<div class="workbench cnt-bench">
+          <section class="card cnt-studio" data-ref="studio">${sheetStudioHtml()}</section>
+          <aside class="stack cnt-aside" data-ref="aside">${sheetAsideHtml()}</aside>
+        </div>`;
     if (S.camp) { scrollMessages(); updateComposer(); }
   }
 
@@ -213,6 +267,7 @@
   function sheetStudioHtml() {
     const s = S.sheet;
     return `<div class="cnt-studio-bar"><div class="flex">${icon('spark')}<strong>새 콘텐츠 만들기</strong></div>${badge('STEP 01 / 03')}</div>
+      <div class="cnt-api" data-ref="api">${apiStatusHtml()}</div>
       <div class="cnt-studio-body">
         <div class="cnt-welcome"><div class="cnt-spark" aria-hidden="true">✳</div><h2>어떤 이야기를 만들어볼까요?</h2>
           <p>콘텐츠와 채널, 제작 대상만 고르면 시작할 수 있어요. 나머지는 대화하면서 정해요.</p></div>
@@ -407,7 +462,7 @@
       setCampaign(res.campaign);
       renderMain();
       loadList();
-      if (textReady()) send('', { kickoff: true });
+      interviewAct('start');  // 질문을 하나씩 (키가 없으면 예시 질문)
     } catch (e) {
       toast(e.message, 'error');
     } finally { ui.busy(btn, false); }
@@ -473,15 +528,15 @@
     const aside = ref('aside');
     if (!aside) return;
     if (!S.camp) { aside.innerHTML = sheetAsideHtml(); return; }
-    if (!aside.querySelector('[data-ref="results"]')) { aside.innerHTML = studioAsideHtml(); return; }
-    renderDecisions();
+    if (!ref('results')) { renderMain(); return; }
+    if (!aside.querySelector('[data-ref="brief"]')) aside.innerHTML = studioAsideHtml();
+    else { renderBrief(); renderDecisions(); }
     renderResults();
-    renderFold('ai');
-    renderFold('facts');
   }
 
   function studioHtml() {
     return `<div class="cnt-studio-bar" data-ref="bar">${barHtml()}</div>
+      <div class="cnt-api" data-ref="api">${apiStatusHtml()}</div>
       <div class="cnt-studio-head" data-ref="head">${headHtml()}</div>
       <div class="cnt-messages" data-ref="messages" aria-live="polite">${messagesHtml()}</div>
       <div class="cnt-dock">
@@ -524,9 +579,12 @@
     c.messages.forEach(m => out.push(messageHtml(m)));
     if (!textReady() && !S.sending) out.push(noKeyHtml());
     if (S.pending) {
-      if (!S.pending.kickoff) out.push(`<div class="message user cnt-pending"><div class="bubble">${esc(S.pending.text)}</div></div>`);
+      const pd = S.pending;
+      if (!pd.kickoff && pd.text) out.push(`<div class="message user cnt-pending"><div class="bubble">${esc(pd.text)}</div></div>`);
+      const wait = pd.interview ? (pd.kickoff ? '시트를 읽고 첫 질문을 준비하는 중…' : '답을 저장하고 다음 질문을 준비하는 중…')
+        : pd.kickoff ? '시트를 읽고 첫 제안을 준비하는 중…' : pd.force === 'image' ? '이미지 작업을 등록하는 중…' : '생각하는 중… 초안을 쓰면 30초쯤 걸려요';
       out.push(`<div class="message"><div class="bot-symbol">✳</div><div class="cnt-bot"><div class="cnt-typing"><span></span><span></span><span></span>
-        <em>${S.pending.kickoff ? '시트를 읽고 첫 제안을 준비하는 중…' : S.pending.force === 'image' ? '이미지 작업을 등록하는 중…' : '생각하는 중… 초안을 쓰면 30초쯤 걸려요'}</em></div></div></div>`);
+        <em>${wait}</em></div></div></div>`);
     }
     return out.join('');
   }
@@ -552,6 +610,8 @@
       return `<div class="cnt-event${tone}">${icon(p.kind === 'job_failed' ? 'x' : p.kind === 'job_done' ? 'image' : 'clock')}<span>${esc(m.text)}</span>${view}${time}</div>`;
     }
     const p = m.payload || {};
+    if (p.interview) return interviewHtml(m, time);
+    if (p.interviewDone) return interviewDoneHtml(m, time);
     return `<div class="message cnt-msg-bot"><div class="bot-symbol" aria-hidden="true">✳</div><div class="cnt-bot">
       <div class="cnt-bot-head"><strong>REBOOT AI</strong>${badge('AI', 'lime')}${time}</div>
       <div class="prose cnt-bot-text">${ui.markdown(m.text)}</div>
@@ -573,7 +633,7 @@
       const btns = a.versionIds.map((id, i) => `<button type="button" class="link" data-act="select-version" data-id="${esc(id)}">${esc((a.versionLabels || [])[i] || 'v' + id)}</button>`).join(' · ');
       lines.push(`<li class="ok">${icon('doc')}${a.type === 'select_version' ? '선택한 버전' : a.mode === 'edit' ? '수정본' : '초안'}: ${btns}</li>`);
     } else if (a.status === 'queued') {
-      lines.push(`<li class="run"><span class="spinner"></span>이미지 작업을 등록했어요 — 진행 상황은 오른쪽 '진행 과정 & 결과'에서 볼 수 있어요.</li>`);
+      lines.push(`<li class="run"><span class="spinner"></span>이미지 작업을 등록했어요 — 진행 상황은 아래 '진행 과정 & 결과'에서 볼 수 있어요.</li>`);
     }
     if (a.note) lines.push(`<li class="${a.status === 'failed' ? 'no' : 'info'}">${esc(a.note)}</li>`);
     return lines.length ? `<ul class="cnt-results">${lines.join('')}</ul>` : '';
@@ -582,21 +642,200 @@
   function candidatesHtml(m) {
     const cands = (m.payload && m.payload.candidates) || [];
     if (!cands.length) return '';
-    const c = S.camp;
     return `<div class="cnt-concepts">${cands.map((cd, i) => {
-      const key = cd.field.startsWith('decisions.') ? cd.field.slice(10) : null;
-      const cur = key ? c.decisions[key] : null;
-      const chosen = key ? !!(cur && cur.value === cd.value && cur.status === 'confirmed') : c.sheet[cd.field.slice(6)] === cd.value;
+      const chosen = isChosen(cd.field, cd.value);
       return `<button type="button" class="cnt-concept${chosen ? ' selected' : ''}" data-act="pick-candidate" data-msg="${esc(m.id)}" data-i="${i}" aria-pressed="${chosen}">
-        <small>제안 0${i + 1} · ${esc(fieldLabel(cd.field))}</small><strong>${esc(cd.label)}</strong><span>${esc(cd.reason)}</span>${chosen ? '<em>✓ 선택됨</em>' : ''}</button>`;
-    }).join('')}</div><p class="panel-note">카드를 고르면 확정으로 저장돼요. 고르기 전까지는 제안이에요.</p>`;
+        <small>제안 0${i + 1} · ${esc(fieldLabel(cd.field))}</small><strong>${esc(cd.label)}</strong><span>${esc(cd.reason)}</span>${chosen ? '<em>✓ 선택됨 · 다시 누르면 취소</em>' : ''}</button>`;
+    }).join('')}</div><p class="panel-note">카드를 고르면 확정으로 저장돼요. 고른 카드를 다시 누르면 선택이 취소돼요.</p>`;
+  }
+
+  /* ───────── 인터뷰: 질문 하나 · 보기 ①②③ · 직접 입력 (개수는 AI 판단 · 윤곽이 잡히면 만들기 제안) ───────── */
+
+  function interviewHtml(m, time) {
+    const iv = m.payload.interview;
+    const open = iv.status === 'open';
+    const custom = iv.answer && iv.answer.option == null ? iv.answer.value : null;
+    const opts = iv.options.map((o, i) => {
+      const chosen = !open && isChosen(iv.field, o.value);
+      return `<button type="button" class="cnt-concept cnt-iv-opt${chosen ? ' selected' : ''}" data-act="iv-pick" data-msg="${esc(m.id)}" data-i="${i}" aria-pressed="${chosen}" ${S.ivBusy ? 'disabled' : ''}>
+        <small>${CIRCLED[i]}</small><strong>${esc(o.label)}</strong><span>${esc(o.reason)}</span>${chosen ? '<em>✓ 선택됨 · 다시 누르면 취소</em>' : ''}</button>`;
+    }).join('');
+    const foot = open
+      ? `<div class="cnt-iv-custom"><input class="input" data-ref="iv-input" maxlength="300" value="${esc(S.ivDraft)}" placeholder="직접 입력해도 돼요 (Enter)" aria-label="직접 입력" ${S.ivBusy ? 'disabled' : ''}>
+          <button type="button" class="btn small lime" data-act="iv-custom" ${S.ivBusy ? 'disabled' : ''}>답하기</button></div>
+         <div class="flex wrap cnt-iv-links"><button type="button" class="link" data-act="iv-skip" ${S.ivBusy ? 'disabled' : ''}>이 질문 건너뛰기</button>
+          <button type="button" class="link" data-act="iv-finish" ${S.ivBusy ? 'disabled' : ''}>질문 그만하고 정리하기</button></div>`
+      : iv.status === 'skipped' ? '<p class="panel-note">건너뛴 질문이에요. 오른쪽 표에서 언제든 답할 수 있어요.</p>'
+        : custom != null ? `<p class="cnt-iv-answer${isChosen(iv.field, custom) ? ' on' : ''}">직접 입력: ${esc(custom)}</p>` : '';
+    return `<div class="message cnt-msg-bot"><div class="bot-symbol" aria-hidden="true">✳</div><div class="cnt-bot cnt-iv${open ? ' open' : ''}">
+      <div class="cnt-bot-head"><strong>REBOOT AI</strong>${badge(`질문 ${iv.step}`, 'lime')}${iv.source === 'example' ? badge('예시 질문') : ''}${time}</div>
+      ${iv.intro ? `<div class="prose cnt-bot-text">${ui.markdown(iv.intro)}</div>` : ''}
+      ${open && iv.ready ? `<div class="cnt-iv-ready">${icon('spark')}<div><b>윤곽이 잡혔어요.</b> 지금 바로 만들어 봐도 되고, 아래 질문에 더 답하면 더 정교해져요.
+        ${makeButtonsHtml(['image', 'cardnews'].includes(S.camp.sheet.content_type), textReady())}</div></div>` : ''}
+      <p class="cnt-iv-q"><span>${esc(iv.label)}</span>${esc(iv.question)}</p>
+      <div class="cnt-concepts">${opts}</div>
+      ${foot}
+    </div></div>`;
+  }
+
+  function interviewDoneHtml(m, time) {
+    const canImage = ['image', 'cardnews'].includes(S.camp.sheet.content_type);
+    const ready = textReady();
+    return `<div class="message cnt-msg-bot"><div class="bot-symbol" aria-hidden="true">✳</div><div class="cnt-bot">
+      <div class="cnt-bot-head"><strong>REBOOT AI</strong>${badge('정리 완료', 'green')}${time}</div>
+      <div class="prose cnt-bot-text">${ui.markdown(m.text)}</div>
+      ${makeButtonsHtml(canImage, ready)}
+    </div></div>`;
+  }
+
+  function makeButtonsHtml(canImage, ready) {
+    const off = ready ? '' : 'disabled title="OpenAI 키가 필요해요"';
+    // 이미지·카드뉴스는 이미지 만들기가 먼저
+    return `<div class="flex wrap cnt-iv-make">
+      ${canImage ? `<button type="button" class="btn small lime" data-act="make-image" ${off}>${icon('image')}이미지 만들기</button>` : ''}
+      <button type="button" class="btn small ${canImage ? '' : 'lime'}" data-act="iv-make" ${off}>${icon('spark')}${canImage ? '카피 초안 만들기' : '이대로 만들기'}</button>
+      ${ready ? '' : '<span class="panel-note">만들기는 OpenAI 키가 필요해요. 지금은 직접 작성할 수 있어요.</span>'}</div>`;
+  }
+
+  function interviewQs() {
+    return S.camp.messages.filter(m => m.role === 'assistant' && m.payload && m.payload.interview);
+  }
+  function interviewDone() {
+    return S.camp.messages.some(m => m.payload && m.payload.interviewDone);
+  }
+
+  function briefInner() {
+    const qs = interviewQs();
+    const done = interviewDone();
+    if (!qs.length) {
+      return `<div class="card-head"><h2>답 정리</h2></div>
+        <p class="panel-note">AI가 좋은 콘텐츠에 필요한 것을 하나씩 물어보고 답을 여기에 표로 정리해요. 윤곽이 잡히면 만들기를 제안해요.</p>
+        <button type="button" class="btn small lime mt-8" data-act="iv-start" ${S.ivBusy ? 'disabled' : ''}>${icon('chat')}질문으로 정리 시작</button>`;
+    }
+    const open = qs.some(m => m.payload.interview.status === 'open');
+    const rows = qs.map(m => {
+      const iv = m.payload.interview;
+      const cur = currentValue(iv.field);
+      const val = cur ? esc(cur.value) : `<span class="faint">${iv.status === 'open' ? '질문 중…' : iv.status === 'skipped' ? '건너뜀' : '미정'}</span>`;
+      return `<tr><td class="cnt-brief-n">${esc(iv.step)}</td><td>${esc(iv.label)}</td><td>${val}${cur ? ' ' + statusBadge(cur.status) : ''}</td>
+        <td>${iv.status === 'open' ? '' : `<button type="button" class="link" data-act="brief-edit" data-msg="${esc(m.id)}">고치기</button>`}</td></tr>`;
+    }).join('');
+    const canImage = ['image', 'cardnews'].includes(S.camp.sheet.content_type);
+    const ready = done || qs.some(m => m.payload.interview.ready);
+    return `<div class="card-head"><h2>답 정리</h2>${done ? badge('정리 완료', 'green') : badge(`질문 ${qs.length}`, 'lime')}</div>
+      <table class="cnt-brief"><thead><tr><th>#</th><th>항목</th><th>답</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      ${ready ? makeButtonsHtml(canImage, textReady()) : ''}
+      ${open ? '<p class="panel-note">왼쪽 질문에 답하면 다음 질문으로 넘어가요.</p>' : ''}
+      <p class="panel-note">답은 결정 사항(확정)으로 저장돼요. 표에서 고치면 다음 생성부터 반영돼요.</p>`;
+  }
+  function renderBrief() { const el = ref('brief'); if (el && S.camp) el.innerHTML = briefInner(); }
+
+  async function interviewAct(action, body, shown) {
+    const c = S.camp;
+    if (!c || S.ivBusy || S.sending) return;
+    S.ivBusy = true;
+    S.pending = { interview: true, kickoff: action === 'start', text: shown || '' };
+    renderMessages();
+    renderBrief();
+    try {
+      const res = await REBOOT.api(`${API}/campaigns/${c.id}/interview`,
+        Object.assign({ action, expected_revision: c.revision, client_request_id: rid() }, body || {}));
+      if (action === 'answer') S.ivDraft = '';
+      S.ivBusy = false; S.pending = null;
+      applyCampaign(res.campaign, { applied: res.applied || [] });
+    } catch (e) {
+      S.ivBusy = false; S.pending = null;
+      if (e.status === 409 && e.data && e.data.campaign) applyCampaign(e.data.campaign);
+      else { renderMessages(); renderBrief(); }
+      toast(e.message, 'error');
+    }
+    const inp = ref('iv-input');
+    if (inp) inp.focus();
+  }
+
+  function ivPick(b) {
+    const m = S.camp.messages.find(x => String(x.id) === b.dataset.msg);
+    const iv = m && m.payload && m.payload.interview;
+    const o = iv && iv.options[+b.dataset.i];
+    if (!o) return;
+    if (iv.status === 'open') interviewAct('answer', { option: +b.dataset.i }, `${CIRCLED[+b.dataset.i]} ${o.label}`);
+    else toggleChoice(iv.field, o.value, m.id);  // 지난 질문: 후보 카드처럼 고르기 · 다시 누르면 취소
+  }
+
+  function ivCustom() {
+    const v = S.ivDraft.trim();
+    if (!v) { toast('보기를 고르거나 직접 입력하세요.', 'error'); return; }
+    interviewAct('answer', { value: v }, v);
+  }
+
+  function briefEditModal(m) {
+    const iv = m.payload.interview;
+    const cur = currentValue(iv.field);
+    const isOpt = cur && iv.options.some(o => o.value === cur.value);
+    let value = null;
+    modal({
+      title: `${iv.label} 답 고치기`,
+      body: `<p>${esc(iv.question)}</p>
+        <div class="cnt-suggest-list">${iv.options.map((o, i) => `<button type="button" class="cnt-concept${cur && cur.value === o.value ? ' selected' : ''}" data-pick="${i}"><small>${CIRCLED[i]}</small><strong>${esc(o.label)}</strong><span>${esc(o.reason)}</span></button>`).join('')}</div>
+        <label class="field mt-8"><span>직접 입력</span><input data-m="value" maxlength="300" value="${esc(cur && !isOpt ? cur.value : '')}"></label>`,
+      actions: [{ label: '취소', value: null }].concat(cur ? [{ label: '미정으로', value: 'clear' }] : []).concat([{
+        label: '저장', value: 'save', tone: 'lime',
+        onClick: el => {
+          const typed = el.querySelector('[data-m="value"]').value.trim();
+          if (typed) value = typed;
+          if (!value) { toast('보기를 고르거나 직접 입력하세요.', 'error'); return false; }
+          return true;
+        }
+      }]),
+      onOpen: el => {
+        el.addEventListener('click', e => {
+          const b = e.target.closest('[data-pick]');
+          if (!b) return;
+          value = iv.options[+b.dataset.pick].value;
+          el.querySelectorAll('[data-pick]').forEach(x => x.classList.toggle('selected', x === b));
+          el.querySelector('[data-m="value"]').value = '';
+        });
+      }
+    }).then(v => {
+      if (v === 'save' && value) changeDecisions([{ field: iv.field, value, status: 'confirmed' }], 'manual', m.id);
+      else if (v === 'clear' && cur) {
+        changeDecisions([iv.field.startsWith('sheet.') ? { field: iv.field, value: '', status: 'confirmed' }
+          : { field: iv.field, value: null, status: 'undecided' }], 'manual', m.id);
+      }
+    });
+  }
+
+  /* 후보·보기 선택 상태 (지금 저장된 값과 같으면 선택됨) */
+  function currentValue(field) {
+    const c = S.camp;
+    if (field.startsWith('decisions.')) return c.decisions[field.slice(10)] || null;
+    const v = c.sheet[field.slice(6)];
+    return v ? { value: v, status: 'confirmed' } : null;
+  }
+  function isChosen(field, value) {
+    const cur = currentValue(field);
+    return !!(cur && cur.value === value && cur.status === 'confirmed');
+  }
+  // 고르기 전 값으로: 이 값을 넣은 가장 최근 변경의 이전 값 (없으면 미정 · 시트 항목은 빈 값)
+  function revertChange(field, value) {
+    const ev = (S.camp.recentChanges || []).find(e => e.field === field && e.new && e.new.value === value);
+    const old = ev && ev.old && ev.old.value !== value ? ev.old : null;
+    if (field.startsWith('sheet.')) return { field, value: old ? old.value : '', status: 'confirmed' };
+    return old ? { field, value: old.value, status: old.status || 'confirmed' } : { field, value: null, status: 'undecided' };
+  }
+  function toggleChoice(field, value, messageId) {
+    if (isChosen(field, value)) changeDecisions([revertChange(field, value)], 'undo', messageId);
+    else changeDecisions([{ field, value, status: 'confirmed' }], 'candidate', messageId);
   }
 
   function renderMessages() {
     const el = ref('messages');
     if (!el || !S.camp) return;
+    const typing = global.document.activeElement && global.document.activeElement.dataset.ref === 'iv-input';
     el.innerHTML = messagesHtml();
     scrollMessages();
+    const inp = typing && ref('iv-input');
+    if (inp && !inp.disabled) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
   }
   function scrollMessages() {
     const el = ref('messages');
@@ -642,12 +881,12 @@
   async function send(text, opts) {
     opts = opts || {};
     const c = S.camp;
-    if (!c || S.sending) return;
+    if (!c || S.sending || S.ivBusy) return;
     text = String(text || '').trim();
     if (!text && !opts.kickoff) return;
     if (!textReady()) { toast('OpenAI 키가 없어 AI 대화를 쓸 수 없어요. 설정 › 연결에서 키를 넣어 주세요.', 'error'); return; }
     if (!opts.kickoff && (!S.retryId || S.retryText !== text)) { S.retryId = rid(); S.retryText = text; }
-    const base = currentBase();
+    const base = opts.noBase ? null : currentBase();
     const body = { message: text, expected_revision: c.revision, base_version_id: base ? base.id : null };
     if (!opts.kickoff) body.client_request_id = S.retryId;
     if (opts.force) body.force_action = opts.force;
@@ -689,11 +928,10 @@
   /* ───────── 오른쪽: 현재 결정 사항 · 진행 과정 & 결과 · 접이식 ───────── */
 
   function studioAsideHtml() {
-    return `<section class="card" data-ref="decisions">${decisionsInner()}</section>
-      <section class="card" data-ref="results">${resultsInner()}</section>
-      <details class="card cnt-fold" data-fold="sheet"${S.folds.sheet ? ' open' : ''}><summary>${icon('edit')}기본 정보 시트 수정</summary><div data-ref="fold-sheet">${foldSheetInner()}</div></details>
-      <details class="card cnt-fold" data-fold="ai"${S.folds.ai ? ' open' : ''}><summary>${icon('settings')}AI 설정</summary><div data-ref="fold-ai">${aiSettingsInner(false)}</div></details>
-      <details class="card cnt-fold" data-fold="facts"${S.folds.facts ? ' open' : ''}><summary>${icon('shield')}제품 근거</summary><div data-ref="fold-facts">${factsInner()}</div></details>`;
+    return `<section class="card cnt-brief-card" data-ref="brief">${briefInner()}</section>
+      <section class="card" data-ref="decisions">${decisionsInner()}</section>
+      <details class="card cnt-fold" data-fold="sheet"${S.folds.sheet ? ' open' : ''}><summary>${icon('edit')}기본 정보 시트 수정</summary><div data-ref="fold-sheet">${foldSheetInner()}</div></details>`;
+    // AI 설정 · 제품 근거는 오른쪽 위 버튼(모달)으로
   }
 
   function renderDecisions() { const el = ref('decisions'); if (el && S.camp) el.innerHTML = decisionsInner(); }
@@ -701,7 +939,7 @@
   function renderFold(name) {
     const el = ref('fold-' + name);
     if (!el || !S.camp) return;
-    el.innerHTML = name === 'sheet' ? foldSheetInner() : name === 'ai' ? aiSettingsInner(false) : factsInner();
+    if (name === 'sheet') el.innerHTML = foldSheetInner();
   }
 
   function decisionRow(label, value, status, opts) {
@@ -763,27 +1001,102 @@
     const vs = c.versions;
     const sel = selectedVersion();
     const hasDec = Object.values(c.decisions).some(d => d.status === 'confirmed');
+    const finalV = vs.find(v => v.id === c.finalVersionId) || null;
+    const complete = c.status === '완료' && !!finalV;
     const steps = [
       ['브리프 정리', '완료'],
       ['방향 정하기', hasDec || vs.length ? '완료' : '진행 중'],
       ['초안 · 시안', vs.length ? '완료' : hasDec ? '진행 중' : '대기'],
-      ['검토 · 최종본', c.finalVersionId ? '완료' : vs.length ? '진행 중' : '대기']
+      ['검토 · 최종본', complete ? '완성' : c.finalVersionId ? '완료' : vs.length ? '진행 중' : '대기']
     ];
     const jobs = c.jobs.filter(j => ACTIVE_JOB.includes(j.status) || j.status === 'failed' || j.status === 'submission_unknown').slice(0, 3);
     const canImage = ['image', 'cardnews'].includes(c.sheet.content_type);
     const ready = textReady();
     const head = sel ? (sel.stale ? badge('변경 사항 미반영', 'orange') : badge('최신 결정 반영', 'green')) : badge(vs.length ? '결과 있음' : '방향 정하는 중', 'green');
     return `<div class="card-head"><h2>진행 과정 & 결과</h2>${head}</div>
-      ${steps.map(([t, st], i) => `<div class="workflow-step ${st === '진행 중' ? 'current' : st === '완료' ? 'done' : ''}"><span class="stepnum">${st === '완료' ? '✓' : i + 1}</span>${esc(t)}<span class="cnt-step-st">${esc(st)}</span></div>`).join('')}
-      ${jobs.map(jobHtml).join('')}
-      <div class="flex wrap cnt-make">
-        <button type="button" class="btn small lime" data-act="make-draft" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('spark')}초안 만들기</button>
-        ${canImage ? `<button type="button" class="btn small dark" data-act="make-image" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('image')}이미지 생성</button>` : ''}
-        <button type="button" class="btn small" data-act="manual-version">${icon('edit')}직접 작성</button>
-      </div>
-      ${sel ? previewHtml(sel) : `<div class="empty-art cnt-empty">${icon(canImage ? 'image' : 'doc')}<span>아직 결과물이 없어요.<br>대화에서 "만들어줘"라고 하거나 위 버튼을 눌러 보세요.</span></div>`}
-      ${vs.length ? `<div class="cnt-vhead"><span class="field-label">버전 ${esc(vs.length)}개</span><button type="button" class="link" data-act="export">${icon('download')}전체 내보내기 (ZIP)</button></div>
-        <div class="cnt-versions">${vs.map(v => versionRowHtml(v, sel)).join('')}</div>` : ''}`;
+      <div class="cnt-steps">${steps.map(([t, st], i) => { const ok = st === '완료' || st === '완성'; return `<div class="workflow-step ${st === '진행 중' ? 'current' : ok ? 'done' : ''}"><span class="stepnum">${ok ? '✓' : i + 1}</span>${esc(t)}<span class="cnt-step-st">${esc(st)}</span></div>`; }).join('')}</div>
+      ${complete ? completeHtml(finalV) : ''}
+      <div class="cnt-results-grid">
+        <div class="cnt-results-main">
+          ${sel ? previewHtml(sel) : `<div class="empty-art cnt-empty">${icon(canImage ? 'image' : 'doc')}<span>아직 결과물이 없어요.<br>대화에서 "만들어줘"라고 하거나 오른쪽 버튼을 눌러 보세요.</span></div>`}
+        </div>
+        <div class="cnt-results-side">
+          ${jobs.map(jobHtml).join('')}
+          <div class="flex wrap cnt-make">
+            <button type="button" class="btn small lime" data-act="make-draft" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('spark')}초안 만들기</button>
+            ${canImage ? `<button type="button" class="btn small dark" data-act="make-image" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('image')}이미지 생성</button>` : ''}
+            <button type="button" class="btn small" data-act="manual-version">${icon('edit')}직접 작성</button>
+          </div>
+          ${sel && !complete ? `<button type="button" class="btn small dark cnt-complete-btn" data-act="complete">${icon('check')}완성하기 · ${esc(sel.label)} v${esc(sel.seq)}</button>
+            <p class="panel-note">보고 있는 버전을 최종본으로 정하고 상태를 '완료'로 바꿔요. 나중에 더 수정할 수 있어요.</p>` : ''}
+          ${vs.length ? `<div class="cnt-vhead"><span class="field-label">버전 ${esc(vs.length)}개</span><button type="button" class="link" data-act="export">${icon('download')}전체 내보내기 (ZIP)</button></div>
+            <div class="cnt-versions">${vs.map(v => versionRowHtml(v, sel)).join('')}</div>` : '<p class="panel-note">만든 결과물은 버전으로 여기에 쌓여요.</p>'}
+        </div>
+      </div>`;
+  }
+
+  /* 완성: 최종본 + 상태 '완료' → 저장 · 더 수정하기 · 새 콘텐츠 */
+  function completeHtml(v) {
+    const isImg = v.kind === 'image' && v.imageUrl;
+    return `<div class="cnt-done">
+      <div class="cnt-done-msg">${icon('check')}<div><b>완성됐어요 — ${esc(v.label)} · v${esc(v.seq)}</b>
+        <small>최종본은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</small></div></div>
+      <div class="flex wrap cnt-done-btns">
+        ${isImg ? `<button type="button" class="btn small lime" data-act="save-image" data-id="${esc(v.id)}">${icon('download')}이미지 저장하기</button>`
+          : `<button type="button" class="btn small lime" data-act="export-one" data-id="${esc(v.id)}">${icon('download')}파일 저장하기</button>`}
+        <button type="button" class="btn small" data-act="reopen">${icon('edit')}더 수정하기</button>
+        <button type="button" class="btn small dark" data-act="new-campaign">${icon('plus')}새 콘텐츠 만들기</button>
+      </div></div>`;
+  }
+
+  async function completeCampaign(btn) {
+    const c = S.camp;
+    const v = selectedVersion();
+    if (!c || !v) return;
+    ui.busy(btn, true);
+    try {
+      let camp = c;
+      if (camp.finalVersionId !== v.id) camp = (await REBOOT.api(`${API}/versions/${v.id}/final`, { final: true })).campaign;
+      if (camp.status !== '완료') {
+        camp = (await REBOOT.api(`${API}/campaigns/${c.id}`, { expected_revision: camp.revision, status: '완료' }, { method: 'PATCH' })).campaign;
+      }
+      applyCampaign(camp);
+      loadList();
+      toast('완성했어요. [더 수정하기]를 누르면 언제든 이어서 고칠 수 있어요.');
+    } catch (e) { conflictOr(e); } finally { ui.busy(btn, false); }
+  }
+
+  // 더 수정하기: 상태만 '제작 중'으로 (최종본 지정은 그대로 — 새 버전을 고르면 다시 완성하기)
+  async function reopenCampaign() {
+    const c = S.camp;
+    try {
+      const res = await REBOOT.api(`${API}/campaigns/${c.id}`, { expected_revision: c.revision, status: '제작 중' }, { method: 'PATCH' });
+      applyCampaign(res.campaign);
+      loadList();
+      const inp = ref('input');
+      if (inp && !inp.disabled) { inp.focus(); inp.placeholder = '어떻게 더 고칠까요? 예: 배경만 더 어둡게, 헤드라인 짧게'; }
+    } catch (e) { conflictOr(e); }
+  }
+
+  // 이미지 저장: 따로 둔 텍스트 레이어가 있으면 합성해서 PNG로 (원본 파일은 그대로)
+  async function saveImage(v) {
+    const name = `reboot-${S.camp.id}-${String(v.label).replace(/[^\w가-힣-]+/g, '')}-v${v.seq}.png`;
+    const layers = v.image && !v.image.baked ? (v.image.text_layers || []) : [];
+    try {
+      const res = await REBOOT.api(v.imageUrl, undefined, { raw: true });
+      const blob = await res.blob();
+      if (!layers.length) { ui.download(name, blob); toast('이미지를 저장했어요.'); return; }
+      const url = global.URL.createObjectURL(blob);
+      const img = new global.Image();
+      img.onload = () => {
+        const out = global.document.createElement('canvas');
+        drawEditor(out, img, { crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100, layers: layers.map(normLayer), sel: -1 }, 0, { text: true, select: false });
+        global.URL.revokeObjectURL(url);
+        out.toBlob(b => { if (b) { ui.download(name, b); toast('문구를 합성한 이미지를 저장했어요.'); } else toast('이미지를 만들지 못했어요.', 'error'); }, 'image/png');
+      };
+      img.onerror = () => { global.URL.revokeObjectURL(url); toast('이미지를 읽지 못했어요.', 'error'); };
+      img.src = url;
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   function jobHtml(j) {
@@ -819,12 +1132,14 @@
   function previewHtml(v) {
     const c = S.camp;
     const img = v.kind === 'image' && v.imageUrl;
-    const layers = (v.image && v.image.text_layers) || [];
+    const baked = !!(v.image && v.image.baked);  // 편집기에서 글자를 이미지에 합성함 → 겹쳐 그리지 않음
+    const layers = baked ? [] : (v.image && v.image.text_layers) || [];
     const body = img
       ? `<div class="cnt-preview${S.showLayers && layers.length ? ' layers' : ''}"><img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 시안" loading="lazy">
-          ${layers.length ? `<div class="cnt-layer-box" aria-hidden="${!S.showLayers}">${layers.map(t => `<span class="cnt-layer ${esc(t.role)}">${esc(t.text)}</span>`).join('')}</div>` : ''}</div>
-         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} 글자·로고는 이미지에 그리지 않고 텍스트 레이어로 따로 둬요.</span>
-          ${layers.length ? `<button type="button" class="link" data-act="toggle-layers">텍스트 레이어 ${S.showLayers ? '숨기기' : '보기'}</button>` : ''}</div>`
+          ${layers.length ? `<div class="cnt-layer-box" aria-hidden="${!S.showLayers}">${layers.map(layerHtml).join('')}</div>` : ''}</div>
+         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${baked ? '글자를 이미지에 합성한 버전이에요.' : '글자·로고는 이미지에 그리지 않고 텍스트 레이어로 따로 둬요.'}</span>
+          ${layers.length ? `<button type="button" class="link" data-act="toggle-layers">텍스트 레이어 ${S.showLayers ? '숨기기' : '보기'}</button>` : ''}</div>
+         ${imageEditHtml(v)}`
       : `<div class="prose cnt-doc">${ui.markdown(v.body)}</div>`;
     const cmp = complianceOf(v);
     const ai = v.review && v.review.ai;
@@ -859,6 +1174,262 @@
       </div>
       ${c.finalVersionId === v.id ? '<p class="panel-note">최종본 지정은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</p>' : ''}
     </div>`;
+  }
+
+  // 편집기에서 위치를 정한 레이어는 그 자리에 (x·y·크기는 이미지 폭 대비 비율)
+  function layerHtml(t) {
+    if (typeof t.x !== 'number') return `<span class="cnt-layer ${esc(t.role)}">${esc(t.text)}</span>`;
+    const shift = t.align === 'center' ? '-50%' : t.align === 'right' ? '-100%' : '0';
+    return `<span class="cnt-layer free" style="left:${t.x * 100}%;top:${t.y * 100}%;font-size:${t.size * 100}cqw;color:${esc(t.color)};transform:translateX(${shift})">${esc(t.text)}</span>`;
+  }
+
+  /* 이미지 수정: A) AI로 수정 (기준 이미지를 넣어 편집 · 새 버전) · C) 직접 편집기 (AI 없음) */
+  function imageEditHtml(v) {
+    const ready = textReady();
+    const off = ready ? '' : 'disabled title="OpenAI 키가 필요해요"';
+    const quick = DATA.quick.image.filter(q => q.label !== '다른 시안' && q.label !== '문구 수정');
+    return `<div class="cnt-img-edit">
+      <div class="field-label">${icon('spark')}이 이미지 수정하기</div>
+      <div class="chips">${quick.map((q, i) => `<button type="button" class="chip" data-act="img-quick" data-i="${i}">${esc(q.label)}</button>`).join('')}</div>
+      <div class="cnt-img-edit-row"><textarea class="input" data-ref="img-prompt" rows="2" maxlength="1000" placeholder="어떻게 고칠까요? 예: 배경만 흰색으로, 제품은 그대로" aria-label="AI 수정 요청">${esc(S.imgDraft)}</textarea>
+        <button type="button" class="btn small dark" data-act="img-ai-edit" data-id="${esc(v.id)}" ${off}>${icon('spark')}AI로 수정</button></div>
+      <div class="flex wrap cnt-img-edit-btns">
+        <button type="button" class="btn small" data-act="img-editor" data-id="${esc(v.id)}">${icon('edit')}직접 편집 (자르기 · 색 · 문구)</button>
+        <button type="button" class="btn small ghost" data-act="img-new" ${off}>AI로 다른 시안</button>
+      </div>
+      <p class="panel-note">AI 수정은 이 이미지를 기준으로 넣어 새 버전을 만들어요 (원본 유지 · 이미지 생성 비용). ${S.meta && S.meta.imageEdit === false ? '지금 이미지 모델은 편집을 지원하지 않아 새 시안으로 만들어요. ' : ''}직접 편집은 AI 없이 브라우저에서 해요.</p>
+    </div>`;
+  }
+
+  async function imageAiEdit(v) {
+    const text = S.imgDraft.trim();
+    if (!text) { toast('어떻게 고칠지 적어 주세요. 위 버튼을 누르면 예시가 채워져요.', 'error'); return; }
+    if (S.camp.selectedVersionId !== v.id) await selectVersion(v.id);
+    S.baseOff = false;
+    S.imgDraft = '';
+    send(text, { force: 'image' });
+  }
+
+  /* 직접 편집기 — 캔버스에서 자르기 · 밝기/대비/채도 · 텍스트 레이어(끌어서 이동) → PNG를 새 버전으로 */
+  const CROPS = [['original', '원본'], ['1:1', '1:1'], ['4:5', '4:5'], ['9:16', '9:16'], ['16:9', '16:9']];
+  const LAYER_DEFAULT = {
+    headline: { x: 0.06, y: 0.06, size: 0.07, color: '#ffffff', align: 'left' },
+    slogan: { x: 0.94, y: 0.9, size: 0.045, color: '#d7ff3f', align: 'right' },
+    cta: { x: 0.94, y: 0.8, size: 0.04, color: '#d7ff3f', align: 'right' },
+    text: { x: 0.06, y: 0.5, size: 0.05, color: '#ffffff', align: 'left' }
+  };
+  const ROLE_LABEL = { headline: '헤드라인', slogan: '슬로건', cta: 'CTA', text: '문구' };
+
+  function normLayer(t) {
+    const role = LAYER_DEFAULT[t.role] ? t.role : 'text';
+    return Object.assign({}, LAYER_DEFAULT[role], { role, text: String(t.text || '') },
+      typeof t.x === 'number' ? { x: t.x, y: t.y, size: t.size, color: t.color, align: t.align } : {});
+  }
+
+  function cropRect(w, h, crop, offset) {
+    if (crop === 'original') return { x: 0, y: 0, w, h };
+    const [a, b] = crop.split(':').map(Number);
+    const r = a / b;
+    if (w / h > r) { const cw = Math.round(h * r); return { x: Math.round((w - cw) * offset), y: 0, w: cw, h }; }
+    const ch = Math.round(w / r);
+    return { x: 0, y: Math.round((h - ch) * offset), w, h: ch };
+  }
+
+  function adjustPixels(ctx, w, h, st) {
+    if (st.brightness === 100 && st.contrast === 100 && st.saturation === 100) return;
+    const d = ctx.getImageData(0, 0, w, h);
+    const a = d.data;
+    const br = st.brightness / 100, ct = st.contrast / 100, sat = st.saturation / 100;
+    for (let i = 0; i < a.length; i += 4) {
+      let r = (a[i] * br - 128) * ct + 128, g = (a[i + 1] * br - 128) * ct + 128, b = (a[i + 2] * br - 128) * ct + 128;
+      const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      a[i] = l + (r - l) * sat; a[i + 1] = l + (g - l) * sat; a[i + 2] = l + (b - l) * sat;  // Uint8ClampedArray가 0~255로 자름
+    }
+    ctx.putImageData(d, 0, 0);
+  }
+
+  function layerFont(t, W) { return `800 ${Math.max(8, t.size * W)}px Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif`; }
+
+  function layerBox(ctx, t, W, H) {
+    ctx.font = layerFont(t, W);
+    const w = ctx.measureText(t.text).width, fs = Math.max(8, t.size * W);
+    const x = t.x * W, y = t.y * H;
+    const x0 = t.align === 'center' ? x - w / 2 : t.align === 'right' ? x - w : x;
+    return { x: x0, y, w, h: fs * 1.2 };
+  }
+
+  function drawEditor(canvas, img, st, maxW, opts) {
+    const crop = cropRect(img.naturalWidth, img.naturalHeight, st.crop, st.offset);
+    const scale = maxW ? Math.min(1, maxW / crop.w) : 1;
+    canvas.width = Math.round(crop.w * scale);
+    canvas.height = Math.round(crop.h * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, crop.x, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
+    adjustPixels(ctx, canvas.width, canvas.height, st);
+    if (!opts.text) return;
+    const W = canvas.width, H = canvas.height;
+    st.layers.forEach((t, i) => {
+      if (!t.text) return;
+      ctx.save();
+      ctx.font = layerFont(t, W);
+      ctx.textAlign = t.align;
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = t.color;
+      ctx.shadowColor = 'rgba(0,0,0,.35)';
+      ctx.shadowBlur = Math.max(2, t.size * W * 0.15);
+      ctx.fillText(t.text, t.x * W, t.y * H);
+      ctx.restore();
+      if (opts.select && i === st.sel) {
+        const b = layerBox(ctx, t, W, H);
+        ctx.save();
+        ctx.strokeStyle = '#d7ff3f';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
+        ctx.restore();
+      }
+    });
+  }
+
+  function editorLayersHtml(st) {
+    const list = st.layers.map((t, i) => `<button type="button" class="cnt-ed-layer${i === st.sel ? ' on' : ''}" data-e-sel="${i}"><small>${esc(ROLE_LABEL[t.role])}</small>${esc(t.text || '(빈 문구)')}</button>`).join('');
+    const t = st.layers[st.sel];
+    const detail = t ? `<div class="cnt-ed-detail">
+        <label class="field"><span>문구${t.role === 'slogan' ? ' (슬로건은 원문 고정)' : ''}</span><input data-e="text" maxlength="160" value="${esc(t.text)}" ${t.role === 'slogan' ? 'readonly' : ''}></label>
+        <div class="field-grid three">
+          <label class="field"><span>크기</span><input type="range" min="2" max="20" step="0.5" data-e="size" value="${t.size * 100}"></label>
+          <label class="field"><span>색</span><input type="color" data-e="color" value="${esc(t.color)}"></label>
+          <label class="field"><span>정렬</span><select data-e="align">${[['left', '왼쪽'], ['center', '가운데'], ['right', '오른쪽']].map(([k, l]) => `<option value="${k}" ${t.align === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        </div>
+        <button type="button" class="link cnt-x" data-e-del>이 문구 지우기</button></div>` : '';
+    return `<div class="cnt-ed-layers">${list || '<p class="panel-note">텍스트 레이어가 없어요.</p>'}</div>${detail}`;
+  }
+
+  function imageEditor(v) {
+    const c = S.camp;
+    const baked = !!(v.image && v.image.baked);
+    const init = () => ({ crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100,
+      layers: baked ? [] : ((v.image && v.image.text_layers) || []).map(normLayer), sel: 0, bake: false });
+    let st = init();
+    const start = JSON.stringify(st);
+    const img = new global.Image();
+    let save = false;
+    modal({
+      title: `${v.label} · v${v.seq} 직접 편집`,
+      wide: true,
+      body: `<div class="cnt-editor">
+        <div class="cnt-ed-stage"><canvas data-e="canvas" aria-label="편집 미리보기"></canvas>
+          <p class="panel-note">글자를 끌어서 옮길 수 있어요. 저장하면 새 버전이 되고 원본은 그대로 남아요.${baked ? ' 이 버전은 글자가 이미 합성돼 있어요.' : ''}</p></div>
+        <div class="cnt-ed-panel">
+          <div class="field-label">자르기 · 비율</div>
+          <div class="chips" data-e="crops">${CROPS.map(([k, l]) => `<button type="button" class="chip" data-e-crop="${k}" aria-pressed="${k === 'original'}">${l}</button>`).join('')}</div>
+          <label class="field"><span>자르는 위치</span><input type="range" min="0" max="100" data-e="offset" value="50"></label>
+          <div class="field-label">색 보정</div>
+          <label class="field"><span>밝기</span><input type="range" min="50" max="150" data-e="brightness" value="100"></label>
+          <label class="field"><span>대비</span><input type="range" min="50" max="150" data-e="contrast" value="100"></label>
+          <label class="field"><span>채도</span><input type="range" min="0" max="200" data-e="saturation" value="100"></label>
+          <div class="between"><span class="field-label">텍스트 레이어</span><button type="button" class="link" data-e-add>${icon('plus')}문구 추가</button></div>
+          <div data-e="layers">${editorLayersHtml(st)}</div>
+          <label class="cnt-ed-bake"><input type="checkbox" data-e="bake"> 글자를 이미지에 합성해서 저장 <small>(끄면 고칠 수 있는 레이어로 따로 저장)</small></label>
+          <button type="button" class="link" data-e-reset>처음 상태로</button>
+        </div></div>`,
+      actions: [{ label: '취소', value: null }, {
+        label: '새 버전으로 저장', value: 'save', tone: 'lime',
+        onClick: () => {
+          if (!img.naturalWidth) { toast('이미지를 아직 불러오지 못했어요.', 'error'); return false; }
+          if (JSON.stringify(st) === start) { toast('바뀐 내용이 없어요.'); return false; }
+          save = true;
+          return true;
+        }
+      }],
+      onOpen: el => {
+        const canvas = el.querySelector('[data-e="canvas"]');
+        const box = el.querySelector('[data-e="layers"]');
+        let frame = 0, drag = null;
+        const redraw = () => {
+          if (frame || !img.naturalWidth) return;
+          frame = global.requestAnimationFrame(() => { frame = 0; drawEditor(canvas, img, st, 720, { text: true, select: true }); });
+        };
+        const relist = () => { box.innerHTML = editorLayersHtml(st); redraw(); };
+        const syncControls = () => {
+          el.querySelectorAll('[data-e-crop]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.eCrop === st.crop)));
+          ['offset', 'brightness', 'contrast', 'saturation'].forEach(k => { el.querySelector(`[data-e="${k}"]`).value = k === 'offset' ? st.offset * 100 : st[k]; });
+          el.querySelector('[data-e="bake"]').checked = st.bake;
+        };
+        img.onload = redraw;
+        img.onerror = () => { canvas.replaceWith(Object.assign(global.document.createElement('p'), { className: 'note error', textContent: '이미지를 불러오지 못했어요.' })); };
+        img.src = v.imageUrl;
+        el.addEventListener('click', e => {
+          const t = e.target;
+          const crop = t.closest('[data-e-crop]');
+          if (crop) { st.crop = crop.dataset.eCrop; syncControls(); redraw(); return; }
+          const sel = t.closest('[data-e-sel]');
+          if (sel) { st.sel = +sel.dataset.eSel; relist(); return; }
+          if (t.closest('[data-e-add]')) { st.layers.push(normLayer({ role: 'text', text: '새 문구' })); st.sel = st.layers.length - 1; relist(); return; }
+          if (t.closest('[data-e-del]')) { st.layers.splice(st.sel, 1); st.sel = Math.max(0, st.sel - 1); relist(); return; }
+          if (t.closest('[data-e-reset]')) { st = init(); syncControls(); relist(); }
+        });
+        el.addEventListener('input', e => {
+          const k = e.target.dataset.e;
+          const cur = st.layers[st.sel];
+          if (['brightness', 'contrast', 'saturation'].includes(k)) st[k] = +e.target.value;
+          else if (k === 'offset') st.offset = +e.target.value / 100;
+          else if (k === 'bake') st.bake = e.target.checked;
+          else if (cur && k === 'text') { cur.text = e.target.value; const b = box.querySelector(`[data-e-sel="${st.sel}"]`); if (b) b.lastChild.textContent = cur.text || '(빈 문구)'; }
+          else if (cur && k === 'size') cur.size = +e.target.value / 100;
+          else if (cur && k === 'color') cur.color = e.target.value;
+          else if (cur && k === 'align') cur.align = e.target.value;
+          else return;
+          redraw();
+        });
+        el.addEventListener('change', e => { if (e.target.dataset.e === 'align' && st.layers[st.sel]) { st.layers[st.sel].align = e.target.value; redraw(); } });
+        const point = e => {
+          const r = canvas.getBoundingClientRect();
+          return { x: (e.clientX - r.left) / r.width * canvas.width, y: (e.clientY - r.top) / r.height * canvas.height };
+        };
+        canvas.addEventListener('pointerdown', e => {
+          const p = point(e);
+          const ctx = canvas.getContext('2d');
+          for (let i = st.layers.length - 1; i >= 0; i--) {
+            const b = layerBox(ctx, st.layers[i], canvas.width, canvas.height);
+            if (p.x >= b.x - 6 && p.x <= b.x + b.w + 6 && p.y >= b.y - 6 && p.y <= b.y + b.h + 6) {
+              if (st.sel !== i) { st.sel = i; relist(); }
+              const t = st.layers[i];
+              drag = { dx: p.x - t.x * canvas.width, dy: p.y - t.y * canvas.height };
+              canvas.setPointerCapture(e.pointerId);
+              return;
+            }
+          }
+        });
+        canvas.addEventListener('pointermove', e => {
+          if (!drag) return;
+          const p = point(e), t = st.layers[st.sel];
+          t.x = Math.min(1, Math.max(0, (p.x - drag.dx) / canvas.width));
+          t.y = Math.min(1, Math.max(0, (p.y - drag.dy) / canvas.height));
+          redraw();
+        });
+        canvas.addEventListener('pointerup', () => { drag = null; });
+        canvas.addEventListener('pointercancel', () => { drag = null; });
+      }
+    }).then(r => {
+      if (r !== 'save' || !save) return;
+      const out = global.document.createElement('canvas');
+      drawEditor(out, img, st, 0, { text: st.bake, select: false });
+      out.toBlob(async blob => {
+        if (!blob) { toast('이미지를 만들지 못했어요.', 'error'); return; }
+        const fd = new global.FormData();
+        fd.append('file', blob, 'edit.png');
+        fd.append('parent_id', String(v.id));
+        fd.append('text_layers', JSON.stringify(st.layers.filter(t => t.text.trim()).map(t => ({ role: t.role, text: t.text, x: t.x, y: t.y, size: t.size, color: t.color, align: t.align }))));
+        fd.append('edits', JSON.stringify({ crop: st.crop, offset: Math.round(st.offset * 100) + '%', brightness: st.brightness + '%', contrast: st.contrast + '%', saturation: st.saturation + '%' }));
+        fd.append('baked', st.bake ? '1' : '0');
+        try {
+          const res = await REBOOT.api(`${API}/campaigns/${c.id}/images`, fd);
+          applyCampaign(res.campaign);
+          toast('편집한 이미지를 새 버전으로 저장했어요. 원본은 그대로예요.');
+        } catch (e) { toast(e.message, 'error'); }
+      }, 'image/png');
+    });
   }
 
   function foldSheetInner() {
@@ -903,7 +1474,6 @@
           <label class="field"><span>텍스트 자동 재작성</span><select data-setting="rewrite_max">${[0, 1, 2].map(n => `<option value="${n}" ${+st.rewrite_max === n ? 'selected' : ''}>최대 ${n}회</option>`).join('')}</select></label>
         </div>
         <p class="hint">자동 재작성은 키워드 확인에서 '수정 필요'가 나온 텍스트에만 써요. 유료 이미지 재생성은 자동으로 하지 않아요.</p>
-        ${inModal ? '' : `<button type="button" class="btn small lime mt-8" data-act="save-settings">고급 옵션 저장</button>`}
       </details>
     </div>`;
   }
@@ -1134,7 +1704,7 @@
     const m = S.camp.messages.find(x => String(x.id) === b.dataset.msg);
     const cd = m && m.payload && (m.payload.candidates || [])[+b.dataset.i];
     if (!cd) return;
-    changeDecisions([{ field: cd.field, value: cd.value, status: 'confirmed' }], 'candidate', m.id);
+    toggleChoice(cd.field, cd.value, m.id);
   }
 
   function undoChange(eventId) {
@@ -1342,7 +1912,8 @@
   /* ───────── 내 캠페인 ───────── */
 
   function campaignsHtml() {
-    return `<div class="filters cnt-filters">
+    return `<div class="cnt-folders" data-ref="folder-chips" role="tablist" aria-label="채널별 폴더">${folderChipsHtml()}</div>
+      <div class="filters cnt-filters">
         <div class="chips" data-ref="filter-chips">${filterChipsHtml()}</div>
         <div class="flex wrap"><label class="search cnt-search">${icon('search')}<input class="input" data-ref="search" type="search" placeholder="캠페인명 · 제품 · 채널 · 콘텐츠 검색" value="${esc(S.query)}" aria-label="캠페인 검색"></label>
           <button type="button" class="btn lime" data-act="new-campaign">${icon('plus')}새 캠페인</button></div>
@@ -1356,9 +1927,20 @@
     return ['전체'].concat(DATA.statuses).map(st => `<button type="button" class="chip" data-act="filter" data-value="${esc(st)}" aria-pressed="${S.filter === st}">${esc(st)} <span class="n">${esc(st === '전체' ? total : counts[st] || 0)}</span></button>`).join('');
   }
 
+  // 채널별 폴더 — 여러 채널 기획서는 해당 폴더마다 보임 (개수는 지금 상태 필터·검색 결과 기준)
+  const inFolder = (c, id) => (c.channels || []).includes(id);
+  function folderChipsHtml() {
+    const list = S.list || [];
+    const folders = [['전체', '전체', list.length]].concat(DATA.channels.map(ch => [ch.id, ch.label, list.filter(c => inFolder(c, ch.id)).length]));
+    return folders.map(([id, label, n]) => `<button type="button" class="cnt-folder" role="tab" data-act="folder" data-value="${esc(id)}" aria-selected="${S.folder === id}">
+      ${icon('grid')}<span>${esc(label)}</span><span class="n">${esc(n)}</span></button>`).join('');
+  }
+
   function renderCampaignGrid() {
     const chips = ref('filter-chips');
     if (chips) chips.innerHTML = filterChipsHtml();
+    const folders = ref('folder-chips');
+    if (folders) folders.innerHTML = folderChipsHtml();
     const el = ref('grid');
     if (!el) return;
     if (S.list == null) { el.innerHTML = '<div class="skeleton" style="height:220px"></div>'; return; }
@@ -1367,7 +1949,23 @@
       el.innerHTML = ui.empty(S.query || S.filter !== '전체' ? '조건에 맞는 캠페인이 없어요.' : "아직 캠페인이 없어요. 'AI와 함께 제작'에서 시작해 보세요.", 'spark');
       return;
     }
-    el.innerHTML = `<div class="cnt-campaign-grid">${S.list.map(cardHtml).join('')}</div>`;
+    if (S.folder !== '전체') {
+      const items = S.list.filter(c => inFolder(c, S.folder));
+      el.innerHTML = items.length ? `<div class="cnt-campaign-grid">${items.map(cardHtml).join('')}</div>`
+        : ui.empty(`${channelLabel(S.folder)} 폴더에 캠페인이 없어요.`, 'grid');
+      return;
+    }
+    el.innerHTML = DATA.channels.map(ch => {
+      const items = S.list.filter(c => inFolder(c, ch.id));
+      return items.length ? `<section class="cnt-folder-group"><div class="cnt-folder-head">${icon('grid')}<h3>${esc(ch.label)}</h3><span class="muted small">${esc(items.length)}개</span>
+          <button type="button" class="link" data-act="folder" data-value="${esc(ch.id)}">폴더 열기</button></div>
+        <div class="cnt-campaign-grid">${items.map(cardHtml).join('')}</div></section>` : '';
+    }).join('');
+  }
+
+  function canDelete(c) {
+    const me = REBOOT.user() || {};
+    return !!(me.isAdmin || (c.createdBy && c.createdBy === (me.name || String(me.email || '').split('@')[0])));
   }
 
   function cardHtml(c) {
@@ -1376,13 +1974,26 @@
       ? `<div class="cnt-cover"><img src="${esc(c.cover)}" alt="${esc(c.title)} 대표 이미지" loading="lazy"></div>`
       : `<div class="poster cnt-poster t-${esc(c.contentType)}"><div class="wordmark">REB∞T</div><strong>${esc(p.en)}</strong><small>${esc(c.channelLabels.join(' · ').toUpperCase())}</small></div>`;
     const targets = (c.brandFocus ? ['브랜드'] : []).concat((c.products || []).map(x => x.ko || x.name));
-    return `<button type="button" class="card cnt-campaign-card" data-act="open-campaign" data-id="${esc(c.id)}">
-      ${head}
-      <h3>${esc(c.title)}</h3>
-      <p>${esc(c.channelLabels.join(', '))} · ${esc(c.contentTypeLabel)} · ${esc(fmt.date(c.updatedAt))}</p>
-      <div class="cnt-tags">${targets.map(t => `<span class="cnt-tag">${esc(t)}</span>`).join('')}${c.versionCount ? `<span class="cnt-tag strong">버전 ${esc(c.versionCount)}</span>` : ''}</div>
-      <div class="between cnt-card-foot">${badge(c.status, statusTone(c.status))}<span class="small muted">작업 열기 ↗</span></div>
-    </button>`;
+    return `<div class="card cnt-campaign-card">
+      <button type="button" class="cnt-card-open" data-act="open-campaign" data-id="${esc(c.id)}">
+        ${head}
+        <h3>${esc(c.title)}</h3>
+        <p>${esc(c.channelLabels.join(', '))} · ${esc(c.contentTypeLabel)} · ${esc(fmt.date(c.updatedAt))}</p>
+        <div class="cnt-tags">${targets.map(t => `<span class="cnt-tag">${esc(t)}</span>`).join('')}${c.versionCount ? `<span class="cnt-tag strong">버전 ${esc(c.versionCount)}</span>` : ''}</div>
+        <div class="between cnt-card-foot">${badge(c.status, statusTone(c.status))}<span class="small muted">작업 열기 ↗</span></div>
+      </button>
+      ${canDelete(c) ? `<button type="button" class="cnt-card-del" data-act="delete-campaign" data-id="${esc(c.id)}" data-title="${esc(c.title)}" aria-label="${esc(c.title)} 삭제" title="삭제">${icon('trash')}</button>` : ''}
+    </div>`;
+  }
+
+  async function deleteCampaign(id, title) {
+    if (!(await ui.confirm(`'${title}' 캠페인을 삭제할까요? 대화·버전·이미지 파일이 함께 지워지고 되돌릴 수 없어요.`, { ok: '삭제', danger: true }))) return;
+    try {
+      await REBOOT.api(`${API}/campaigns/${id}`, undefined, { method: 'DELETE' });
+      if (S.camp && S.camp.id === id) { stopPolling(); S.camp = null; S.edit = null; setHash('campaigns'); }
+      toast('캠페인을 삭제했어요.');
+      loadList();
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   function newCampaign() {
@@ -1439,7 +2050,6 @@
         }
         case 'sheet-save': saveSheetEdit(b); break;
         case 'sheet-reset': S.edit = editCopy(S.camp); renderFold('sheet'); break;
-        case 'save-settings': { const box = ref('fold-ai'); if (box) saveSettings(readSettings(box)); break; }
         case 'ai-settings': aiSettingsModal(); break;
         case 'reference': if (S.camp) referenceModal(); break;
         case 'rename': renameModal(); break;
@@ -1467,6 +2077,28 @@
         case 'make-draft': send('초안 만들어줘', { force: 'draft' }); break;
         case 'make-image': send('이미지 시안 만들어줘', { force: 'image' }); break;
         case 'retry-image': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = '이미지 시안 다시 만들어줘'; inp.focus(); } break; }
+        case 'api-check': apiCheck(); break;
+        case 'complete': completeCampaign(b); break;
+        case 'reopen': reopenCampaign(); break;
+        case 'save-image': if (v) saveImage(v); break;
+        case 'folder': S.folder = b.dataset.value; renderCampaignGrid(); break;
+        case 'delete-campaign': deleteCampaign(+b.dataset.id, b.dataset.title); break;
+        case 'iv-start': interviewAct('start'); break;
+        case 'iv-pick': ivPick(b); break;
+        case 'iv-custom': ivCustom(); break;
+        case 'iv-skip': interviewAct('skip', {}, '이 질문은 건너뛸게요'); break;
+        case 'iv-finish': interviewAct('finish'); break;
+        case 'iv-make': send('지금까지 정한 내용으로 초안 만들어줘', { force: 'draft' }); break;
+        case 'brief-edit': { const m = S.camp && S.camp.messages.find(x => String(x.id) === b.dataset.msg); if (m) briefEditModal(m); break; }
+        case 'img-quick': {
+          const q = DATA.quick.image.filter(x => x.label !== '다른 시안' && x.label !== '문구 수정')[+b.dataset.i];
+          const ta = ref('img-prompt');
+          if (q && ta) { ta.value = q.text; S.imgDraft = q.text; selectRange(ta, q.text); }
+          break;
+        }
+        case 'img-ai-edit': if (v) imageAiEdit(v); break;
+        case 'img-new': send('지금 결정 사항으로 다른 이미지 시안 만들어줘', { force: 'image', noBase: true }); break;
+        case 'img-editor': if (v) imageEditor(v); break;
         default: break;
       }
     });
@@ -1474,6 +2106,8 @@
     root.addEventListener('input', e => {
       const el = e.target;
       if (el.dataset.sheetInput) { onSheetInput(el); return; }
+      if (el.dataset.ref === 'iv-input') { S.ivDraft = el.value; return; }
+      if (el.dataset.ref === 'img-prompt') { S.imgDraft = el.value; return; }
       if (el.dataset.ref === 'search') {
         clearTimeout(S.searchTimer);
         S.searchTimer = setTimeout(() => { S.query = el.value.trim(); loadList(); }, 300);
@@ -1493,10 +2127,10 @@
 
     root.addEventListener('keydown', e => {
       const el = e.target;
-      if (el.dataset.ref !== 'input' || e.key !== 'Enter' || e.shiftKey) return;
+      if ((el.dataset.ref !== 'input' && el.dataset.ref !== 'iv-input') || e.key !== 'Enter' || e.shiftKey) return;
       if (e.isComposing || e.keyCode === 229) return;  // 한글 조합 중에는 보내지 않음
       e.preventDefault();
-      send(el.value);
+      if (el.dataset.ref === 'iv-input') { S.ivDraft = el.value; ivCustom(); } else send(el.value);
     });
 
     root.addEventListener('toggle', e => {

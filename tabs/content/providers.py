@@ -3,7 +3,8 @@
 - 텍스트: 공통 server.core.ai.openai_json (작업 로그 자동 기록). 모델은 CONTENT_TEXT_MODEL → OPENAI_MODEL 순서 (하나만)
 - 이미지: OpenAI Images (CONTENT_IMAGE_MODEL, 기본 gpt-image-1). 유료 호출이라 자동 재시도하지 않음 (max_retries=0)
   응답 시간 초과는 '제출 여부 불명'(SubmissionUnknown)으로 따로 알려 다시 제출하지 않게 함 (README 8장)
-테스트는 이 모듈의 call_json · ready · generate_image · edit_image를 바꿔 끼웁니다 (인터넷·키 없이).
+- 연결 확인: 모델 조회(models.retrieve)만 — 생성 비용 없음
+테스트는 이 모듈의 call_json · ready · generate_image · edit_image · check_connection을 바꿔 끼웁니다 (인터넷·키 없이).
 """
 import base64
 
@@ -107,6 +108,29 @@ def edit_image(path, prompt, size, model):
     return _png_from(res), _usage(res)
 
 
+def check_connection():
+    """키가 실제로 동작하는지 — 모델 조회만 함 (토큰·생성 비용 없음). 반환: {ok, message, models:{이름: ok}}"""
+    if not ready():
+        return {"ok": False, "message": "OpenAI 키가 없습니다 (설정 › 연결).", "models": {}}
+    import openai
+    client = openai.OpenAI(api_key=envkeys.get("OPENAI_API_KEY"), timeout=15, max_retries=0)
+    models, msg = {}, ""
+    for m in dict.fromkeys([text_model(), image_model()]):
+        try:
+            client.models.retrieve(m)
+            models[m] = True
+        except openai.AuthenticationError:
+            return {"ok": False, "message": "OpenAI 키가 올바르지 않습니다 (설정 › 연결 확인).", "models": {}}
+        except (openai.PermissionDeniedError, openai.NotFoundError):
+            models[m], msg = False, f"이 키로는 '{m}' 모델을 쓸 수 없습니다."
+        except (openai.APIConnectionError, openai.APITimeoutError):
+            return {"ok": False, "message": "OpenAI 서버에 연결하지 못했습니다 (인터넷 확인).", "models": {}}
+        except openai.APIStatusError as e:
+            models[m], msg = False, f"OpenAI 서버 오류 ({e.status_code})."
+    ok = all(models.values())
+    return {"ok": ok, "message": "키와 모델 접근을 확인했어요." if ok else msg, "models": models}
+
+
 def _usage(res):
     u = getattr(res, "usage", None)
     if not u:
@@ -116,4 +140,4 @@ def _usage(res):
 
 
 __all__ = ["AIError", "ProviderError", "SubmissionUnknown", "ready", "text_model", "image_model", "image_supports_edit",
-           "call_json", "generate_image", "edit_image"]
+           "call_json", "generate_image", "edit_image", "check_connection"]
