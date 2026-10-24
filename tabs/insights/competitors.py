@@ -273,7 +273,8 @@ CHANGE_GROUP = {"down": "threat", "new": "threat", "back": "threat", "oos": "cha
 
 
 def _phrases(text):
-    return [s.strip(" .") for s in re.split(r"(?<=[.!?])\s+|\s+/\s+", clean(text, 400)) if len(s.strip(" .")) > 3]
+    parts = re.split(r"(?<=[.!?])\s+|\s*/\s+", clean(text, 3000))
+    return [x.strip(" ./") for x in parts if len(x.strip(" ./")) > 3]
 
 
 def _vs_own(ps, own_ps):
@@ -293,14 +294,15 @@ def weekly_changes(now, prev, limit=30):
         return None
     before = {(x["source"], x["key"]): x for x in prev}
     compared = {x["source"] for x in prev}
-    own_ps = [x["perServing"] for x in now if x["own"] and x.get("perServing") is not None]
+    known = lambda x: x.get("perServing") if x.get("servingsSource") != "default" else None  # noqa: E731 — 회분을 모르면 1회분 비교 안 함
+    own_ps = [known(x) for x in now if x["own"] and known(x) is not None]
     own_src = {x["source"] for x in now if x["own"]}
     out = []
     for x in now:
         if x["own"] or x["source"] not in compared:
             continue
         p = before.get((x["source"], x["key"]))
-        ps = x.get("perServing")
+        ps = known(x)
         base = {"brand": x["brand"], "title": x["title"][:120], "source": x["sourceLabel"], "link": x.get("link") or "",
                 "price": x.get("price"), "perServing": ps}
 
