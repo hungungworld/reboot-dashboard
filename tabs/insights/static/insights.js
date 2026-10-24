@@ -372,7 +372,7 @@
       ${acts.map(a => `<div class="ins-signal"><div class="flex">${badge(a.grade, GRADE_TONE[a.grade])}<b>${esc(a.ruleLabel)}</b></div>
         <div class="ins-facts">${Object.keys(a.facts || {}).map(k => `<div><span>${esc(k)}</span><span>${factValue(a.facts[k])}</span></div>`).join('')}</div>
         ${a.ai ? `<p class="small muted mt-8">규칙 문장 · ${esc(a.base.fact)} ${esc(a.base.why)} ${esc(a.base.todo)}</p>` : ''}</div>`).join('')}
-      <p class="panel-note mt-8">판단(등급)은 규칙이 해요. AI는 키가 있을 때 문장만 다듬어요 (데이터 업데이트 › 이번 주 액션).${w.aiReady ? '' : ' 지금은 OpenAI 키가 없어 규칙 문장 그대로예요.'}</p>
+      <p class="panel-note mt-8">등급은 규칙이 정하고, AI는 문장만 다듬어요.${w.aiReady ? '' : ' 지금은 OpenAI 키가 없어 규칙 문장 그대로예요.'}</p>
     </details>` : '';
     const stat = (label, value, tone, sub) => `<div class="ins-stat${tone ? ' ' + tone : ''}"><span>${esc(label)}</span><b>${esc(value)}</b>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     const weeks = Object.keys(s.weeks || {}).map(src => `${SRC_LABEL[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
@@ -1075,7 +1075,7 @@
       ${shelves}
       <div class="ins-legend small mt-16"><span><i class="ins-lg own"></i>우리 제품</span><span><i class="ins-lg oos"></i>품절 (빈자리)</span>
         <span><i class="ins-lg low"></i>곧 품절</span></div>
-      <p class="panel-note mt-8">같은 제품은 판매처가 여러 곳이어도 1회분이 가장 싼 곳 기준으로 한 번만 놓았어요.${unpriced ? ` 가격을 못 읽은 제품 ${unpriced}개는 진열대에서 뺐어요.` : ''} 숫자로 비교하려면 위의 상품 목록을 누르세요.</p>
+      <p class="panel-note mt-8">같은 제품은 1회분이 가장 싼 판매처 한 곳만 놓았어요.${unpriced ? ` 가격을 못 읽은 ${unpriced}개는 뺐어요.` : ''} 숫자 비교는 상품 목록에서 보세요.</p>
     </section>`;
   }
 
@@ -1185,7 +1185,7 @@
     return `<section class="card mt-24">
       <div class="card-head wrap"><div class="ins-comp-filter"><div class="ins-head-title"><h2>상품 목록</h2>${badge(`${d.items.length}개`)}</div></div></div>
       <div data-ref="board-body">${boardBody(d)}</div>
-      <p class="panel-note mt-8">남은 수량은 Amazon에 "Only N left"가 뜰 때만 보여요. 재고 정보 없음은 품절이 아니에요. 가격은 USD · 배송비 · 세금 제외예요.</p>
+      <p class="panel-note mt-8">가격은 USD(배송비 · 세금 제외)예요. 재고 정보 없음은 품절이 아니에요.</p>
     </section>`;
   }
   function drawBoard() {
@@ -1309,7 +1309,7 @@
       ${x.change && x.change.pricePct != null ? ui.row('지난 수집 대비', esc(`${money(x.change.before)} → ${money(x.price)} (${fmt.signed(x.change.pricePct, 0, '%')})`)) : ''}
       <h3 class="ins-h3">판매 문구 (원문)</h3>
       <p class="ins-quote">${x.message ? esc(x.message) : '<span class="muted">상세 조회를 하지 않았거나 문구가 없어요.</span>'}</p>
-      <p class="panel-note mt-8">원문 그대로예요. 우리 광고 문구에 옮겨 쓸 때는 컴플라이언스 검토를 거쳐요. ${extLink(x.link, '판매 페이지')}</p>
+      <p class="panel-note mt-8">원문 그대로예요. 우리 광고에 쓰려면 컴플라이언스 검토를 거쳐요. ${extLink(x.link, '판매 페이지')}</p>
     </div>`;
     ui.modal({ title: x.title, body, wide: true });
   }
@@ -1463,7 +1463,8 @@
       ${x.impact ? `<p class="ins-chg-impact">→ ${esc(x.impact)}</p>` : ''}
     </article>`;
   }
-  function changesHtml(list) {
+  // demo: 지난주 수집이 없어 서버가 만든 예시 지난주와 비교한 결과 (competitors.demo_prev)
+  function changesHtml(list, demo) {
     if (list == null) return '<p class="small muted">지난주 진열대와 비교할 수 있을 때부터 보여요 (2주차부터).</p>';
     if (!list.length) return '<p class="small muted">이번 주 경쟁사 변화가 없어요.</p>';
     const by = g => list.filter(x => (x.group || 'watch') === g);
@@ -1483,8 +1484,11 @@
       return `<div class="ins-chg-col"><p class="ins-chg-h ${g}">${esc(name)} ${its.length}</p>
         ${(all ? its : its.slice(0, CHG_FIRST)).map(chgCard).join('') || '<p class="small muted">없음</p>'}${more}</div>`;
     }).join('');
-    return `<div class="ins-chg-sum">${tiles}</div><div class="ins-chg-cols${S.chg === 'all' ? '' : ' one'}">${cols}</div>
-      <p class="panel-note mt-8">지난주 진열대의 같은 상품과 비교했어요. '→' 줄은 수집한 가격 · 재고로 계산한 알디콤 입장이에요 (1회분은 알디콤 최저 1회분과 비교). 위 칸을 누르면 그 종류만 모아 봐요.</p>`;
+    const demoNote = demo ? `<details class="note warn ins-fold ins-demo mb-16" data-fold="demo-prev"${S.open['demo-prev'] ? ' open' : ''}>
+        <summary>예시 지난주와 비교한 결과예요 <span>자세히 보기</span></summary>
+        <p>지난주 수집이 아직 없어 이번 주 진열대로 만든 예시와 비교했어요. 실제 변화가 아니에요.<br>다음 주 수집부터 실제 비교로 바뀌어요.</p></details>` : '';
+    return `${demoNote}<div class="ins-chg-sum">${tiles}</div><div class="ins-chg-cols${S.chg === 'all' ? '' : ' one'}">${cols}</div>
+      <p class="panel-note mt-8">지난주 같은 상품과 비교했어요. '→'는 알디콤에 주는 의미예요. 위협 · 기회 · 관찰 칸을 누르면 그것만 보여요.</p>`;
   }
 
   // 경쟁사 비교 표: 필터 · 정렬 · COMP_PAGE개씩 페이지 (알디콤 행은 늘 맨 위) — 검색창은 그대로 두고 표만 다시 그림
@@ -1582,11 +1586,11 @@
         <div class="ins-export-menu"><a href="/api/insights/competitors.csv" download>CSV</a><a href="/api/insights/competitors.json" download>JSON</a></div></details></div>`;
     const notes = [!d.aiReady ? '<div class="note warn mt-16">OpenAI 키가 없어 핵심 메시지 · 성분 분석은 할 수 없어요. 판매 채널 · 단가 · 칭찬/불만은 그대로 보여요 (설정 › 연결).</div>' : '',
       d.aiReady && !d.firecrawlReady ? '<div class="note mt-16">Firecrawl 키가 없어 홈페이지 · 뉴스는 읽지 않고, 진열대 자료와 AI 웹 검색으로 채워요.</div>' : ''].join('');
-    const changes = `<section class="card mt-24"><div class="card-head"><h2>이번 주 경쟁사 변화</h2>${d.changes && d.changes.length ? badge(`${d.changes.length}건`, 'blue') : ''}</div>${changesHtml(d.changes)}</section>`;
+    const changes = `<section class="card mt-24"><div class="card-head"><h2>이번 주 경쟁사 변화 ${d.changesDemo ? badge('예시', 'orange') : ''}</h2>${d.changes && d.changes.length ? badge(`${d.changes.length}건`, 'blue') : ''}</div>${changesHtml(d.changes, d.changesDemo)}</section>`;
     // 제목 줄 한 줄에: 제목 · 개수 · 검색창 (왼쪽) / 다시 불러오기 · AI 분석 · 내보내기 (오른쪽)
     const list = `<section class="card mt-24"><div class="card-head wrap"><div class="ins-comp-filter"><div class="ins-head-title"><h2>경쟁사 비교</h2>${badge(`${d.table.length}개`)}</div></div>${tools}</div>
       <div data-ref="comp-body">${compTable(d)}</div>
-      <p class="panel-note mt-8">행을 누르면 브랜드 카드가 열려요. 핵심 메시지 · 주력 성분은 리뷰 상위 ${d.deepTop}개 브랜드만 AI가 채워요. 나머지는 '분석 대상 밖'이고, 지금 분석을 누르면 그 브랜드만 채워요.</p></section>`;
+      <p class="panel-note mt-8">행을 누르면 브랜드 카드가 열려요. 메시지 · 성분은 리뷰 상위 ${d.deepTop}개 브랜드만 AI가 채워요. 나머지는 '지금 분석'으로 채울 수 있어요.</p></section>`;
     const subs = d.substitutes.length ? fold('comp-subs', `대체재 ${d.substitutes.length}개 (전해질 음료 · 간 영양제 등)`, table(compSorted(d.substitutes))) : '';
     const arch = d.archived.length ? fold('comp-arch', `보관함 ${d.archived.length}개 · 브랜드 카드에서 '보관'한 브랜드 (다시 불러와도 표에 안 올라와요)`, table(d.archived)) : '';
     return qHead('competitors', d.oneLine, d.watch.length ? badge(`주시 ${d.watch.length}개`, 'lime') : '') + notes + changes + list + subs + arch;
@@ -1813,9 +1817,9 @@
       <td class="num">${c.total == null ? '—' : esc(c.total)}</td><td class="num">${c.avg == null ? '—' : esc(c.avg)}</td><td class="num">${esc(c.got)}</td><td class="small muted">${esc(fmt.date(c.at))}</td></tr>`).join('');
     return `<section class="card mt-24"><div class="card-head wrap"><div class="ins-comp-filter"><div class="ins-head-title"><h2>구매자 리뷰</h2>${badge(`${d.stats.total}개`)}${d.stats.csTodo ? badge(`대응 필요 ${d.stats.csTodo}개`, 'red') : ''}</div></div></div>
         <div data-ref="rv-body">${rvTable(d)}</div>
-        <p class="panel-note mt-8">행을 누르면 리뷰 카드가 열려요. 알디콤 리뷰는 불만 · 부작용 · 배송/파손 말이 있으면 '대응 필요'가 자동으로 붙어요. 상태 · 메모는 이름 · 시간과 함께 저장되고, 답글은 각 사이트에서 직접 남겨 주세요.</p></section>` +
+        <p class="panel-note mt-8">행을 누르면 리뷰 카드가 열려요. 불만 · 부작용 · 배송 문제가 있는 알디콤 리뷰엔 '대응 필요'가 붙어요. 답글은 각 사이트에서 남겨 주세요.</p></section>` +
       (ch ? fold('cs-channels', '채널별 리뷰 수 (사이트 숫자 · 모은 수)', `<div class="table-wrap"><table class="data-table"><thead><tr><th>채널</th><th>제품</th><th>상품</th><th class="num">사이트 리뷰</th><th class="num">평균 별점</th><th class="num">모은 수</th><th>확인</th></tr></thead><tbody>${ch}</tbody></table></div>
-        <p class="panel-note mt-8">Olive Young은 영어 리뷰(Global Reviews)만, Amazon은 대표 리뷰(최대 8개 · 매주 새 것만 더함)를 모아요. Amazon '사이트 리뷰'는 별점 평가 수예요. Weee!는 진열대 상품의 공개 리뷰를 모아요.</p>`) : '');
+        <p class="panel-note mt-8">Olive Young은 영어 리뷰만, Amazon은 대표 리뷰(최대 8개)만 모아요. '사이트 리뷰'는 사이트에 표시된 평가 수예요.</p>`) : '');
   }
 
   // 리뷰 카드 창: 지금 표의 순서대로 이전 · 다음 리뷰로 넘어감. 대응 · 메모 · 번역은 창 안에서 바로 저장
@@ -1906,7 +1910,7 @@
     return `<section class="card mt-24"><div class="card-head"><h2>브랜드 × 주제</h2><span class="small muted">+칭찬 / −불만을 누르면 리뷰 목록에서 그 리뷰만 보여요</span></div>
         ${d.table.length ? `<div class="table-wrap"><table class="data-table ins-matrix"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`
           : ui.empty('리뷰가 없어요. 데이터 업데이트에서 Amazon · Weee! 진열대를 모으세요.', 'chat')}
-        <p class="panel-note mt-8">Amazon은 전체가 아니라 대표 리뷰 기준이에요. Weee!는 진열대 상품의 공개 리뷰를 모두 모아요. 주제 · 칭찬/불만은 규칙(단어 · 별점)으로 나누고, OpenAI 키가 있으면 '리뷰 분류'가 AI로 다시 나눠요.</p></section>
+        <p class="panel-note mt-8">Amazon은 대표 리뷰만 모아요. 주제 · 칭찬/불만은 단어와 별점으로 나누고, OpenAI 키가 있으면 AI가 다시 나눠요.</p></section>
       <section class="card mt-24"><div class="card-head"><h2>아마존 리뷰 요약</h2>${badge('원문')}</div>
         ${sums ? `<ul class="ins-reviews ins-rv-list">${sums}</ul>` : '<p class="small muted">아마존 상품 상세 조회 때 리뷰 요약이 있으면 여기에 보여요.</p>'}</section>`;
   }
@@ -1975,7 +1979,7 @@
       ${ui.row('찾은 영상', esc(`${p.found}개 (세트별 ${Object.keys(p.bySet || {}).map(k => `${k} ${p.bySet[k]}`).join(' · ') || '—'})`))}
       ${ui.row(`조회수 ${fmt.num(p.minViews)} 이상`, esc(`${p.kept}개`))}
       ${ui.row('댓글', esc(`${p.comments}개 중 관련 ${p.relevant}개 (AI 분류 ${p.ai}개)`))}
-      <p class="panel-note mt-8">무관한 댓글(유튜버 칭찬 · 잡담)은 규칙으로 거르고, OpenAI 키가 있으면 'VOC 분류'가 AI로 다시 걸러요. 작성자 이름은 저장하지 않아요.</p>`;
+      <p class="panel-note mt-8">잡담 같은 무관한 댓글은 걸러요(키가 있으면 AI로 한 번 더). 작성자 이름은 저장하지 않아요.</p>`;
     const comments = d.comments.map(c => audComment(c, true)).join('');
     return qHead('audience', d.oneLine, months) +
       `<div class="ins-aud-grid mt-24">
@@ -2020,7 +2024,7 @@
       <div class="ins-news-tools"><input class="input" type="search" data-ref="news-q" value="${esc(S.news.q)}" placeholder="제목 · 요약 · 마케터의 시선 · 매체 · 분야 검색" aria-label="보관한 기사 검색">
         <div class="chips" data-ref="news-kinds"></div></div>
       <div data-ref="news-list"></div>
-      ${ai ? '<p class="panel-note mt-8">한국어 제목 · 요약 · 마케터의 시선은 보관할 때의 AI 요약이에요. 사실 확인은 원문으로 해 주세요.</p>' : ''}</section>`;
+      ${ai ? '<p class="panel-note mt-8">제목 · 요약 · 마케터의 시선은 AI가 정리했어요. 사실은 원문으로 확인해 주세요.</p>' : ''}</section>`;
   }
   // 보관한 기사 검색: 띄어쓰기로 나눈 낱말이 모두 들어간 기사만 (대소문자 무시) + 업계 뉴스 / 트렌드 고르기
   const NEWS_KINDS = [['', '전체'], ['flow', '업계 뉴스'], ['trend', '트렌드']];
@@ -2070,7 +2074,7 @@
           <div class="workflow-step"><span class="stepnum">02</span>같은 30건을 규칙 / AI(예시 없이) / AI(예시 포함) 세 방식으로 분류해요</div>
           <div class="workflow-step"><span class="stepnum">03</span>정답과 맞은 비율로 채점해요</div>
           <div class="workflow-step"><span class="stepnum">04</span>이긴 방식으로 전체를 분류해요</div>
-          <p class="panel-note mt-8">정답 30건을 모으면 시작할 수 있어요. 그 전까지 AI 분류 결과는 '참고용'으로만 보세요.</p>
+          <p class="panel-note mt-8">정답 30건이 모이면 시작해요. 그 전까지 AI 분류는 참고만 하세요.</p>
         </section>
         <aside class="stack"><section class="card"><h3>지금 분류 상태</h3>
           <p class="small muted mt-8">${S.data.reviews ? esc(`리뷰 ${S.data.reviews.stats.total}개 중 AI 분류 ${S.data.reviews.stats.ai}개 · 나머지는 규칙`) : '구매자 리뷰 탭을 열면 분류 상태가 보여요.'}</p></section></aside>

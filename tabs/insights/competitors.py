@@ -277,6 +277,52 @@ def _phrases(text):
     return [x.strip(" ./") for x in parts if len(x.strip(" ./")) > 3]
 
 
+def demo_prev(now):
+    """시연용 '지난주' 진열대 — 지난주 수집이 없을 때만 씀 (화면에 '예시' 배지 · DB에 저장 안 함 · 보고서 · 숫자 요약에는 안 씀).
+    이번 주 실제 진열대를 복사한 뒤, 상품 key로 순서를 고정해 몇 개만 바꿈 (새로고침해도 같은 결과):
+    새 상품 2 · 가격 인하 2 · 가격 인상 2 · 재입고 1 · 품절 1 · 판매 문구 변경 1."""
+    import hashlib
+    comp = sorted((x for x in now if not x["own"]), key=lambda x: hashlib.md5(f"{x['source']}:{x['key']}".encode()).hexdigest())
+    priced = [x for x in comp if x.get("price")]
+    oos_now = [x for x in comp if x.get("in_stock") is False]
+    in_now = [x for x in comp if x.get("in_stock") is True]
+    msg_now = [x for x in comp if len(_phrases(x.get("message") or "")) >= 2]
+    used, plan = set(), {}
+
+    def pick(pool, n, kind):
+        for x in pool:
+            k = (x["source"], x["key"])
+            if n and k not in used:
+                used.add(k)
+                plan[k] = kind
+                n -= 1
+
+    pick(priced, 2, "new")
+    pick(priced, 2, "down")    # 지난주가 더 비쌌음 → 이번 주 가격 인하
+    pick(priced, 2, "up")      # 지난주가 더 쌌음 → 이번 주 가격 인상
+    pick(in_now, 1, "back")    # 지난주 품절 → 재입고
+    pick(oos_now, 1, "oos")    # 지난주 재고 있음 → 품절
+    pick(msg_now, 1, "message")
+    out = []
+    for x in now:
+        kind = plan.get((x["source"], x["key"]))
+        if kind == "new":
+            continue
+        p = dict(x)
+        h = int(hashlib.md5(x["key"].encode()).hexdigest()[:4], 16) / 0xFFFF   # 상품마다 고정된 0~1
+        if kind in ("down", "up"):
+            pct = 0.08 + 0.12 * h   # 8~20%
+            p["price"] = round(x["price"] * (1 + pct if kind == "down" else 1 - pct), 2)
+        elif kind == "back":
+            p["in_stock"] = False
+        elif kind == "oos":
+            p["in_stock"] = True
+        elif kind == "message":
+            p["message"] = ". ".join(_phrases(x["message"])[1:])   # 첫 문장(광고 문구)이 없던 예전 문구
+        out.append(p)
+    return out
+
+
 def _vs_own(ps, own_ps):
     """1회분 단가를 알디콤 최저 1회분과 비교한 한 줄 (둘 중 하나라도 없으면 빈 문자열)."""
     if ps is None or not own_ps:

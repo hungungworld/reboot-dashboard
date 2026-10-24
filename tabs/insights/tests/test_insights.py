@@ -937,6 +937,25 @@ def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today
     assert msg["group"] == "watch" and msg["added"] == ["DHM and electrolytes in a shot"] and msg["removed"] == ["DHM shot"]
     assert next(c for c in d["changes"] if c["kind"] == "new")["group"] == "threat"
     assert not any(c["source"] == "Yami" for c in d["changes"])  # 지난주 Yami 수집이 없으면 비교 안 함
+    assert d["changesDemo"] is False  # 실제 지난주가 있으면 예시를 쓰지 않음
+
+
+def test_competitor_changes_demo_when_no_last_week(app, auth_client, fixed_today):
+    """지난주 수집이 없으면 이번 주 실제 진열대로 만든 예시 지난주와 비교 — 화면 표시만, DB에는 안 남음."""
+    from server.extensions import db
+    from tabs.insights.models import ShelfItem
+    _seed_competitors(app)
+    with app.app_context():
+        ShelfItem.query.filter(ShelfItem.week != "2026-W43").delete()
+        db.session.commit()
+        before = ShelfItem.query.count()
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    assert d["changesDemo"] is True and d["changes"]
+    assert {c["kind"] for c in d["changes"]} <= {"new", "price", "oos", "back", "message"}
+    again = auth_client.get("/api/insights/data/competitors").get_json()
+    assert [(c["brand"], c["kind"]) for c in again["changes"]] == [(c["brand"], c["kind"]) for c in d["changes"]]  # 새로고침해도 같음
+    with app.app_context():
+        assert ShelfItem.query.count() == before  # 예시 지난주는 저장하지 않음
 
 
 def test_competitor_research_fills_from_evidence_then_web(app, auth_client, monkeypatch, fixed_today, sync_jobs):
