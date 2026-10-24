@@ -247,3 +247,27 @@
 .part-partners .ptn-rec-pop, .ptn-rec-pop { position: absolute; z-index: 60; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,.15); }
 .ptn-rec-pop p { margin: 6px 0 0; }
 .ptn-rec-pop .ptn-rec-pop-text { color: var(--text); line-height: 1.5; max-height: 7.5em; overflow: hidden; }
+
+/* 판매 실적: 일별 추이 위 상승률 (상승 빨강 · 하락 파랑) · 크리에이터별 실적 접기 */
+.part-partners .ptn-rec-change { margin: -6px 0 8px; font-size: 12px; min-height: 1em; }
+.part-partners .ptn-rec-change ul { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; }
+.part-partners .ptn-rec-change li { display: inline-flex; align-items: center; gap: 5px; }
+.part-partners .ptn-rec-change li i { width: 10px; height: 3px; border-radius: 2px; }
+.part-partners .ptn-rec-change b { font-weight: 600; color: var(--red); }
+.part-partners .ptn-rec-change li.down b { color: var(--blue); }
+.part-partners .ptn-rec-change span, .part-partners .ptn-rec-change small { color: var(--muted); }
+.part-partners .ptn-rec-change small { display: block; margin-top: 2px; font-size: 11px; }
+.part-partners details.ptn-rec-salestable > summary { cursor: pointer; list-style: none; }
+.part-partners details.ptn-rec-salestable > summary::-webkit-details-marker { display: none; }
+.part-partners details.ptn-rec-salestable > summary h2::before { content: '▾'; display: inline-block; margin-right: 6px; font-size: .8em; transition: transform .15s; }
+.part-partners details.ptn-rec-salestable:not([open]) > summary h2::before { transform: rotate(-90deg); }
+.part-partners details.ptn-rec-salestable:not([open]) > summary { margin-bottom: 0; }
+
+/* 협업 이력: 업체 이름 → 메일 히스토리 창 */
+.part-partners .ptn-rec-who { all: unset; cursor: pointer; border-radius: 4px; }
+.part-partners .ptn-rec-who:hover strong { text-decoration: underline; text-underline-offset: 2px; }
+.part-partners .ptn-rec-who:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.part-partners .ptn-thread { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.part-partners .ptn-thread-item { border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px; padding: 10px 12px; max-width: 88%; }
+.part-partners .ptn-thread-item.out { justify-self: end; border-left-color: var(--ptn-chart, #637c13); }
+.part-partners .ptn-thread-item.in { justify-self: start; border-left-color: var(--blue); background: var(--surface-2); }

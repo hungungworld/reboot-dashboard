@@ -67,6 +67,11 @@ def _pct(a, b):
     return round(a / b * 100, 2) if b else 0.0
 
 
+def _change(cur, prev):
+    """이전 같은 길이 기간 대비 증감률(%) — 이전 값이 0이면 None"""
+    return round((cur - prev) / prev * 100, 1) if prev else None
+
+
 def report(names, today, start=None, end=None):
     lo, hi = window(today)
     end = min(max(end or hi, lo), hi)
@@ -77,10 +82,16 @@ def report(names, today, start=None, end=None):
     used, rows = set(), []
     days = [start + timedelta(days=i) for i in range((end - start).days + 1)]
     daily = {d: {"date": d.isoformat(), "visits": 0, "orders": 0, "units": 0, "revenue": 0.0} for d in days}
+    prev_days = [start - timedelta(days=i) for i in range(len(days), 0, -1)]   # 바로 앞 같은 길이 기간 (상승률용)
+    prev_total = 0.0
     for i, name in enumerate(creators):
         t = {"visits": 0, "orders": 0, "units": 0, "revenue": 0.0, "refunds": 0}
+        cdaily = []
+        prev = sum(_day(name, d.isoformat())[3] for d in prev_days)
+        prev_total += prev
         for d in days:
             v, o, u, r, f = _day(name, d.isoformat())
+            cdaily.append({"date": d.isoformat(), "visits": v, "orders": o, "revenue": r})
             t["visits"] += v
             t["orders"] += o
             t["units"] += u
@@ -93,11 +104,14 @@ def report(names, today, start=None, end=None):
             dd["revenue"] += r
         rows.append({"name": name, "code": _code(name, i, used), "visits": t["visits"], "orders": t["orders"],
                      "units": t["units"], "revenue": round(t["revenue"], 2), "refunds": t["refunds"],
-                     "conversion": _pct(t["orders"], t["visits"])})
+                     "conversion": _pct(t["orders"], t["visits"]), "daily": cdaily,
+                     "prevRevenue": round(prev, 2), "change": _change(t["revenue"], prev)})
     rows.sort(key=lambda r: (-r["revenue"], r["name"]))
     totals = {k: sum(r[k] for r in rows) for k in ("visits", "orders", "units", "refunds")}
     totals["revenue"] = round(sum(r["revenue"] for r in rows), 2)
     totals["conversion"] = _pct(totals["orders"], totals["visits"])
+    totals["prevRevenue"] = round(prev_total, 2)
+    totals["change"] = _change(totals["revenue"], prev_total)
     for dd in daily.values():
         dd["revenue"] = round(dd["revenue"], 2)
     return {"dummy": True, "source": source, "start": start.isoformat(), "end": end.isoformat(),
