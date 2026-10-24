@@ -8,6 +8,12 @@
   PATCH /api/insights/shelf/<id>               진열대 한 줄 고치기 {price, in_stock, own}
   PUT   /api/insights/servings                 회분 수 고치기 {key, servings|null} (모든 주차에 적용)
   PUT   /api/insights/watch                    주시 브랜드 {brand, watch}
+경쟁사 분석
+  POST  /api/insights/competitors/discover     새 경쟁사 찾기 (지금 진열대 기준 · 무료)
+  POST  /api/insights/competitors/<id>/research   한 곳 다시 조사 (뒤에서 실행)
+  POST  /api/insights/competitors/research-all    상위 15개 모두 다시 조사 (뒤에서 실행)
+  PATCH /api/insights/competitors/<id>         {status: active|archived, website}
+  GET   /api/insights/competitors.csv · /competitors.json
   POST  /api/insights/reviews/upload           Weee! 리뷰 CSV {csv}
   POST  /api/insights/trends/upload            Google Trends CSV {csv} (SerpApi 키가 없을 때)
 데이터 업데이트
@@ -22,6 +28,7 @@
 """
 import csv
 import io
+import json
 import re
 
 from flask import Blueprint, Response, jsonify, request, send_file
@@ -32,8 +39,8 @@ from server.config import ROOT
 from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
-from . import reports, service, store, trends, update
-from .models import ServingOverride, ShelfItem, kv_get, kv_set
+from . import competitors, reports, service, store, trends, update
+from .models import Competitor, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
 
 bp = Blueprint("insights", __name__, url_prefix="/api/insights")
@@ -177,6 +184,87 @@ def watch_edit():
     kv_set("watch", watch, _who())
     worklog.add("insights", "승인 · 선정", f"주시 브랜드 {'선정' if on else '해제'}: {brand}", approval=_who())
     return jsonify(watch=watch)
+
+
+# ───────── 경쟁사 분석 ─────────
+
+@bp.post("/competitors/discover")
+def competitors_discover():
+    now, _, _ = service.snapshots()
+    if not now:
+        raise ApiError("진열대 데이터가 없어요. 먼저 데이터 업데이트에서 Amazon · Weee! 진열대를 모으세요.")
+    added = competitors.sync(now, service._tier)
+    worklog.add("insights", "수집", "새 경쟁사 찾기 (진열대 기준)", detail={"added": added[:30]})
+    return jsonify(ok=True, added=added)
+
+
+def _start_competitors(options, label):
+    try:
+        run = update.start(["competitors"], _who(), options)
+    except ValueError as e:
+        raise ApiError(str(e))
+    except RuntimeError as e:
+        raise ApiError(str(e), 409)
+    worklog.add("insights", "기타", label)
+    return jsonify(ok=True, runId=run.id), 202
+
+
+@bp.post("/competitors/<int:cid>/research")
+def competitor_research(cid):
+    c = db.session.get(Competitor, cid)
+    if c is None:
+        raise ApiError("없는 경쟁사입니다.", 404)
+    return _start_competitors({"only": c.id}, f"경쟁사 다시 조사: {c.brand}")
+
+
+@bp.post("/competitors/research-all")
+def competitors_research_all():
+    return _start_competitors({"force": True}, "경쟁사 전체 다시 조사")
+
+
+@bp.patch("/competitors/<int:cid>")
+def competitor_edit(cid):
+    c = db.session.get(Competitor, cid)
+    if c is None:
+        raise ApiError("없는 경쟁사입니다.", 404)
+    data = json_body()
+    changed = []
+    if "status" in data:
+        if data["status"] not in ("active", "archived"):
+            raise ApiError("상태는 active(관리 중) · archived(보관) 중 하나입니다.")
+        c.status = data["status"]
+        changed.append("status")
+    if "website" in data:
+        url = clip(data.get("website"), 500).strip()
+        if url and not re.match(r"^https?://[^\s/]+\.[^\s]+$", url):
+            raise ApiError("홈페이지 주소는 https://로 시작하게 입력하세요.")
+        c.website = url
+        changed.append("website")
+    if not changed:
+        raise ApiError("고칠 값이 없습니다.")
+    db.session.commit()
+    worklog.add("insights", "기타", f"경쟁사 수정: {c.brand}", detail={"fields": changed, "status": c.status})
+    return jsonify(competitors.comp_dict(c))
+
+
+@bp.get("/competitors.json")
+def competitors_json():
+    body = json.dumps(competitors.export_rows(), ensure_ascii=False, indent=2)
+    return Response(body, content_type="application/json; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.json"})
+
+
+@bp.get("/competitors.csv")
+def competitors_csv():
+    rows = competitors.export_rows()
+    buf = io.StringIO()
+    head = ["brand", "tier", "status"] + [f for f, _ in competitors.FIELDS] + ["website", "keywords", "sources", "researched_at", "ai"]
+    w = csv.writer(buf)
+    w.writerow(["브랜드", "구분", "상태"] + [label for _, label in competitors.FIELDS] + ["홈페이지", "발견 검색어", "출처", "조사일", "AI 분석"])
+    for r in rows:
+        w.writerow([r[k] for k in head])
+    return Response("﻿" + buf.getvalue(), content_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.csv"})
 
 
 def _csv_rows(text):

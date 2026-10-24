@@ -17,7 +17,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import amazon, rules, service, trends, weee, youtube
+from . import amazon, competitors, rules, service, trends, weee, youtube
 from .http import CollectError
 from .models import Comment, Monthly, Review, Run, load_json
 from .util import review_month, week_key
@@ -32,6 +32,8 @@ ITEMS = [
      "desc": "트렌드 키워드마다 미국 12개월 (키가 없으면 CSV 올리기)"},
     {"id": "reviews", "label": "리뷰 분류", "group": "weekly", "needs": [], "ai": True,
      "desc": "주제(효과 · 맛·향 · 복용 편의 · 부작용 · 가격) · 칭찬/불만"},
+    {"id": "competitors", "label": "경쟁사 분석", "group": "weekly", "needs": [], "ai": True,
+     "desc": "새 경쟁사 등록 · 상품 위치(제형 · 타이밍) 분류 · 리뷰 상위 15개 브랜드 분석(25일 지난 것만)"},
     {"id": "actions", "label": "이번 주 액션", "group": "weekly", "needs": [], "ai": True,
      "desc": "규칙으로 신호를 고르고, AI 키가 있으면 문장을 다듬음"},
     {"id": "youtube", "label": "유튜브 수집", "group": "monthly", "needs": ["YOUTUBE_API_KEY"],
@@ -42,7 +44,7 @@ ITEMS = [
      "desc": "이달의 요약 3줄 · 고객 인사이트 · 페르소나 · SWOT"},
 ]
 BY_ID = {i["id"]: i for i in ITEMS}
-ORDER = ["weee", "amazon", "trends", "youtube", "reviews", "voc", "actions", "monthly"]
+ORDER = ["weee", "amazon", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly"]
 LIMITS = {"serpapi": 250, "firecrawl": 1000, "youtube": 10000}
 REVIEW_BATCH, REVIEW_MAX = 40, 200
 COMMENT_BATCH, COMMENT_MAX = 80, 400
@@ -74,9 +76,24 @@ def estimate(item_id, cfg):
         return {"openai": math.ceil(min(_pending_reviews(), REVIEW_MAX) / REVIEW_BATCH) if ai else 0}
     if item_id == "voc":
         return {"openai": math.ceil(min(_pending_comments(service.latest_comment_month()), COMMENT_MAX) / COMMENT_BATCH) if ai else 0}
+    if item_id == "competitors":
+        return _competitor_cost(ai)
     if item_id in ("actions", "monthly"):
         return {"openai": 1 if ai else 0}
     return {}
+
+
+def _competitor_cost(ai, force=False, only=None):
+    if not ai:
+        return {}
+    now, _, _ = service.snapshots()
+    if only is not None:
+        n, site = 1, 1
+    else:
+        targets = [c for c in competitors.deep_targets(now) if competitors.stale(c, force)]
+        n, site = len(targets), sum(1 for c in targets if not c.website)
+    fc = n + site if envkeys.has("FIRECRAWL_API_KEY") else 0
+    return {k: v for k, v in {"openai": n + 1, "firecrawl": fc}.items() if v}
 
 
 def month_usage():
@@ -111,7 +128,8 @@ def plan():
             "lastRun": service.last_run(), "reviewMonth": review_month(service.today()), "week": week_key(service.today())}
 
 
-def start(items, user):
+def start(items, user, options=None):
+    """options: 경쟁사 분석용 {force: 상위 15개 모두 다시 조사, only: 경쟁사 id 한 곳}."""
     items = [i for i in ORDER if i in set(items)]
     if not items:
         raise ValueError("업데이트할 항목을 하나 이상 고르세요.")
@@ -126,7 +144,7 @@ def start(items, user):
     run = Run(items=json.dumps(items, ensure_ascii=False), user_name=(user or "")[:100], status="running")
     db.session.add(run)
     db.session.commit()
-    if jobs.run_background(current_app._get_current_object(), JOB, run_update, run.id, items, user) is None:
+    if jobs.run_background(current_app._get_current_object(), JOB, run_update, run.id, items, user, options or {}) is None:
         # 확인과 시작 사이에 다른 요청이 먼저 잠금을 잡은 경우 → 이 실행 기록은 닫음
         run.status, run.finished_at, run.current = "failed", utcnow(), ""
         db.session.commit()
@@ -227,6 +245,14 @@ def _run_voc(cfg, ctx):
     return {"ok": True, "count": done, "message": f"댓글 {done}개를 AI로 분류했어요 (OpenAI {calls}회).", "usage": {"openai": calls}}
 
 
+def _run_competitors(cfg, ctx):
+    now, _, _ = service.snapshots()
+    if not now:
+        return {"ok": True, "count": 0, "message": "진열대 데이터가 없어 경쟁사를 찾지 못했어요 (먼저 Amazon · Weee! 수집).", "usage": {}}
+    opt = ctx.get("options") or {}
+    return competitors.run(now, service._tier, force=bool(opt.get("force")), only=opt.get("only"))
+
+
 def _run_actions(cfg, ctx):
     context, _ = service.weekly_context(ctx["today"])
     acts = rules.weekly_actions(context)
@@ -254,18 +280,18 @@ def _run_monthly(cfg, ctx):
 
 
 RUNNERS = {"weee": _run_weee, "amazon": _run_amazon, "trends": _run_trends, "youtube": _run_youtube, "reviews": _run_reviews,
-           "voc": _run_voc, "actions": _run_actions, "monthly": _run_monthly}
+           "voc": _run_voc, "competitors": _run_competitors, "actions": _run_actions, "monthly": _run_monthly}
 COLLECTORS = {"weee", "amazon", "trends", "youtube"}
 
 
-def run_update(run_id, items, user):
+def run_update(run_id, items, user, options=None):
     run = db.session.get(Run, run_id)
     if run is None:
         return
     t = service.today()
     cfg = get_collect_config()
     # 월간 묶음: 1~7일에는 지난달 (월간 리뷰가 보는 달과 같게 — 유튜브 수집 · 요약이 같은 달을 봄)
-    ctx = {"today": t, "week": week_key(t), "month": review_month(t), "user": user}
+    ctx = {"today": t, "week": week_key(t), "month": review_month(t), "user": user, "options": options or {}}
     results, usage = {}, {"serpapi": 0, "firecrawl": 0, "youtube": 0, "openai": 0}
     for item in items:
         label = BY_ID[item]["label"]
@@ -285,7 +311,7 @@ def run_update(run_id, items, user):
             usage[k] = usage.get(k, 0) + int(v or 0)
         if res.get("warnings"):
             res["message"] = res.get("message", "") + " 참고: " + " / ".join(res["warnings"][:3])
-        if item in COLLECTORS or not res["ok"]:
+        if item in COLLECTORS or item == "competitors" or not res["ok"]:
             _collect_log(label, res, user, failed=not res["ok"], collector=item in COLLECTORS)
         run = db.session.get(Run, run_id)
         results[item] = {"ok": res["ok"], "message": res.get("message", ""), "count": res.get("count"),

@@ -123,6 +123,76 @@ def classify_comments(rows):
     return {str(i["id"]): i for i in out.get("items") or []}
 
 
+# ───────── 경쟁사: 상품 위치 분류 · 브랜드 분석 ─────────
+
+POSITION_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["items"],
+    "properties": {"items": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["id", "form", "timing", "wellness"],
+        "properties": {"id": {"type": "string"},
+                       "form": {"type": "string", "enum": ["liquid", "solid", "unknown"]},
+                       "timing": {"type": "string", "enum": ["pre", "post", "both", "unknown"]},
+                       "wellness": {"type": "boolean"}}}}},
+}
+
+
+def classify_positions(rows):
+    """rows: [{id, title, text}] → ({id: {form, timing, wellness}}, 저장된 결과였는지)."""
+    data, _ = cache_get("product_positions", rows)
+    if data:
+        return data.get("items") or {}, True
+    system = ("숙취 관련 상품의 상품명 · 판매 문구를 보고 분류해. form: 마시는 액상(샷 · 음료 · 병)=liquid, "
+              "분말 · 구미 · 젤리 · 정제 · 캡슐 · 스틱 분말=solid. timing: 판매 문구가 음주 전 섭취를 말하면 pre, "
+              "음주 후 · 다음 날 회복을 말하면 post, 둘 다면 both. wellness: 허브 · 아유르베다 · 프로바이오틱스 · 간 건강 같은 "
+              "기능성 웰니스를 내세우면 true. 문구로 알 수 없으면 unknown (추측하지 마).")
+    out = openai_json(system, {"products": rows}, schema=POSITION_SCHEMA, schema_name="product_positions", part=PART,
+                      action="경쟁 상품 위치 분류", max_tokens=4000)
+    ids = {r["id"] for r in rows}
+    items = {i["id"]: {"form": i["form"], "timing": i["timing"], "wellness": bool(i["wellness"])}
+             for i in out.get("items") or [] if i.get("id") in ids}
+    cache_put("product_positions", rows, {"items": items})
+    return items, False
+
+
+_SRC = {"type": "array", "items": {"type": "string"}}
+
+
+def _vals(enum):
+    return {"type": "object", "additionalProperties": False, "required": ["values", "sources"],
+            "properties": {"values": {"type": "array", "items": {"type": "string", "enum": enum}}, "sources": _SRC}}
+
+
+_TEXT = {"type": "object", "additionalProperties": False, "required": ["text", "sources"],
+         "properties": {"text": {"type": "string"}, "sources": _SRC}}
+COMPETITOR_SCHEMA = {
+    "type": "object", "additionalProperties": False,
+    "required": ["positioning", "formats", "channels", "usp", "marketing", "implication"],
+    "properties": {
+        "positioning": _vals(["Pre-Drinking", "Post-Drinking", "Functional Wellness"]),
+        "formats": _vals(["Liquid Shot", "Drink", "Powder", "Gummy", "Jelly", "Tablet/Capsule", "기타"]),
+        "channels": _vals(["D2C 중심", "Amazon", "대형 오프라인 리테일", "편의점 · 주류점", "아시안 마켓", "기타 온라인몰"]),
+        "usp": _TEXT, "marketing": _TEXT, "implication": _TEXT,
+    },
+}
+
+
+def analyze_competitor(payload):
+    """payload: {brand, tier, evidence:[{id, type, title, text}]} → (7개 항목, 저장된 결과였는지)."""
+    data, _ = cache_get("competitor_analysis", payload)
+    if data:
+        return data, True
+    system = ("너는 글로벌 웰니스 · 숙취해소제 시장을 분석하는 수석 브랜드 마케터야. 당사는 미국에 진출한 한국 숙취해소 젤리 · 음료 "
+              "브랜드(REBOOT, 실제 데이터는 알디콤)야. 주어진 경쟁사의 evidence(근거 자료)만 보고 아래 항목을 채워. "
+              "positioning(1~2개) · formats · channels는 목록에서 고르고, usp(핵심 소구 성분 · 차별점) · "
+              "marketing(주요 마케팅 채널 · 버즈 포인트)은 한국어 1~2문장, implication은 알디콤이 벤치마킹하거나 방어할 점 1~2문장. "
+              "항목마다 sources에 근거 id(P1 · S1 · R1 · W1 …)를 넣어. 근거에 없는 내용은 쓰지 말고 "
+              "text는 '{확인 필요}', values는 빈 목록, sources는 빈 목록으로 둬. 판매 채널은 근거의 판매처 · 홈페이지 문구로만 판단해. " + SAFE)
+    out = openai_json(system, payload, schema=COMPETITOR_SCHEMA, schema_name="competitor_analysis", part=PART,
+                      action=f"경쟁사 분석: {payload.get('brand', '')}", max_tokens=2000, timeout=90)
+    cache_put("competitor_analysis", payload, out)
+    return out, False
+
+
 # ───────── 월간 요약 · 전략 ─────────
 
 _STR = {"type": "string"}
