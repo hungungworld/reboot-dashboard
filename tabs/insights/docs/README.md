@@ -144,6 +144,7 @@ SERPAPI_KEY=...
 | 유튜브 댓글 | YouTube Data API: 검색어 세트 A(제품 리뷰) · B(숙취 일반) · K(한국 숙취해소제) + 영상 선정 기준 | 월 1회 | 무관한 댓글(유튜버 칭찬·잡담)은 AI가 걸러요 |
 | Yami 진열대 | Firecrawl: `yami_queries` 검색 결과 첫 페이지 (브랜드 · 가격 · 정가 · 판매량) | 주 1회 | robots.txt가 리뷰(`/comment/`)는 막아서 진열대만 읽어요. 숙취 · 음주 · 간 관련 단어가 없는 상품은 빼요 |
 | 경쟁사 분석 | 진열대 · 리뷰 + Firecrawl(홈페이지 찾기 · 읽기 · 뉴스 검색) + OpenAI(분석 · 못 채운 칸 웹 검색) | 주 1회 (25일 지난 곳만) · 버튼 | 브랜드마다 OpenAI 1~2회 · Firecrawl 2~3회. AI 결과라 카드의 근거 자료로 꼭 확인 |
+| 페르소나 그림 (월간 리뷰) | `static/peeps/peep-01~12.svg` — [Open Peeps](https://www.openpeeps.com/)(Pablo Stanley, CC0 1.0)를 DiceBear `open-peeps`로 만든 것 | 한 번 (2026-10-25) | 표정은 calm · smile만. 옷 색은 `currentColor`라 카드 색을 따라가요. 이름으로 12개 중 하나를 골라요 |
 
 **1회분 단가 계산**
 - **기본:** 포장 문구에서 개수를 읽어 계산해요. 예) `5 pack*4 boxes` = 20, `Pack of 6` = 6, `(min 2)`는 최소 주문 수량이라 무시

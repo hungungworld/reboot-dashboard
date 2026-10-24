@@ -644,6 +644,10 @@ def test_ai_rewrite_and_monthly_with_mocked_openai(app, auth_client, monkeypatch
     assert seen.count("weekly_actions") == 1
     m = auth_client.get("/api/insights/monthly").get_json()
     assert m["ai"] and m["summary"] == ["한 줄", "두 줄", "세 줄"] and len(m["strategy"]["personas"]) == 3
+    # 화면 'AI가 읽은 자료': 실행 때 넘긴 개수 그대로
+    src = m["sources"]
+    assert set(src) == {"shelf", "reviews", "questions", "expressions", "competitors", "trends", "lastMonth"}
+    assert src["shelf"] > 0 and src["reviews"] >= 1 and src["lastMonth"] is False
     personas = auth_client.get("/api/insights/personas").get_json()
     assert personas[0] == {"name": "파티 다음 날 직장인", "oneLine": "아침 회의가 걱정", "needs": "간편함", "message": "가볍게 챙기는 리추얼"}
     rv = auth_client.get("/api/insights/data/reviews").get_json()

@@ -303,7 +303,9 @@ def _run_actions(cfg, ctx):
 
 def _run_monthly(cfg, ctx):
     month = ctx["month"]
-    out = insights_ai.monthly_analysis(service.monthly_payload(month, ctx["today"]))
+    payload = service.monthly_payload(month, ctx["today"])
+    out = insights_ai.monthly_analysis(payload)
+    out["sources"] = service.monthly_sources(payload)   # 화면 'AI가 읽은 자료' (실행 때 실제로 넘긴 개수)
     row = db.session.get(Monthly, month) or Monthly(month=month)
     row.data = json.dumps(out, ensure_ascii=False)
     row.model, row.created_at, row.created_by = insights_ai.openai_model(), utcnow(), (ctx["user"] or "")[:100]

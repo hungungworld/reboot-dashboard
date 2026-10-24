@@ -495,6 +495,7 @@ def monthly_view(month=None, t=None):
         "competitorTrends": data.get("competitor_trends") or rule_comp, "competitorAi": bool(data.get("competitor_trends")),
         "strategy": {k: data.get(k) for k in ("changes", "personas", "swot", "target", "positioning")} if row else None,
         "prevStrategy": bool(prev_row),
+        "sources": data.get("sources"),
         "questions": q, "expressions": ex,
     }
 
@@ -519,6 +520,14 @@ def monthly_payload(month, t=None):
         "trends": trends_view(t)["next"][:5],
         "lastMonthStrategy": {k: prev.get(k) for k in ("personas", "swot", "target", "positioning")} if prev else None,
     }
+
+
+def monthly_sources(payload):
+    """월간 AI에 넘긴 자료 개수 (화면 'AI가 읽은 자료')."""
+    return {"shelf": len(payload["shelf"]), "reviews": len(payload["reviews"]),
+            "questions": sum(q["count"] for q in payload["questions"]), "expressions": len(payload["expressions"]),
+            "competitors": len(payload["competitors"]), "trends": len(payload["trends"]),
+            "lastMonth": bool(payload["lastMonthStrategy"])}
 
 
 # ───────── 경쟁사 ─────────
