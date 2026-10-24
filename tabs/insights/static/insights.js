@@ -19,7 +19,7 @@
     ['trends', '검색 수요'], ['accuracy', '정확도 검증']];
   const QUESTIONS = {
     shelf: '누가 얼마에, 무슨 말로 팔고 있나', competitors: '누구와 경쟁하고 있나', reviews: '고객은 무엇에 만족하고, 무엇에 실망하나',
-    audience: '사기 전에 무엇을 궁금해하나', trends: '언제 찾고, 왜 늘었나', accuracy: 'AI 분류를 믿어도 되나'
+    audience: '사기 전에 무엇을 궁금해하나', accuracy: 'AI 분류를 믿어도 되나'
   };
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
@@ -30,7 +30,6 @@
   const USE_LABEL = { serpapi: 'SerpApi', firecrawl: 'Firecrawl', youtube: 'YouTube', openai: 'OpenAI' };
   const USE_UNIT = { serpapi: '회', firecrawl: ' 크레딧', youtube: ' units', openai: '회' };
   const SERVING_SRC = { manual: '직접 수정', parsed: '문구에서 읽음', default: '확인 필요 (1회분으로 계산)' };
-  const LINE_COLORS = ['--lime-deep', '--blue', '--orange', '--purple', '--red', '--gray'];
 
   const $ = (el, sel) => (el ? el.querySelector(sel) : null);
   const $$ = (el, sel) => (el ? Array.from(el.querySelectorAll(sel)) : []);
@@ -52,7 +51,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', sub: 'shelf', weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, chart: null, loading: {}
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}
   };
   const panel = id => $(S.root, `[data-panel="${id}"]`);
   const skel = '<div class="skeleton ins-skel"></div>';
@@ -168,7 +167,6 @@
       case 'month': S.monthly = null; S.month = d.month; loadMonthly(d.month); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'upload-reviews': uploadCsv(b, 'reviews'); break;
-      case 'upload-trends': uploadCsv(b, 'trends'); break;
       case 'weee-raw': openWeeeRaw(); break;
       case 'reload-sub': loadData(S.sub); break;
       default: break;
@@ -462,10 +460,8 @@
   function drawSub(sub) {
     const body = $(panel('data'), '[data-ref="data-body"]');
     if (!body) return;
-    if (S.chart) { try { S.chart.destroy(); } catch (e) { /* 무시 */ } S.chart = null; }
     const d = S.data[sub];
     body.innerHTML = { shelf: shelfHtml, competitors: competitorsHtml, reviews: reviewsHtml, audience: audienceHtml, trends: trendsHtml }[sub](d);
-    if (sub === 'trends') drawChart(d);
   }
 
   function qHead(sub, oneLine, extra) {
@@ -489,19 +485,85 @@
     return '';
   }
 
-  function prodCard(x) {
+  function shortNum(n) { return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n); }
+
+  // 카드 = 브랜드 · 별점 · 리뷰 중심. 계산식(가격 ÷ 회분)은 상세 모달에만
+  function prodCard(x, o) {
     const cls = ['ins-prod', x.own ? 'own' : '', x.in_stock === false ? 'oos' : '', x.watched ? 'watched' : ''].filter(Boolean).join(' ');
+    const flags = [o.multiSource ? badge(x.sourceLabel) : '', x.own ? badge('자사', 'green') : '', x.watched ? '<span class="ins-star" title="주시 중">★</span>' : '',
+      x.in_stock === false ? badge('품절', 'red') : '', o.top.has(x.id) ? badge('인기', 'lime') : '', changeBadge(x.change)].join('');
+    const meta = [x.rating != null ? `★ ${x.rating}` : '', x.reviews != null ? `리뷰 ${shortNum(x.reviews)}` : ''].filter(Boolean).join(' · ');
     return `<button type="button" class="${cls}" data-act="prod" data-id="${esc(x.id)}">
-      <span class="ins-prod-top">${badge(x.sourceLabel)}${x.own ? badge('자사', 'green') : ''}${x.watched ? '<span class="ins-star" title="주시 중">★</span>' : ''}${x.in_stock === false ? badge('품절', 'red') : ''}${changeBadge(x.change)}</span>
-      <span class="ins-prod-title">${esc(x.title)}</span>
-      <span class="ins-prod-price"><b>${esc(money(x.perServing))}</b> / 1회분 <span class="muted">· ${esc(money(x.price))} ÷ ${esc(x.servings)}회분${x.servingsSource === 'default' ? ' (확인 필요)' : ''}</span></span>
+      ${flags ? `<span class="ins-prod-top">${flags}</span>` : ''}
+      <span class="ins-prod-head"><b class="ins-prod-brand${x.brandGuessed ? ' guessed' : ''}"${x.brandGuessed ? ' title="상품명에서 추정한 브랜드"' : ''}>${esc(x.brand || '브랜드 모름')}</b>${meta ? `<span class="ins-prod-meta">${esc(meta)}</span>` : ''}</span>
+      <span class="ins-prod-title" title="${esc(x.title)}">${esc(x.title)}</span>
+      <span class="ins-prod-price"><b>${esc(money(x.perServing))}</b> / 1회분${x.servingsSource === 'default' ? ' <span class="muted">· 회분 확인 필요</span>' : ''}</span>
     </button>`;
   }
 
+  // 요약 숫자 3개: 최저 · 중앙값 · 자사 (1회분 단가)
+  function shelfSummary(priced) {
+    const vals = priced.map(x => x.perServing).sort((a, b) => a - b);
+    const n = vals.length;
+    const median = n % 2 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
+    const low = priced.reduce((a, b) => (b.perServing < a.perServing ? b : a));
+    const own = priced.filter(x => x.own).sort((a, b) => a.perServing - b.perServing)[0];
+    let ownSub = '진열대에서 아직 찾지 못했어요';
+    if (own) {
+      const gap = own.perServing - median;
+      ownSub = Math.abs(gap) < 0.005 ? '중앙값과 같아요' : `중앙값보다 ${money(Math.abs(gap))} ${gap > 0 ? '비싸요' : '저렴해요'}`;
+    }
+    return `<div class="ins-stats three">
+      <div class="ins-stat"><span>최저 1회분</span><b>${esc(money(low.perServing))}</b><small>${esc(low.brand)}</small></div>
+      <div class="ins-stat"><span>중앙값</span><b>${esc(money(median))}</b><small>${n}개 기준</small></div>
+      <div class="ins-stat${own ? '' : ' red'}"><span>자사 1회분</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small></div>
+    </div>`;
+  }
+
+  // 가격 축 띠 차트: 점 하나 = 상품 하나, 크기 = 리뷰 수, 누르면 상세
+  function shelfStrip(priced) {
+    const W = 640, H = 162, P = 20, top = 22, axisY = 130;
+    const iw = W - P * 2;
+    const max = Math.max(7, Math.min(12, Math.ceil(Math.max(...priced.map(x => x.perServing)) + 0.5)));
+    const X = v => P + Math.min(v, max) / max * iw;
+    const bands = [[0, 3, 'low'], [3, 6, 'mid'], [6, max, 'high']].map(([a, b, k], i) => {
+      const count = priced.filter(x => x.bucket === k).length;
+      return `<rect class="ins-band${i % 2 ? ' alt' : ''}" x="${X(a).toFixed(1)}" y="${top}" width="${(X(b) - X(a)).toFixed(1)}" height="${axisY - top}"></rect>
+        <text class="ins-band-t" x="${(X(a) + 8).toFixed(1)}" y="${top + 14}">${esc(BUCKETS[i][1])} · ${count}개</text>`;
+    }).join('');
+    const ticks = [0, 3, 6, max].map(v => `<text class="ins-axis" x="${X(v).toFixed(1)}" y="${axisY + 16}" text-anchor="${v === 0 ? 'start' : v === max ? 'end' : 'middle'}">$${v}${v === max ? '+' : ''}</text>`).join('');
+    // 겹치는 점은 위아래 줄로 비켜 놓기
+    const placed = [];
+    const mid = (top + 18 + axisY) / 2;
+    const maxRev = Math.max(1, ...priced.map(x => x.reviews || 0));
+    priced.slice().sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).forEach(x => {   // 큰 점부터 가운데 줄에
+      const r = 4 + 7 * Math.sqrt((x.reviews || 0) / maxRev);
+      const cx = X(x.perServing);
+      const lanes = [0, -1, 1, -2, 2, -3, 3, -4, 4].map(k => mid + k * 9);
+      const gap = y => Math.min(Infinity, ...placed.map(p => Math.hypot(p.cx - cx, p.cy - y) - p.r - r));
+      const cy = lanes.find(y => gap(y) >= 1) ?? lanes.reduce((a, b) => (gap(b) > gap(a) ? b : a));
+      placed.push({ x, r, cx, cy });
+    });
+    const dots = placed.slice().sort((a, b) => b.r - a.r).map(({ x, r, cx, cy }) => {
+      const cls = ['ins-dot', x.own ? 'own' : '', x.watched ? 'watched' : '', x.in_stock === false ? 'oos' : ''].filter(Boolean).join(' ');
+      const tip = [x.brand, money(x.perServing) + ' / 1회분', x.rating != null ? `★ ${x.rating}` : '', x.reviews != null ? `리뷰 ${fmt.num(x.reviews)}` : '',
+        x.in_stock === false ? '품절' : ''].filter(Boolean).join(' · ');
+      return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" data-act="prod" data-id="${esc(x.id)}"><title>${esc(tip)}</title></circle>` +
+        (x.own ? `<text class="ins-dot-label" x="${cx.toFixed(1)}" y="${(cy - r - 4).toFixed(1)}" text-anchor="middle">자사</text>` : '');
+    }).join('');
+    return `<svg class="ins-strip-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="1회분 단가 분포: 점 하나가 상품 하나, 점이 클수록 리뷰가 많아요">
+      ${bands}<line class="ins-axis-line" x1="${P}" x2="${W - P}" y1="${axisY}" y2="${axisY}"></line>${ticks}${dots}</svg>
+      <div class="ins-legend small"><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg own"></i>자사</span><span><i class="ins-lg watched"></i>주시</span>
+        <span><i class="ins-lg oos"></i>품절</span><span>점 크기 = 리뷰 수 · 점을 누르면 상세</span></div>`;
+  }
+
   function shelfHtml(d) {
-    const legend = `${badge('자사', 'green')}<span class="small muted">★ 주시</span>${badge('품절', 'red')}`;
+    const priced = d.items.filter(x => x.perServing != null);
+    const top = new Set(d.items.filter(x => !x.own && x.reviews).sort((a, b) => b.reviews - a.reviews).slice(0, 3).map(x => x.id));
+    const opt = { top, multiSource: new Set(d.items.map(x => x.source)).size > 1 };
+    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에</h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     const cols = BUCKETS.map(([k, label]) => `<section class="card ins-bucket"><div class="card-head"><h2>1회분 ${esc(label)}</h2>${badge(`${d.groups[k].length}개`)}</div>
-      <div class="stack tight">${d.groups[k].map(prodCard).join('') || '<p class="small muted">없음</p>'}</div></section>`).join('');
+      <div class="stack tight">${d.groups[k].map(x => prodCard(x, opt)).join('') || '<p class="small muted">없음</p>'}</div></section>`).join('');
     const unknown = d.unknown.length ? `<div class="note mt-16">가격을 읽지 못한 상품 ${d.unknown.length}개는 구간에서 뺐어요 — 아래 표에서 가격을 넣을 수 있어요.</div>` : '';
     const rows = d.items.map(x => `<tr>
       <td>${esc(x.sourceLabel)}${x.position ? `<small class="ins-sub">${esc(x.position)}위</small>` : ''}</td>
@@ -523,7 +585,7 @@
       </div>
       ${d.items.length ? `<div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>상품</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>자사</th><th>변화</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : '<p class="small muted">수집된 상품이 없어요.</p>'}`;
-    return qHead('shelf', d.oneLine, legend) +
+    return qHead('shelf', d.oneLine) + overview +
       (d.items.length ? `<div class="grid-3 mt-24">${cols}</div>${unknown}` : `<div class="mt-24">${ui.empty('진열대 데이터가 없어요. 데이터 업데이트에서 Weee! · Amazon 진열대를 모으세요 (Firecrawl · SerpApi 키 필요).', 'grid')}</div>`) +
       fold('shelf-table', '표로 보기 · 수집 · 고치기', table);
   }
@@ -825,69 +887,13 @@
   function trendsHtml(d) {
     const next = d.next.map(n => `<li><div class="between"><b>${esc(n.name)}</b><span class="flex">${n.opportunity ? badge('기회', 'green') : ''}<span class="small muted">${esc(fmt.dday(n.start))}</span></span></div>
       <small>${n.lift ? esc(`작년 같은 시기 '${n.lift.keyword}' 검색이 12개월 평균 대비 ${fmt.signed(n.lift.pct, 0, '%')} (${n.lift.date} 주)`) : '작년 같은 시기 데이터 없음'}</small></li>`).join('');
-    const spikes = d.spikes.map(s => `<li><div class="between"><b>${esc(s.keyword)}</b>${badge(fmt.signed(s.pct, 0, '%'), 'orange')}</div><small>${esc(s.date)} 주 · 지수 ${esc(s.value)} · ${esc(s.reason)}</small></li>`).join('');
-    const dates = Array.from(new Set(d.series.flatMap(s => s.points.map(p => p.date)))).sort();
-    const table = d.series.length ? `<div class="table-wrap"><table class="data-table"><thead><tr><th>주 시작</th>${d.series.map(s => `<th class="num">${esc(s.keyword)}</th>`).join('')}</tr></thead>
-      <tbody>${dates.map(dt => `<tr><td>${esc(dt)}</td>${d.series.map(s => { const p = s.points.find(x => x.date === dt); return `<td class="num">${p ? esc(p.value) : '—'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`
-      : '<p class="small muted">없음</p>';
-    const upload = `<section class="card"><div class="card-head"><h2>Google Trends CSV 올리기</h2>${badge('SerpApi 키가 없을 때')}</div>
-      <p class="small muted">trends.google.com에서 키워드를 <b>하나씩</b> 조회(미국 · 지난 12개월)한 뒤 '내려받기'로 받은 CSV를 올리세요.</p>
-      <div class="flex wrap mt-16"><input type="file" accept=".csv,text/csv" data-ref="file-trends" aria-label="Google Trends CSV 파일"><button type="button" class="btn small lime" data-act="upload-trends">${icon('upload')}올리기</button></div></section>`;
-    const srcs = d.series.map(s => `${s.keyword} (${s.source === 'csv' ? 'CSV' : 'SerpApi'} · ${s.week})`).join(' · ');
-    return qHead('trends', d.oneLine) +
-      `<div class="grid-2 mt-24">
-        <section class="card"><div class="card-head"><h2>다음 급등 예상</h2><a class="link" href="/dashboard/settings#collect">시즌 편집 (설정)</a></div>${next ? `<ul class="ins-list">${next}</ul>` : '<p class="small muted">모니터링 중인 다가오는 시즌이 없어요.</p>'}</section>
-        <section class="card"><div class="card-head"><h2>지난 12개월 급등과 이유</h2>${badge('이유는 추정')}</div>${spikes ? `<ul class="ins-list">${spikes}</ul>` : '<p class="small muted">평균보다 30% 넘게 오른 주가 없거나 데이터가 없어요.</p>'}</section>
-      </div>
-      <section class="card mt-24"><div class="card-head"><h2>12개월 검색 추이</h2><span class="small muted">미국 · 키워드마다 따로 조회 (0~100)</span></div>
-        ${d.series.length ? `<div class="ins-chart"><canvas data-ref="chart" role="img" aria-label="키워드별 12개월 검색 추이"></canvas></div><p class="panel-note mt-8">${esc(srcs)}</p>`
-          : ui.empty('검색 트렌드 데이터가 없어요. 데이터 업데이트(SerpApi)나 아래 CSV 올리기로 채우세요.', 'chart')}
-      </section>
-      <div class="grid-2 mt-24">${upload}<section class="card"><h3>알아두세요</h3><p class="panel-note mt-8">키워드마다 따로 조회해서 키워드끼리 크기를 비교하면 안 돼요 (각자 최고점이 100). 급등 이유는 시즌 날짜로 붙인 추정이에요. 시즌은 설정 › 수집 설정에서만 편집해요.</p></section></div>` +
-      fold('trend-table', '숫자 표', table);
-  }
-
-  function cssVar(name, fallback) {
-    try {
-      const v = global.getComputedStyle(global.document.documentElement).getPropertyValue(name).trim();
-      return v || fallback;
-    } catch (e) { return fallback; }
-  }
-
-  function drawChart(d) {
-    const canvas = $(panel('data'), '[data-ref="chart"]');
-    if (!canvas || !global.Chart || !d.series.length) return;
-    const dates = Array.from(new Set(d.series.flatMap(s => s.points.map(p => p.date)))).sort();
-    const grid = cssVar('--line', '#e9ece4');
-    const text = cssVar('--muted', '#858981');
-    S.chart = new global.Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: dates,
-        datasets: d.series.map((s, i) => {
-          const color = cssVar(LINE_COLORS[i % LINE_COLORS.length], '#637c13');
-          const byDate = {};
-          s.points.forEach(p => { byDate[p.date] = p.value; });
-          return { label: s.keyword, data: dates.map(dt => (dt in byDate ? byDate[dt] : null)), borderColor: color, backgroundColor: color,
-            borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0.25, spanGaps: true };
-        })
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { color: text, boxWidth: 12 } } },
-        scales: {
-          x: { ticks: { color: text, maxTicksLimit: 12 }, grid: { color: grid } },
-          y: { beginAtZero: true, suggestedMax: 100, ticks: { color: text }, grid: { color: grid } }
-        }
-      }
-    });
+    return `<section class="card"><div class="card-head"><h2>다음 급등 예상</h2><a class="link" href="/dashboard/settings#collect">시즌 편집 (설정)</a></div>${next ? `<ul class="ins-list">${next}</ul>` : '<p class="small muted">모니터링 중인 다가오는 시즌이 없어요.</p>'}</section>`;
   }
 
   /* 정확도 검증 (자리만 · README '정확도 검증') */
   function drawAccuracy() {
     const body = $(panel('data'), '[data-ref="data-body"]');
     if (!body) return;
-    if (S.chart) { try { S.chart.destroy(); } catch (e) { /* 무시 */ } S.chart = null; }
     body.innerHTML = qHead('accuracy', '아직 검증 전이에요. 지금 분류는 규칙(단어 · 별점) 또는 AI 결과이고, 둘 다 사람 확인이 필요해요.') + `
       <div class="workbench mt-24">
         <section class="card">
@@ -903,7 +909,7 @@
       </div>`;
   }
 
-  /* CSV 올리기 (Weee! 리뷰 · Google Trends) */
+  /* CSV 올리기 (Weee! 리뷰) */
   async function uploadCsv(btn, kind) {
     const input = $(panel('data'), `[data-ref="file-${kind}"]`);
     const f = input && input.files && input.files[0];
@@ -913,9 +919,8 @@
     try {
       const csv = (await f.text()).replace(/^﻿/, '');
       const r = await api(`/api/insights/${kind}/upload`, { csv });
-      toast(kind === 'reviews' ? `리뷰 ${r.rows}줄 중 새 리뷰 ${r.added}개를 넣었어요.` : `키워드 ${r.keywords.length}개 (${r.keywords.join(', ')})를 넣었어요.`);
+      toast(`리뷰 ${r.rows}줄 중 새 리뷰 ${r.added}개를 넣었어요.`);
       S.data = {};
-      trendP = null;
       loadData(kind);
       loadWeekly();
     } catch (e) {

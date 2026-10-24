@@ -237,8 +237,9 @@ def _run_voc(cfg, ctx):
             o = out.get(c.id)
             if not o:
                 continue
-            c.relevant, c.is_question = bool(o["relevant"]), bool(o["question"]) and bool(o["relevant"])
-            c.topic = o["topic"] if c.is_question and o["topic"] != "none" else ""
+            c.relevant = bool(o["relevant"])
+            c.is_question = bool(o["question"]) and c.relevant and o["topic"] != "none"
+            c.topic = o["topic"] if c.is_question else ""
             c.classified_by = "ai"
             done += 1
         db.session.commit()

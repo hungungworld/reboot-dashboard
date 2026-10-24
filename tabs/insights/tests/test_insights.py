@@ -95,10 +95,12 @@ YT_SEARCH = {"items": [{"id": {"videoId": "vid00000001"}, "snippet": {"title": "
 YT_STATS = {"items": [{"id": "vid00000001", "statistics": {"viewCount": "50000", "likeCount": "900", "commentCount": "4"}},
                       {"id": "vid00000002", "statistics": {"viewCount": "500", "commentCount": "1"}}]}
 YT_COMMENTS = {"items": [
-    {"snippet": {"topLevelComment": {"id": f"c{i}", "snippet": {"textOriginal": t, "likeCount": 5 - i,
+    {"snippet": {"topLevelComment": {"id": f"c{i}", "snippet": {"textOriginal": t, "likeCount": 10 - i,
                                                                  "publishedAt": "2026-09-03T00:00:00Z"}}}}
     for i, t in enumerate(["Where can I buy this in the US?", "Where to buy the korean hangover drink online?",
-                           "Does it actually work for a bad hangover?", "great video bro"])]}
+                           "Does it actually work for a bad hangover?", "great video bro",
+                           "Is this available at Costco or Walmart?", "Can I order this jelly on Amazon?",
+                           "Where do you find this in stores?", "anyone else extremely hungover right now?"])]}
 
 
 @pytest.fixture()
@@ -238,6 +240,32 @@ def test_rules_price_changes_and_new_entries():
     assert rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=None)) == []
 
 
+def test_comment_rules_drop_chatter_and_unknown_questions():
+    from tabs.insights import classify
+    noise = classify.classify_comment("anyone else extremely hungover right now?")
+    assert noise == {"relevant": False, "is_question": False, "topic": ""}
+    assert classify.classify_comment("Where can I buy this jelly in the US?")["topic"] == "buy"
+    assert classify.classify_comment("Is it better than Liquid IV for hangovers?")["topic"] == "compare"
+    odd = classify.classify_comment("Why is the hangover cure in the thumbnail blue?")
+    assert odd["relevant"] and not odd["is_question"] and odd["topic"] == ""  # 주제를 모르면 질문 아님 ('기타' 없음)
+    assert not classify.is_relevant("I went drinking last night and feel bad")  # 숙취 잡담
+    assert classify.video_on_topic("Korean hangover drink review") and not classify.video_on_topic("My crazy weekend vlog")
+    assert classify.video_on_topic("Aldicom unboxing", ["aldicom"])
+    assert "other" not in classify.QUESTION_LABEL
+
+
+def test_rules_top_question_needs_volume_and_skips_other():
+    few = _ctx(questions=[{"key": "buy", "label": "어디서 사나요 (구매처)", "count": 4, "examples": []}])
+    assert "top_question" not in {a["rule"] for a in rules.weekly_actions(few)}
+    thin = _ctx(questions=[{"key": "buy", "label": "어디서 사나요 (구매처)", "count": 5, "examples": []}]
+                + [{"key": k, "label": k, "count": 5, "examples": []} for k in ("works", "when", "safety", "taste", "price", "ingredients", "compare")])
+    assert "top_question" not in {a["rule"] for a in rules.weekly_actions(thin)}  # 5/40 = 12.5% < 15%
+    other = _ctx(questions=[{"key": "other", "label": "기타 질문", "count": 68, "examples": []},
+                            {"key": "taste", "label": "맛이 어떤가요", "count": 6, "examples": []}])
+    top = next(a for a in rules.weekly_actions(other) if a["rule"] == "top_question")
+    assert top["facts"]["질문 주제"] == "맛이 어떤가요"
+
+
 def test_rules_season_search_lift_questions_and_complaints():
     pts = [{"date": (date(2025, 10, 26) + timedelta(weeks=i)).isoformat(), "value": 90 if i == 1 else 40} for i in range(52)]
     lift = rules.season_lift(pts, "2026-10-31")
@@ -349,9 +377,9 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
 
     aud = auth_client.get("/api/insights/data/audience").get_json()
     assert aud["process"]["found"] == 2 and aud["process"]["kept"] == 1
-    assert aud["questions"][0]["key"] == "buy" and aud["questions"][0]["count"] == 2
+    assert aud["questions"][0]["key"] == "buy" and aud["questions"][0]["count"] == 5
     assert aud["creators"][0]["channel"] == "K-Snack Lab"
-    assert all("great video" not in c["text"] for c in aud["comments"])
+    assert all("great video" not in c["text"] and "anyone else" not in c["text"] for c in aud["comments"])
 
     rv = auth_client.get("/api/insights/data/reviews").get_json()
     own_row = next(b for b in rv["table"] if b["own"])
