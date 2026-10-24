@@ -255,7 +255,7 @@
         <p class="source-label">시즌 일정은 설정 › 수집 설정의 시즌 캘린더에서 고칩니다. 준비 시작일 = 시즌 시작일 − 준비 기간.</p>
       </section>
       <section class="card section-gap"><div class="card-head"><h2>다가오는 일정</h2>${badge(`시즌 ${upcoming.length}개`)}</div>
-        <div class="home-sched-grid">${upcoming.length ? upcoming.map(item).join('') : '<p class="panel-note">다가오는 시즌이 없습니다. 설정 › 수집 설정에서 추가하세요.</p>'}</div></section>`;
+        <div class="home-sched-grid">${upcoming.length ? upcoming.map(item).join('') : '<p class="panel-note">다가오는 시즌이 없어요. 설정 › 수집 설정에서 추가하세요.</p>'}</div></section>`;
   }
   function moveMonth(n) {
     const cur = S.calMonth || REBOOT.today().slice(0, 7);
@@ -329,8 +329,8 @@
       ? ` · <a class="link" href="/dashboard/${encodeURIComponent(t.source)}">${esc(partLabel(t.source))}</a>` : '';
     return `<div class="task${t.done ? ' done' : ''}" data-id="${esc(t.id)}">
       <label class="home-task-main"><input type="checkbox" data-act="todo-toggle"${t.done ? ' checked' : ''} aria-label="완료 표시: ${esc(t.title)}">
-        <span class="grow"><span class="task-title">${esc(t.title)}</span><span class="meta">근거: ${esc(t.reason || '—')}${src}${t.done && t.doneBy ? ` · 완료 ${esc(t.doneBy)}` : ''}</span></span></label>
-      ${tag}<button type="button" class="home-todo-del" data-act="todo-del" aria-label="삭제: ${esc(t.title)}">${icon('x')}</button></div>`;
+        <span class="grow"><span class="task-title">${esc(t.title)}</span><span class="meta">${tag}근거: ${esc(t.reason || '—').replace(/\bD-(\d)/g, 'D‑$1')}${src}${t.done && t.doneBy ? ` · 완료 ${esc(t.doneBy)}` : ''}</span></span></label>
+      <button type="button" class="home-todo-del" data-act="todo-del" aria-label="삭제: ${esc(t.title)}">${icon('x')}</button></div>`;
   }
   function paintTodos() {
     const t = S.todos;
@@ -485,7 +485,7 @@
     return `<details class="home-qstats"><summary>검색어 점검 (최근 60일)${flagged ? ` · 교체 후보 ${flagged}개` : ''}</summary>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어 · 피드</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th class="num" title="최근 7일 vs 그 전 7일 기사 수">보도 변화</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-      <p class="panel-note">30일 넘게 돌렸는데 카드로 고른 기사가 0개면 교체 후보예요. 검색어 · 업계지 피드는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
+      <p class="panel-note">30일 동안 고른 기사가 0개면 교체 후보예요. 검색어 · 피드는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
   }
 
   /* 미국 시장 브리핑 — 3초 안에 훑어보기 (2026-10-25 다시 설계)
@@ -558,7 +558,7 @@
       const rows = rest.map((a, i) => rowHtml(a, i + (lead ? 2 : 1), read.has(a.url)));
       body.innerHTML = `${lead ? leadHtml(lead, read.has(lead.url)) : ''}${rows.length ? `<div class="home-rows">${newsList(rows, k)}</div>` : ''}
         ${!n.ai ? (n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약 실패: ${esc(n.aiError)} — 다음 수집 때 다시 시도합니다.</p>` : '')
-          : '<p class="panel-note mt-8">설정 › 연결에서 OPENAI_API_KEY를 넣으면 관련 기사만 골라 한국어 제목 · 마케터의 시선으로 정리해요. 지금은 최근 기사 제목만 보여 줘요 (관련 없는 기사가 섞일 수 있음).</p>') : ''}`;
+          : '<p class="panel-note mt-8">지금은 최근 기사 제목만 보여 줘요(관련 없는 기사가 섞일 수 있어요). 설정 › 연결에 OpenAI 키를 넣으면 관련 기사만 골라 정리해요.</p>') : ''}`;
     }
     ref('news-tabs').innerHTML = n.ai && all.length ? kindTabs(k, flow.length, trend.length) : '';
     const last = n.lastRun;
