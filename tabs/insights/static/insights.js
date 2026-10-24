@@ -489,19 +489,85 @@
     return '';
   }
 
-  function prodCard(x) {
+  function shortNum(n) { return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n); }
+
+  // 카드 = 브랜드 · 별점 · 리뷰 중심. 계산식(가격 ÷ 회분)은 상세 모달에만
+  function prodCard(x, o) {
     const cls = ['ins-prod', x.own ? 'own' : '', x.in_stock === false ? 'oos' : '', x.watched ? 'watched' : ''].filter(Boolean).join(' ');
+    const flags = [o.multiSource ? badge(x.sourceLabel) : '', x.own ? badge('자사', 'green') : '', x.watched ? '<span class="ins-star" title="주시 중">★</span>' : '',
+      x.in_stock === false ? badge('품절', 'red') : '', o.top.has(x.id) ? badge('인기', 'lime') : '', changeBadge(x.change)].join('');
+    const meta = [x.rating != null ? `★ ${x.rating}` : '', x.reviews != null ? `리뷰 ${shortNum(x.reviews)}` : ''].filter(Boolean).join(' · ');
     return `<button type="button" class="${cls}" data-act="prod" data-id="${esc(x.id)}">
-      <span class="ins-prod-top">${badge(x.sourceLabel)}${x.own ? badge('자사', 'green') : ''}${x.watched ? '<span class="ins-star" title="주시 중">★</span>' : ''}${x.in_stock === false ? badge('품절', 'red') : ''}${changeBadge(x.change)}</span>
-      <span class="ins-prod-title">${esc(x.title)}</span>
-      <span class="ins-prod-price"><b>${esc(money(x.perServing))}</b> / 1회분 <span class="muted">· ${esc(money(x.price))} ÷ ${esc(x.servings)}회분${x.servingsSource === 'default' ? ' (확인 필요)' : ''}</span></span>
+      ${flags ? `<span class="ins-prod-top">${flags}</span>` : ''}
+      <span class="ins-prod-head"><b class="ins-prod-brand${x.brandGuessed ? ' guessed' : ''}"${x.brandGuessed ? ' title="상품명에서 추정한 브랜드"' : ''}>${esc(x.brand || '브랜드 모름')}</b>${meta ? `<span class="ins-prod-meta">${esc(meta)}</span>` : ''}</span>
+      <span class="ins-prod-title" title="${esc(x.title)}">${esc(x.title)}</span>
+      <span class="ins-prod-price"><b>${esc(money(x.perServing))}</b> / 1회분${x.servingsSource === 'default' ? ' <span class="muted">· 회분 확인 필요</span>' : ''}</span>
     </button>`;
   }
 
+  // 요약 숫자 3개: 최저 · 중앙값 · 자사 (1회분 단가)
+  function shelfSummary(priced) {
+    const vals = priced.map(x => x.perServing).sort((a, b) => a - b);
+    const n = vals.length;
+    const median = n % 2 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
+    const low = priced.reduce((a, b) => (b.perServing < a.perServing ? b : a));
+    const own = priced.filter(x => x.own).sort((a, b) => a.perServing - b.perServing)[0];
+    let ownSub = '진열대에서 아직 찾지 못했어요';
+    if (own) {
+      const gap = own.perServing - median;
+      ownSub = Math.abs(gap) < 0.005 ? '중앙값과 같아요' : `중앙값보다 ${money(Math.abs(gap))} ${gap > 0 ? '비싸요' : '저렴해요'}`;
+    }
+    return `<div class="ins-stats three">
+      <div class="ins-stat"><span>최저 1회분</span><b>${esc(money(low.perServing))}</b><small>${esc(low.brand)}</small></div>
+      <div class="ins-stat"><span>중앙값</span><b>${esc(money(median))}</b><small>${n}개 기준</small></div>
+      <div class="ins-stat${own ? '' : ' red'}"><span>자사 1회분</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small></div>
+    </div>`;
+  }
+
+  // 가격 축 띠 차트: 점 하나 = 상품 하나, 크기 = 리뷰 수, 누르면 상세
+  function shelfStrip(priced) {
+    const W = 640, H = 162, P = 20, top = 22, axisY = 130;
+    const iw = W - P * 2;
+    const max = Math.max(7, Math.min(12, Math.ceil(Math.max(...priced.map(x => x.perServing)) + 0.5)));
+    const X = v => P + Math.min(v, max) / max * iw;
+    const bands = [[0, 3, 'low'], [3, 6, 'mid'], [6, max, 'high']].map(([a, b, k], i) => {
+      const count = priced.filter(x => x.bucket === k).length;
+      return `<rect class="ins-band${i % 2 ? ' alt' : ''}" x="${X(a).toFixed(1)}" y="${top}" width="${(X(b) - X(a)).toFixed(1)}" height="${axisY - top}"></rect>
+        <text class="ins-band-t" x="${(X(a) + 8).toFixed(1)}" y="${top + 14}">${esc(BUCKETS[i][1])} · ${count}개</text>`;
+    }).join('');
+    const ticks = [0, 3, 6, max].map(v => `<text class="ins-axis" x="${X(v).toFixed(1)}" y="${axisY + 16}" text-anchor="${v === 0 ? 'start' : v === max ? 'end' : 'middle'}">$${v}${v === max ? '+' : ''}</text>`).join('');
+    // 겹치는 점은 위아래 줄로 비켜 놓기
+    const placed = [];
+    const mid = (top + 18 + axisY) / 2;
+    const maxRev = Math.max(1, ...priced.map(x => x.reviews || 0));
+    priced.slice().sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).forEach(x => {   // 큰 점부터 가운데 줄에
+      const r = 4 + 7 * Math.sqrt((x.reviews || 0) / maxRev);
+      const cx = X(x.perServing);
+      const lanes = [0, -1, 1, -2, 2, -3, 3, -4, 4].map(k => mid + k * 9);
+      const gap = y => Math.min(Infinity, ...placed.map(p => Math.hypot(p.cx - cx, p.cy - y) - p.r - r));
+      const cy = lanes.find(y => gap(y) >= 1) ?? lanes.reduce((a, b) => (gap(b) > gap(a) ? b : a));
+      placed.push({ x, r, cx, cy });
+    });
+    const dots = placed.slice().sort((a, b) => b.r - a.r).map(({ x, r, cx, cy }) => {
+      const cls = ['ins-dot', x.own ? 'own' : '', x.watched ? 'watched' : '', x.in_stock === false ? 'oos' : ''].filter(Boolean).join(' ');
+      const tip = [x.brand, money(x.perServing) + ' / 1회분', x.rating != null ? `★ ${x.rating}` : '', x.reviews != null ? `리뷰 ${fmt.num(x.reviews)}` : '',
+        x.in_stock === false ? '품절' : ''].filter(Boolean).join(' · ');
+      return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" data-act="prod" data-id="${esc(x.id)}"><title>${esc(tip)}</title></circle>` +
+        (x.own ? `<text class="ins-dot-label" x="${cx.toFixed(1)}" y="${(cy - r - 4).toFixed(1)}" text-anchor="middle">자사</text>` : '');
+    }).join('');
+    return `<svg class="ins-strip-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="1회분 단가 분포: 점 하나가 상품 하나, 점이 클수록 리뷰가 많아요">
+      ${bands}<line class="ins-axis-line" x1="${P}" x2="${W - P}" y1="${axisY}" y2="${axisY}"></line>${ticks}${dots}</svg>
+      <div class="ins-legend small"><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg own"></i>자사</span><span><i class="ins-lg watched"></i>주시</span>
+        <span><i class="ins-lg oos"></i>품절</span><span>점 크기 = 리뷰 수 · 점을 누르면 상세</span></div>`;
+  }
+
   function shelfHtml(d) {
-    const legend = `${badge('자사', 'green')}<span class="small muted">★ 주시</span>${badge('품절', 'red')}`;
+    const priced = d.items.filter(x => x.perServing != null);
+    const top = new Set(d.items.filter(x => !x.own && x.reviews).sort((a, b) => b.reviews - a.reviews).slice(0, 3).map(x => x.id));
+    const opt = { top, multiSource: new Set(d.items.map(x => x.source)).size > 1 };
+    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에</h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     const cols = BUCKETS.map(([k, label]) => `<section class="card ins-bucket"><div class="card-head"><h2>1회분 ${esc(label)}</h2>${badge(`${d.groups[k].length}개`)}</div>
-      <div class="stack tight">${d.groups[k].map(prodCard).join('') || '<p class="small muted">없음</p>'}</div></section>`).join('');
+      <div class="stack tight">${d.groups[k].map(x => prodCard(x, opt)).join('') || '<p class="small muted">없음</p>'}</div></section>`).join('');
     const unknown = d.unknown.length ? `<div class="note mt-16">가격을 읽지 못한 상품 ${d.unknown.length}개는 구간에서 뺐어요 — 아래 표에서 가격을 넣을 수 있어요.</div>` : '';
     const rows = d.items.map(x => `<tr>
       <td>${esc(x.sourceLabel)}${x.position ? `<small class="ins-sub">${esc(x.position)}위</small>` : ''}</td>
@@ -523,7 +589,7 @@
       </div>
       ${d.items.length ? `<div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>상품</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>자사</th><th>변화</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : '<p class="small muted">수집된 상품이 없어요.</p>'}`;
-    return qHead('shelf', d.oneLine, legend) +
+    return qHead('shelf', d.oneLine) + overview +
       (d.items.length ? `<div class="grid-3 mt-24">${cols}</div>${unknown}` : `<div class="mt-24">${ui.empty('진열대 데이터가 없어요. 데이터 업데이트에서 Weee! · Amazon 진열대를 모으세요 (Firecrawl · SerpApi 키 필요).', 'grid')}</div>`) +
       fold('shelf-table', '표로 보기 · 수집 · 고치기', table);
   }
