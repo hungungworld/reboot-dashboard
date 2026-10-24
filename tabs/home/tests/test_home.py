@@ -252,6 +252,26 @@ def test_requires_login(client):
     assert client.get("/api/home/todos").status_code == 401
     assert client.post("/api/home/todos", json={"title": "x"}).status_code == 401
     assert client.post("/api/home/news/collect").status_code == 401
+    assert client.get("/api/home/news/saved").status_code == 401
+
+
+def test_saved_news(auth_client):
+    assert auth_client.get("/api/home/news/saved").get_json()["items"] == []
+    assert auth_client.post("/api/home/news/saved", json={"url": "javascript:alert(1)", "title": "x"}).status_code == 400
+    assert auth_client.post("/api/home/news/saved", json={"url": "https://example.com/a"}).status_code == 400
+    body = {"url": "https://example.com/a", "title": "FDA Finalizes NDI Guidance", "titleKo": "FDA NDI 지침 확정",
+            "summaryKo": "요약", "whyKo": "성분 표기 다시 점검", "kind": "nope", "areaLabel": "규제", "domain": "BevNET",
+            "date": "2026-10-20T13:00:00Z"}
+    r = auth_client.post("/api/home/news/saved", json=body)
+    s = r.get_json()
+    assert r.status_code == 201 and s["kind"] == "flow" and s["date"] == "2026-10-20T13:00:00Z" and s["savedBy"]
+    r = auth_client.post("/api/home/news/saved", json=dict(body, kind="trend", whyKo="고친 시선", date="bad"))
+    assert r.status_code == 200 and r.get_json()["id"] == s["id"] and r.get_json()["date"] is None   # 같은 URL은 덮어씀
+    items = auth_client.get("/api/home/news/saved").get_json()["items"]
+    assert len(items) == 1 and items[0]["kind"] == "trend" and items[0]["whyKo"] == "고친 시선"
+    assert auth_client.delete(f"/api/home/news/saved/{s['id']}").get_json()["ok"] is True
+    assert auth_client.delete(f"/api/home/news/saved/{s['id']}").status_code == 404
+    assert auth_client.get("/api/home/news/saved").get_json()["items"] == []
 
 
 def test_news_before_first_collection(auth_client):
