@@ -159,13 +159,37 @@
 .part-insights .ins-prod-price b { font-size: 15px; color: var(--ink); }
 .part-insights .ins-stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .part-insights .ins-stat small { display: block; margin-top: 4px; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.part-insights .ins-strip-svg { width: 100%; height: auto; display: block; margin-top: 16px; }
-.part-insights .ins-band { fill: var(--soft-2); }
-.part-insights .ins-band.alt { fill: transparent; }
-.part-insights .ins-band-t { font-size: 11px; font-weight: 600; fill: var(--ink-2); }
-.part-insights .ins-axis-line { stroke: var(--line-2); }
-.part-insights .ins-dot.oos { fill: transparent; stroke: var(--red); stroke-width: 2; }
-.part-insights .ins-dot-label { font-size: 10px; font-weight: 700; fill: var(--lime-deep); }
+/* 1회분 단가 벌떼 차트 — $12까지 한 화면, 그 위는 가로 스크롤 */
+.part-insights .ins-sw-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin-top: 18px; }
+.part-insights .ins-sw-hint { color: var(--lime-deep); font-weight: 600; }
+.part-insights .ins-sw-scroll { margin-top: 8px; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+.part-insights .ins-sw-scroll::-webkit-scrollbar { height: 8px; }
+.part-insights .ins-sw-scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
+.part-insights .ins-sw-in { position: relative; }
+.part-insights .ins-sw-svg { display: block; }
+.part-insights .ins-sw-band { fill: transparent; }
+.part-insights .ins-sw-band.mid { fill: var(--soft-2); }
+.part-insights .ins-sw-band-t { font-size: 11px; fill: var(--muted); }
+.part-insights .ins-sw-band-n { font-weight: 700; fill: var(--ink-2); }
+.part-insights .ins-sw-grid { stroke: var(--line); stroke-dasharray: 2 4; }
+.part-insights .ins-sw-grid.major { stroke: var(--line-2); stroke-dasharray: none; }
+.part-insights .ins-sw-tick { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.part-insights .ins-sw-axis { stroke: var(--line-2); stroke-width: 1.5; }
+.part-insights .ins-sw-med { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .55; }
+.part-insights .ins-sw-med-t { font-size: 10px; font-weight: 700; fill: var(--ink-2); }
+.part-insights .ins-sw-own rect { fill: var(--ink); }
+.part-insights .ins-sw-own text { font-size: 10.5px; font-weight: 700; fill: var(--lime); }
+.part-insights .ins-sw-own { cursor: pointer; }
+.part-insights .ins-sw-tip { position: absolute; z-index: 2; max-width: 240px; padding: 8px 10px; border-radius: 8px; background: var(--ink); color: var(--surface);
+  font-size: 11px; line-height: 1.45; pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.part-insights .ins-sw-tip > * { display: block; }
+.part-insights .ins-sw-tip b { color: inherit; }
+.part-insights .ins-sw-tip em { font-style: normal; color: #ff8a80; font-weight: 700; }
+.part-insights .ins-sw-tip small { opacity: .7; }
+.part-insights .ins-sw-tip-t { opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-insights .ins-dot.oos { fill: var(--surface); fill-opacity: 1; stroke: var(--red); stroke-width: 2; }
+.part-insights .ins-lg.med { width: 14px; height: 0; border-radius: 0; border-top: 2px dashed var(--ink-2); background: none; vertical-align: 3px; }
 .part-insights .ins-lg.oos { background: transparent; border: 2px solid var(--red); opacity: 1; }
 .part-insights .ins-table td { vertical-align: middle; }
 .part-insights .ins-title-cell { min-width: 240px; }
@@ -178,10 +202,10 @@
 .part-insights .ins-pre { margin: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 280px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
 .part-insights .ins-axis { font-size: 10px; fill: var(--muted); }
-.part-insights .ins-dot { fill: var(--gray); fill-opacity: .45; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; }
-.part-insights .ins-dot:hover { fill-opacity: .85; }
-.part-insights .ins-dot.watched { fill: var(--orange); fill-opacity: .7; }
-.part-insights .ins-dot.own { fill: var(--lime); fill-opacity: 1; stroke: var(--lime-deep); stroke-width: 2; }
+.part-insights .ins-dot { fill: var(--muted); fill-opacity: .42; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; transition: fill-opacity .12s; }
+.part-insights .ins-dot:hover { fill-opacity: .9; stroke: var(--ink); }
+.part-insights .ins-dot.watched { fill: var(--orange); fill-opacity: .8; }
+.part-insights .ins-dot.own { fill: var(--lime); fill-opacity: 1; stroke: var(--ink); stroke-width: 2; }
 .part-insights .ins-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; color: var(--muted); }
 .part-insights .ins-lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; background: var(--gray); opacity: .6; }
 .part-insights .ins-lg.own { background: var(--lime); border: 1px solid var(--lime-deep); opacity: 1; }

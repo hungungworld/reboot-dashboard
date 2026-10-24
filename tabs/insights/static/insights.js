@@ -120,9 +120,15 @@
       if (ref === 'tbl-q') { S.tbl.q = e.target.value; S.tbl.page = 1; drawShelfTable(); }
       if (ref === 'comp-q') { S.comp.q = e.target.value; S.comp.page = 1; drawCompTable(); }
     });
+    root.addEventListener('mouseover', swarmTip);
+    root.addEventListener('mouseout', e => {
+      const box = e.target.closest && e.target.closest('.ins-sw-in');
+      if (box && !box.contains(e.relatedTarget)) $(box, '.ins-sw-tip').hidden = true;
+    });
     root.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches && e.target.matches('tr[data-act]')) e.target.click(); });
     root.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.fold) S.open[d.dataset.fold] = d.open; }, true);
     global.addEventListener('hashchange', route);
+    global.addEventListener('resize', fitSwarm);
     route();
     loadWeekly();
     checkRun(true);
@@ -152,6 +158,7 @@
       b.setAttribute('aria-selected', String(on));
     });
     $$(S.root, '[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== tab; });
+    if (tab === 'data') fitSwarm();   // 숨어 있을 때 그린 차트는 폭을 못 재서
     const kpis = $(S.root, '[data-ref="kpis"]');
     if (kpis) kpis.hidden = tab !== 'weekly';   // 주간 카드는 주간 리뷰에서만 (월간은 자체 카드)
     drawActions();
@@ -545,6 +552,7 @@
     if (!body) return;
     const d = S.data[sub];
     body.innerHTML = { shelf: shelfHtml, competitors: competitorsHtml, reviews: reviewsHtml, audience: audienceHtml, news: newsHtml }[sub](d);
+    if (sub === 'shelf') fitSwarm();
   }
 
   function qHead(sub, oneLine, extra) {
@@ -603,41 +611,100 @@
     </div>`;
   }
 
-  // 가격 축 띠 차트: 점 하나 = 상품 하나, 크기 = 리뷰 수, 누르면 상세
+  // 가격 축 벌떼 차트: 점 하나 = 상품 하나, 크기 = 리뷰 수, 누르면 상세
+  // 첫 화면에 $0~SWARM_FULL이 꽉 차게 — 상자 폭을 재서 $1 폭(px)을 정하고(fitSwarm), 더 비싼 상품은 가로 스크롤로 봐요
+  const SWARM_PX = 64, SWARM_FULL = 8, SWARM_PL = 28;
   function shelfStrip(priced) {
-    const W = 640, H = 162, P = 20, top = 22, axisY = 130;
-    const iw = W - P * 2;
-    const max = Math.max(7, Math.min(12, Math.ceil(Math.max(...priced.map(x => x.perServing)) + 0.5)));
-    const X = v => P + Math.min(v, max) / max * iw;
-    const bands = [[0, 3, 'low'], [3, 6, 'mid'], [6, max, 'high']].map(([a, b, k], i) => {
-      const count = priced.filter(x => x.bucket === k).length;
-      return `<rect class="ins-band${i % 2 ? ' alt' : ''}" x="${X(a).toFixed(1)}" y="${top}" width="${(X(b) - X(a)).toFixed(1)}" height="${axisY - top}"></rect>
-        <text class="ins-band-t" x="${(X(a) + 8).toFixed(1)}" y="${top + 14}">${esc(BUCKETS[i][1])} · ${count}개</text>`;
-    }).join('');
-    const ticks = [0, 3, 6, max].map(v => `<text class="ins-axis" x="${X(v).toFixed(1)}" y="${axisY + 16}" text-anchor="${v === 0 ? 'start' : v === max ? 'end' : 'middle'}">$${v}${v === max ? '+' : ''}</text>`).join('');
-    // 겹치는 점은 위아래 줄로 비켜 놓기
-    const placed = [];
-    const mid = (top + 18 + axisY) / 2;
-    const maxRev = Math.max(1, ...priced.map(x => x.reviews || 0));
-    priced.slice().sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).forEach(x => {   // 큰 점부터 가운데 줄에
-      const r = 4 + 7 * Math.sqrt((x.reviews || 0) / maxRev);
-      const cx = X(x.perServing);
-      const lanes = [0, -1, 1, -2, 2, -3, 3, -4, 4].map(k => mid + k * 9);
-      const gap = y => Math.min(Infinity, ...placed.map(p => Math.hypot(p.cx - cx, p.cy - y) - p.r - r));
-      const cy = lanes.find(y => gap(y) >= 1) ?? lanes.reduce((a, b) => (gap(b) > gap(a) ? b : a));
-      placed.push({ x, r, cx, cy });
-    });
-    const dots = placed.slice().sort((a, b) => b.r - a.r).map(({ x, r, cx, cy }) => {
-      const cls = ['ins-dot', x.own ? 'own' : '', x.watched ? 'watched' : '', x.in_stock === false ? 'oos' : ''].filter(Boolean).join(' ');
-      const tip = [x.brand, money(x.perServing) + ' / 1회분', x.rating != null ? `★ ${x.rating}` : '', x.reviews != null ? `리뷰 ${fmt.num(x.reviews)}` : '',
-        x.in_stock === false ? '품절' : ''].filter(Boolean).join(' · ');
-      return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${r.toFixed(1)}" data-act="prod" data-id="${esc(x.id)}"><title>${esc(tip)}</title></circle>` +
-        (x.own ? `<text class="ins-dot-label" x="${cx.toFixed(1)}" y="${(cy - r - 4).toFixed(1)}" text-anchor="middle">자사</text>` : '');
-    }).join('');
-    return `<svg class="ins-strip-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="1회분 단가 분포: 점 하나가 상품 하나, 점이 클수록 리뷰가 많아요">
-      ${bands}<line class="ins-axis-line" x1="${P}" x2="${W - P}" y1="${axisY}" y2="${axisY}"></line>${ticks}${dots}</svg>
+    const vmax = Math.max(...priced.map(x => x.perServing));
+    const over = priced.filter(x => x.perServing > SWARM_FULL).length;
+    const hint = over ? `<span class="ins-sw-hint">→ 옆으로 밀면 $${SWARM_FULL} 넘는 상품 ${over}개도 보여요 (최고 ${esc(money(vmax))})</span>` : '';
+    S.swarm = { priced, px: SWARM_PX };
+    S.swarmInfo = Object.fromEntries(priced.map(x => [x.id, x]));   // 말풍선(swarmTip)용
+    return `<div class="ins-sw-top small muted"><span>점 하나 = 상품 하나 · 클수록 리뷰가 많아요 · 누르면 상세</span>${hint}</div>
+      <div class="ins-sw-scroll" data-ref="swarm">${swarmSvg(priced, SWARM_PX)}</div>
       <div class="ins-legend small"><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg own"></i>자사</span><span><i class="ins-lg watched"></i>주시</span>
-        <span><i class="ins-lg oos"></i>품절</span><span>점 크기 = 리뷰 수 · 점을 누르면 상세</span></div>`;
+        <span><i class="ins-lg oos"></i>품절</span><span><i class="ins-lg med"></i>보통 가격 (중앙값)</span></div>`;
+  }
+  // 화면에 붙은 뒤 상자 폭에 맞춰 다시 그림 (창 크기가 바뀔 때도)
+  function fitSwarm() {
+    const box = $(panel('data'), '[data-ref="swarm"]');
+    if (!box || !box.clientWidth || !S.swarm) return;
+    const px = Math.max(40, (box.clientWidth - SWARM_PL - 18) / SWARM_FULL);
+    if (Math.abs(px - S.swarm.px) < 1) return;
+    S.swarm.px = px;
+    box.innerHTML = swarmSvg(S.swarm.priced, px);
+  }
+  function swarmSvg(priced, px) {
+    const PL = SWARM_PL, PR = 44, head = 44, gapY = 14, maxOff = 72;
+    const vmax = Math.max(...priced.map(x => x.perServing));
+    const end = Math.max(SWARM_FULL, Math.ceil(vmax + 0.5));
+    const W = Math.round(PL + end * px + PR);
+    const X = v => PL + v * px;
+    // 겹치지 않게 위아래로 비켜 쌓기 (큰 점부터 가운데에)
+    const maxRev = Math.max(1, ...priced.map(x => x.reviews || 0));
+    const placed = [];
+    priced.slice().sort((a, b) => (b.reviews || 0) - (a.reviews || 0)).forEach(x => {
+      const r = 4 + 6 * Math.sqrt((x.reviews || 0) / maxRev);
+      const cx = X(x.perServing);
+      const near = placed.filter(p => Math.abs(p.cx - cx) < p.r + r + 1);
+      const fits = o => near.every(p => Math.hypot(p.cx - cx, p.off - o) >= p.r + r + 1);
+      let off = 0;
+      for (let k = 0; k <= maxOff; k++) {
+        if (fits(k)) { off = k; break; }
+        if (fits(-k)) { off = -k; break; }
+        off = k;   // 끝까지 자리가 없으면 맨 끝에 겹쳐 둠
+      }
+      placed.push({ x, r, cx, off });
+    });
+    const ext = Math.max(16, ...placed.map(p => Math.abs(p.off) + p.r));
+    const mid = head + gapY + ext, axisY = mid + ext + gapY, H = axisY + 26;
+    // 가격 구간 배경 + 구간 이름
+    const bands = [[0, 3, 'low'], [3, 6, 'mid'], [6, end, 'high']].map(([a, b, k], i) => {
+      const count = priced.filter(x => x.bucket === k).length;
+      return `<rect class="ins-sw-band ${k}" x="${X(a)}" y="${head}" width="${X(b) - X(a)}" height="${axisY - head}"></rect>
+        <text class="ins-sw-band-t" x="${X(a) + 10}" y="${head - 10}"><tspan class="ins-sw-band-n">${esc(BUCKETS[i][1])}</tspan> ${count}개</text>`;
+    }).join('');
+    // 눈금: $20까지는 $1마다, 그 위로는 $5마다
+    const ticks = [];
+    for (let v = 0; v <= end; v++) if (v <= 20 || v % 5 === 0) ticks.push(v);
+    const grid = ticks.map(v => `<line class="ins-sw-grid${v % 3 === 0 && v <= 6 ? ' major' : ''}" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${head}" y2="${axisY}"></line>
+      <text class="ins-sw-tick" x="${X(v).toFixed(1)}" y="${axisY + 18}" text-anchor="middle">$${v}</text>`).join('');
+    // 보통 가격(중앙값) 선
+    const vals = priced.map(x => x.perServing).sort((a, b) => a - b), n = vals.length;
+    const median = n % 2 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
+    const medLine = `<line class="ins-sw-med" x1="${X(median)}" x2="${X(median)}" y1="${head + 4}" y2="${axisY}"></line>
+      <text class="ins-sw-med-t" x="${X(median) + 5}" y="${head + 14}">보통 ${esc(money(median))}</text>`;
+    const dots = placed.slice().sort((a, b) => (a.x.own - b.x.own) || (b.r - a.r)).map(({ x, r, cx, off }) => {
+      const cls = ['ins-dot', x.own ? 'own' : '', x.watched ? 'watched' : '', x.in_stock === false ? 'oos' : ''].filter(Boolean).join(' ');
+      return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${(mid + off).toFixed(1)}" r="${r.toFixed(1)}" data-act="prod" data-id="${esc(x.id)}" data-tip="${esc(x.id)}"></circle>`;
+    }).join('');
+    // 자사 이름표: 점 위 말풍선
+    const tags = placed.filter(p => p.x.own).map(({ x, r, cx, off }) => {
+      const t = `자사 ${money(x.perServing)}`, w = t.length * 6.6 + 14, y = mid + off - r - 8;
+      return `<g class="ins-sw-own" data-act="prod" data-id="${esc(x.id)}"><rect x="${(cx - w / 2).toFixed(1)}" y="${(y - 16).toFixed(1)}" width="${w.toFixed(1)}" height="18" rx="9"></rect>
+        <text x="${cx.toFixed(1)}" y="${(y - 3.5).toFixed(1)}" text-anchor="middle">${esc(t)}</text></g>`;
+    }).join('');
+    return `<div class="ins-sw-in" style="width:${W}px">
+        <svg class="ins-sw-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="1회분 단가 분포: 점 하나가 상품 하나, 점이 클수록 리뷰가 많아요">
+          ${bands}${grid}<line class="ins-sw-axis" x1="${PL}" x2="${W - PR / 2}" y1="${axisY}" y2="${axisY}"></line>${medLine}${dots}${tags}</svg>
+        <div class="ins-sw-tip" hidden></div></div>`;
+  }
+  // 점에 마우스를 올리면 말풍선
+  function swarmTip(e) {
+    const dot = e.target.closest && e.target.closest('.ins-dot[data-tip]');
+    const box = e.target.closest && e.target.closest('.ins-sw-in');
+    const tip = box && $(box, '.ins-sw-tip');
+    if (!tip) return;
+    const x = dot && (S.swarmInfo || {})[dot.dataset.tip];
+    if (!x) { tip.hidden = true; return; }
+    const sub = [x.sourceLabel, x.rating != null ? `★ ${x.rating}` : '', x.reviews != null ? `리뷰 ${fmt.num(x.reviews)}` : ''].filter(Boolean).join(' · ');
+    tip.innerHTML = `<b>${esc(x.brand || '브랜드 모름')}${x.own ? ' · 자사' : ''}</b><span class="ins-sw-tip-t">${esc(x.title)}</span>
+      <span><b>${esc(money(x.perServing))}</b> / 1회분${x.in_stock === false ? ' · <em>품절</em>' : ''}</span>${sub ? `<small>${esc(sub)}</small>` : ''}`;
+    const cx = +dot.getAttribute('cx'), cy = +dot.getAttribute('cy'), r = +dot.getAttribute('r');
+    tip.hidden = false;
+    const w = tip.offsetWidth, W = box.offsetWidth;
+    tip.style.left = `${Math.max(4, Math.min(W - w - 4, cx - w / 2))}px`;
+    tip.style.top = `${cy - r - 8 - tip.offsetHeight < 0 ? cy + r + 8 : cy - r - 8 - tip.offsetHeight}px`;
   }
 
   // 제품 라인 카드: 옵션(회분) × 판매처 표 — 같은 제품을 채널 · 용량과 상관없이 한 장에 (lines.py)
@@ -752,6 +819,10 @@
     const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에</h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     const cols = BUCKETS.map(([k, label]) => `<section class="card ins-bucket"><div class="card-head"><h2>1회분 ${esc(label)}</h2>${badge(`${d.groups[k].length}개`)}</div>
       <div class="stack tight">${d.groups[k].map(x => prodCard(x, opt)).join('') || '<p class="small muted">없음</p>'}</div></section>`).join('');
+    // 구간별 상품 카드는 길어서 접을 수 있게 (처음엔 펼침)
+    const bucketFold = `<details class="ins-fold mt-24" data-fold="buckets"${S.open.buckets === false ? '' : ' open'}>
+      <summary>1회분 가격 구간별 상품 <span class="muted">${BUCKETS.map(([k, label]) => `${esc(label)} ${d.groups[k].length}개`).join(' · ')}</span></summary>
+      <div class="grid-3 ins-fold-body">${cols}</div></details>`;
     const unknown = d.unknown.length ? `<div class="note mt-16">가격을 읽지 못한 상품 ${d.unknown.length}개는 구간에서 뺐어요 — 아래 표에서 가격을 넣을 수 있어요.</div>` : '';
     const table = `<div class="flex wrap mb-16">
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 수집</button>
@@ -766,7 +837,7 @@
       `<button type="button" data-act="shelf-view" data-v="${k}" aria-pressed="${S.shelfView === k}">${esc(l)}</button>`).join('')}</div>`;
     const view = !d.items.length ? `<div class="mt-24">${ui.empty('진열대 데이터가 없어요. 데이터 업데이트에서 Weee! · Amazon 진열대를 모으세요 (Firecrawl · SerpApi 키 필요).', 'grid')}</div>`
       : S.shelfView === 'board' ? boardHtml(d)
-        : S.shelfView === 'cards' ? overview + linesSection(d) + `<div class="grid-3 mt-24">${cols}</div>${unknown}`
+        : S.shelfView === 'cards' ? overview + linesSection(d) + bucketFold + unknown
           : pantryHtml(d, priced);
     return demoNote(d.demo) + qHead('shelf', d.oneLine, d.items.length ? seg : '') + view +
       fold('shelf-table', '표로 보기 · 수집 · 고치기', table);
