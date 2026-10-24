@@ -173,7 +173,6 @@
 .part-insights .ins-reviews li { padding: 12px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
 .part-insights .ins-reviews li:last-child { border-bottom: 0; }
 .part-insights .ins-reviews p { margin-top: 6px; }
-.part-insights .ins-chart { position: relative; height: 300px; }
 
 /* 데이터 업데이트 창 */
 .part-insights .ins-item { display: flex; gap: 12px; align-items: flex-start; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; margin-top: 8px; cursor: pointer; }
