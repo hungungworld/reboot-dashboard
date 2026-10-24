@@ -177,7 +177,9 @@ def top_questions(month=None, limit=5):
     rows = Comment.query.filter_by(month=month, is_question=True, relevant=True).order_by(Comment.likes.desc()).all()
     counts, examples = Counter(), defaultdict(list)
     for c in rows:
-        k = c.topic or "other"
+        k = c.topic
+        if k not in QUESTION_LABEL:  # 주제 없음 · 예전 '기타'는 집계하지 않음
+            continue
         counts[k] += 1
         if len(examples[k]) < 3:
             examples[k].append(c.text[:300])
@@ -278,7 +280,7 @@ def weekly_context(t=None):
     now, prev, info = snapshots(week_key(t))
     series, _ = latest_trends()
     ctx = {"today": t, "shelf_now": now, "shelf_prev": prev, "seasons": catalog.list_seasons(today=t), "trends": series,
-           "questions": top_questions(), "own_complaints": own_complaints()}
+           "questions": top_questions(limit=None), "own_complaints": own_complaints()}
     return ctx, info
 
 
@@ -661,7 +663,8 @@ def audience_view(month=None):
                       "video": vids[c.video_id].title if c.video_id in vids else "", "videoId": c.video_id, "by": c.classified_by}
                      for c in relevant[:150]],
         "process": {"found": len(videos), "kept": len(kept), "minViews": cfg.get("min_views"), "comments": len(comments),
-                    "relevant": len(relevant), "bySet": dict(by_set),
+                    "relevant": len(relevant), "noisePct": round((len(comments) - len(relevant)) * 100 / len(comments))
+                    if comments else None, "bySet": dict(by_set),
                     "queries": cfg.get("search_sets"), "ai": sum(1 for c in comments if c.classified_by == "ai")},
     }
 

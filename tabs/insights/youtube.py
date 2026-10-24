@@ -1,6 +1,7 @@
 """잠재 고객 (YouTube Data API v3) — 월 1회.
 
-검색어 세트 A · B · K → 영상 검색(100 units/회) → 조회수 확인(1 unit/50개) → 최소 조회수 통과 영상의 댓글(1 unit/영상)
+검색어 세트 A · B · K → 영상 검색(100 units/회) → 조회수 확인(1 unit/50개)
+→ 최소 조회수 + 제목이 해결책 · 제품 · 리뷰 영상인 것만 댓글(1 unit/영상)
 댓글은 작성자 이름 없이 본문만 저장하고, 규칙으로 관련 여부 · 질문 주제를 바로 붙입니다.
 """
 from server.extensions import db
@@ -66,7 +67,11 @@ def collect(cfg, key, month):
                 v.update(views=to_int(st.get("viewCount")), likes=to_int(st.get("likeCount")),
                          comment_count=to_int(st.get("commentCount")))
     min_views = int(cfg.get("min_views") or 0)
-    kept = [v for v in found.values() if (v["views"] or 0) >= min_views]
+    own = cfg.get("own_terms") or []
+    for v in found.values():
+        v["kept"] = (v["views"] or 0) >= min_views and classify.video_on_topic(v["title"], own)
+    off_topic = sum(1 for v in found.values() if (v["views"] or 0) >= min_views and not v["kept"])
+    kept = [v for v in found.values() if v["kept"]]
     comments, disabled = [], 0
     for v in kept:
         if v.get("comment_count") == 0:
@@ -92,7 +97,7 @@ def collect(cfg, key, month):
         row = db.session.get(Video, v["id"]) or Video(id=v["id"])
         for k in ("title", "channel", "channel_id", "published_at", "views", "likes", "comment_count", "query_set", "search_query"):
             setattr(row, k, v[k])
-        row.month, row.kept, row.collected_at = month, (v["views"] or 0) >= min_views, now
+        row.month, row.kept, row.collected_at = month, v["kept"], now
         db.session.add(row)
     for c in comments:
         row = db.session.get(Comment, c["id"]) or Comment(id=c["id"])
@@ -103,5 +108,7 @@ def collect(cfg, key, month):
             row.relevant, row.is_question, row.topic, row.classified_by = cls["relevant"], cls["is_question"], cls["topic"], "rule"
         db.session.add(row)
     db.session.commit()
-    return {"count": len(kept), "found": len(found), "comments": len(comments), "units": units,
-            "warnings": [f"댓글이 꺼진 영상 {disabled}개는 건너뛰었어요."] if disabled else []}
+    warnings = [f"댓글이 꺼진 영상 {disabled}개는 건너뛰었어요."] if disabled else []
+    if off_topic:
+        warnings.append(f"제목이 숙취해소 제품 · 리뷰와 맞지 않는 영상 {off_topic}개는 댓글을 모으지 않았어요.")
+    return {"count": len(kept), "found": len(found), "comments": len(comments), "units": units, "warnings": warnings}
