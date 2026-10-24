@@ -337,6 +337,14 @@ def run_dict(r):
             "finishedAt": iso(r.finished_at), "user": r.user_name}
 
 
+def comp_changes(now, prev):
+    """이번 주 경쟁사 변화 — 경쟁사 탭 · 주간 리뷰 요약이 같은 숫자를 쓰도록 여기서만 계산 → (변화 목록 또는 None, 예시 여부)."""
+    changes = competitors.weekly_changes(now, prev)
+    if changes is None and any(not x["own"] for x in now):   # 지난주 수집이 없으면 시연용 예시 지난주와 비교 (화면에 '예시' 배지)
+        return competitors.weekly_changes(now, competitors.demo_prev(now)), True
+    return changes, False
+
+
 def weekly_view(t=None):
     t = t or today()
     ctx, info = weekly_context(t)
@@ -349,8 +357,7 @@ def weekly_view(t=None):
             a.update(fact=w["fact"], why=w["why"], todo=w["todo"], ai=True)
         a.pop("weight", None)
     now, prev = ctx["shelf_now"], ctx["shelf_prev"]
-    changes = _changes(now, prev)
-    price_moves = [v for v in changes.values() if not v["new"] and v.get("pricePct") is not None and abs(v["pricePct"]) >= 10]
+    chg, chg_demo = comp_changes(now, prev)
     weee = sorted([x for x in now if x["source"] == "weee" and x["perServing"] is not None], key=lambda x: x["perServing"])
     own_pos = None
     for i, x in enumerate(weee, start=1):
@@ -386,8 +393,11 @@ def weekly_view(t=None):
         "actions": actions, "aiUsed": any(a["ai"] for a in actions), "aiReady": insights_ai.ready(),
         "aiAt": iso(ai_row.created_at) if ai_row else None,
         "shelf": {"total": len(now), "oos": sum(1 for x in now if x["in_stock"] is False and not x["own"]),
-                  "ownOos": sum(1 for x in now if x["in_stock"] is False and x["own"]), "priceChanges": len(price_moves),
-                  "newEntries": sum(1 for v in changes.values() if v["new"]), "compare": prev is not None,
+                  "ownOos": sum(1 for x in now if x["in_stock"] is False and x["own"]), "compare": prev is not None,
+                  "compChanges": None if chg is None else {
+                      "total": len(chg), "demo": chg_demo, "price": sum(1 for c in chg if c["kind"] == "price"),
+                      "new": sum(1 for c in chg if c["kind"] == "new"),
+                      **{g: sum(1 for c in chg if c["group"] == g) for g in ("threat", "chance", "watch")}},
                   "weeks": {src: {"now": week_label(i["week"]), "prev": week_label(i["prev"]) if i["prev"] else None}
                             for src, i in info.items()},
                   "ownWeee": own_pos, "ownCount": sum(1 for x in now if x["own"]),
@@ -628,10 +638,7 @@ def _analysis_view(now, prev, cols, watch, total):
     if own_items:
         own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤 (자사)", own=True,
                    tierLabel="자사", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
-    changes = competitors.weekly_changes(now, prev)
-    changes_demo = False
-    if changes is None and any(not x["own"] for x in now):   # 지난주 수집이 없으면 시연용 예시 지난주와 비교 (화면에 '예시' 배지)
-        changes, changes_demo = competitors.weekly_changes(now, competitors.demo_prev(now)), True
+    changes, changes_demo = comp_changes(now, prev)
     analyzed = sum(1 for d in rows if d["analyzed"])
     chans = sorted({ch["label"] for d in rows for ch in d["channels"]})
     one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 판매 채널 {' · '.join(chans) or '없음'}"

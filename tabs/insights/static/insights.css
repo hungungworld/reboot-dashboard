@@ -632,6 +632,17 @@
 .part-insights .ins-slack-done { color: var(--purple); border-color: var(--purple); background: var(--purple-bg); }
 
 /* 주간 리뷰: 누르면 이동하는 카드 · 이동해 온 제품 카드 강조 */
-.part-insights .ins-card-link { cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-.part-insights .ins-card-link:hover { border-color: var(--line-2); box-shadow: var(--shadow); }
 .part-insights .ins-line.ins-flash { box-shadow: 0 0 0 3px var(--lime); transition: box-shadow .3s; }
+/* 이번 주 변화 요약: 1행 3칸, 칸 전체가 링크 */
+.part-insights .ins-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.part-insights .ins-sum-tile { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--soft-2); color: inherit; text-decoration: none; transition: border-color .15s, background .15s; }
+.part-insights .ins-sum-tile:hover { border-color: var(--line-2); background: var(--surface); }
+.part-insights .ins-sum-label { font-size: 11px; color: var(--muted); font-weight: 600; padding-right: 20px; }
+.part-insights .ins-sum-tile b { font-size: 22px; color: var(--ink); letter-spacing: -.5px; line-height: 1.2; }
+.part-insights .ins-sum-tile.red b { color: var(--red); }
+.part-insights .ins-sum-of { font-size: 13px; color: var(--muted); font-weight: 600; }
+.part-insights .ins-sum-tile small { font-size: 12px; color: var(--text); line-height: 1.5; }
+.part-insights .ins-sum-go { position: absolute; top: 12px; right: 12px; color: var(--muted); }
+.part-insights .ins-sum-go .icon { width: 14px; height: 14px; }
+@media (max-width: 640px) { .part-insights .ins-sum { grid-template-columns: 1fr; } }

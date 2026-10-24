@@ -106,7 +106,8 @@ def weekly_docx(t=None):
     s = v["shelf"]
     d.add_heading("진열대 요약", level=2)
     if s["total"]:
-        cmp_txt = (f"지난 수집 대비 가격 변동 {s['priceChanges']}개 · 신규 진입 {s['newEntries']}개" if s["compare"]
+        cc = s.get("compChanges")
+        cmp_txt = (f"지난 수집 대비 경쟁사 변화 {cc['total']}건 (가격 변동 {cc['price']} · 새 상품 {cc['new']})" if s["compare"] and cc
                    else "첫 수집이라 변화 비교는 다음 수집부터예요")
         _p(d, f"상품 {s['total']}개 · 경쟁 상품 품절 {s['oos']}개 · 자사 품절 {s['ownOos']}개 · {cmp_txt}.")
         if s.get("ownWeee"):
