@@ -162,6 +162,16 @@ def test_pick_keeps_trends_in_their_own_slots():
     assert [c["id"] for c in out[3:]] == [10, 11, 12, 13]
 
 
+def test_pick_spreads_trends_across_sources():
+    kinds = {"trend": "trend"}.get
+    mr = [{"id": i, "area": "trend", "domain": "Modern Retail", "score": 9} for i in range(4)]
+    others = [{"id": 10, "area": "trend", "domain": "Mintel", "score": 3}, {"id": 11, "area": "trend", "domain": "NOSH", "score": 2}]
+    out = news.pick(mr + others, kinds)
+    assert sorted(c["id"] for c in out) == [0, 1, 10, 11]          # 한 매체 2개까지 · 다른 매체로 채움
+    only = news.pick(mr + others[:1], kinds)
+    assert sorted(c["id"] for c in only) == [0, 1, 2, 10]          # 다른 매체가 모자라면 점수순으로 채움
+
+
 def test_client_parses_rss_and_retries(monkeypatch):
     slept = []
     now = _now().replace(microsecond=0)
