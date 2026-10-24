@@ -100,7 +100,7 @@ def test_queries_are_plain_search_terms():
     cfg = news.load_queries()
     queries = [g for g in cfg["groups"] if not g.get("feed")]
     feeds = [g for g in cfg["groups"] if g.get("feed")]
-    assert len(queries) == 9  # 2026-10-24 팀 결정 (분야 7개 · 검색어 9개)
+    assert len(queries) == 8  # 2026-10-24 팀 결정 (9개 → 무알코올 · 기능성 합쳐 8개)
     assert len(feeds) == 6 and "trend" in {g["area"] for g in feeds}   # 업계지 · 트렌드 피드 (같은 날 추가)
     for g in queries:
         assert g.get("label") and news.build_query(cfg, g) == g["query"]
@@ -248,7 +248,7 @@ def test_news_before_first_collection(auth_client):
     j = auth_client.get("/api/home/news").get_json()
     assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False
     assert len(j["groups"]) >= 3 and "판매량" in j["limitNote"]
-    assert len(j["queryStats"]) == 15 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
+    assert len(j["queryStats"]) == 14 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
 
 
 def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
@@ -316,17 +316,31 @@ def test_partial_failure(fast, auth_client, monkeypatch):
     assert auth_client.get("/api/home/news").get_json()["status"] == "partial"
 
 
+TREND_IDS = {"marketingdive", "modernretail", "mintel", "nosh"}
+
+
+def test_vague_copy_filter(monkeypatch):
+    assert news.vague("새로운 기회가 될 수 있다") and news.vague("전략을 세워야 한다")
+    assert not news.vague("Liquid I.V.가 F1 협찬 — 스포츠 관람 시즌 채널 검토")
+    monkeypatch.setattr(news, "STRICT_COPY", False)
+    assert not news.vague("새로운 기회")
+
+
 def test_ai_filter_and_korean_items(fast, auth_client, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     make_session(monkeypatch, good_responder)
     seen = {}
 
     def fake_openai_json(system, user, **kw):
+        if user["section"] == "trend":   # 트렌드는 따로 부름 (여기선 고를 것 없음)
+            assert all(a["group"] in TREND_IDS for a in user["articles"])
+            return {"relevant_ids": [], "headline": "", "articles": []}
         ids = [a["id"] for a in user["articles"]]
         hang = next(a["id"] for a in user["articles"] if a["title"].startswith("Hangover trend"))
         seen.update(system=system, user=user, kw=kw)
         return {"relevant_ids": ids[:3] + [99999], "headline": "핼러윈 앞두고 무알코올 보도가 늘었습니다.",
-                "articles": [{"id": hang, "title_ko": "숙취 관련 보도 증가", "summary_ko": "숙취 관련 기사가 늘었습니다.", "topic": "소비 트렌드"},
+                "articles": [{"id": hang, "title_ko": "숙취 관련 보도 증가", "summary_ko": "숙취 관련 기사가 늘었습니다.", "topic": "소비 트렌드",
+                              "why_ko": "숙취 시장에 큰 기회가 될 수 있다"},
                              {"id": hang, "title_ko": "중복", "summary_ko": "x", "topic": "업계 일반"},
                              {"id": 12345, "title_ko": "없는 기사", "summary_ko": "x", "topic": "판매 동향"}]}
 
@@ -336,13 +350,16 @@ def test_ai_filter_and_korean_items(fast, auth_client, monkeypatch):
         assert run.ai_status == "ok"
         assert HomeNewsArticle.query.filter(HomeNewsArticle.relevant.is_(True)).count() == 4
     assert "본문" in seen["system"] and seen["kw"]["schema"]["additionalProperties"] is False
-    assert seen["kw"]["part"] == "home" and seen["user"]["signals"] and seen["user"]["articles"][0]["source"]
+    assert seen["kw"]["part"] == "home" and "signals" not in seen["user"] and seen["user"]["articles"][0]["source"]   # 급증 수치는 AI에 안 줌
     j = auth_client.get("/api/home/news").get_json()
-    assert j["aiReady"] is True and j["ai"]["headline"].startswith("핼러윈")
+    assert j["aiReady"] is True and j["ai"]["headline"] == "업계: 핼러윈 앞두고 무알코올 보도가 늘었습니다."
     assert seen["user"]["articles"][0]["area"] and "why_ko" in seen["kw"]["schema"]["properties"]["articles"]["items"]["required"]
-    assert len(j["ai"]["items"]) == 1  # 겹친 기사 · 없는 기사는 버림
-    it = j["ai"]["items"][0]
+    items = j["ai"]["items"]
+    assert len(items) == 4 and [i["fallback"] for i in items] == [False, True, True, True]  # 겹친 · 없는 기사는 버리고, 관련 기사로 채움
+    assert all(i["titleKo"] == "" and i["kind"] != "trend" for i in items[1:])
+    it = items[0]
     assert it["titleKo"] == "숙취 관련 보도 증가" and it["topic"] == "소비 트렌드" and it["surge"] is True
+    assert it["whyKo"] == ""   # 막연한 문구('기회')는 버림
     assert it["url"].startswith("https://") and it["title"].startswith("Hangover trend") and it["domain"] == "Trend"
     assert all(a["relevant"] for a in j["articles"])
     with fast.app_context():
@@ -365,6 +382,8 @@ def test_feed_drops_old_articles_and_ai_trend_slot(fast, auth_client, monkeypatc
     make_session(monkeypatch, responder)
 
     def fake_openai_json(system, user, **kw):
+        if user["section"] == "news":
+            return {"relevant_ids": [], "headline": "", "articles": []}
         tid = next(a["id"] for a in user["articles"] if a["title"].startswith("Brands bet"))
         return {"relevant_ids": [tid], "headline": "h",
                 "articles": [{"id": tid, "title_en": "Brands bet on TikTok Shop live sales", "title_ko": "틱톡샵 라이브 판매 확대",

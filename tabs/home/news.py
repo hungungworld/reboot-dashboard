@@ -1,12 +1,14 @@
 """미국 주류 업계 뉴스 · 트렌드 (README 2장) — 구글 뉴스 RSS · 업계지 RSS 수집 → 규칙 거르기 → 저장(URL·제목 중복 제거) → 보도 급증 → AI 점수·기사별 한국어 요약.
 
 - 화면을 열 때는 구글 뉴스를 부르지 않음 (저장된 결과만). 수집은 '지금 수집' 버튼(뒤에서 실행) · 하루 1회 작업
-- 검색어: tabs/home/data/queries.json (분야 8개 · 검색어 9개 + 업계지 피드 6개 · signal/flow/trend)
+- 검색어: tabs/home/data/queries.json (분야 8개 · 검색어 8개 + 업계지 피드 6개 · signal/flow/trend)
 - 업계지 피드는 검색어 없이 사이트 기사를 다 받으므로 14일 안 기사만 남기고, 보도 급증 계산에서는 뺌
 - 규칙 거르기 (무료): 사고 · 범죄 단어 · 비유 hangover(AI hangover 등) · 인사 소식 · 미국 밖 시장 · 한국어 제목(K-푸드만 허용)
 - AI(OpenAI 키가 있을 때만): 관련 기사마다 점수(REBOOT와의 거리 · 실행 가능성 · 출처 · 새로움) + '왜 중요한가'
   → 업계 뉴스 최대 8개: signal 분야(숙취 · 경쟁사 · 규제)는 2개씩 자리 보장, 한 분야는 3개까지, 나머지는 점수순
   → 트렌드(trend 분야: 마케팅 · 소비자 매체)는 따로 점수순 최대 4개
+  AI는 업계 뉴스 · 트렌드를 나눠 2번 부름 (한 번에 많이 시키면 후보를 적게 냄). 그래도 자리가 남으면 관련 기사 최신순으로 채움(요약 없음)
+  보도 급증 수치는 AI에 주지 않음 (요약이 급증 칩에 끌려가지 않게)
   제목만 보고 씀 (본문 추측 금지)
 - 실패하면 마지막 결과를 그대로 두고 화면에 '업데이트 실패' 표시
 """
@@ -33,6 +35,9 @@ AI_PER_GROUP = 20  # 검색어마다 최신 20개까지 → 기사가 많은 분
 MAX_ITEMS = 8
 TREND_ITEMS = 4    # 트렌드 칸 최대
 AI_CANDIDATES = 20
+# 막연한 문구 거르기 (켜 보고 별로면 False): 이 표현이 든 '왜 중요' · 요약 줄은 버림
+STRICT_COPY = True
+VAGUE = ("기회", "필요하다", "필요합니다", "필요가 있", "전략을 세워", "해야 한다", "해야 합니다", "중요하다", "주목해야")
 SIGNAL_SLOTS = 2   # signal 분야마다 자리 보장
 AREA_CAP = 3       # 한 분야 최대
 STATS_DAYS = 60    # 검색어 점검 기간 (이 기간 동안 고른 카드가 0개면 교체 후보)
@@ -46,6 +51,7 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
 
 규칙
 - 기사 제목과 매체에 있는 내용만 근거로 씁니다. 본문을 읽은 것처럼 쓰거나, 주어지지 않은 숫자·사실을 만들지 않습니다.
+- section이 news면 업계 뉴스만 다룹니다 (area에 trend를 쓰지 않음). section이 trend면 모든 기사를 area trend로 봅니다.
 - 기사마다 검색한 분야(area)가 붙어 있지만, 기사 내용에 맞는 분야를 다시 고릅니다 (area: category 숙취 카테고리 · competitor 경쟁사 ·
   regulation 규제 · behavior 음주 행태 · nonalc 무알코올·기능성 · sales 주류 판매 · kfood K-푸드 · trend 트렌드). 예: FDA로 찾았어도 Z세대 음주 기사면 behavior.
 - 고를 기사 (넓게 고르고 점수로 가립니다): 숙취 제품 · 성분(DHM · 전해질 등), 경쟁 브랜드 소식(Liquid I.V. · ZBiotics 등의 협찬 · 신제품 · 캠페인),
@@ -59,7 +65,7 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
 - 버릴 기사: 'hangover'를 비유로 쓴 기사(예: AI hangover, tariff hangover, DOGE hangover, post-election hangover — 술과 무관하면 모두 뺌),
   음주 사고·범죄, 주가·인물 가십, 인사 소식, 미국 밖 시장만 다룬 기사, 무관한 산업.
 - relevant_ids: 관련 있는 기사 id 전부.
-- articles: 관련 기사 중 후보 15~20개 (그중 트렌드는 6개까지). 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
+- articles: section news면 후보 12~16개 — 관련 기사가 있는 분야는 분야마다 2개 이상. section trend면 후보 4~6개. 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
   (특히 숙취 카테고리 · 경쟁사 · 규제는 기사 수가 적어도 꼭 확인). 기사마다 점수를 매깁니다 (점수 합으로 서버가 최종 8개를 고름).
   distance(REBOOT와의 거리): 2 = 숙취 제품·성분 · 경쟁 브랜드 · 영양제/식품 규제, 1 = 음주 행태 · 무알코올·기능성 음료 · K-푸드, 0 = 주류 업계 일반
   action(실행 가능성): 2 = 이번 주 카피·캠페인·채널에 바로 반영할 수 있음, 1 = 참고, 0 = 없음
@@ -70,8 +76,9 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
   좋은 예: "DHM 성분 관심 기사 — 우리 상세페이지에 성분 설명이 있는지 확인" · "Liquid I.V.가 F1 협찬 — 스포츠 관람 시즌 채널 검토"
   · "FDA 신규 성분 신고 지침 — 성분 표기 · 효능 문구를 컴플라이언스 탭에서 다시 점검")
   topic(판매 동향 / 소비 트렌드 / 규제·정책 / 경쟁·신제품 / 업계 일반)
-- headline: 전체를 한국어 2문장 이내로 — 무엇이 일어나고 REBOOT 마케팅에 무슨 의미인지.
-- signals(보도 급증)가 있으면 '보도가 늘었다'고만 쓰고, 판매·수요가 늘었다고 단정하지 않습니다.
+- headline: 한국어 한 문장. 고른 기사 하나를 근거로 브랜드 · 성분 · 채널 · 규제 이름을 넣고, REBOOT가 무엇을 확인할지까지.
+  "기회다" · "필요하다" · "전략을 세워야" · "주목해야" 같은 막연한 표현은 쓰지 않습니다.
+  좋은 예: "Liquid I.V.가 연말 파티 시즌 번들을 냈어요 — 우리 연말 묶음 구성과 가격을 비교해 보세요."
 - 숙취 해소 효능을 단정하는 표현(cure · prevent · treat)을 쓰지 않습니다."""
 
 AI_SCHEMA = {
@@ -292,21 +299,26 @@ def pick(cands, kind_of, limit=MAX_ITEMS, trend_limit=TREND_ITEMS):
     return sorted(out, key=lambda c: -c["score"]) + trends
 
 
-def summarize(articles, signals, cfg):
-    """AI 관련성 필터링 + 점수 · 기사별 한국어 요약 → 자리 규칙으로 최대 8개 → (summary dict, 관련 기사 id 집합)."""
+def vague(text):
+    return STRICT_COPY and any(w in str(text or "") for w in VAGUE)
+
+
+def _ask(section, articles, cfg):
+    """AI 1번 (section: news 업계 뉴스 / trend 트렌드) → (후보 목록, 관련 id 집합, 한 줄 요약)."""
+    if not articles:
+        return [], set(), ""
     ids = {a.id for a in articles}
     by_group = {g["id"]: g for g in cfg["groups"]}
     kinds = {g["area"]: g["kind"] for g in cfg["groups"]}  # AI가 고른 분야도 여기 있는 것만 씀
     area_of = {a.id: (by_group.get(a.group_id) or {}).get("area", a.group_id) for a in articles}
     data = {
+        "section": section,
         "articles": [{"id": a.id, "title": a.title, "source": a.domain, "date": a.seen_at.strftime("%Y-%m-%d"),
                       "group": a.group_id, "area": (by_group.get(a.group_id) or {}).get("areaLabel", "")} for a in articles],
-        "groups": groups_public(cfg),
-        "signals": [{"group": s["group"], "label": s["label"], "recent": s.get("recent"), "previous": s.get("previous"),
-                     "surge": s.get("surge")} for s in signals],
+        "groups": [g for g in groups_public(cfg) if (g["kind"] == "trend") == (section == "trend")],
     }
-    raw = openai_json(AI_SYSTEM, data, schema=AI_SCHEMA, schema_name="news_items", max_tokens=6500,
-                      part="home", action="미국 주류 업계 뉴스 · 트렌드 필터링·요약")
+    raw = openai_json(AI_SYSTEM, data, schema=AI_SCHEMA, schema_name="news_items", max_tokens=4000,
+                      part="home", action=f"미국 시장 브리핑 {'트렌드' if section == 'trend' else '업계 뉴스'} 필터링·요약")
     relevant = {i for i in (raw.get("relevant_ids") or []) if isinstance(i, int) and i in ids}
     cands, used = [], set()
     titles = {a.id: a.title for a in articles}
@@ -321,15 +333,50 @@ def summarize(articles, signals, cfg):
             continue  # 없는 기사 · 겹친 기사 · 제목 없는 항목은 버림
         used.add(aid)
         relevant.add(aid)
+        area = it.get("area") if it.get("area") in kinds else area_of[aid]
+        if (kinds.get(area) == "trend") != (section == "trend"):
+            area = "trend" if section == "trend" else area_of[aid]  # 칸을 넘나들지 않게
+        why = str(it.get("why_ko") or "").strip()[:200]
         cands.append({"id": aid, "title_ko": title_ko, "summary_ko": str(it.get("summary_ko") or "").strip()[:300],
-                      "why_ko": str(it.get("why_ko") or "").strip()[:200],
+                      "why_ko": "" if vague(why) else why,
                       "topic": it.get("topic") if it.get("topic") in TOPICS else "업계 일반",
-                      "score": score_of(it), "area": it.get("area") if it.get("area") in kinds else area_of[aid]})
+                      "score": score_of(it), "area": area})
         if len(cands) >= AI_CANDIDATES:
             break
-    items = pick(cands, lambda area: kinds.get(area, "flow"))
-    return {"headline": str(raw.get("headline") or "").strip()[:300], "items": items,
-            "relevant_ids": sorted(relevant)}, relevant
+    head = str(raw.get("headline") or "").strip()[:200]
+    return cands, relevant, "" if vague(head) else head
+
+
+def _fill(items, relevant, articles, area_of, limit):
+    """AI가 고른 카드가 limit보다 적으면 관련 기사 최신순으로 채움 (한국어 요약 없음 · fallback 표시)."""
+    used = {c["id"] for c in items}
+    for a in sorted(articles, key=lambda a: a.seen_at, reverse=True):
+        if len(items) >= limit:
+            break
+        if a.id in relevant and a.id not in used:
+            items.append({"id": a.id, "title_ko": "", "summary_ko": "", "why_ko": "", "topic": "업계 일반", "score": 0,
+                          "area": area_of[a.id], "fallback": True})
+            used.add(a.id)
+    return items
+
+
+def summarize(articles, cfg):
+    """업계 뉴스 · 트렌드를 나눠 AI 2번 → 자리 규칙으로 업계 최대 8개 + 트렌드 최대 4개 (모자라면 관련 기사로 채움)
+    → (summary dict, 관련 기사 id 집합). 한쪽 AI가 실패하면 AIError를 그대로 올림."""
+    by_group = {g["id"]: g for g in cfg["groups"]}
+    kinds = {g["area"]: g["kind"] for g in cfg["groups"]}
+    area_of = {a.id: (by_group.get(a.group_id) or {}).get("area", a.group_id) for a in articles}
+    is_trend = {a.id: kinds.get(area_of[a.id]) == "trend" for a in articles}
+    news_arts = [a for a in articles if not is_trend[a.id]]
+    trend_arts = [a for a in articles if is_trend[a.id]]
+    c1, r1, h1 = _ask("news", news_arts, cfg)
+    c2, r2, h2 = _ask("trend", trend_arts, cfg)
+    picked = pick(c1 + c2, lambda area: kinds.get(area, "flow"))
+    news_items = _fill([c for c in picked if kinds.get(c["area"]) != "trend"], r1, news_arts, area_of, MAX_ITEMS)
+    trend_items = _fill([c for c in picked if kinds.get(c["area"]) == "trend"], r2, trend_arts, area_of, TREND_ITEMS)
+    lines = ([f"업계: {h1}"] if h1 else []) + ([f"트렌드: {h2}"] if h2 else [])
+    relevant = r1 | r2
+    return {"headline": "\n".join(lines), "items": news_items + trend_items, "relevant_ids": sorted(relevant)}, relevant
 
 
 # ───────── 수집 ─────────
@@ -439,7 +486,7 @@ def _collect(run, client, user_name):
             run.ai_status, run.ai_error = "skipped", "요약할 최근 기사가 없음"
         else:
             try:
-                summary, relevant = summarize(arts, signals, cfg)
+                summary, relevant = summarize(arts, cfg)
                 for a in arts:
                     a.relevant = a.id in relevant
                 run.summary, run.ai_status, run.model = _dumps(summary), "ok", openai_model()[:80]
@@ -502,7 +549,7 @@ def payload():
             d = a.to_dict()
             items.append(dict(d, titleKo=it.get("title_ko", ""), summaryKo=it.get("summary_ko", ""),
                               whyKo=it.get("why_ko", ""), score=it.get("score"), areaLabel=areas.get(it.get("area"), ""),
-                              topic=it.get("topic", ""), kind=kinds.get(it.get("area"), "flow"), groupLabel=labels.get(a.group_id, ""),
+                              topic=it.get("topic", ""), kind=kinds.get(it.get("area"), "flow"), fallback=bool(it.get("fallback")), groupLabel=labels.get(a.group_id, ""),
                               surge=bool(surging & set(d["groups"]))))
         ai = {"headline": s.get("headline", ""), "items": items, "at": iso(ai_run.finished_at), "model": ai_run.model}
 
