@@ -1678,7 +1678,7 @@
     return `<div class="cnt-ai-settings">
       <div class="setting-row"><div><b>대화·제작 AI</b><p>대화 · 추천 · 기획 · 카피 · 보조 검토를 모델 하나로 해요.</p></div>
         <div class="cnt-model">${esc(textModel())} ${ready ? badge('연결됨', 'green') : badge('키 없음', 'orange')}</div></div>
-      <div class="setting-row"><div><b>이미지 AI</b><p>이미지 작업 때만 써요. OpenAI · ${esc(meta.imageModel || 'gpt-image-1')} 또는 Higgsfield · ${esc(meta.higgsfieldImageModel || 'marketing-studio/image')} (제품·Rebu 사진을 참고 이미지로 넣어요).</p></div>
+      <div class="setting-row"><div><b>이미지 AI</b><p>이미지 작업 때만 써요. OpenAI · ${esc(meta.imageModel || 'gpt-image-2.5-sunburst')} 또는 Higgsfield · ${esc(meta.higgsfieldImageModel || 'marketing-studio/image')} (제품·Rebu 사진을 참고 이미지로 넣어요).</p></div>
         <select class="cnt-model" data-setting="image_provider" aria-label="이미지 AI">${opts(providersImg, st.image_provider || 'openai')}</select></div>
       <div class="setting-row"><div><b>영상 AI</b><p>실제 영상은 Higgsfield ${esc(video.model || 'Seedance 2.0')} · ${esc(video.resolution || '720p')} · 4~15초 · 소리 없음 (유료 · 명확히 요청할 때만).${hfKey ? '' : ' HIGGSFIELD_API_KEY가 없으면 구성안만 만들어요.'}</p></div>
         <select class="cnt-model" data-setting="video_mode" aria-label="영상 AI">${opts(modes, st.video_mode || 'plan_only')}</select></div>

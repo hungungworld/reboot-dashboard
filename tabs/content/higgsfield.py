@@ -58,7 +58,8 @@ def _check(res, what):
         return
     detail = _detail(res)
     if res.status_code in (401, 403):
-        raise ProviderError("Higgsfield 키가 올바르지 않거나 권한이 없습니다 (설정 › 연결 확인).", 503)
+        raise ProviderError(f"Higgsfield 키가 올바르지 않거나 권한이 없습니다 ({res.status_code}"
+                            + (f" · {detail}" if detail else "") + " · 설정 › 연결 확인).", 503)
     if res.status_code == 402:
         raise ProviderError("Higgsfield 크레딧이 부족합니다. 충전 후 다시 요청하세요.", 402)
     if res.status_code == 404:

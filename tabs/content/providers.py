@@ -2,7 +2,7 @@
 
 - 텍스트: 공통 server.core.ai.openai_json (작업 로그 자동 기록). 모델은 CONTENT_TEXT_MODEL → OPENAI_MODEL 순서 (하나만)
 - 텍스트 + 레퍼런스 이미지: call_json_images (같은 모델 · 공용 작업 로그에 같은 형식으로 기록)
-- 이미지: OpenAI Images (CONTENT_IMAGE_MODEL, 기본 gpt-image-1). 유료 호출이라 자동 재시도하지 않음 (max_retries=0)
+- 이미지: OpenAI Images (CONTENT_IMAGE_MODEL, 기본 gpt-image-2.5-sunburst). 유료 호출이라 자동 재시도하지 않음 (max_retries=0)
   응답 시간 초과는 '제출 여부 불명'(SubmissionUnknown)으로 따로 알려 다시 제출하지 않게 함 (README 8장)
 - 연결 확인: 모델 조회(models.retrieve)만 — 생성 비용 없음
 테스트는 이 모듈의 call_json · ready · generate_image · edit_image · check_connection을 바꿔 끼웁니다 (인터넷·키 없이).
@@ -12,7 +12,7 @@ import base64
 from server import envkeys, worklog
 from server.core.ai import AIError, openai_json, openai_model, openai_ready
 
-DEFAULT_IMAGE_MODEL = "gpt-image-1"
+DEFAULT_IMAGE_MODEL = "gpt-image-2.5-sunburst"  # gpt-image-1은 2026-10-23 종료
 IMAGE_TIMEOUT = 240
 
 
@@ -122,6 +122,16 @@ def _png_from(res):
         raise ProviderError("이미지 결과를 읽지 못했습니다.")
 
 
+def _bad_request_detail(e):
+    """OpenAI가 알려 준 거절 이유 (어떤 값이 왜 틀렸는지). 키·프롬프트는 들어 있지 않음."""
+    body = getattr(e, "body", None)
+    body = body if isinstance(body, dict) else {}
+    msg = str(body.get("message") or getattr(e, "message", "") or "").strip()
+    param = body.get("param") or getattr(e, "param", None)
+    bits = ([f"항목: {param}"] if param else []) + ([msg[:200]] if msg else [])
+    return (" · " + " · ".join(bits)) if bits else ""
+
+
 def _run(fn, model):
     import openai
     try:
@@ -138,7 +148,7 @@ def _run(fn, model):
         code = getattr(e, "code", None) or "bad_request"
         if "moderation" in str(code) or "safety" in str(code):
             raise ProviderError("이미지 모델의 안전 정책에 걸려 만들지 못했습니다. 요청 표현을 바꿔 보세요.", 400)
-        raise ProviderError(f"이미지 요청을 처리하지 못했습니다 ({code}).", 400)
+        raise ProviderError(f"이미지 요청을 처리하지 못했습니다 ({code}{_bad_request_detail(e)}).", 400)
     except openai.APIConnectionError:
         raise SubmissionUnknown("이미지 서버 연결이 끊겼습니다. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않습니다.", 502)
     except openai.APIStatusError as e:
