@@ -344,6 +344,55 @@
     }
   }
 
+  /* 업체 목록 › CSV 팝업: 지금 목록 내보내기 · CSV(또는 XLSX) 가져오기
+     내보낸 파일에 줄을 추가해 다시 가져오면 그 구분 목록이 파일 내용으로 바뀜 (협업 이력은 그대로) */
+  function csvModal(st) {
+    const im = st.data.imports || {};
+    const n = t => fmt.num((im[t] && im[t].count) || 0);
+    const body = doc.createElement('div');
+    body.className = 'part-partners ptn-csv';
+    body.innerHTML = `
+      <h3 class="ptn-csv-h">내보내기 (꺼내기)</h3>
+      <p class="small muted">지금 업체 목록을 가져오기와 같은 형식의 CSV로 받습니다. 엑셀에서 열어 줄을 추가 · 수정할 수 있어요.</p>
+      <div class="flex wrap mt-8">
+        <a class="btn small" href="/api/partners/export/catering.csv" download>${icon('download')}케이터링 CSV (${n('케이터링')}곳)</a>
+        <a class="btn small" href="/api/partners/export/influencer.csv" download>${icon('download')}인플루언서 CSV (${n('인플루언서')}곳)</a>
+      </div>
+      <h3 class="ptn-csv-h mt-24">가져오기 (추가 · 바꾸기)</h3>
+      <p class="small muted">CSV 또는 XLSX를 고르면 머리글을 보고 케이터링 · 인플루언서를 알아서 구분합니다.
+        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 위에서 내보낸 파일에 줄을 더해 올리세요. 협업 이력은 그대로 남습니다.</p>
+      <label class="dropzone ptn-out-drop mt-8">${icon('upload')}<span data-ref="csv-picked">파일을 눌러 고르세요</span>
+        <input type="file" class="sr-only" accept=".csv,.xlsx" data-ref="csv-file" aria-label="업체 CSV · XLSX 고르기"></label>
+      <p class="small muted mt-8">양식: <a class="link" href="/api/partners/template/catering.csv" download>케이터링 CSV</a> ·
+        <a class="link" href="/api/partners/template/influencer.xlsx" download>인플루언서 XLSX</a></p>`;
+    let file = null;
+    const ok = ui.modal({
+      title: 'CSV — 업체 목록 내보내기 · 가져오기', body,
+      onOpen: b => b.querySelector('[data-ref="csv-file"]').addEventListener('change', e => {
+        file = e.target.files && e.target.files[0];
+        b.querySelector('[data-ref="csv-picked"]').textContent = file ? `선택: ${file.name} (${fmtBytes(file.size)})` : '파일을 눌러 고르세요';
+      }),
+      actions: [{ label: '닫기', value: false }, { label: '가져오기', value: true, tone: 'lime', onClick: () => {
+        if (!file) { toast('가져올 파일을 고르세요.', 'error'); return false; }
+        return true;
+      } }]
+    });
+    ok.then(async v => {
+      if (v !== true || !file) return;
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      try {
+        const out = await REBOOT.upload('/api/partners/import', fd);
+        importNote = `<p class="note lime mb-16">가져왔습니다 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>`;
+        toast('업체 파일을 가져왔습니다.');
+        contactsP = null;
+        if (st.el.isConnected) renderContacts(fresh(st.el));
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+  }
+
   async function loadExample(st, btn) {
     ui.busy(btn, true);
     try {
@@ -401,7 +450,7 @@
     body.innerHTML = `<div class="workbench ptn-out-bench">
       <section class="card ptn-out-listcard ptn-cf-card">
         <div class="card-head wrap"><div class="ptn-head-title"><h2>업체 목록</h2><span data-ref="total"></span></div>
-          <div class="flex wrap"><button type="button" class="btn small" data-act="import-open">${icon('upload')}업체 파일 가져오기</button></div></div>
+          <div class="flex wrap"><button type="button" class="btn small" data-act="csv-open" title="업체 목록 CSV 내보내기 · 가져오기">${icon('download')}CSV</button></div></div>
         <div data-ref="bar"></div>
         <div data-ref="rows"></div>
         <p class="panel-note mt-8" data-ref="foot"></p>
@@ -921,6 +970,7 @@
           const c = st.data.items.find(x => x.id === act.dataset.id);
           if (c) compose(c);
         } else if (a === 'import-open') paintImport(st, !st.data.total, true);
+        else if (a === 'csv-open') csvModal(st);
         else if (a === 'import-upload') doImport(st, act);
         else if (a === 'example') loadExample(st, act);
         else if (a.startsWith('yt-')) ytAction(st, a, act);
@@ -1726,10 +1776,52 @@
     if (g.view === 'edit') {
       view.innerHTML = `<textarea class="input mono ptn-out-mdedit" rows="24" data-g="md" aria-label="가이드 Markdown 원문" placeholder="# REBOOT 협업 가이드&#10;&#10;## 1. 한 줄 요약&#10;> …">${esc(g.md)}</textarea>`;
     } else {
+      // 미리보기에서 바로 고치기: 문서를 눌러 고치면 Markdown 원문으로 바꿔 저장 (Word 변환 · 문구 점검이 그대로 씀)
       view.innerHTML = g.md.trim()
-        ? `<article class="prose ptn-out-prose">${ui.markdown(g.md)}</article>`
+        ? `<p class="small muted mb-8">문서를 눌러 바로 고칠 수 있어요. 표 칸 · 제목 · 문단 모두 됩니다. 줄 추가 · 표 모양 바꾸기는 원문 편집에서 하세요.</p>
+           <article class="prose ptn-out-prose ptn-out-editable" contenteditable="true" spellcheck="false" data-gedit aria-label="가이드 문서 (바로 수정)">${ui.markdown(g.md)}</article>`
         : ui.empty('아직 가이드가 없습니다. 위에서 가이드 초안 생성을 누르거나 원문 편집에서 직접 쓰세요.', 'doc');
     }
+  }
+
+  /* 미리보기 HTML → Markdown (가이드에 쓰는 모양만: 제목 · 문단 · 인용 · 목록 · 표 · 굵게/기울임 · 코드 · 링크 · 구분선) */
+  function inlineMd(node) {
+    return Array.from(node.childNodes).map(n => {
+      if (n.nodeType === 3) return n.nodeValue.replace(/\s+/g, ' ');
+      if (n.nodeType !== 1) return '';
+      const tag = n.tagName.toLowerCase();
+      const inner = inlineMd(n);
+      if (tag === 'br') return '  \n';
+      if (!inner.trim()) return inner;
+      if (tag === 'strong' || tag === 'b') return `**${inner.trim()}**`;
+      if (tag === 'em' || tag === 'i') return `*${inner.trim()}*`;
+      if (tag === 'code') return '`' + n.textContent + '`';
+      if (tag === 'a') return `[${inner.trim()}](${n.getAttribute('href') || ''})`;
+      return inner;
+    }).join('');
+  }
+  function blockMd(el) {
+    const out = [];
+    Array.from(el.children).forEach(n => {
+      const tag = n.tagName.toLowerCase();
+      const h = tag.match(/^h([1-6])$/);
+      if (h) out.push('#'.repeat(+h[1]) + ' ' + inlineMd(n).trim());
+      else if (tag === 'p') out.push(inlineMd(n).trim());
+      else if (tag === 'blockquote') out.push(blockMd(n).split('\n').map(l => '> ' + l).join('\n'));
+      else if (tag === 'ul' || tag === 'ol') {
+        out.push(Array.from(n.children).map((li, i) => `${tag === 'ol' ? (i + 1) + '.' : '-'} ${inlineMd(li).trim()}`).join('\n'));
+      } else if (tag === 'table') {
+        const rows = Array.from(n.querySelectorAll('tr')).map(tr => Array.from(tr.children).map(c => inlineMd(c).trim().replace(/\|/g, '\\|')));
+        if (rows.length) {
+          const line = r => `| ${r.join(' | ')} |`;
+          out.push([line(rows[0]), line(rows[0].map(() => '---'))].concat(rows.slice(1).map(line)).join('\n'));
+        }
+      } else if (tag === 'hr') out.push('---');
+      else if (tag === 'pre') out.push('```\n' + n.textContent.replace(/\n$/, '') + '\n```');
+      else if (tag === 'div') { const inner = blockMd(n); if (inner) out.push(inner); }
+      else { const t = inlineMd(n).trim(); if (t) out.push(t); }
+    });
+    return out.filter(x => x.trim()).join('\n\n');
   }
 
   function stripDoDont(md) {
@@ -1747,7 +1839,22 @@
   }
 
   function wireGuide(st, box) {
+    let editTimer = null;
     box.addEventListener('input', e => {
+      const ed = e.target.closest && e.target.closest('[data-gedit]');
+      if (ed) {
+        // 미리보기에서 고친 내용 → 잠깐 기다렸다가 Markdown으로 저장 (입력마다 바꾸면 느려짐)
+        clearTimeout(editTimer);
+        editTimer = setTimeout(() => {
+          const g = getGuide();
+          g.md = blockMd(ed) + '\n';
+          g.prev = '';
+          const u = box.querySelector('[data-act="g-undo"]');
+          if (u) u.hidden = true;
+          saveGuide(g);
+        }, 400);
+        return;
+      }
       const f = e.target.dataset && e.target.dataset.g;
       if (!f) return;
       const g = getGuide();

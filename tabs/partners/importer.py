@@ -418,6 +418,26 @@ def example_records(ptype):
     return parse_rows(ptype, [[ex["header"]] + ex["rows"]])[0]
 
 
+def export_csv(ptype, contacts):
+    """지금 업체 목록을 가져오기와 같은 머리글의 CSV로 (내려받아 고친 뒤 다시 가져오면 그대로 읽힘)."""
+    key = "catering" if ptype == CATERING else "influencer"
+    header = (examples().get(key) or {}).get("header")
+    out = io.StringIO()
+    w = csv.writer(out)
+    if ptype == CATERING:
+        w.writerow(header or ["No", "Company Name", "Contact Email", "Phone Number", "Official Website URL",
+                              "Office Location", "Category Focus", "Why Relevant"])
+        for i, c in enumerate(contacts, start=1):
+            w.writerow([i, c.name, c.email, c.phone, c.url, c.location, c.category, c.note])
+    else:
+        w.writerow(header or ["번호", "업체명", "공개 이메일", "공개 전화/문자", "공식 사이트 URL", "미국 시장 범위",
+                              "서비스 형태", "서비스/검토 이유", "주의/연락처 용도"])
+        for i, c in enumerate(contacts, start=1):
+            # 서비스 형태 · 검토 이유는 가져올 때 ' · '로 합쳐 두었으므로 한 칸에 그대로 (다시 가져와도 같은 값)
+            w.writerow([i, c.name, c.email, c.phone, c.url, c.location, c.category, "", c.note])
+    return "﻿" + out.getvalue()
+
+
 def template_csv():
     ex = examples().get("catering") or {}
     out = io.StringIO()
