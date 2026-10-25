@@ -486,7 +486,7 @@
         <label class="cs-field"><span>보기</span><select class="cs-input" data-el="filter">
           <option value="open">미처리</option><option value="urgent">긴급 (C1)</option><option value="overdue">기한 초과</option><option value="owner">담당 확인 대기</option><option value="all">전체</option></select></label>
         <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="sort">
-          <option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option><option value="priority">처리 우선순위 (긴급·기한 순)</option></select></label>
+          <option value="priority" selected>처리 우선순위 (긴급·기한 순)</option><option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option></select></label>
         <div class="cs-gmailbar">
           <button type="button" class="cs-btn" data-act="gmail-import" disabled>${icon('mail')} Gmail에서 불러오기</button>
           <span class="cs-muted" data-el="gmailmsg" aria-live="polite"></span>
@@ -504,7 +504,7 @@
   <section class="cs-panel" data-panel="templates" hidden></section>
 </div>`;
 
-    const ui = { root, selected: null, filter: 'open', sort: 'newest', approver: (REBOOT.user && REBOOT.user().name) || '', adverseDraft: null, secOpen: {} };   // 승인자 기본값 = 로그인한 사람
+    const ui = { root, selected: null, filter: 'open', sort: 'priority', approver: (REBOOT.user && REBOOT.user().name) || '', adverseDraft: null, secOpen: {} };   // 승인자 기본값 = 로그인한 사람
     const panel = name => root.querySelector(`[data-panel="${name}"]`);
     ui.showTab = name => {
       root.querySelectorAll('.cs-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
@@ -618,7 +618,7 @@
     const s = stats();
     const cards = [
       { filter: 'open', label: '답변 대기', icon: 'mail', value: s.open, sub: '<b>미처리</b>발송·종결 전 문의' },
-      { filter: 'urgent', label: '긴급 확인', icon: 'alert', value: s.urgent, sub: '<b>C1</b>건강·부작용 문의' },
+      { filter: 'urgent', label: '긴급 확인', icon: 'alert', value: s.urgent, sub: '<b>C1</b>건강·부작용 문의', alert: s.urgent > 0 },
       { filter: 'overdue', label: '기한 초과', icon: 'clock', value: s.overdue, sub: '<b>응답 기한</b>지난 문의', alert: s.overdue > 0 },
       { filter: 'owner', label: '담당 확인 대기', icon: 'shield', value: s.owner_required, sub: '<b>지정 담당</b>추가 검토 필요' }
     ];
@@ -659,7 +659,7 @@
       const late = isOpen(i) && now > due(i);
       const snippet = String(i.body || '').replace(/\s+/g, ' ').trim().slice(0, 140);
       return `
-<li><button type="button" class="cs-item cs-mailrow${i.id === ui.selected ? ' is-selected' : ''}${unread(i) ? ' is-unread' : ''}${ui.highlight && ui.highlight.has(i.id) ? ' is-new' : ''}" data-id="${esc(i.id)}">
+<li><button type="button" class="cs-item cs-mailrow${i.id === ui.selected ? ' is-selected' : ''}${unread(i) ? ' is-unread' : ''}${late ? ' is-late' : ''}${ui.highlight && ui.highlight.has(i.id) ? ' is-new' : ''}" data-id="${esc(i.id)}">
   <span class="cs-avatar" aria-hidden="true">${initials(i.name)}</span>
   <span class="cs-row-from"><span class="cs-item-name">${esc(i.name)}</span>${custMap.has(emailOf(i.from)) ? custChips(custMap.get(emailOf(i.from)), true) : ''}</span>
   <span class="cs-row-main"><span class="cs-row-line"><b class="cs-row-subject">${esc(i.subject)}</b><span class="cs-row-snippet"> — ${esc(snippet)}</span></span>
@@ -714,6 +714,10 @@
       ${inq.type === 'C1' && c.tag && ['watch', 'limit'].includes(c.tag.tag) ? '<p class="cs-note cs-note-block">주의 고객으로 분류돼 있어도 부작용 신고(C1)는 평소처럼 처리하세요 (FDA 보고 대상 판단).</p>' : ''}` : '')(customers().find(c => c.email === emailOf(inq.from)))}
     <blockquote class="cs-body">${esc(inq.body)}</blockquote>
     <div class="cs-meta"><span>응답 기한 <b>${fmt(due(inq))}</b> (${dueText(inq)})</span><span>${esc(t.mode)}</span><span>담당 <b>${esc(t.owner)}</b></span><span>팀 태그 ${esc(t.tag)}</span></div>
+    ${t.code === 'C1' && !locked ? (adv => adv
+      ? `<div class="cs-escal is-done">${icon('shield')}<span>부작용 접수 완료 · ${fmt(adv.createdAt)}</span><button type="button" class="cs-btn cs-btn-sm" data-act="to-adverse-records">접수 기록 보기</button></div>`
+      : `<div class="cs-escal">${icon('alert')}<span><b>부작용 신고 문의입니다.</b> 답장보다 접수 기록을 먼저 남기세요.</span><button type="button" class="cs-btn cs-primary" data-act="to-adverse">부작용 접수 열기</button></div>`
+    )(loadAdverse().find(x => x.linkedInquiry === inq.id)) : ''}
     ${trBlock(`${inq.subject}\n${inq.body}`, '문의 한글 번역')}
   </header>
 
@@ -734,7 +738,6 @@
         `<option value="${x.id}"${x.id === inq.product ? ' selected' : ''}>${esc(x.ko)} · ${esc(x.id.startsWith('jelly') ? '모양 젤리' : '비탄산 음료')}</option>`).join('')}</select></label>
     <div class="cs-actions">
       <button type="button" class="cs-btn" data-act="regen" ${locked ? 'disabled' : ''}>템플릿으로 초안 다시 만들기</button>
-      ${t.code === 'C1' ? '<button type="button" class="cs-btn" data-act="to-adverse">부작용 접수 열기</button>' : ''}
     </div>
   </div>
   </div></details>
@@ -1030,6 +1033,8 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       } else if (act === 'to-adverse') {
         const cur = load().find(x => x.id === id);
         ui.adverseDraft = { customer: cur.name, contact: cur.from, symptoms: cur.body, linkedInquiry: cur.id, product: cur.product ? `REBOOT ${productKo(cur.product)}` : '' };
+        ui.showTab('adverse');
+      } else if (act === 'to-adverse-records') {
         ui.showTab('adverse');
       }
     });
@@ -1677,6 +1682,35 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
 
   /* 답변 템플릿 */
 
+  // 자주 나오는 불만 — 인사이트 파트 REBOOT.use('insights').reviewPriorities() (자사 리뷰 규칙 계산 · 읽기만).
+  // 리뷰 원문은 오지 않음. 이 불만이 문의로 들어올 때를 대비해 템플릿을 미리 손볼 때 참고
+  let VOC;   // undefined: 아직 안 읽음 · null: 못 읽음 · {items, basis, …}
+  function vocSumHTML() {
+    if (VOC === undefined) return '<span class="cs-chip cs-chip-dim">불러오는 중</span>';
+    if (!VOC || !VOC.items.length) return '<span class="cs-chip cs-chip-dim">없음</span>';
+    return `<span class="cs-chip">1위 ${esc(VOC.items[0].topic)} ${esc(VOC.items[0].count)}건</span>`;
+  }
+  function vocHTML() {
+    if (VOC === undefined) return '<p class="cs-muted">불러오는 중…</p>';
+    if (!VOC) return '<p class="cs-muted">인사이트 파트의 리뷰 데이터를 읽지 못했습니다.</p>';
+    if (!VOC.items.length) return '<p class="cs-muted">자사 불만 리뷰가 아직 없습니다.</p>';
+    const li = VOC.items.slice(0, 3).map((x, i) => `<li><b>${i + 1}. ${esc(x.topic)}</b> · ${esc(x.count)}건
+      ${x.check ? '<span class="cs-chip cs-chip-warn">C1 부작용 신고 템플릿 확인</span>' : ''}
+      <span class="cs-chip cs-chip-dim">${esc(x.channels.join(' · '))}</span></li>`).join('');
+    return `<ol class="cs-voc-list">${li}</ol>
+      <p class="cs-muted">${esc(VOC.basis)}. 리뷰 불만은 C8(리뷰·평점 불만) 템플릿에서 먼저 대비하세요. 원문은 <a href="/dashboard/insights#customers/reviews">인사이트 › 구매자 리뷰</a>에서 봅니다.</p>`;
+  }
+  async function loadVoc(p) {
+    if (VOC !== undefined) return;
+    let v = null;
+    try { v = await REBOOT.use('insights').reviewPriorities(); } catch (e) { v = null; }
+    VOC = v && Array.isArray(v.items) ? v : null;
+    const box = p.querySelector('[data-ref="cs-voc"]');
+    const sum = p.querySelector('[data-ref="cs-voc-sum"]');
+    if (box) box.innerHTML = vocHTML();
+    if (sum) sum.innerHTML = vocSumHTML();
+  }
+
   function renderTemplates(p) {
     const sample = { name: 'Alex Morgan', orderNo: 'RB-240000', tracking: '', eta: '' };
     const rows = DATA.types.map(t => {
@@ -1717,6 +1751,11 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     <p class="cs-muted">문의함 → 답변 초안의 <b>[AI로 초안 다듬기]</b>가 이 인물로 씁니다. 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버에서 따로 지키며, 결과는 재검사와 최종 승인을 거칩니다. (${String(PERSONA.text || '').length}자 / 300자)</p>
   </div>
 </details>
+<details class="cs-sec" data-tpl="voc"${op('voc')}>
+  <summary><span class="cs-sec-title">자주 나오는 불만 (구매자 리뷰)</span>
+    <span class="cs-sec-sum" data-ref="cs-voc-sum">${vocSumHTML()}</span></summary>
+  <div class="cs-sec-body" data-ref="cs-voc">${vocHTML()}</div>
+</details>
 <div class="cs-secbar"><span class="cs-summary">템플릿 ${rows.length}개 · BLOCK <b class="${blocked ? 'cs-late' : 'cs-ok'}">${blocked}개</b> (목표 0개)
   ${unchecked ? ` · <span class="cs-warn-text">컴플라이언스 파트가 없어 ${unchecked}개 점검 불가</span>` : ''}</span>
   <span class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-all" data-open="1">모두 펼치기</button>
@@ -1735,6 +1774,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     </div>
   </details>`).join('')}</div>`;
     p.querySelectorAll('details[data-tpl]').forEach(d => d.addEventListener('toggle', () => TPL_OPEN.set(d.dataset.tpl, d.open)));
+    loadVoc(p);
     const cbox = p.querySelector('[data-el="contacts"]');
     p.querySelector('[data-act="contact-add"]').addEventListener('click', () => cbox.insertAdjacentHTML('beforeend', contactRowHTML({})));
     cbox.addEventListener('click', e => { const b = e.target.closest('[data-act="contact-del"]'); if (b) b.closest('.cs-contact').remove(); });
