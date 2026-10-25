@@ -245,8 +245,9 @@
 .part-content .cnt-ed-detail { border-top: 1px solid var(--line-3); padding-top: 8px; margin-top: 4px; }
 .part-content .cnt-ed-detail .field-grid { gap: 8px; }
 .part-content .cnt-ed-detail input[type="color"] { width: 100%; height: 30px; padding: 0; border: 1px solid var(--line-2); border-radius: 6px; }
-.part-content .cnt-ed-bake { display: flex; gap: 6px; align-items: flex-start; font-size: 11px; margin-top: 10px; }
-.part-content .cnt-ed-bake small { display: block; color: var(--muted-2); font-size: 10px; }
+.part-content .cnt-make-busy { padding: 0; }
+.part-content .cnt-img-text { align-items: center; gap: 6px; margin: 4px 0 8px; }
+.part-content .cnt-img-text .panel-note { margin: 0; }
 
 /* ───────── 오른쪽: 브리프 · 결과 ───────── */
 .part-content .cnt-aside { min-width: 0; }

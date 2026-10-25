@@ -154,6 +154,9 @@ def campaigns_list():
     return jsonify(items=items, total=total_all, counts=counts, active=counts.get("제작 중", 0) + counts.get("검토 중", 0))
 
 
+SHEET_LANGUAGES = {"한국어": "한국어", "영어": "미국 영어 (US English)"}  # 시트 칩 → 결정 값 (대화 질문 보기와 같은 값)
+
+
 @bp.post("/campaigns")
 def campaigns_create():
     data = json_body()
@@ -176,9 +179,14 @@ def campaigns_create():
                         status="제작 중", revision=1, created_by=user, created_by_id=current_user.id, updated_by=user)
     c.channels, c.product_ids = sheet["channels"], sheet["product_ids"]
     c.settings = settings
-    # 소비자용 결과물 언어는 영어를 '초기 제안'으로 (README 5.4) — 사용자 확정이 아님
-    c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
-                                "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    # 시트에서 고른 콘텐츠 언어(한국어 · 영어) → 확정. 안 보냈으면 영어를 '초기 제안'으로 (README 5.4)
+    lang = SHEET_LANGUAGES.get(data.get("language"))
+    if lang:
+        c.decisions = {"language": {"value": lang, "status": "confirmed", "source": "sheet", "by": user,
+                                    "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    else:
+        c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
+                                    "at": iso(utcnow()), "revision": 1, "messageId": None}}
     ratio = O.default_ratio(sheet)
     if ratio:  # 채널 기본 비율도 '초기 제안' — 대화에서 바꿀 수 있음
         c.decisions = dict(c.decisions, ratio={"value": ratio, "status": "proposed", "source": "default", "by": "채널 기본값",
@@ -419,8 +427,10 @@ def images_upload(cid):
     facts = brandkit.product_facts(sheet["product_ids"])
     snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
                                            model=None, mode="manual")
+    drawn = ((parent.snapshot or {}).get("image") or {}).get("image_text") or []  # AI가 이미지에 그린 문구는 그대로 이어받음
     snap["image"] = {"model": None, "size": f"{size[0]}x{size[1]}", "mode": "manual_edit", "text_layers": layers,
-                     "baked": baked, "edits": edits, "base": {"label": parent.label, "seq": parent.seq}}
+                     "baked": baked or bool(drawn), "image_text": drawn, "edits": edits,
+                     "base": {"label": parent.label, "seq": parent.seq}}
     note = [f"{parent.label} · v{parent.seq}을 브라우저 편집기로 수정 (AI 아님)"]
     if baked:
         note.append("글자를 이미지에 합성")
@@ -430,8 +440,8 @@ def images_upload(cid):
                        approach=", ".join(f"{k} {val}" for k, val in edits.items())[:300], note=" · ".join(note)[:500],
                        facts_version=facts.get("facts_version") or "", snapshot_hash=shash, created_by=user)
     v.snapshot = snap
-    v.review = {"keyword": review.keyword_check("\n".join(t["text"] for t in layers), "copy", sheet, facts),
-                "imageScope": "이미지 속 픽셀·글자는 검사하지 않음 (텍스트 레이어만 확인)"}
+    v.review = {"keyword": review.keyword_check("\n".join(t["text"] for t in layers + drawn), "copy", sheet, facts),
+                "imageScope": media.IMAGE_SCOPE if drawn else "이미지 속 픽셀·글자는 검사하지 않음 (텍스트 레이어만 확인)"}
     db.session.add(v)
     db.session.flush()
     c.selected_version_id = v.id

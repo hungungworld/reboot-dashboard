@@ -18,7 +18,7 @@ NOTICE = """REBOOT 콘텐츠 제작 — 내보내기 묶음
 이 파일들은 작업 중인 초안입니다. 승인본이 아닙니다.
 - 각 버전 파일 머리말에 상태(최종본 지정 여부 · 검토 상태 · 변경 사항 미반영 여부)를 적었습니다.
 - '최종본'은 팀이 고른 버전이라는 뜻일 뿐 법적 승인이나 사실 확인 완료를 뜻하지 않습니다.
-- 검토 표시: 키워드 확인(서버 규칙) · 컴플라이언스(1차 규칙 판정, 외부 검토) · AI 보조 검토(같은 모델의 자체 검토)는 서로 다릅니다.
+- 검토 표시: 키워드 확인(서버 규칙) · 컴플라이언스(1차 규칙 판정, 외부 검토)는 서로 다릅니다.
   기록이 없으면 '미검토'입니다. 어떤 결과도 법적 승인이 아닙니다.
 - 제품 정보는 브랜드 키트(2026-10-24) 기준입니다. Balance의 Zero Sugar는 표기 조건 충족 가정, 성분 함량·젤리 봉지 안 개수는 미제공입니다 (facts.json 참고).
 - 이미지는 AI 시안입니다. 최종 패키지·캐릭터 사진을 참고해 만들지만 라벨 글자·모양은 게시 전 확인이 필요하며, 헤드라인·슬로건 문구는 이미지에 그리지 않고 텍스트 레이어로 따로 둡니다.
@@ -29,7 +29,6 @@ NOTICE = """REBOOT 콘텐츠 제작 — 내보내기 묶음
 def _review_line(review_):
     kw = (review_ or {}).get("keyword")
     cmp_ = (review_ or {}).get("compliance")
-    ai = (review_ or {}).get("ai")
     kw_s = {"error": "수정 필요", "warn": "확인 필요", "clear": "키워드 미탐지"}.get((kw or {}).get("status"), "미검토")
     if not cmp_:
         cmp_s = "미검토"
@@ -37,12 +36,11 @@ def _review_line(review_):
         cmp_s = "미연동" if cmp_["verdict"] == "UNAVAILABLE" else "미검토 (검사 오류)"
     else:
         cmp_s = f"{cmp_.get('label') or cmp_.get('verdict')} (규칙 판정 · 승인 아님)"
-    ai_s = f"{len(ai.get('issues') or [])}건 지적 (보조 검토)" if ai else "미검토"
-    return kw_s, cmp_s, ai_s
+    return kw_s, cmp_s
 
 
 def _version_md(v, vd, campaign, seq_by_id):
-    kw_s, cmp_s, ai_s = _review_line(v.review)
+    kw_s, cmp_s = _review_line(v.review)
     head = [
         f"# {v.label} · v{v.seq} — {O.KIND_LABELS.get(v.kind, v.kind)}",
         "",
@@ -52,7 +50,7 @@ def _version_md(v, vd, campaign, seq_by_id):
         f"- 부모 버전: {('v' + str(seq_by_id[v.parent_id])) if v.parent_id in seq_by_id else '없음'}",
         f"- 제품 기준 버전(facts_version): {v.facts_version or '기록 없음'}",
         f"- 변경 사항 미반영: {'예 — ' + ', '.join(vd['staleFields']) if vd['stale'] else '아니요'}",
-        f"- 키워드 확인: {kw_s} · 컴플라이언스: {cmp_s} · AI 보조 검토: {ai_s}",
+        f"- 키워드 확인: {kw_s} · 컴플라이언스: {cmp_s}",
     ]
     if v.kind == "script":
         head.append("- 숏폼 구성안 · 실제 영상 아님")
@@ -68,7 +66,9 @@ def _version_md(v, vd, campaign, seq_by_id):
     img = (v.snapshot or {}).get("image")
     if img:
         head.append(f"- 이미지 모델: {img.get('model')} · 크기 {img.get('size')} · {'편집' if img.get('mode') == 'edit' else '생성'}")
-        if img.get("text_layers"):
+        if img.get("image_text"):
+            head.append("- 이미지에 그린 문구 (철자는 게시 전 확인): " + " / ".join(t["text"] for t in img["image_text"]))
+        elif img.get("text_layers"):
             head.append("- 텍스트 레이어(이미지 위에 따로 얹을 문구): " + " / ".join(t["text"] for t in img["text_layers"]))
     body = v.body or ""
     return "\n".join(head) + "\n\n---\n\n" + body + "\n"
@@ -108,7 +108,7 @@ def build_zip(c, only_version_id=None):
         index = []
         for v in versions:
             vd = repository.version_dict(v, cur, c.final_version_id, c.selected_version_id)
-            kw_s, cmp_s, _ = _review_line(v.review)
+            kw_s, cmp_s = _review_line(v.review)
             lines.append(f"| {v.label} · v{v.seq} | {O.KIND_LABELS.get(v.kind, v.kind)} | {'최종본(승인 아님)' if vd['isFinal'] else '초안'} "
                          f"| {kw_s} | {cmp_s} | {'예' if vd['stale'] else '아니요'} |")
             stem = f"versions/v{v.seq:02d}-{_safe(v.label)}-{v.kind}"

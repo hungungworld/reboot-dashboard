@@ -419,7 +419,7 @@ def run_turn(c, data, user):
         if media.has_active_job(cid):
             act.update(run=None, status="skipped", note="이미지·영상 작업이 이미 진행 중이에요. 끝난 뒤 다시 요청해 주세요.")
         else:
-            job_spec = act
+            job_spec = dict(act, image_text=media.text_mode_of(data.get("image_text"), message))
 
     made = bool(drafts_out) or job_spec is not None
     if act["status"] not in ("none", "skipped"):  # 이번 턴에 실행했으면 새 제안은 띄우지 않음
@@ -509,7 +509,7 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
                       "base_image": {"label": tgt.label, "seq": tgt.seq} if tgt is not None else None,
                       "copy_draft": ({"label": cp.label, "seq": cp.seq, "title": cp.title, "body": cp.body[:1500]}
                                      if cp is not None else None),
-                      "selected_at_request": c.selected_version_id},
+                      "image_text": job_spec["image_text"], "selected_at_request": c.selected_version_id},
             request_key=f"{cid}:{req_id}" if req_id else None, user=user, message_id=msg_id)
         db.session.add(job)
 
