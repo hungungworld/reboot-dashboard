@@ -6,7 +6,7 @@
 
 | 파일 | 하는 일 | CSS 접두사 · 저장 키 |
 |---|---|---|
-| `tabs/partners/static/partners.js` | 대표: 메뉴 등록 · 탭 틀 · 제목 옆 '업체 파일 가져오기' 버튼만 | `ptn-` · `partners.tab.u<id>` |
+| `tabs/partners/static/partners.js` | 대표: 메뉴 등록 · 탭 틀 | `ptn-` · `(저장 키 없음)` |
 | `tabs/partners/static/outreach.js` · `data-outreach.js` | 🔎 업체 컨택(3-1) · ✉️ 협업 메일(3-2) · 📘 협업 가이드(3-3) | `ptn-out-` · `outreach.*` |
 | `tabs/partners/static/records.js` · `data-records.js` | 🗂️ 협업 이력(3-4) · 협업 보드 · 📈 판매 실적(3-5) · `creatorSales` | `ptn-rec-` · `records.*` |
 | `tabs/partners/static/partners.css` | 세 파일의 스타일 (`.part-partners` 안에서만) | — |
