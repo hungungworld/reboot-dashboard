@@ -59,13 +59,17 @@ class FakeAI:
 
     def __init__(self):
         self.queue = {"content_turn": [], "content_draft": [], "content_image_plan": [], "content_suggest": [],
-                      "content_review": [], "content_interview": [], "content_video_plan": [], "content_reference": []}
+                      "content_review": [], "content_interview": [], "content_video_plan": [], "content_reference": [],
+                      "content_caption": []}
         self.calls = []
 
     def add(self, name, *items):
         self.queue[name].extend(items)
 
     def __call__(self, system, user, *, schema, name, action, max_tokens=3000, timeout=120, images=0):
+        if name == "content_caption" and not self.queue[name]:
+            # 생성 직후 자동 캡션 추천 — 응답을 넣지 않은 테스트는 'AI 실패'로 (기록하지 않아 calls[-1]이 그대로)
+            raise providers.AIError("테스트: 캡션 응답 없음")
         self.calls.append({"name": name, "system": system, "user": user, "action": action, "images": images})
         if not self.queue.get(name):
             raise AssertionError(f"예상하지 못한 AI 호출: {name}")
@@ -564,8 +568,11 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     # 제품을 골랐으니 최종 패키지 사진을 참고 이미지로 넣어 생성 (generate 아님)
     assert "generate" not in calls and calls["edit"][0][2] == "1024x1536" and img["image"]["size"] == "1024x1536"
     sent, prompt = calls["edit"][0][0], calls["edit"][0][1]
-    assert img["image"]["references"] == ["jelly-original-pouch-front", "jelly-original-cherry-hat-wrapped"]
-    assert [Path(x).name for x in sent] == ["jelly-original-pouch-front.jpg", "jelly-original-cherry-hat-wrapped.jpg"]
+    # 그 제품의 참고용 사진 전부 (상한 16장 · 2026-10-25)
+    assert img["image"]["references"] == [a["id"] for a in assets.pick_refs(["jelly_original"])]
+    assert len(img["image"]["references"]) > 2 and img["image"]["references"][:2] == ["jelly-original-pouch-front",
+                                                                                      "jelly-original-cherry-hat-wrapped"]
+    assert [Path(x).name for x in sent] == [r + ".jpg" for r in img["image"]["references"]]
     assert "Reference image 1: Reboot Jelly Original" in prompt and "exactly as they appear in the reference images" in prompt
     # 새 방식: 문구는 이미지 AI가 직접 그림 (슬로건은 원문 그대로 · 텍스트 레이어 없음)
     assert {"role": "slogan", "text": "Restart Your Day"} in img["image"]["image_text"]
@@ -589,7 +596,9 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     assert edited["parentId"] == img["id"] and edited["label"] == "시안 1" and edited["image"]["mode"] == "edit"
     base_sent = calls["edit"][1][0]
     assert base_sent[0].endswith(img["imageUrl"].rsplit("/", 1)[1])  # 1번 = 편집할 기준 이미지
-    assert [Path(x).name for x in base_sent[1:]] == ["jelly-original-lime-boot-wrapped.jpg", "jelly-original-pouch-front.jpg"]
+    # 고른 맛(라임) 사진 전부 + 맛 구분 없는 봉지 사진
+    assert [Path(x).name for x in base_sent[1:]] == ["jelly-original-lime-boot-wrapped.jpg", "jelly-original-lime-boot-spec.jpg",
+                                                     "jelly-original-pouch-front.jpg", "jelly-original-pouch-scene-2.jpg"]
     assert "Image 1 is the base image to edit" in calls["edit"][1][1]
     assert auth_client.get(img["imageUrl"]).status_code == 200  # 원본 파일 유지
     # 수정할 때 프롬프트 작성 AI에게 기준 이미지에 들어간 문구를 넘김 (문구 수정 · 유지 판단용)
@@ -700,7 +709,7 @@ def test_manual_version_final_and_export(auth_client):
     assert {"00_README.txt", "campaign.md", "facts.json", "versions.json", "settings.json"} <= set(names)
     every = "\n".join(z.read(n).decode("utf-8") for n in names)
     assert "승인본이 아닙니다" in every and "user-2026-10-23" in every and "최종본으로 지정됨 (승인 아님)" in every
-    assert '"zero_sugar": true' in every and "+kit-2026-10-24" in every  # 브랜드 키트 값 (Balance = Zero Sugar)
+    assert '"zero_sugar": true' in every and "+kit-2026-10-25" in every  # 브랜드 키트 값 (Balance = Zero Sugar)
     assert "sk-" not in every and "OPENAI_API_KEY" not in every and "password" not in every.lower()
     one = auth_client.get(f"/api/content/campaigns/{cid}/export?version={v['id']}")
     assert one.status_code == 200
@@ -825,15 +834,19 @@ def test_interview_example_flow_without_key(auth_client):
                                              source="manual")
     assert open_question(c)["ready"] is False  # 답 2개 — 아직 윤곽 전
     c = iv(auth_client, c, "skip").get_json()["campaign"]
-    # 비율은 채널 기본값(제안)이 있어 묻지 않음
-    assert "background" not in c["decisions"] and open_question(c)["field"] == "decisions.tone"
+    # 비율·크기는 채널 기본값(제안)이 있어도 물음 — 보기 첫 번째가 채널(Instagram) 추천
+    q = open_question(c)
+    assert "background" not in c["decisions"] and q["field"] == "decisions.ratio"
+    assert q["options"][0]["label"].startswith("4:5") and "추천" in q["options"][0]["label"]
+    c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
+    assert open_question(c)["field"] == "decisions.tone" and open_question(c)["ready"] is True  # 답 3개 → 만들기 제안
     c = iv(auth_client, c, "answer", option=2).get_json()["campaign"]
-    assert open_question(c)["field"] == "decisions.language" and open_question(c)["ready"] is True  # 답 3개 → 만들기 제안
+    assert open_question(c)["field"] == "decisions.language"
     c = iv(auth_client, c, "answer", option=0).get_json()["campaign"]
     assert open_question(c) is None  # 예시 질문을 다 쓰면 끝
     done = [m for m in c["messages"] if (m["payload"] or {}).get("interviewDone")]
-    assert len(done) == 1 and done[0]["payload"]["interviewDone"] == {"answered": 4, "asked": 5}
-    assert c["decisions"]["ratio"] == dict(c["decisions"]["ratio"], value="4:5 세로", status="proposed")
+    assert len(done) == 1 and done[0]["payload"]["interviewDone"] == {"answered": 5, "asked": 6}
+    assert c["decisions"]["ratio"] == dict(c["decisions"]["ratio"], value="4:5 세로 · 1080×1350", status="confirmed")
     assert c["decisions"]["tone"]["value"] == "친근하고 따뜻하게"
     assert c["decisions"]["language"]["status"] == "confirmed"
     assert iv(auth_client, c, "answer", option=0).status_code == 400  # 끝난 뒤에는 답하지 않음
@@ -938,7 +951,8 @@ def test_image_editor_upload_makes_child_version(auth_client, ai, sync_jobs, mon
 def test_brand_kit_overlays_facts_per_product(auth_client):
     camp = create(auth_client, brand_focus=False, product_ids=["jelly_balance", "drink_original"])
     f = camp["facts"]
-    assert f["facts_version"].startswith("user-2026-10-23") and f["facts_version"].endswith("+kit-2026-10-24")
+    assert f["facts_version"].startswith("user-2026-10-23") and f["facts_version"].endswith("+kit-2026-10-25")
+    assert f["brand"]["slogans"] == ["Restart Your Day", "Buy Your Tomorrow"] and f["brand"]["slogan"] == "Restart Your Day"
     assert f["brand"]["character"].startswith("Rebu") and "A-HAT" in f["brand"]["key_ingredient"]
     jb, do = (next(p for p in f["products"] if p["entity_id"] == pid) for pid in ("jelly_balance", "drink_original"))
     assert jb["zero_sugar"] is True and do["zero_sugar"] is False  # 제품마다 따로 — Original로 옮기지 않음
@@ -963,12 +977,18 @@ def test_manifest_files_exist_and_ids_are_valid():
 
 def test_pick_refs_by_flavor_and_character():
     ids = lambda refs: [a["id"] for a in refs]
-    assert ids(assets.pick_refs(["drink_original"])) == ["drink-original-trio", "drink-original-cherry-front"]
-    assert ids(assets.pick_refs(["drink_original"], flavors=["lime"])) == ["drink-original-lime-front", "drink-original-trio"]
-    two = assets.pick_refs(["jelly_balance", "drink_balance"], flavors=["lemon"], character=True)
-    assert ids(two) == ["jelly-balance-lemon-lasso-wrapped", "drink-balance-lemon-front", "rebu-poses-fullbody"]
+    # 제품(·맛)에 맞는 참고용 사진 전부 — 우선순위 순, 상한 16장 (2026-10-25)
+    one = ids(assets.pick_refs(["drink_original"]))
+    assert one[:2] == ["drink-original-trio", "drink-original-cherry-front"] and len(one) == 10
+    assert ids(assets.pick_refs(["drink_original"], flavors=["lime"])) == [
+        "drink-original-lime-front", "drink-original-lime-angle", "drink-original-lime-spec", "drink-original-trio"]
+    two = ids(assets.pick_refs(["jelly_balance", "drink_balance"], flavors=["lemon"], character=True))
+    assert two[:2] == ["jelly-balance-lemon-lasso-wrapped", "drink-balance-lemon-front"] and two[-1] == "rebu-poses-fullbody"
+    assert not any(x for x in two if "cherry" in x or "lime" in x)  # 고른 맛 · 맛 구분 없는 사진만
     many = assets.pick_refs(["jelly_original", "jelly_balance", "drink_original", "drink_balance"], character=True)
-    assert len(many) == assets.MAX_REFS and many[-1]["type"] == "character"
+    assert len(many) == assets.MAX_REFS == 16 and many[-1]["type"] == "character"
+    assert {a["product_id"] for a in many[:-1]} == {"jelly_original", "jelly_balance", "drink_original", "drink_balance"}
+    assert len(assets.pick_refs(["jelly_original"], limit=assets.HIGGSFIELD_MAX_REFS)) == 5
     assert all(a["ref"] for a in many) and assets.flavors_in("체리 맛으로", "Lime!") == ["cherry", "lime"]
 
 
@@ -1181,7 +1201,7 @@ def test_higgsfield_image_provider_saves_jpg_and_keeps_provider(auth_client, ai,
     img = next(v for v in c["versions"] if v["kind"] == "image")
     model_path, body = hf.submits[0]
     assert called == [] and model_path == higgsfield.IMAGE_MODEL and body["aspect_ratio"] == "3:4"  # 4:5에 가장 가까운 비율
-    assert len(body["image_urls"]) == 2 and img["image"]["provider"] == "higgsfield"
+    assert len(body["image_urls"]) == assets.HIGGSFIELD_MAX_REFS and img["image"]["provider"] == "higgsfield"
     assert img["imageUrl"].endswith(".jpg") and "Marketing Studio" in img["note"] and "4:5 세로 → 3:4" in img["note"]
     res = auth_client.get(img["imageUrl"])
     assert res.status_code == 200 and res.mimetype == "image/jpeg"
@@ -1269,7 +1289,7 @@ def kickoff(client, camp):
 
 def test_flow_and_channel_profile_in_context(auth_client, ai):
     camp = create(auth_client, content_type="image", channels=["instagram"])
-    assert camp["flow"] == ["concept", "story", "design_note", "emphasis"]
+    assert camp["flow"] == ["concept", "story", "design_note", "emphasis", "ratio"]
     assert camp["decisions"]["ratio"]["value"] == "4:5 세로" and camp["decisions"]["ratio"]["status"] == "proposed"
     ai.add("content_turn", dict(turn("인스타 이미지로 시작할게요. 원하는 컨셉이나 레퍼런스가 있나요?"),
                                 offer={"type": "generate_image", "summary": "x"}))
@@ -1279,12 +1299,19 @@ def test_flow_and_channel_profile_in_context(auth_client, ai):
     assert ctx["channel_profile"].startswith("Instagram") and ctx["user_references"] is None
     assert out["reply"]["payload"]["offer"] is None  # 첫 답변에는 만들기 제안 없음
     assert "흐름" in ai.calls[-1]["system"] and "offer" in ai.calls[-1]["system"]
-    # 캡션 · 멘트 · 비율은 흐름 질문에 없음 (비율은 채널 기본값 제안) · 카드뉴스 · 숏폼 · CRM 흐름
+    # 비율·크기는 흐름에서 물음 — 채널 추천 보기가 첫 번째 (2026-10-25) · 캡션 · 멘트는 흐름 질문에 없음
+    ratio_item = next(f for f in ctx["flow"] if f["key"] == "ratio")
+    assert ratio_item["recommended_options"][0]["value"].startswith("4:5")
     amazon = create(auth_client, content_type="image", channels=["amazon"])
-    assert amazon["flow"] == ["concept", "story", "design_note", "emphasis"] and amazon["decisions"]["ratio"]["value"] == "1:1 정사각"
+    assert amazon["flow"] == ["concept", "story", "design_note", "emphasis", "ratio"]
+    assert amazon["decisions"]["ratio"]["value"] == "1:1 정사각"
+    assert O.ratio_options({"content_type": "image", "channels": ["amazon"]})[0][0].startswith("1:1")
+    assert O.ratio_options({"content_type": "image", "channels": ["tiktok"]})[0][0].startswith("9:16")
     assert "ratio" not in create(auth_client, content_type="shortform", channels=["instagram"])["decisions"]
-    assert create(auth_client, content_type="cardnews", channels=["oliveyoung"])["flow"] == ["content_points", "concept", "emphasis", "slide_count"]
-    assert create(auth_client, content_type="shortform", channels=["tiktok"])["flow"][:2] == ["concept", "duration"]
+    assert create(auth_client, content_type="cardnews", channels=["oliveyoung"])["flow"] == [
+        "content_points", "concept", "emphasis", "slide_count", "ratio"]
+    assert create(auth_client, content_type="shortform", channels=["tiktok"])["flow"][:3] == ["concept", "duration", "ratio"]
+    assert O.ratio_options({"content_type": "shortform", "channels": ["instagram"]})[0][1] == "9:16 세로"
     assert "caption" not in create(auth_client, content_type="crm", channels=["crm"])["flow"]
     from tabs.content import prompts
     assert set(prompts.CHANNEL_PROFILES) == set(O.CHANNELS)
@@ -1470,3 +1497,96 @@ def test_copy_campaign_to_other_channel(auth_client, app):
     crm = create(auth_client, content_type="crm", channels=["crm"])
     assert auth_client.post(f"/api/content/campaigns/{crm['id']}/copy", json={"channel": "instagram"}).status_code == 400
     assert app.test_client().post(url, json={"channel": "tiktok"}).status_code in (302, 401, 403)
+
+
+# ───────── 슬로건 2개 · 캡션·해시태그 자동 추천 · 영상 썸네일 (2026-10-25) ─────────
+
+def test_two_official_slogans():
+    assert brandkit.slogans() == ("Restart Your Day", "Buy Your Tomorrow")
+    assert media.official_slogan("BUY YOUR TOMORROW!") == "Buy Your Tomorrow"
+    assert media.official_slogan("restart your day.") == "Restart Your Day" and media.official_slogan("Hello") is None
+    pick = lambda v: media.chosen_slogans({"slogan_choice": {"value": v}} if v else {})
+    assert pick(None) == ["Restart Your Day"] and pick("Buy Your Tomorrow") == ["Buy Your Tomorrow"]
+    assert pick("둘 다") == ["Restart Your Day", "Buy Your Tomorrow"]
+    s = sheet()
+    assert review.keyword_check("Buy Your Tomorrow. Restart Your Day.", "copy", s, {})["status"] == "clear"
+    kw = review.keyword_check("buy your tomorrow", "copy", s, {})
+    assert kw["items"][0]["code"] == "slogan" and kw["items"][0]["level"] == "error"
+    assert review.keyword_check("BUY YOUR TOMORROW", "copy", s, {})["items"][0]["level"] == "warn"
+    assert media.clean_layers([{"role": "slogan", "text": "buy your tomorrow"}])[0]["text"] == "Buy Your Tomorrow"
+    assert "Buy Your Tomorrow" in conversation.prompts.CONVERSATION_CORE_V3 and "Buy Your Tomorrow" in O.example_suggestions(
+        "goal", sheet(brand_focus=False, product_ids=["jelly_original"]))[2]["reason"]
+
+
+def test_image_slogan_choice_is_drawn(auth_client, ai, sync_jobs, monkeypatch):
+    sent = []
+    monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (sent.append(prompt), (PNG, {}))[1])
+    camp = create(auth_client)
+    camp = auth_client.post(f"/api/content/campaigns/{camp['id']}/decisions", json={
+        "expected_revision": camp["revision"], "changes": [{"field": "decisions.slogan_choice", "value": "Buy Your Tomorrow",
+                                                            "status": "confirmed"}]}).get_json()["campaign"]
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Neon on black.", "keep": [], "change": [], "text_layers": [],
+                                  "notes_ko": "시안", "flavors": [], "include_character": False})
+    chat(auth_client, camp, "이미지 만들어줘")
+    img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
+    assert img["image"]["image_text"] == [{"role": "slogan", "text": "Buy Your Tomorrow"}]
+    assert 'slogan: "Buy Your Tomorrow"' in sent[0]
+
+
+def test_image_gets_three_captions_and_hashtags(auth_client, ai, sync_jobs, monkeypatch):
+    monkeypatch.setattr(providers, "edit_image", lambda paths, prompt, size, model: (PNG, {}))  # 제품 사진을 참고로 넣어 생성
+    camp = create(auth_client, brand_focus=False, product_ids=["drink_original"])
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Bottles on black.", "keep": [], "change": [], "text_layers": [],
+                                  "notes_ko": "시안", "flavors": [], "include_character": False})
+    ai.add("content_caption", {"captions": [{"angle": "감성형", "text": "Your morning, rebooted. Restart Your Day."},
+                                            {"angle": "정보형", "text": "Reboot Drink Original in a 100ml glass bottle."},
+                                            {"angle": "행동 유도형", "text": "Buy Your Tomorrow — shop now."},
+                                            {"angle": "남는 안", "text": "버림"}],
+                               "hashtags": ["#Reboot", "neon vibes", "#reboot", "#Morning!"], "note_ko": "검정 배경 병 사진을 보고 썼어요."})
+    chat(auth_client, camp, "이미지 만들어줘")
+    img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
+    s = img["social"]
+    assert s["status"] == "done" and s["basis"] == "image" and len(s["captions"]) == 3
+    assert s["captions"][2] == {"angle": "행동 유도형", "text": "Buy Your Tomorrow — shop now."}
+    assert s["hashtags"] == ["#Reboot", "#neonvibes", "#Morning"]  # 기호 제거 · 대소문자 중복 제거
+    assert s["review"]["method"] == "키워드 확인"
+    call = next(c for c in ai.calls if c["name"] == "content_caption")
+    user = json.loads(call["user"])
+    assert call["images"] == 1 and user["basis"] == "image" and user["channel"] == "instagram"
+    assert user["channel_profile"].startswith("Instagram") and "Buy Your Tomorrow" in call["system"]
+
+
+def test_caption_failure_keeps_image(auth_client, ai, sync_jobs, monkeypatch):
+    monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (PNG, {}))
+    camp = create(auth_client)
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Neon.", "keep": [], "change": [], "text_layers": [], "notes_ko": "시안",
+                                  "flavors": [], "include_character": False})
+    chat(auth_client, camp, "이미지 만들어줘")  # 캡션 응답 없음 → AI 실패
+    c = get(auth_client, camp["id"])
+    img = next(v for v in c["versions"] if v["kind"] == "image")
+    assert c["jobs"][0]["status"] == "succeeded" and img["social"]["status"] == "failed" and img["social"]["captions"] == []
+    assert "추천하지 못했어요" in img["social"]["note"]
+
+
+def test_video_captions_use_scene_plan(auth_client, ai, sync_jobs, monkeypatch):
+    FakeHiggsfield(monkeypatch)
+    camp = create(auth_client, content_type="shortform", channels=["tiktok"], brand_focus=False, product_ids=["jelly_original"])
+    camp = set_settings(auth_client, camp, video_mode="higgsfield")
+    ai.add("content_turn", turn(intent="generate_media", action="generate_video"))
+    ai.add("content_video_plan", {"prompt_en": "Pouch spins on black.", "notes_ko": "회전 컷", "flavors": [],
+                                  "include_character": False})
+    ai.add("content_caption", {"captions": [{"angle": a, "text": f"Caption {a}"} for a in ("A", "B", "C")],
+                               "hashtags": ["#Reboot", "#JellyTime", "#NeonNight"], "note_ko": "장면 설명으로 썼어요."})
+    chat(auth_client, camp, "실제 영상 만들어줘")
+    c = get(auth_client, camp["id"])
+    video = next(v for v in c["versions"] if v["kind"] == "video")
+    assert video["social"]["basis"] == "video_plan" and len(video["social"]["captions"]) == 3
+    call = next(x for x in ai.calls if x["name"] == "content_caption")
+    user = json.loads(call["user"])
+    assert call["images"] == 0 and "Pouch spins on black." in user["video_plan"] and user["channel"] == "tiktok"
+    # 내 캠페인 목록: 영상만 있는 캠페인도 대표 파일(mp4)이 썸네일로 나감
+    items = auth_client.get("/api/content/campaigns").get_json()["items"]
+    assert next(i for i in items if i["id"] == camp["id"])["cover"].endswith(".mp4")
