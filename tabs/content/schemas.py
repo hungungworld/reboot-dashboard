@@ -89,6 +89,38 @@ INTERVIEW = _obj({
     "options": {"type": "array", "items": _obj({"label": _STR, "value": _STR, "reason": _STR})},
 })
 
+# 카드뉴스 덱 (cardnews_v1) — 레이아웃마다 쓰는 칸이 달라서 안 쓰는 칸은 빈 문자열 · 빈 배열
+CARDNEWS = _obj({
+    "deckTitle": _STR,
+    "caption": _STR,
+    "hashtags": _STR_LIST,
+    "needs_check": _STR_LIST,
+    "note_ko": _STR,
+    "cards": {"type": "array", "items": _obj({
+        "layout": {"type": "string", "enum": ["cover", "list", "quote", "stat", "outro"]},
+        "kicker": _STR,
+        "title": _STR,
+        "sub": _STR,
+        "items": {"type": "array", "items": _obj({"head": _STR, "body": _STR})},
+        "quote": _STR,
+        "number": _STR,
+        "desc": _STR,
+        "cta": _STR,
+        "photo_asset": _STR,
+        "visual_en": _STR,
+        "bg_ai": {"type": "boolean"},
+        "bg_reason_ko": _STR,
+    })},
+})
+
+# 카드뉴스 AI 배경 추천 (cardnews_bg_plan_v1) — 카드마다 쓸지 · 장면 · 이유
+CARDNEWS_BG_PLAN = _obj({"cards": {"type": "array", "items": _obj({
+    "index": {"type": "integer"},
+    "use": {"type": "boolean"},
+    "visual_en": _STR,
+    "reason_ko": _STR,
+})}})
+
 # 레퍼런스 이미지 요약 (reference_v1)
 REFERENCE = _obj({"summary": _STR})
 

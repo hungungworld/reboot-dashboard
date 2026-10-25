@@ -55,7 +55,10 @@
   function lsSet(k, v) { try { global.localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) { /* 저장 못 해도 화면은 동작 */ } }
   function lsDel(k) { try { global.localStorage.removeItem(LS + k); } catch (e) { /* 무시 */ } }
   const ref = name => (S.root ? S.root.querySelector(`[data-ref="${name}"]`) : null);
-  function products() { try { return REBOOT.data.products() || []; } catch (e) { return []; } }
+  function products() {   // 한글 이름(ko)은 브랜드 키트 값으로 덮어씀 (공용 팩트시트는 그대로)
+    const kit = (S.meta && S.meta.productKit) || {};
+    try { return (REBOOT.data.products() || []).map(p => (kit[p.id] && kit[p.id].ko ? Object.assign({}, p, { ko: kit[p.id].ko }) : p)); } catch (e) { return []; }
+  }
   const productById = id => products().find(p => p.id === id) || null;
   const typeOf = id => DATA.contentTypes.find(t => t.id === id) || null;
   const typeLabel = id => (typeOf(id) ? typeOf(id).label : id || '—');
@@ -191,6 +194,7 @@
     try { S.meta = await REBOOT.api(`${API}/meta`); } catch (e) { S.meta = null; }
     try { S.health = await REBOOT.health(); } catch (e) { S.health = null; }
     if (S.tab === 'create') {
+      if (cnActive()) { cnRenderSetup(); return; }  // 키 확인 뒤 '카드뉴스 만들기' 버튼을 켬
       renderApi(); renderAsideParts(); updateComposer(); renderMessages();
       const f = ref('sheet-footer');  // '질문 없이 바로 3안'은 키 확인 뒤에 켜짐
       if (f) f.innerHTML = sheetFooterHtml();
@@ -282,6 +286,11 @@
       renderCampaignGrid();
       return;
     }
+    if (cnActive()) {  // 카드뉴스는 대화 대신 편집기
+      el.innerHTML = cnLayoutHtml();
+      cnScale();
+      return;
+    }
     // 대화 중에는 '진행 과정 & 결과'를 대화창 바로 아래에 넓게 (오른쪽은 답 정리 · 결정 사항 · 접이식)
     el.innerHTML = S.camp
       ? `<div class="workbench cnt-bench">
@@ -317,12 +326,15 @@
     const missing = sheetMissing(s);
     const summary = missing.length ? `${missing.join(' · ')}을(를) 골라 주세요.`
       : `${typeLabel(s.content_type)} · ${s.channels.map(channelLabel).join(', ')} · ${targetLabel(s)} · ${s.language || '영어'}${s.goal ? ' · ' + s.goal : ''}`;
+    const cardnews = s.content_type === 'cardnews';  // 카드뉴스는 대화 없이 편집기로 (내용 넣기 → 템플릿 → 바로 수정)
     return `<div class="cnt-sheet-summary"><span class="panel-note">${missing.length ? '필수 3개' : '선택한 정보'}</span><span class="cnt-summary-text">${esc(summary)}</span>
-        <span class="panel-note">미정인 내용은 AI와 함께 정해요.</span></div>
-      <div class="flex wrap cnt-start-btns">
+        <span class="panel-note">${cardnews ? '다음 화면에서 내용을 넣고 템플릿을 골라요.' : '미정인 내용은 AI와 함께 정해요.'}</span></div>
+      <div class="flex wrap cnt-start-btns">${cardnews ? `
+        <button type="button" class="btn lime" data-act="start" ${missing.length ? 'disabled' : ''}>${icon('doc')}카드뉴스 편집기 열기${icon('arrow')}</button>
+      </div>` : `
         <button type="button" class="btn" data-act="start-quick" ${missing.length || !textReady() ? 'disabled' : ''} title="${textReady() ? '질문 없이 지금 정보로 초안 3안을 바로 만들어요' : 'OpenAI 키가 필요해요'}">${icon('spark')}질문 없이 바로 3안</button>
         <button type="button" class="btn lime" data-act="start" ${missing.length ? 'disabled' : ''}>이 정보로 시작${icon('arrow')}</button>
-      </div>`;
+      </div>`}`;
   }
 
   function sheetFormHtml(s, ctx) {
@@ -524,6 +536,7 @@
   async function startCampaign(btn, quick) {
     const s = S.sheet;
     if (sheetMissing(s).length) return;
+    const cardnews = s.content_type === 'cardnews';
     ui.busy(btn, true);
     try {
       const body = Object.assign(sheetPayload(s), { reference_text: s.reference_text || '', settings: lsGet('settings', {}) });
@@ -534,7 +547,8 @@
       setCampaign(res.campaign);
       renderMain();
       loadList();
-      if (quick) send('질문 없이 지금 정보로 바로 초안 만들어줘', { force: 'draft' });
+      if (cardnews) { /* 카드뉴스는 편집기에서 내용을 넣고 시작 (질문 카드 · 대화 없음) */ }
+      else if (quick) send('질문 없이 지금 정보로 바로 초안 만들어줘', { force: 'draft' });
       else interviewAct('start');  // 질문 카드 하나씩 · 추천 답 ①②③ (키가 없으면 예시 질문)
     } catch (e) {
       toast(e.message, 'error');
@@ -550,6 +564,8 @@
       S.edit = editCopy(c);
       S.baseOff = false;
       S.reviews = {};
+      S.cn = cnEmpty();
+      if (c.sheet.content_type === 'cardnews') cnLoad(c);  // 저장한 덱을 불러옴 (편집기 · 대화 어느 쪽이든)
     }
     setHash('campaign=' + c.id);
     if (c.jobs.some(j => ACTIVE_JOB.includes(j.status))) startPolling(); else stopPolling();
@@ -581,6 +597,12 @@
 
   function refreshStudio() {
     if (S.tab !== 'create' || !S.camp) return;
+    if (cnActive()) {  // 편집기: 화면 수정 중인 카드는 그대로 두고 상단 · 오른쪽만 갱신
+      if (!ref('cn-result')) { renderMain(); return; }
+      const bar = ref('bar'); if (bar) bar.innerHTML = barHtml();
+      cnRenderAside();
+      return;
+    }
     const studio = ref('studio');
     if (!studio || !studio.querySelector('[data-ref="messages"]')) { renderMain(); return; }
     const bar = ref('bar'); if (bar) bar.innerHTML = barHtml();
@@ -597,6 +619,7 @@
     const aside = ref('aside');
     if (!aside) return;
     if (!S.camp) { aside.innerHTML = sheetAsideHtml(); return; }
+    if (cnActive()) { cnRenderAside(); return; }
     if (!ref('results')) { renderMain(); return; }
     if (!aside.querySelector('[data-ref="brief"]')) aside.innerHTML = studioAsideHtml();
     else renderBrief();
@@ -629,6 +652,7 @@
       <div class="flex cnt-bar-right">
         <span class="cnt-status ${statusTone(c.status)}" title="완성하기 → 완료 · 더 수정하기 → 제작 중 (자동)">${esc(c.status)}</span>
         <span class="cnt-saved" title="서버에 저장됨 · 리비전 ${esc(c.revision)}">${icon('check')}저장됨 · ${esc(fmt.relative(c.updatedAt))}</span>
+        ${c.sheet.content_type === 'cardnews' && !cnActive() ? `<button type="button" class="btn small" data-act="cn-editor">${icon('doc')}카드뉴스 편집기</button>` : ''}
         <button type="button" class="btn small ghost" data-act="new-campaign">${icon('plus')}새로 만들기</button>
       </div>`;
   }
@@ -738,12 +762,12 @@
   function renderRefs() { const el = ref('refs'); if (el) el.innerHTML = refsHtml(); }
 
   // 올리기 전에 브라우저에서 긴 쪽 1024px JPEG로 줄임 (서버에 이미지 처리 패키지가 없어도 되게)
-  function shrinkImage(file) {
+  function shrinkImage(file, max) {
     return new Promise((resolve, reject) => {
       const url = global.URL.createObjectURL(file);
       const img = new global.Image();
       img.onload = () => {
-        const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+        const k = Math.min(1, (max || 1024) / Math.max(img.naturalWidth, img.naturalHeight));
         const cv = global.document.createElement('canvas');
         cv.width = Math.max(16, Math.round(img.naturalWidth * k));
         cv.height = Math.max(16, Math.round(img.naturalHeight * k));
@@ -1678,13 +1702,21 @@
     const b = f.brand || {};
     const prods = f.products || [];
     const cell = (label, v, extra) => `<div class="row"><span>${esc(label)}</span><span>${v == null || v === '' ? `<em class="cnt-missing">미제공 · 확인 필요</em>` : esc(v)}${extra || ''}</span></div>`;
+    const usd = n => '$' + Number(n).toFixed(2);
+    const priceText = p => (p.price || []).map(x => `${x.option} ${usd(x.usd)}${x.per_unit_usd != null ? ` (1개당 ${usd(x.per_unit_usd)})` : ''}`).join(' · ');
+    const nutritionText = n => (n ? [n.sugar && `당류 ${n.sugar}`, n.calories && `열량 ${n.calories}`, n.status].filter(Boolean).join(' · ') : null);
     return `<p class="panel-note">AI는 아래 값만 사실 근거로 써요 (기준 ${esc(f.facts_version || '—')}). 바꾸려면 설정 › 제품 정보에서 고칩니다.</p>
       <div class="cnt-fact"><b>Reboot 브랜드 ${badge('항상 포함')}</b>
         ${cell('슬로건', (b.slogans || []).join(' · ') || b.slogan)}${cell('브랜드 색', b.colors)}${cell('캐릭터', b.character)}${cell('CM송', b.cm_song)}${cell('구분', b.category)}</div>
       ${prods.length ? prods.map(p => `<div class="cnt-fact"><b>${esc(p.internal_name)} ${badge(p.evidence || '확인 필요', p.evidence === '확인 완료' ? 'green' : 'orange')}</b>
         ${cell('제형', p.form)}
         ${cell('맛', p.flavors && p.flavors.value, p.flavors && p.flavors.status === 'provisional' ? ' ' + badge('임시', 'orange') : '')}
+        ${p.shapes ? cell('모양', p.shapes) : ''}
         ${cell('포장', p.pack)}
+        ${cell('가격', priceText(p))}
+        ${p.zero_sugar_condition ? cell('Zero Sugar 조건', p.zero_sugar_condition) : ''}
+        ${cell('영양', nutritionText(p.nutrition), p.nutrition && p.nutrition.use_in_copy === false ? ' ' + badge('내부 확인용 · 카피 사용 금지', 'red') : '')}
+        ${cell('알레르기', p.allergens && (p.allergens.value || p.allergens.status))}
         ${cell('개발 방향', p.development_direction, p.sugar_reduction === 'development_goal' ? ' ' + badge('개발 목표 · 저당 표현 금지', 'red') : '')}
         ${cell('성분', p.ingredients)}${cell('용량', p.volume)}${cell('외부 출시명', p.consumer_name === '미정' ? null : p.consumer_name)}
       </div>`).join('') : '<p class="panel-note">선택한 제품이 없어요 — 브랜드 정보만 근거로 써요.</p>'}`;
@@ -2261,7 +2293,7 @@
   /* ───────── 내 캠페인 ───────── */
 
   function campaignsHtml() {
-    return `<div class="cnt-folders" data-ref="folder-chips" role="tablist" aria-label="채널별 폴더">${folderChipsHtml()}</div>
+    return `<div class="cnt-folders" data-ref="folder-chips" role="tablist" aria-label="콘텐츠별 폴더">${folderChipsHtml()}</div>
       <div class="filters cnt-filters">
         <div class="chips" data-ref="filter-chips">${filterChipsHtml()}</div>
         <div class="flex wrap"><label class="search cnt-search">${icon('search')}<input class="input" data-ref="search" type="search" placeholder="캠페인명 · 제품 · 채널 · 콘텐츠 검색" value="${esc(S.query)}" aria-label="캠페인 검색"></label>
@@ -2276,11 +2308,11 @@
     return ['전체'].concat(DATA.statuses).map(st => `<button type="button" class="chip" data-act="filter" data-value="${esc(st)}" aria-pressed="${S.filter === st}">${esc(st)} <span class="n">${esc(st === '전체' ? total : counts[st] || 0)}</span></button>`).join('');
   }
 
-  // 채널별 폴더 — 여러 채널 기획서는 해당 폴더마다 보임 (개수는 지금 상태 필터·검색 결과 기준)
-  const inFolder = (c, id) => (c.channels || []).includes(id);
+  // 콘텐츠별 폴더 — 이미지 · 카드뉴스 · 숏폼 영상 · CRM 메시지 (개수는 지금 상태 필터·검색 결과 기준)
+  const inFolder = (c, id) => c.contentType === id;
   function folderChipsHtml() {
     const list = S.list || [];
-    const folders = [['전체', '전체', list.length]].concat(DATA.channels.map(ch => [ch.id, ch.label, list.filter(c => inFolder(c, ch.id)).length]));
+    const folders = [['전체', '전체', list.length]].concat(DATA.contentTypes.map(t => [t.id, t.label, list.filter(c => inFolder(c, t.id)).length]));
     return folders.map(([id, label, n]) => `<button type="button" class="cnt-folder" role="tab" data-act="folder" data-value="${esc(id)}" aria-selected="${S.folder === id}">
       ${icon('grid')}<span>${esc(label)}</span><span class="n">${esc(n)}</span></button>`).join('');
   }
@@ -2301,15 +2333,17 @@
     if (S.folder !== '전체') {
       const items = S.list.filter(c => inFolder(c, S.folder));
       el.innerHTML = items.length ? `<div class="cnt-campaign-grid">${items.map(cardHtml).join('')}</div>`
-        : ui.empty(`${channelLabel(S.folder)} 폴더에 캠페인이 없어요.`, 'grid');
+        : ui.empty(`${typeLabel(S.folder)} 폴더에 캠페인이 없어요.`, 'grid');
+      cnScale();  // 카드뉴스 썸네일 축소
       return;
     }
-    el.innerHTML = DATA.channels.map(ch => {
-      const items = S.list.filter(c => inFolder(c, ch.id));
-      return items.length ? `<section class="cnt-folder-group"><div class="cnt-folder-head">${icon('grid')}<h3>${esc(ch.label)}</h3><span class="muted small">${esc(items.length)}개</span>
-          <button type="button" class="link" data-act="folder" data-value="${esc(ch.id)}">폴더 열기</button></div>
+    el.innerHTML = DATA.contentTypes.map(t => {
+      const items = S.list.filter(c => inFolder(c, t.id));
+      return items.length ? `<section class="cnt-folder-group"><div class="cnt-folder-head">${icon('grid')}<h3>${esc(t.label)}</h3><span class="muted small">${esc(items.length)}개</span>
+          <button type="button" class="link" data-act="folder" data-value="${esc(t.id)}">폴더 열기</button></div>
         <div class="cnt-campaign-grid">${items.map(cardHtml).join('')}</div></section>` : '';
     }).join('');
+    cnScale();
   }
 
   function canDelete(c) {
@@ -2317,10 +2351,19 @@
     return !!(me.isAdmin || (c.createdBy && c.createdBy === (me.name || String(me.email || '').split('@')[0])));
   }
 
+  // 카드뉴스 편집기 덱 → 앞 3장을 편집기와 같은 HTML로 작게 그림 (이미지 파일 없음 · 서버 cardnews.deck_covers)
+  function deckCoverHtml(c) {
+    const d = c.deckCover, ratio = d.ratio || '4:5', cards = (d.cards || []).map(cnNorm);
+    const n = d.count || cards.length;
+    return `<div class="cnt-cover cnt-cover-deck" role="img" aria-label="${esc(c.title)} 카드뉴스 미리보기">` +
+      cards.map((x, i) => cnFrame(cnCardHtml(x, i, n, { template: d.template || 'neon', ratio, brand: d.brand, scale: true }), ratio)).join('') +
+      (n > cards.length ? `<span class="cnt-cover-more">+${esc(n - cards.length)}장</span>` : '') + '</div>';
+  }
+
   function cardHtml(c) {
     const p = DATA.posters[c.contentType] || { en: 'CONTENT' };
     // 대표 파일이 영상(mp4)이면 첫 장면을 썸네일로 (소리 없음 · 재생 안 함)
-    const head = c.cover && /\.mp4(\?|$)/i.test(c.cover)
+    const head = c.deckCover ? deckCoverHtml(c) : c.cover && /\.mp4(\?|$)/i.test(c.cover)
       ? `<div class="cnt-cover cnt-cover-video"><video src="${esc(c.cover)}#t=0.1" muted playsinline preload="metadata" tabindex="-1" aria-label="${esc(c.title)} 대표 영상"></video><span class="cnt-cover-play" aria-hidden="true">▶</span></div>`
       : c.cover
       ? `<div class="cnt-cover"><img src="${esc(c.cover)}" alt="${esc(c.title)} 대표 이미지" loading="lazy"></div>`
@@ -2348,7 +2391,8 @@
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  function newCampaign() {
+  async function newCampaign() {
+    if (cnActive() && S.cn.dirty && !(await ui.confirm('저장하지 않은 카드뉴스 수정이 있어요. 새로 만들면 사라져요. 계속할까요?'))) return;
     stopPolling();
     S.camp = null;
     S.edit = null;
@@ -2356,6 +2400,862 @@
     setHash('');
     renderTabs();
     renderMain();
+  }
+
+  /* ───────── 카드뉴스 편집기 (cardnews.py · README 7.1a) ─────────
+     내용 넣기 → AI 덱 구성(또는 예시 · 그대로 나누기) → 템플릿에 얹기 → 글자를 눌러 바로 수정 → 저장(새 버전) · 이미지(PNG) 저장.
+     카드는 1080px 원본 크기로 그리고 화면에서는 scale로 줄여 보여 줌. PNG는 라이브러리 없이 SVG(foreignObject) → canvas (크롬 · 엣지). */
+
+  const CN = DATA.cardnews;
+  const CN_W = 1080;
+  const CN_MAX = 12;   // 서버 cardnews.norm_deck과 같은 최대 장수
+  const cnH = ratio => (ratio === '1:1' ? 1080 : 1350);
+  const CN_BUSY_MSGS = ['자료를 읽는 중…', '장마다 레이아웃을 고르는 중…', '문구를 다듬는 중…', '거의 다 됐어요…'];
+
+  function cnEmpty() {
+    return { campaignId: null, decks: {}, deck: null, versionId: null, dirty: false, busy: false, busyMsg: '', loading: false,
+      source: '', sourceName: '', opts: null, sel: null, reviews: {}, setup: true, notice: '',
+      bgJobs: [], bgWatch: {}, bgTimer: null };   // AI 배경 작업 · 이 화면에서 기다리는 작업(끝나면 카드에 넣음)
+  }
+  const cnId = () => (Math.random().toString(36).slice(2) + '00000000').slice(0, 8);
+  S.cn = cnEmpty();
+  S.cnMode = null;   // {id, mode: 'editor' | 'chat'} — 이 캠페인을 편집기 / 대화 중 무엇으로 볼지 사용자가 고른 것
+  if (global.addEventListener) global.addEventListener('resize', () => cnScale());
+
+  const cnIsDeckVersion = v => v.kind === 'cardnews' && String(v.note || '').startsWith('카드뉴스 편집기');
+  function cnActive() {
+    const c = S.camp;
+    if (!c || c.sheet.content_type !== 'cardnews') return false;
+    if (S.cnMode && S.cnMode.id === c.id) return S.cnMode.mode === 'editor';
+    // 편집기로 만든 덱이 있거나 아직 대화를 한 적이 없으면 편집기 (예전 대화형 카드뉴스는 대화 화면 그대로)
+    return c.versions.some(cnIsDeckVersion) || !c.messages.some(m => m.role === 'user' || m.role === 'assistant');
+  }
+
+  function cnDefaultOpts(c) {
+    const lang = String((c.decisions.language && c.decisions.language.value) || '');
+    const ratio = String((c.decisions.ratio && c.decisions.ratio.value) || '');
+    return { language: lang.includes('한국어') ? 'ko' : 'en', tone: 'info', count: 0, template: CN.templates[0].id,
+      ratio: ratio.includes('1:1') ? '1:1' : ratio.includes('4:5') ? '4:5' : (c.sheet.channels[0] === 'instagram' ? '4:5' : '1:1') };
+  }
+
+  async function cnLoad(c) {
+    S.cn = Object.assign(cnEmpty(), { campaignId: c.id, opts: cnDefaultOpts(c), source: lsGet('cn-src-' + c.id, ''), loading: true });
+    let decks = {};
+    try { decks = (await REBOOT.api(`${API}/campaigns/${c.id}/cardnews`)).decks || {}; } catch (e) { toast(e.message, 'error'); }
+    if (!S.camp || S.camp.id !== c.id) return;
+    S.cn.decks = decks;
+    S.cn.loading = false;
+    cnBgRefresh(true);  // 새로고침 전에 요청한 AI 배경이 아직 만드는 중이면 이어서 기다림
+    const ids = Object.keys(decks).map(Number).sort((a, b) => b - a);
+    const pick = decks[S.camp.selectedVersionId] ? S.camp.selectedVersionId : ids[0];
+    if (pick) cnUseDeck(pick, decks[pick]);
+    if (S.tab === 'create' && cnActive()) renderMain();
+  }
+
+  // vid가 없으면 아직 저장 안 한 덱 (예시 · 그대로 나누기 · AI 실패 대체)
+  function cnUseDeck(vid, deck) {
+    const n = S.cn;
+    n.deck = JSON.parse(JSON.stringify(deck));
+    n.deck.cards = n.deck.cards.map(cnNorm);
+    n.versionId = vid || null;
+    n.dirty = !vid;
+    n.setup = false;
+    n.sel = null;
+    n.reviews = {};
+    Object.assign(n.opts, { ratio: n.deck.ratio, template: n.deck.template, language: n.deck.language, tone: n.deck.tone });
+  }
+
+  function cnBlank(layout) {
+    return { id: cnId(), layout, kicker: '', title: '', sub: '', items: layout === 'list' ? [{ head: '', body: '' }] : [], quote: '',
+      number: '', desc: '', cta: '', photo: null, sizes: {}, numberCheck: false, visual: '', bgAi: false, bgReason: '' };
+  }
+  function cnNorm(c) {
+    return Object.assign(cnBlank(c.layout || 'list'), c, { id: c.id || cnId(), sizes: Object.assign({}, c.sizes),
+      items: (c.items || []).map(it => ({ head: it.head || '', body: it.body || '' })) });
+  }
+  function cnDemo() {
+    const d = JSON.parse(JSON.stringify(CN.sample));
+    return Object.assign(d, { template: S.cn.opts.template, ratio: S.cn.opts.ratio });
+  }
+
+  // AI 없이: 넣은 내용을 그대로 카드로 나눔 ('## 제목' · '1장' · 'Slide 1' · 'S1'로 나뉘어 있으면 그 단위, 아니면 빈 줄 단위)
+  function cnSplit(text) {
+    const marker = /^\s*(?:#{1,3}\s+|\d{1,2}\s*장\b[.:)]?\s*|slide\s*\d{1,2}\b[.:)]?\s*|S\d{1,2}\b[.:)·\s]*)/i;
+    const src = String(text || '').replace(/\r\n/g, '\n');
+    const lines = src.split('\n');
+    let parts = [];
+    if (lines.filter(l => marker.test(l)).length >= 2) {
+      lines.forEach(l => { if (marker.test(l) || !parts.length) parts.push([]); parts[parts.length - 1].push(l); });
+      parts = parts.map(p => p.join('\n'));
+    } else parts = src.split(/\n\s*\n/);
+    const cards = parts.map(p => p.trim()).filter(Boolean).slice(0, CN_MAX).map(p => {
+      const ls = p.split('\n').map(l => l.replace(marker, '').trim()).filter(Boolean);
+      const c = cnBlank('list');
+      c.items = [];
+      c.title = (ls[0] || '').slice(0, 160);
+      c.sub = ls.slice(1).join('\n').slice(0, 300);
+      return c;
+    });
+    if (cards.length) cards[0].layout = 'cover';
+    if (cards.length > 1) cards[cards.length - 1].layout = 'outro';
+    return cards;
+  }
+  function cnSplitDeck() {
+    const o = S.cn.opts, cards = cnSplit(S.cn.source);
+    return { deckTitle: (cards[0] && cards[0].title) || '카드뉴스', brand: 'REBOOT', demo: false, template: o.template, ratio: o.ratio,
+      language: o.language, tone: o.tone, caption: '', hashtags: [], needsCheck: [], cards };
+  }
+
+  /* 카드 그리기 — 편집 화면 · 템플릿 미리보기 · PNG가 같은 HTML을 씀 (테마는 .cnt-cn-t-<ID> 클래스만 바뀜) */
+
+  const cnRich = s => esc(s || '').replace(/\*\*(.+?)\*\*/g, '<mark class="cnt-cn-em">$1</mark>');
+  const cnSizeKey = key => (key.startsWith('items.') ? 'items' : key);
+  function cnPhotoUrl(p) {
+    if (!p) return '';
+    if (p.asset) return `${API}/assets/${encodeURIComponent(p.asset)}.jpg`;
+    return p.file ? `${API}/files/${encodeURIComponent(p.file)}` : '';
+  }
+  // opt: {template, ratio, brand, edit(글자 · 사진 칸 편집), scale(화면용 축소), photoUrl(PNG용 data URL)}
+  function cnCardHtml(c, i, n, opt) {
+    const f = (key, tag, cls, value) => {
+      const v = value !== undefined ? value : c[key];
+      if (!opt.edit && !String(v || '').trim()) return '';
+      const sk = cnSizeKey(key), k = c.sizes && c.sizes[sk];
+      const ed = opt.edit ? ` contenteditable="true" spellcheck="false" data-cn-k="${esc(key)}" data-i="${i}" data-ph="${esc(CN.placeholders[sk] || '')}"` : '';
+      return `<${tag} class="${cls}"${k ? ` style="--k:${k}"` : ''}${ed}>${cnRich(v)}</${tag}>`;
+    };
+    let body;
+    if (c.layout === 'cover') body = f('kicker', 'div', 'cnt-cn-kicker') + f('title', 'h2', 'cnt-cn-title') + f('sub', 'p', 'cnt-cn-sub');
+    else if (c.layout === 'list') {
+      body = f('title', 'h2', 'cnt-cn-title') + f('sub', 'p', 'cnt-cn-sub') + (c.items || []).map((it, j) => (opt.edit || it.head || it.body
+        ? `<div class="cnt-cn-li">${f(`items.${j}.head`, 'b', 'cnt-cn-li-head', it.head)}${f(`items.${j}.body`, 'span', 'cnt-cn-li-body', it.body)}</div>` : '')).join('');
+    } else if (c.layout === 'quote') body = f('title', 'h2', 'cnt-cn-title') + f('quote', 'p', 'cnt-cn-quote');
+    else if (c.layout === 'stat') body = f('title', 'h2', 'cnt-cn-title') + f('number', 'div', 'cnt-cn-number') + f('desc', 'p', 'cnt-cn-desc');
+    else body = f('title', 'h2', 'cnt-cn-title') + f('sub', 'p', 'cnt-cn-sub') + f('cta', 'div', 'cnt-cn-cta');
+    const url = opt.photoUrl !== undefined ? opt.photoUrl : cnPhotoUrl(c.photo);
+    const photo = url ? `<div class="cnt-cn-photo"${opt.edit ? ` data-act="cn-photo" data-i="${i}" title="사진 바꾸기"` : ''} style="background-image:url('${esc(url)}')"></div>`
+      : opt.edit ? `<div class="cnt-cn-photo empty" data-act="cn-photo" data-i="${i}">${icon('image')}사진 추가</div>` : '';
+    const style = `width:${CN_W}px;height:${cnH(opt.ratio)}px` + (opt.scale ? ';transform:scale(var(--s,.25));transform-origin:0 0' : '');
+    const full = url && c.photo && (c.photo.full || c.photo.ai) ? ' cnt-cn-full' : '';   // 사진을 카드 전체 배경으로 (AI 배경은 항상)
+    return `<div class="cnt-cn-card cnt-cn-t-${esc(opt.template)} cnt-cn-l-${esc(c.layout)}${full}" style="${style}">${photo}<div class="cnt-cn-body">${body}</div>` +
+      `<div class="cnt-cn-foot"><span class="cnt-cn-brand">${esc(opt.brand || 'REBOOT')}</span><span class="cnt-cn-page">${i + 1} / ${n}</span></div></div>`;
+  }
+  const cnFrame = (inner, ratio) => `<div class="cnt-cn-frame" style="aspect-ratio:${CN_W}/${cnH(ratio)}">${inner}</div>`;
+  function cnScale() {
+    if (!S.root) return;
+    S.root.querySelectorAll('.cnt-cn-frame').forEach(fr => fr.style.setProperty('--s', String(fr.clientWidth / CN_W)));
+  }
+
+  /* 화면 */
+
+  function cnLayoutHtml() {
+    return `<div class="workbench cnt-bench">
+        <div class="cnt-main-col">
+          <section class="card cnt-cn">
+            <div class="cnt-studio-bar" data-ref="bar">${barHtml()}</div>
+            <div data-ref="cn-setup">${cnSetupHtml()}</div>
+          </section>
+          <section class="card cnt-cn-result" data-ref="cn-result">${cnResultHtml()}</section>
+        </div>
+        <aside class="stack cnt-aside" data-ref="cn-aside">${cnAsideHtml()}</aside>
+      </div>`;
+  }
+  function cnRenderSetup() { const el = ref('cn-setup'); if (el) el.innerHTML = cnSetupHtml(); cnScale(); }
+  function cnRenderResult() { const el = ref('cn-result'); if (el) el.innerHTML = cnResultHtml(); cnScale(); cnRenderAside(); }
+  function cnRenderAside() { const el = ref('cn-aside'); if (el) el.innerHTML = cnAsideHtml(); }
+  function cnRenderCard(i) {
+    const d = S.cn.deck, fr = S.root && S.root.querySelector(`[data-cn-item="${i}"] .cnt-cn-frame`);
+    if (fr && d && d.cards[i]) fr.innerHTML = cnCardHtml(d.cards[i], i, d.cards.length, { template: d.template, ratio: d.ratio, brand: d.brand, edit: true, scale: true });
+  }
+  function cnTouch() {
+    if (S.cn.dirty) return;
+    S.cn.dirty = true;
+    const el = ref('cn-status');
+    if (el) el.innerHTML = cnStatusHtml();
+    cnRenderAside();
+  }
+
+  const cnLabel = (list, id) => (list.find(x => String(x.id) === String(id)) || {}).label || String(id);
+  function cnCountText() {
+    const n = S.cn, len = n.source.length;
+    return `${n.sourceName ? esc(n.sourceName) + ' · ' : ''}${esc(len.toLocaleString())}자${len > CN.sourceMax ? ` · 앞 ${esc(CN.sourceMax.toLocaleString())}자만 AI에 보내요` : ''}`;
+  }
+  function cnOptChips(key, list) {
+    const o = S.cn.opts;
+    return `<div class="chips">${list.map(x => `<button type="button" class="chip" data-act="cn-opt" data-key="${key}" data-value="${esc(x.id)}" aria-pressed="${String(o[key]) === String(x.id)}">${esc(x.label)}</button>`).join('')}</div>`;
+  }
+
+  function cnSetupHtml() {
+    const n = S.cn, o = n.opts;
+    if (n.loading || !o) return '<div class="cnt-cn-pad"><span class="spinner"></span> 카드뉴스를 불러오는 중…</div>';
+    if (n.deck && !n.setup) {
+      return `<div class="cnt-cn-pad between"><span class="panel-note">${icon('doc')} 넣은 내용 ${cnCountText()} · ${esc(cnLabel(CN.languages, o.language))} · ${esc(cnLabel(CN.tones, o.tone))}</span>
+        <button type="button" class="btn small ghost" data-act="cn-setup">${icon('edit')}내용 · 옵션 바꿔 다시 만들기</button></div>`;
+    }
+    const sample = cnNorm(CN.sample.cards[0]);
+    return `<div class="cnt-cn-pad">
+      <div class="cnt-cn-step"><span class="stepnum">1</span><strong>카드뉴스에 넣을 내용</strong><span class="panel-note">직접 쓰거나 파일에서 불러와요</span></div>
+      <textarea class="input cnt-cn-source" data-cn-input="source" rows="7" aria-label="카드뉴스에 넣을 내용"
+        placeholder="예: 제품 소개 메모, 블로그 글, FAQ, 이벤트 안내…&#10;'1장 / 2장'이나 '## 제목'으로 나눠 쓰면 그 단위로 카드를 나눠요.">${esc(n.source)}</textarea>
+      <div class="flex between cnt-cn-srcbar">
+        <span class="panel-note" data-ref="cn-count">${cnCountText()}</span>
+        <span class="flex"><input type="file" data-ref="cn-file" accept=".md,.markdown,.txt,.csv,.docx,.pdf" hidden>
+          <button type="button" class="btn small" data-act="cn-file">${icon('upload')}파일 불러오기 (.md · .txt · .csv · .docx)</button></span>
+      </div>
+      <div class="cnt-cn-step"><span class="stepnum">2</span><strong>옵션</strong></div>
+      <div class="cnt-cn-opts">
+        <span class="field-label">언어</span>${cnOptChips('language', CN.languages)}
+        <span class="field-label">비율</span>${cnOptChips('ratio', CN.ratios)}
+        <span class="field-label">장 수</span>${cnOptChips('count', CN.counts)}
+        <span class="field-label">톤</span>${cnOptChips('tone', CN.tones)}
+      </div>
+      <div class="cnt-cn-step"><span class="stepnum">3</span><strong>템플릿</strong><span class="panel-note">만든 뒤에도 바꿀 수 있어요</span></div>
+      <div class="cnt-cn-tpls">${CN.templates.map(t => `<button type="button" class="cnt-cn-tpl" data-act="cn-opt" data-key="template" data-value="${esc(t.id)}" aria-pressed="${o.template === t.id}">
+          ${cnFrame(cnCardHtml(sample, 0, CN.sample.cards.length, { template: t.id, ratio: o.ratio, brand: 'REBOOT', scale: true }), o.ratio)}
+          <b>${esc(t.label)}</b><span class="panel-note">${esc(t.hint)}</span></button>`).join('')}</div>
+      <div class="flex cnt-cn-go">
+        <button type="button" class="btn lime" data-act="cn-generate" ${!textReady() || n.busy ? 'disabled' : ''} title="${textReady() ? 'OpenAI가 내용을 카드뉴스로 구성해요' : 'OpenAI 키가 필요해요'}">${n.busy ? '<span class="spinner"></span>' + esc(n.busyMsg) : icon('spark') + '카드뉴스 만들기'}</button>
+        <button type="button" class="btn" data-act="cn-split" ${n.busy ? 'disabled' : ''} title="AI 없이 넣은 내용을 빈 줄 · 제목 단위로 그대로 카드로 나눠요">${icon('doc')}AI 없이 그대로 나누기</button>
+        <button type="button" class="btn ghost" data-act="cn-demo" ${n.busy ? 'disabled' : ''}>예시로 구경하기</button>
+        ${n.deck && !n.busy ? '<button type="button" class="link" data-act="cn-setup-close">접기</button>' : ''}
+      </div>
+      ${textReady() ? '' : '<p class="panel-note mt-8">OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 AI로 만들 수 있어요. 지금은 예시를 보거나 넣은 내용을 그대로 나눠서 고칠 수 있어요.</p>'}
+    </div>`;
+  }
+
+  function cnVersion() { return S.cn.versionId ? S.camp.versions.find(v => v.id === S.cn.versionId) || null : null; }
+  function cnStatusHtml() {
+    const n = S.cn, d = n.deck, v = cnVersion();
+    return `${d.demo ? badge('예시 데이터', 'orange') : ''}${v && v.source === 'ai' ? badge('AI · 참고용', 'purple') : ''}
+      ${v ? `<span class="muted small">${esc(v.label)} · v${esc(v.seq)}</span>` : '<span class="muted small">아직 저장 안 함</span>'}
+      ${n.dirty ? badge('저장 안 한 수정', 'orange') : badge('저장됨', 'green')}
+      <button type="button" class="btn small lime" data-act="cn-save" ${n.dirty ? '' : 'disabled'}>${icon('check')}저장 (새 버전)</button>`;
+  }
+  function cnToolbarHtml() {
+    const d = S.cn.deck;
+    const chips = (key, list) => `<div class="chips">${list.map(x => `<button type="button" class="chip" data-act="cn-deck" data-key="${key}" data-value="${esc(x.id)}" aria-pressed="${d[key] === x.id}">${esc(x.label)}</button>`).join('')}</div>`;
+    return `<span class="field-label">템플릿</span>${chips('template', CN.templates)}
+      <span class="field-label">비율</span>${chips('ratio', CN.ratios)}
+      <span class="field-label">계정 라벨</span><input class="input cnt-cn-brand-input" data-cn-input="brand" value="${esc(d.brand || 'REBOOT')}" aria-label="카드에 찍을 계정 라벨">
+      <span class="flex wrap cnt-cn-right">
+        <button type="button" class="btn small" data-act="cn-bg" title="우리 제품 사진을 참고해 이미지 AI가 카드 배경을 그려요 (장당 이미지 생성 1번)">${icon('image')}AI 배경</button>
+        <button type="button" class="btn small" data-act="cn-check">${icon('shield')}문구 검사</button>
+        <button type="button" class="btn small dark" data-act="cn-save-images">${icon('download')}이미지 저장하기</button></span>`;
+  }
+  function cnSizebarHtml() {
+    const sel = S.cn.sel, d = S.cn.deck;
+    if (!sel || !d || !d.cards[sel.i]) return `<span>${icon('edit')} 카드 위 글자를 누르면 그 자리에서 고쳐져요. 강조는 <b>**단어**</b>처럼 별표로 감싸요.</span>`;
+    const sk = cnSizeKey(sel.key), k = d.cards[sel.i].sizes[sk] || 1;
+    return `<span><b>${sel.i + 1}장 · ${esc(CN.placeholders[sk] || sk)}</b> 글자 크기 ${Math.round(k * 100)}%</span>
+      <button type="button" class="btn small" data-act="cn-size" data-d="-1" aria-label="글자 작게">A−</button>
+      <button type="button" class="btn small" data-act="cn-size" data-d="1" aria-label="글자 크게">A＋</button>
+      <button type="button" class="btn small ghost" data-act="cn-size" data-d="0">기본 크기</button>`;
+  }
+  function cnReviewFlag(r) {
+    if (r.verdict === 'UNAVAILABLE' || r.verdict === 'ERROR') return `<div class="cnt-cn-flag">컴플라이언스: ${esc(r.label)}</div>`;
+    if (r.verdict === 'PASS') return '<div class="cnt-cn-flag ok">컴플라이언스: 규칙 미탐지 (법적 승인 아님)</div>';
+    const terms = r.findings.slice(0, 3).map(f => `${(f.terms || []).join(', ') || f.name}${f.alt ? ` → ${f.alt}` : ''}`).join(' · ');
+    return `<div class="cnt-cn-flag${r.verdict === 'BLOCK' ? ' red' : ''}">컴플라이언스: ${esc(r.label)}${terms ? ' — ' + esc(terms) : ''}</div>`;
+  }
+  function cnItemHtml(c, i, d) {
+    const n = d.cards.length, r = S.cn.reviews[i];
+    const making = S.cn.bgJobs.some(j => j.cardId === c.id && ACTIVE_JOB.includes(j.status));
+    const flags = (making ? '<div class="cnt-cn-flag ok"><span class="spinner"></span> AI 배경 만드는 중… 다 되면 이 카드에 들어가요</div>' : '') +
+      (c.photo && c.photo.ai ? '<div class="cnt-cn-flag">AI 배경 · 제품 라벨 · 모양은 게시 전 확인</div>' : '') +
+      (c.layout === 'stat' && c.numberCheck
+      ? `<div class="cnt-cn-flag between">숫자 확인 필요 — 넣은 자료 · 제품 정보에서 찾지 못한 숫자예요. <button type="button" class="link" data-act="cn-number-ok" data-i="${i}">확인했어요</button></div>` : '') +
+      (r ? cnReviewFlag(r) : '');
+    return `<div class="cnt-cn-item" data-cn-item="${i}">
+      ${cnFrame(cnCardHtml(c, i, n, { template: d.template, ratio: d.ratio, brand: d.brand, edit: true, scale: true }), d.ratio)}
+      <div class="cnt-cn-tools"><span class="cnt-cn-n">${i + 1}</span>
+        <select data-cn-layout="${i}" aria-label="${i + 1}장 레이아웃">${CN.layouts.map(l => `<option value="${l.id}"${l.id === c.layout ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}</select>
+        ${c.layout === 'list' && c.items.length < 5 ? `<button type="button" class="btn small ghost" data-act="cn-item-add" data-i="${i}">＋항목</button>` : ''}
+        <button type="button" class="btn small ghost" data-act="cn-move" data-i="${i}" data-d="-1" ${i ? '' : 'disabled'} aria-label="앞으로">←</button>
+        <button type="button" class="btn small ghost" data-act="cn-move" data-i="${i}" data-d="1" ${i < n - 1 ? '' : 'disabled'} aria-label="뒤로">→</button>
+        <button type="button" class="btn small ghost" data-act="cn-dup" data-i="${i}" ${n >= CN_MAX ? 'disabled' : ''}>복제</button>
+        <button type="button" class="btn small ghost" data-act="cn-del" data-i="${i}" ${n <= 1 ? 'disabled' : ''} aria-label="${i + 1}장 삭제">${icon('trash')}</button>
+        <button type="button" class="btn small ghost" data-act="cn-bg" data-i="${i}" title="이 카드 AI 배경 만들기">AI 배경</button>
+        <button type="button" class="btn small" data-act="cn-png" data-i="${i}" title="이 카드만 PNG로 저장">PNG</button>
+      </div>${flags}</div>`;
+  }
+
+  function cnResultHtml() {
+    const n = S.cn, d = n.deck;
+    if (!d) return `<div class="cnt-cn-pad">${ui.empty(n.loading ? '불러오는 중…' : '아직 카드가 없어요. 위에서 내용을 넣고 [카드뉴스 만들기]를 누르거나, 예시로 구경해 보세요.', 'doc')}</div>`;
+    const v = cnVersion();
+    const checks = (d.needsCheck || []).map(x => `<li>${esc(x)}</li>`).join('');
+    return `<div class="cnt-cn-head"><input class="input cnt-cn-title-input" data-cn-input="deckTitle" value="${esc(String(d.deckTitle || '').replace(/\*\*/g, ''))}" aria-label="카드뉴스 제목 (파일 이름에 써요)">
+        <span class="flex wrap" data-ref="cn-status">${cnStatusHtml()}</span></div>
+      ${n.notice ? `<div class="cnt-cn-pad cnt-cn-notice"><div class="note warn">${esc(n.notice)}</div></div>` : ''}
+      <div class="cnt-cn-toolbar">${cnToolbarHtml()}</div>
+      <div class="cnt-cn-sizebar" data-ref="cn-sizebar">${cnSizebarHtml()}</div>
+      <div class="cnt-cn-grid">${d.cards.map((c, i) => cnItemHtml(c, i, d)).join('')}
+        ${d.cards.length < CN_MAX ? `<div class="cnt-cn-add"><select data-ref="cn-add-layout" aria-label="추가할 카드 레이아웃">${CN.layouts.map(l => `<option value="${l.id}"${l.id === 'list' ? ' selected' : ''}>${esc(l.label)}</option>`).join('')}</select>
+          <button type="button" class="btn small" data-act="cn-add">${icon('plus')}카드 추가</button></div>` : ''}</div>
+      <div class="cnt-cn-social">
+        <div class="between"><span class="field-label">게시글 캡션</span><button type="button" class="btn small ghost" data-act="cn-copy-caption">캡션 + 해시태그 복사</button></div>
+        <textarea class="input" data-cn-input="caption" rows="4" placeholder="게시글 캡션" aria-label="게시글 캡션">${esc(d.caption || '')}</textarea>
+        <input class="input" data-cn-input="hashtags" value="${esc((d.hashtags || []).join(' '))}" placeholder="#Reboot #RebootJelly" aria-label="해시태그">
+        ${n.reviews.caption ? cnReviewFlag(n.reviews.caption) : ''}
+        ${checks ? `<div class="note warn"><b>확인할 점</b><ul class="cnt-cn-checks">${checks}</ul></div>` : ''}
+        ${v && v.review && v.review.keyword ? `<div class="panel-note">저장한 버전 키워드 확인: ${keywordBadge(v, true)} · 카드 문구는 [문구 검사]로 컴플라이언스 1차 판정을 볼 수 있어요 (법적 승인 아님).</div>` : ''}
+        <p class="panel-note">이미지(PNG)는 크롬 · 엣지에서 저장돼요. 글꼴은 이 PC에 설치된 글꼴로 그려요. 게시 전에 사람이 한 번 더 확인하세요.</p>
+      </div>`;
+  }
+
+  function cnAsideHtml() {
+    const c = S.camp, n = S.cn, v = cnVersion();
+    const vs = c.versions.filter(cnIsDeckVersion);
+    const complete = c.status === '완료';
+    return `<section class="card"><div class="card-head"><h2>저장한 버전</h2><span class="muted small">${vs.length}개</span></div>
+        ${vs.length ? `<div class="cnt-cn-versions">${vs.map(x => `<button type="button" class="cnt-version${x.id === n.versionId ? ' on' : ''}" data-act="cn-version" data-id="${esc(x.id)}">
+            <span><b>${esc(x.label)}</b> · v${esc(x.seq)}${x.isFinal ? ' ' + badge('최종본', 'lime') : ''}</span>
+            <span class="cnt-vmeta">${esc(x.source === 'ai' ? 'AI 구성' : '직접 수정')} · ${esc(fmt.relative(x.createdAt))}</span></button>`).join('')}</div>`
+          : '<p class="panel-note">아직 저장한 버전이 없어요. 만들거나 고친 뒤 [저장]을 누르면 새 버전으로 남아요.</p>'}
+        ${v && !n.dirty && (!complete || v.id !== c.finalVersionId) ? `<button type="button" class="btn small lime block mt-8" data-act="cn-complete">${icon('check')}${complete ? '이 버전으로 완성하기' : '완성하기'} · ${esc(v.label)} v${esc(v.seq)}</button>` : ''}
+        ${complete ? `<button type="button" class="btn small block mt-8" data-act="reopen">${icon('edit')}더 수정하기</button>` : ''}
+      </section>
+      <section class="card"><div class="card-head"><h2>사용법</h2></div>
+        <ul class="cnt-cn-tips">
+          <li>카드 위 <b>글자를 누르면</b> 바로 고쳐져요. 강조는 <b>**단어**</b>.</li>
+          <li>글자를 고른 뒤 위 줄의 <b>A− / A＋</b>로 그 칸만 크기를 바꿔요.</li>
+          <li><b>사진 칸</b>을 누르면 브랜드 사진을 고르거나 내 사진을 올려요.</li>
+          <li>템플릿 · 비율 · 카드 순서는 언제든 바꿀 수 있어요. 수정은 [저장]해야 버전으로 남아요.</li>
+        </ul>
+        <button type="button" class="link" data-act="cn-chat">${icon('chat')}대화로 만들기 (예전 방식)</button>
+      </section>`;
+  }
+
+  /* 동작 */
+
+  function cnClick(act, b) {
+    const n = S.cn, d = n.deck, i = +b.dataset.i;
+    switch (act) {
+      case 'cn-opt': {
+        const k = b.dataset.key;
+        n.opts[k] = k === 'count' ? +b.dataset.value : b.dataset.value;
+        if (d && (k === 'template' || k === 'ratio') && d[k] !== n.opts[k]) { d[k] = n.opts[k]; cnTouch(); cnRenderResult(); }
+        cnRenderSetup();
+        break;
+      }
+      case 'cn-deck': d[b.dataset.key] = b.dataset.value; n.opts[b.dataset.key] = b.dataset.value; cnTouch(); cnRenderResult(); break;
+      case 'cn-setup': n.setup = true; cnRenderSetup(); break;
+      case 'cn-setup-close': n.setup = false; cnRenderSetup(); break;
+      case 'cn-file': { const f = ref('cn-file'); if (f) { f.value = ''; f.click(); } break; }
+      case 'cn-generate': cnGenerate(); break;
+      case 'cn-split':
+        if (n.source.trim().length < 2) { toast('나눌 내용을 먼저 넣어 주세요.', 'error'); break; }
+        cnStart(cnSplitDeck(), 'AI 없이 넣은 내용을 그대로 카드로 나눴어요. 글자를 눌러 다듬은 뒤 저장하세요.');
+        break;
+      case 'cn-demo': cnStart(cnDemo(), '예시 데이터예요. 마음대로 고쳐 보고, 저장하면 \'예시\' 버전으로 남아요.'); break;
+      case 'cn-save': cnSave(b); break;
+      case 'cn-size': cnSize(+b.dataset.d); break;
+      case 'cn-photo': cnPhotoModal(i); break;
+      case 'cn-number-ok': d.cards[i].numberCheck = false; cnTouch(); cnRenderResult(); break;
+      case 'cn-move': {
+        const j = i + (+b.dataset.d);
+        if (j < 0 || j >= d.cards.length) break;
+        const [c] = d.cards.splice(i, 1);
+        d.cards.splice(j, 0, c);
+        n.reviews = {}; n.sel = null; cnTouch(); cnRenderResult();
+        break;
+      }
+      case 'cn-dup':
+        if (d.cards.length < CN_MAX) { d.cards.splice(i + 1, 0, Object.assign(JSON.parse(JSON.stringify(d.cards[i])), { id: cnId() })); n.reviews = {}; cnTouch(); cnRenderResult(); }
+        break;
+      case 'cn-bg': cnBgModal(Number.isNaN(i) ? null : i); break;
+      case 'cn-del': if (d.cards.length > 1) { d.cards.splice(i, 1); n.reviews = {}; n.sel = null; cnTouch(); cnRenderResult(); } break;
+      case 'cn-add': {  // 마지막 장이 마무리(outro)면 그 앞에 넣음
+        const sel = ref('cn-add-layout');
+        const last = d.cards[d.cards.length - 1];
+        const at = d.cards.length > 1 && last.layout === 'outro' ? d.cards.length - 1 : d.cards.length;
+        d.cards.splice(at, 0, cnBlank(sel ? sel.value : 'list'));
+        n.reviews = {}; cnTouch(); cnRenderResult();
+        break;
+      }
+      case 'cn-item-add': d.cards[i].items.push({ head: '', body: '' }); cnTouch(); cnRenderResult(); break;
+      case 'cn-png': cnDownloadOne(i, b); break;
+      case 'cn-save-images': cnSaveImages(b); break;
+      case 'cn-check': cnCheck(); break;
+      case 'cn-copy-caption': {
+        const text = [d.caption, (d.hashtags || []).join(' ')].filter(Boolean).join('\n\n');
+        if (!text) { toast('복사할 캡션이 없어요.', 'error'); break; }
+        if (global.navigator && global.navigator.clipboard) global.navigator.clipboard.writeText(text).then(() => toast('복사했어요.'), () => toast('복사하지 못했어요.', 'error'));
+        break;
+      }
+      case 'cn-version': cnPickVersion(+b.dataset.id); break;
+      case 'cn-complete': cnComplete(b); break;
+      case 'cn-chat': cnLeave(); break;
+      case 'cn-editor':
+        S.cnMode = { id: S.camp.id, mode: 'editor' };
+        if (S.cn.campaignId !== S.camp.id) cnLoad(S.camp);
+        renderMain();
+        break;
+      default: return false;
+    }
+    return true;
+  }
+
+  async function cnLeave() {
+    if (S.cn.dirty && !(await ui.confirm('저장하지 않은 카드뉴스 수정이 있어요. 대화 화면으로 가도 이 화면에 돌아오면 그대로 남아 있어요. 계속할까요?'))) return;
+    S.cnMode = { id: S.camp.id, mode: 'chat' };
+    renderMain();
+    if (!S.camp.messages.some(m => m.role === 'assistant')) interviewAct('start');
+  }
+
+  async function cnStart(deck, notice) {
+    if (S.cn.dirty && S.cn.deck && !(await ui.confirm('저장하지 않은 수정이 있어요. 새로 시작하면 화면의 수정은 사라져요 (저장한 버전은 그대로). 계속할까요?'))) return;
+    if (!deck.cards.length) { toast('카드로 나눌 내용이 없어요.', 'error'); return; }
+    cnUseDeck(null, deck);
+    S.cn.notice = notice;
+    renderMain();
+  }
+
+  function cnFromEditable(el) {
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('mark, b, strong').forEach(m => m.replaceWith(global.document.createTextNode(m.textContent ? `**${m.textContent}**` : '')));
+    clone.querySelectorAll('br').forEach(x => x.replaceWith(global.document.createTextNode('\n')));
+    return clone.textContent.replace(/ /g, ' ').replace(/\*\*\s*\*\*/g, '');
+  }
+  function cnSet(c, key, val) {
+    const p = key.split('.');
+    if (p[0] === 'items') { const it = c.items[+p[1]]; if (it) it[p[2]] = val; } else c[key] = val;
+  }
+  function cnInput(el) {
+    const n = S.cn, d = n.deck;
+    const k = el.dataset.cnInput;
+    if (k === 'source') {
+      n.source = el.value;
+      lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
+      const cnt = ref('cn-count');
+      if (cnt) cnt.innerHTML = cnCountText();
+      return;
+    }
+    if (!d) return;
+    if (k) {
+      if (k === 'hashtags') d.hashtags = el.value.split(/[\s,]+/).filter(Boolean).map(t => (t.startsWith('#') ? t : '#' + t)).slice(0, 12);
+      else d[k] = el.value;
+      if (k === 'brand') S.root.querySelectorAll('.cnt-cn-grid .cnt-cn-brand').forEach(x => { x.textContent = el.value || 'REBOOT'; });
+      if (k === 'caption' || k === 'hashtags') delete n.reviews.caption;
+      cnTouch();
+      return;
+    }
+    const i = +el.dataset.i, c = d.cards[i];
+    if (!c) return;
+    cnSet(c, el.dataset.cnK, cnFromEditable(el));
+    delete n.reviews[i];
+    cnTouch();
+  }
+  function cnLayout(el) {
+    const c = S.cn.deck && S.cn.deck.cards[+el.dataset.cnLayout];
+    if (!c) return;
+    c.layout = el.value;
+    if (c.layout === 'list' && !c.items.length) c.items = [{ head: '', body: '' }];
+    cnTouch();
+    cnRenderResult();
+  }
+  function cnSize(dir) {
+    const sel = S.cn.sel, d = S.cn.deck;
+    if (!sel || !d || !d.cards[sel.i]) return;
+    const c = d.cards[sel.i], sk = cnSizeKey(sel.key);
+    const k = dir === 0 ? 1 : Math.round(Math.min(2, Math.max(0.5, (c.sizes[sk] || 1) + dir * 0.1)) * 100) / 100;
+    if (k === 1) delete c.sizes[sk]; else c.sizes[sk] = k;
+    S.root.querySelectorAll(`[data-cn-item="${sel.i}"] [data-cn-k]`).forEach(el => {
+      if (cnSizeKey(el.dataset.cnK) !== sk) return;
+      if (k === 1) el.style.removeProperty('--k'); else el.style.setProperty('--k', String(k));
+    });
+    cnTouch();
+    const sb = ref('cn-sizebar');
+    if (sb) sb.innerHTML = cnSizebarHtml();
+  }
+
+  async function cnLoadFile(file) {
+    const fd = new global.FormData();
+    fd.append('file', file);
+    try {
+      const res = await REBOOT.api(`${API}/cardnews/extract`, fd);
+      const n = S.cn;
+      n.source = n.source.trim() ? `${n.source.trim()}\n\n${res.text}` : res.text;
+      n.sourceName = res.name;
+      lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
+      cnRenderSetup();
+      toast(`${res.name}에서 ${res.chars.toLocaleString()}자를 불러왔어요. 내용을 확인하고 고쳐도 돼요.`);
+    } catch (e) { toast(e.message, 'error'); }
+  }
+
+  async function cnGenerate() {
+    const n = S.cn;
+    if (n.source.trim().length < 10) { toast('카드뉴스에 넣을 내용을 10자 이상 입력해 주세요.', 'error'); return; }
+    if (n.dirty && n.deck && !(await ui.confirm('저장하지 않은 수정이 있어요. 새로 만들면 화면의 수정은 사라져요 (저장한 버전은 그대로). 계속할까요?'))) return;
+    const cid = S.camp.id;
+    let step = 0;
+    n.busy = true;
+    n.notice = '';
+    n.busyMsg = CN_BUSY_MSGS[0];
+    cnRenderSetup();
+    const timer = global.setInterval(() => {
+      step = Math.min(step + 1, CN_BUSY_MSGS.length - 1);
+      n.busyMsg = CN_BUSY_MSGS[step];
+      const btn = S.root && S.root.querySelector('[data-act="cn-generate"]');
+      if (btn) btn.innerHTML = '<span class="spinner"></span>' + esc(n.busyMsg);
+    }, 5000);
+    try {
+      const res = await REBOOT.api(`${API}/campaigns/${cid}/cardnews/generate`, Object.assign({ source: n.source }, n.opts));
+      if (!S.camp || S.camp.id !== cid) return;
+      setCampaign(res.campaign);
+      n.decks[res.versionId] = res.deck;
+      cnUseDeck(res.versionId, res.deck);
+      toast('카드뉴스를 만들었어요. 글자를 눌러 바로 고칠 수 있어요.');
+      loadList();
+    } catch (e) {
+      toast(e.message, 'error');
+      // AI가 실패해도 결과는 보이게: 넣은 내용을 그대로 카드로 나눔 (저장 전) — 실패했다고 사실대로 적음
+      const deck = cnSplitDeck();
+      if (S.camp && S.camp.id === cid && deck.cards.length) {
+        cnUseDeck(null, deck);
+        n.notice = `AI 호출이 실패해서 넣은 내용을 그대로 카드로 나눴어요. (${e.message})`;
+      }
+    } finally {
+      global.clearInterval(timer);
+      n.busy = false;
+      if (S.camp && S.camp.id === cid && S.tab === 'create' && cnActive()) renderMain();
+    }
+  }
+
+  async function cnSave(btn) {
+    const n = S.cn;
+    if (!n.deck) return;
+    ui.busy(btn, true);
+    try {
+      const res = await REBOOT.api(`${API}/campaigns/${S.camp.id}/cardnews`, { deck: n.deck, parent_id: n.versionId });
+      setCampaign(res.campaign);
+      n.decks[res.versionId] = res.deck;
+      cnUseDeck(res.versionId, res.deck);
+      n.notice = '';
+      renderMain();
+      loadList();
+      toast('저장했어요. 새 버전으로 남았어요.');
+    } catch (e) { toast(e.message, 'error'); ui.busy(btn, false); }
+  }
+
+  async function cnSelectOnServer(id) {
+    if (S.camp.selectedVersionId === id) return;
+    try { setCampaign((await REBOOT.api(`${API}/campaigns/${S.camp.id}/select`, { version_id: id })).campaign); } catch (e) { /* 선택 기록이 실패해도 화면은 그대로 */ }
+  }
+  async function cnPickVersion(id) {
+    const n = S.cn;
+    if (id === n.versionId && !n.dirty) return;
+    if (n.dirty && !(await ui.confirm('저장하지 않은 수정이 있어요. 다른 버전을 열면 사라져요. 계속할까요?'))) return;
+    if (!n.decks[id]) { toast('이 버전의 카드뉴스를 찾지 못했어요.', 'error'); return; }
+    cnUseDeck(id, n.decks[id]);
+    n.notice = '';
+    renderMain();
+    cnSelectOnServer(id);
+  }
+  async function cnComplete(btn) {
+    await cnSelectOnServer(S.cn.versionId);
+    completeCampaign(btn);
+  }
+
+  function cnPhotoModal(i) {
+    const c = S.cn.deck && S.cn.deck.cards[i];
+    if (!c) return;
+    const pids = S.camp.sheet.product_ids || [];
+    const noChar = assetsCharacterOff();
+    const rank = a => (a.type === 'product' && pids.includes(a.productId) ? 0 : a.type === 'character' ? 1 : a.type === 'product' ? 2 : 3);
+    const list = (S.assets || []).filter(a => a.type === 'logo' || (a.ref && (a.type === 'product' || (a.type === 'character' && !noChar))))
+      .sort((a, b) => rank(a) - rank(b));
+    const cur = c.photo && (c.photo.asset || c.photo.file);
+    const made = Array.from(new Set(S.cn.bgJobs.filter(j => j.status === 'succeeded' && j.file).map(j => j.file)));
+    modal({
+      title: `${i + 1}장 사진`,
+      wide: true,
+      body: `<div class="flex wrap cnt-cn-photo-bar"><input type="file" accept="image/jpeg,image/png,image/webp" data-ref="cn-photo-file" hidden>
+          <button type="button" class="btn small lime" data-cn-photo-act="upload">${icon('upload')}내 사진 올리기</button>
+          ${c.photo ? '<button type="button" class="btn small ghost" data-cn-photo-act="none">사진 빼기</button>' : ''}
+          <label class="check"><input type="checkbox" data-ref="cn-photo-full" ${c.photo && c.photo.full ? 'checked' : ''}> 카드 전체 배경으로 깔기</label>
+          <span class="panel-note">고른 제품 사진이 먼저 나와요</span></div>
+        ${made.length ? `<div class="field-label">AI로 만든 배경 ${made.length}장</div>
+          <div class="cnt-cn-photos cnt-cn-photos-ai">${made.map(f => `<button type="button" data-cn-photo-act="ai" data-file="${esc(f)}" aria-pressed="${cur === f}"><img src="${esc(cnPhotoUrl({ file: f }))}" alt="AI 배경" loading="lazy"><span>AI 배경 · 전체 배경으로 깔려요</span></button>`).join('')}</div>
+          <div class="field-label">브랜드 사진 ${list.length}장</div>` : ''}
+        <div class="cnt-cn-photos">${list.map(a => `<button type="button" data-cn-photo-act="asset" data-id="${esc(a.id)}" aria-pressed="${cur === a.id}" title="${esc(a.desc)}"><img src="${esc(a.url)}" alt="" loading="lazy"><span>${esc(a.desc)}</span></button>`).join('')}</div>`,
+      actions: [{ label: '닫기', value: null }],
+      onOpen: el => {
+        const full = () => { const f = el.querySelector('[data-ref="cn-photo-full"]'); return !!(f && f.checked); };
+        el.addEventListener('click', e => {
+          const b = e.target.closest('[data-cn-photo-act]');
+          if (!b) return;
+          const act = b.dataset.cnPhotoAct;
+          if (act === 'upload') { const f = el.querySelector('[data-ref="cn-photo-file"]'); if (f) { f.value = ''; f.click(); } return; }
+          cnSetPhoto(i, act === 'asset' ? { asset: b.dataset.id, full: full() } : act === 'ai' ? { file: b.dataset.file, full: true, ai: true } : null);
+          ui.closeModal(null);
+        });
+        el.addEventListener('change', e => {  // 이미 넣은 사진의 '전체 배경' 켜고 끄기
+          if (e.target.dataset.ref !== 'cn-photo-full' || !c.photo || c.photo.ai) return;
+          cnSetPhoto(i, Object.assign({}, c.photo, { full: e.target.checked }));
+        });
+        el.addEventListener('change', async e => {
+          const f = e.target.files && e.target.files[0];
+          if (!f) return;
+          try {
+            const fd = new global.FormData();
+            fd.append('file', await shrinkImage(f, 1600), 'photo.jpg');
+            const res = await REBOOT.api(`${API}/campaigns/${S.camp.id}/cardnews/photo`, fd);
+            cnSetPhoto(i, { file: res.name });
+            ui.closeModal(null);
+            toast('사진을 넣었어요.');
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      }
+    });
+  }
+  function assetsCharacterOff() {
+    const v = String(((S.camp.decisions || {}).use_character || {}).value || '').replace(/\s/g, '');
+    return v === '사용안함';
+  }
+  function cnSetPhoto(i, p) {
+    const c = S.cn.deck && S.cn.deck.cards[i];
+    if (!c) return;
+    c.photo = p;
+    cnTouch();
+    cnRenderResult();
+  }
+
+  function cnCardText(c) {
+    return [c.kicker, c.title, c.sub, c.quote, c.number && `${c.number} ${c.desc}`, c.layout !== 'stat' && c.desc, c.cta]
+      .concat((c.items || []).map(it => `${it.head} ${it.body}`))
+      .filter(x => x && String(x).trim()).join('\n').replace(/\*\*/g, '');
+  }
+  // 컴플라이언스 탭 review()로 카드마다 · 캡션 검사 (비용 없음 · 화면에만 · 법적 승인 아님)
+  function cnCheck() {
+    const n = S.cn, d = n.deck;
+    if (!d) return;
+    n.reviews = {};
+    let bad = 0, unavailable = false;
+    const run = (key, text) => {
+      if (!text.trim()) return;
+      const r = complianceCheck(text);
+      n.reviews[key] = r;
+      if (r.verdict === 'UNAVAILABLE' || r.verdict === 'ERROR') unavailable = true; else if (RANK[r.verdict] > 0) bad++;
+    };
+    d.cards.forEach((c, i) => run(i, cnCardText(c)));
+    run('caption', [d.caption, (d.hashtags || []).join(' ')].filter(Boolean).join('\n'));
+    cnRenderResult();
+    if (unavailable) toast('컴플라이언스 탭을 불러오지 못해 일부는 미검토예요.', 'error');
+    else if (bad) toast(`확인이 필요한 곳이 ${bad}군데 있어요. 카드 아래를 보세요.`, 'error');
+    else toast('걸린 규칙이 없어요. 그래도 게시 전에 사람이 확인하세요 (법적 승인 아님).');
+  }
+
+  /* AI 배경 — 이미지 AI가 우리 제품 사진을 참고해 카드 배경을 그림 (글자 없이 · 장당 이미지 생성 1번 · 버튼으로만)
+     넣을 카드: AI가 판단(덱을 만들 때 bgAi) · 장 수를 정하면 AI가 그만큼 다시 고름 · 직접 고르기 */
+
+  async function cnBgRefresh(adopt) {
+    const n = S.cn, cid = n.campaignId;
+    global.clearTimeout(n.bgTimer);
+    n.bgTimer = null;
+    if (!cid) return;
+    let list = null;
+    try { list = (await REBOOT.api(`${API}/campaigns/${cid}/cardnews/backgrounds`)).jobs || []; } catch (e) { list = null; }
+    if (S.cn !== n || !S.camp || S.camp.id !== cid) return;
+    const active = j => ACTIVE_JOB.includes(j.status);
+    if (list) {
+      if (adopt) list.filter(active).forEach(j => { n.bgWatch[j.id] = true; });
+      const ae = global.document.activeElement;
+      const editing = !!(ae && ae.dataset && (ae.dataset.cnK || ae.dataset.cnInput));   // 글자를 고치는 중이면 다음 확인 때 넣음
+      const changed = JSON.stringify(n.bgJobs.map(j => [j.id, j.status])) !== JSON.stringify(list.map(j => [j.id, j.status]));
+      n.bgJobs = list;
+      let applied = 0;
+      const failed = [];
+      if (!editing) {
+        list.filter(j => n.bgWatch[j.id] && !active(j)).forEach(j => {
+          delete n.bgWatch[j.id];
+          if (j.status !== 'succeeded') { failed.push(j.error || '실패'); return; }
+          const card = n.deck && n.deck.cards.find(c => c.id === j.cardId);   // 순서를 바꿔도 카드 ID로 찾음
+          if (card) { card.photo = { file: j.file, full: true, ai: true }; applied++; }
+        });
+      }
+      if (applied) { cnTouch(); toast(`AI 배경 ${applied}장을 카드에 넣었어요. 마음에 들면 [저장]을 눌러 주세요.`); }
+      if (failed.length) toast(`AI 배경 ${failed.length}장을 만들지 못했어요: ${failed[0]}`, 'error');
+      if (!editing && (applied || failed.length || changed) && S.tab === 'create' && cnActive()) cnRenderResult();
+    }
+    if (Object.keys(n.bgWatch).length || (list && list.some(active))) n.bgTimer = global.setTimeout(() => cnBgRefresh(false), 4000);
+  }
+
+  function cnBgModal(i) {
+    const n = S.cn, d = n.deck;
+    if (!d) return;
+    const busy = new Set(n.bgJobs.filter(j => ACTIVE_JOB.includes(j.status)).map(j => j.cardId));
+    const m = { mode: i != null ? 'pick' : 'ai', count: Math.min(2, d.cards.length), loading: false,
+      picks: new Set(i != null ? [d.cards[i].id] : d.cards.filter(c => c.bgAi).map(c => c.id)) };
+    let box = null;
+    const body = () => {
+      const nAi = d.cards.filter(c => c.bgAi).length;
+      const head = m.mode === 'ai'
+        ? `<p class="panel-note">${d.bgPlanned ? `AI가 내용을 보고 <b>${nAi}장</b>을 골랐어요. 고른 이유는 카드마다 적혀 있어요.` : '아직 AI 추천이 없어요 (예시 · 그대로 나누기 · 직접 만든 덱).'}</p>
+           <button type="button" class="btn small" data-bg-act="plan" ${m.loading || !textReady() ? 'disabled' : ''}>${icon('spark')}${d.bgPlanned ? '다시 추천 받기' : 'AI에게 추천 받기'}</button>`
+        : m.mode === 'count'
+          ? `<div class="flex wrap cnt-cn-bg-count"><span class="field-label">몇 장에 넣을까요?</span>
+              <input class="input" type="number" min="1" max="${d.cards.length}" value="${esc(m.count)}" data-bg-count aria-label="AI 배경 장 수">
+              <button type="button" class="btn small" data-bg-act="plan-count" ${m.loading || !textReady() ? 'disabled' : ''}>${icon('spark')}이 장 수로 AI 추천</button></div>
+             <p class="panel-note">AI가 그 장 수만큼 가장 어울리는 카드를 골라요 (텍스트 AI 1번 · 이미지는 아직 만들지 않아요).</p>`
+          : '<p class="panel-note">배경을 넣을 카드를 직접 켜고 끄세요. 장면 설명도 고칠 수 있어요.</p>';
+      const rows = d.cards.map((c, k) => `<div class="cnt-cn-bg-row${m.picks.has(c.id) ? ' on' : ''}">
+          <label class="check"><input type="checkbox" data-bg-pick="${esc(c.id)}" ${m.picks.has(c.id) && !busy.has(c.id) ? 'checked' : ''} ${busy.has(c.id) ? 'disabled' : ''}>
+            <b>${k + 1}장 · ${esc(cnLabel(CN.layouts, c.layout))}</b> <span class="muted">${esc(String(c.title || '').replace(/\*\*/g, '').slice(0, 40))}</span>
+            ${busy.has(c.id) ? badge('만드는 중', 'orange') : c.photo && c.photo.ai ? badge('AI 배경 있음') : ''}</label>
+          ${c.bgReason ? `<span class="panel-note">${c.bgAi ? 'AI 추천' : 'AI가 빼 둠'} · ${esc(c.bgReason)}</span>` : ''}
+          <textarea class="input" rows="2" data-bg-visual="${esc(c.id)}" placeholder="배경 장면 설명 (영어 권장 · 비우면 카드 내용으로 자동)" aria-label="${k + 1}장 배경 장면 설명">${esc(c.visual || '')}</textarea></div>`).join('');
+      const nPick = Array.from(m.picks).filter(id => !busy.has(id)).length;
+      return `<div class="chips cnt-cn-bg-modes">${[['ai', 'AI가 판단'], ['count', '장 수 정하기'], ['pick', '직접 고르기']]
+          .map(([k, l]) => `<button type="button" class="chip" data-bg-mode="${k}" aria-pressed="${m.mode === k}">${l}</button>`).join('')}</div>
+        <div class="cnt-cn-bg-head">${m.loading ? '<span class="spinner"></span> AI가 카드를 고르는 중…' : head}</div>
+        <div class="cnt-cn-bg-list">${rows}</div>
+        <div class="note cnt-cn-bg-note">고른 제품(맛)의 실제 사진${assetsCharacterOff() ? '' : ' · Rebu(설정에 따라)'}을 참고로 보내고 글자는 그리지 않아요.
+          카드 1장 = 이미지 생성 1번(비용)이고 장당 수십 초~몇 분 걸려요. 제품 라벨 · 모양은 게시 전에 확인하세요.</div>
+        <div class="flex wrap cnt-cn-bg-go"><button type="button" class="btn lime" data-bg-act="start" ${nPick && textReady() && !m.loading ? '' : 'disabled'}>${icon('image')}${nPick}장 배경 만들기</button>
+          ${textReady() ? '' : '<span class="panel-note">OpenAI 키가 있어야 만들 수 있어요 (설정 › 연결).</span>'}</div>`;
+    };
+    const draw = () => { const el = box && box.querySelector('[data-ref="cn-bg-body"]'); if (el) el.innerHTML = body(); };
+    const syncVisuals = () => box.querySelectorAll('[data-bg-visual]').forEach(t => {
+      const c = d.cards.find(x => x.id === t.dataset.bgVisual);
+      if (c && c.visual !== t.value.trim()) { c.visual = t.value.trim(); cnTouch(); }
+    });
+    const plan = async count => {
+      syncVisuals();
+      m.loading = true;
+      draw();
+      try {
+        const res = await REBOOT.api(`${API}/campaigns/${S.camp.id}/cardnews/backgrounds/plan`, { deck: d, count });
+        res.cards.forEach(p => { const c = d.cards.find(x => x.id === p.id); if (c) Object.assign(c, { bgAi: p.use, bgReason: p.reason, visual: p.visual || c.visual }); });
+        d.bgPlanned = true;
+        m.picks = new Set(res.cards.filter(p => p.use).map(p => p.id));
+        cnTouch();
+        toast(`AI가 ${res.count}장을 골랐어요. 장면 설명을 확인하고 [배경 만들기]를 눌러 주세요.`);
+      } catch (e) { toast(e.message, 'error'); } finally { m.loading = false; draw(); }
+    };
+    const start = async btn => {
+      syncVisuals();
+      const items = d.cards.filter(c => m.picks.has(c.id) && !busy.has(c.id)).map(c => ({ id: c.id, visual: c.visual }));
+      if (!items.length) return;
+      ui.busy(btn, true);
+      try {
+        const res = await REBOOT.api(`${API}/campaigns/${S.camp.id}/cardnews/backgrounds`, { deck: d, cards: items });
+        res.jobs.forEach(j => { n.bgWatch[j.id] = true; });
+        n.bgJobs = res.jobs.concat(n.bgJobs.filter(j => !res.jobs.some(x => x.id === j.id)));
+        ui.closeModal(null);
+        cnRenderResult();
+        toast(`${res.jobs.length}장 배경을 만드는 중이에요. 다 되면 카드에 자동으로 들어가요.`);
+        global.clearTimeout(n.bgTimer);
+        n.bgTimer = global.setTimeout(() => cnBgRefresh(false), 4000);
+      } catch (e) { toast(e.message, 'error'); ui.busy(btn, false); }
+    };
+    modal({
+      title: i != null ? `${i + 1}장 AI 배경` : 'AI 배경 만들기',
+      wide: true,
+      body: `<div data-ref="cn-bg-body">${body()}</div>`,
+      actions: [{ label: '닫기', value: null }],
+      onOpen: el => {
+        box = el;
+        el.addEventListener('click', e => {
+          const mb = e.target.closest('[data-bg-mode]');
+          if (mb) { syncVisuals(); m.mode = mb.dataset.bgMode; draw(); return; }
+          const b = e.target.closest('[data-bg-act]');
+          if (!b || b.disabled) return;
+          if (b.dataset.bgAct === 'plan') plan(0);
+          else if (b.dataset.bgAct === 'plan-count') {
+            const inp = el.querySelector('[data-bg-count]');
+            m.count = Math.max(1, Math.min(d.cards.length, parseInt(inp && inp.value, 10) || 1));
+            plan(m.count);
+          } else if (b.dataset.bgAct === 'start') start(b);
+        });
+        el.addEventListener('change', e => {
+          const id = e.target.dataset && e.target.dataset.bgPick;
+          if (id == null) return;
+          syncVisuals();
+          if (e.target.checked) m.picks.add(id); else m.picks.delete(id);
+          draw();
+        });
+      }
+    });
+  }
+
+  /* 이미지(PNG) 저장 (라이브러리 없음) */
+
+  let cnCssText = '';
+  function cnCss() {  // 카드 규칙(.cnt-cn-card)만 골라 PNG용 SVG 안에 넣음
+    if (cnCssText) return cnCssText;
+    const out = [];
+    Array.from(global.document.styleSheets).forEach(sh => {
+      let rules = null;
+      try { rules = sh.cssRules; } catch (e) { return; }  // 다른 출처 스타일시트는 읽을 수 없음
+      Array.from(rules || []).forEach(r => { if (r.cssText.includes('.cnt-cn-card')) out.push(r.cssText); });
+    });
+    cnCssText = out.join('\n');
+    return cnCssText;
+  }
+  const cnDataUrls = {};
+  async function cnDataUrl(url) {
+    if (cnDataUrls[url]) return cnDataUrls[url];
+    const res = await global.fetch(url, { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('카드 사진을 불러오지 못했어요.');
+    const blob = await res.blob();
+    cnDataUrls[url] = await new Promise((ok, no) => {
+      const r = new global.FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = () => no(new Error('카드 사진을 읽지 못했어요.'));
+      r.readAsDataURL(blob);
+    });
+    return cnDataUrls[url];
+  }
+  async function cnPng(i) {
+    const d = S.cn.deck, c = d.cards[i], H = cnH(d.ratio), url = cnPhotoUrl(c.photo);
+    const host = global.document.createElement('div');
+    host.className = 'part-content';
+    host.innerHTML = `<style>${cnCss()}</style>` + cnCardHtml(c, i, d.cards.length, { template: d.template, ratio: d.ratio, brand: d.brand,
+      photoUrl: url ? await cnDataUrl(url) : '' });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CN_W}" height="${H}"><foreignObject x="0" y="0" width="${CN_W}" height="${H}">` +
+      `${new global.XMLSerializer().serializeToString(host)}</foreignObject></svg>`;
+    const img = new global.Image();
+    await new Promise((ok, no) => {
+      img.onload = ok;
+      img.onerror = () => no(new Error('카드를 그리지 못했어요.'));
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+    if (img.decode) await img.decode().catch(() => null);
+    const cv = global.document.createElement('canvas');
+    cv.width = CN_W;
+    cv.height = H;
+    cv.getContext('2d').drawImage(img, 0, 0);
+    return new Promise((ok, no) => {
+      try { cv.toBlob(b => (b ? ok(b) : no(new Error('PNG를 만들지 못했어요.'))), 'image/png'); } catch (e) { no(new Error('이 브라우저에서는 PNG로 저장할 수 없어요. 크롬이나 엣지에서 해 주세요.')); }
+    });
+  }
+  function cnFileBase() {
+    return String(S.cn.deck.deckTitle || '').replace(/\*\*/g, '').replace(/[\\/:*?"<>|]+/g, '').trim().replace(/\s+/g, '_').slice(0, 40) || 'cardnews';
+  }
+  const cnPad = i => String(i + 1).padStart(2, '0');
+  async function cnDownloadOne(i, btn) {
+    ui.busy(btn, true);
+    try { ui.download(`${cnFileBase()}_${cnPad(i)}.png`, await cnPng(i)); } catch (e) { toast(e.message, 'error'); } finally { ui.busy(btn, false); }
+  }
+  // 이미지 저장하기: 카드마다 PNG를 바로 내려받음 (ZIP 없음 · 브라우저가 처음에 '여러 파일 다운로드 허용'을 물을 수 있음)
+  async function cnSaveImages(btn) {
+    const d = S.cn.deck;
+    if (!d) return;
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    let saved = 0;
+    try {
+      for (let i = 0; i < d.cards.length; i++) {
+        btn.textContent = `이미지 저장 중 ${i + 1}/${d.cards.length}`;
+        ui.download(`${cnFileBase()}_${cnPad(i)}.png`, await cnPng(i));
+        saved++;
+        await new Promise(r => global.setTimeout(r, 350));  // 한꺼번에 내려받으면 브라우저가 막을 수 있어 조금씩 띄움
+      }
+      toast(`카드 ${saved}장을 이미지(PNG)로 저장했어요.`);
+    } catch (e) {
+      toast(saved ? `${saved}장까지 저장했어요. ${e.message}` : e.message, 'error');
+    } finally { btn.disabled = false; btn.innerHTML = label; }
   }
 
   /* ───────── 이벤트 (data-act · onclick 없음) ───────── */
@@ -2366,6 +3266,7 @@
       if (!b || !root.contains(b) || b.disabled) return;
       const act = b.dataset.act;
       if (onSheetClick(act, b)) return;
+      if (act.startsWith('cn-') && cnClick(act, b)) return;
       const v = b.dataset.id ? (S.camp && S.camp.versions.find(x => String(x.id) === b.dataset.id)) : null;
       switch (act) {
         case 'tab':
@@ -2470,6 +3371,7 @@
     root.addEventListener('input', e => {
       const el = e.target;
       if (el.dataset.sheetInput) { onSheetInput(el); return; }
+      if (el.dataset.cnInput || el.dataset.cnK) { cnInput(el); return; }
       if (el.dataset.ref === 'iv-input') { S.ivDraft = el.value; return; }
       if (el.dataset.ref === 'img-prompt') { S.imgDraft = el.value; return; }
       if (el.dataset.ref === 'vid-prompt') { S.vidDraft = el.value; return; }
@@ -2483,10 +3385,46 @@
       const el = e.target;
       if (el.dataset.sheetCheck) { onSheetCheck(el); return; }
       if (el.dataset.ref === 'ref-file') { if (el.files && el.files[0]) uploadReference(el.files[0]); return; }
+      if (el.dataset.ref === 'cn-file') { if (el.files && el.files[0]) cnLoadFile(el.files[0]); return; }
+      if (el.dataset.cnLayout != null) cnLayout(el);
+    });
+
+    // 카드뉴스 글자 칸: 고른 칸 기억(A− / A＋) · 다 고치면 **강조**를 다시 그림 · 붙여넣기는 글자만
+    root.addEventListener('focusin', e => {
+      const el = e.target;
+      if (!el.dataset || !el.dataset.cnK) return;
+      S.cn.sel = { i: +el.dataset.i, key: el.dataset.cnK };
+      const sb = ref('cn-sizebar');
+      if (sb) sb.innerHTML = cnSizebarHtml();
+    });
+    root.addEventListener('focusout', e => {
+      const el = e.target;
+      if (!el.dataset || !el.dataset.cnK) return;
+      // **강조**를 썼거나 칸을 비웠을 때만 다시 그림 — 조금 늦게 해서 바로 누른 버튼 · 사진 칸의 클릭이 먼저 처리되게
+      if (!el.textContent.includes('**') && el.textContent.trim()) return;
+      const i = +el.dataset.i;
+      global.setTimeout(() => {
+        const fr = S.root && S.root.querySelector(`[data-cn-item="${i}"] .cnt-cn-frame`);
+        if (fr && !fr.contains(global.document.activeElement)) cnRenderCard(i);
+      }, 200);
+    });
+    root.addEventListener('paste', e => {
+      const el = e.target.closest && e.target.closest('[data-cn-k]');
+      if (!el) return;
+      e.preventDefault();
+      const text = ((e.clipboardData && e.clipboardData.getData('text/plain')) || '').replace(/\s*\n\s*/g, ' ');
+      global.document.execCommand('insertText', false, text);
+    });
+    root.addEventListener('mousedown', e => {  // A− / A＋를 눌러도 글자 칸 선택이 풀리지 않게
+      if (e.target.closest('[data-act="cn-size"]')) e.preventDefault();
     });
 
     root.addEventListener('keydown', e => {
       const el = e.target;
+      if (el.dataset && el.dataset.cnK) {  // 카드 글자 칸은 한 줄 — Enter는 수정 끝
+        if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); el.blur(); }
+        return;
+      }
       if ((el.dataset.ref !== 'input' && el.dataset.ref !== 'iv-input') || e.key !== 'Enter' || e.shiftKey) return;
       if (e.isComposing || e.keyCode === 229) return;  // 한글 조합 중에는 보내지 않음
       e.preventDefault();
