@@ -6,6 +6,7 @@
 import hashlib
 import json
 import threading
+import time
 from pathlib import Path
 
 import anthropic
@@ -19,7 +20,7 @@ MODEL = "claude-opus-5-5"
 BATCH = 40
 _lock = threading.Lock()
 
-SYSTEM = """You help a Korean marketing team at REBOOT (Korean after-party stick jelly and non-carbonated drinks, incl. sugar-reduced versions, sold in the US as conventional foods) skim US regulatory monitoring results.
+SYSTEM = """You help a Korean marketing team at REBOOT (Korean after-party shaped jellies and non-carbonated drinks, incl. "Zero Sugar" Balance versions, sold in the US as conventional foods) skim US regulatory monitoring results.
 For each item you get its source, English title and English summary. Return for every item:
 - title_ko: a natural Korean translation of the title (keep product names, company names, case names and document numbers as written).
 - summary_ko: one short Korean sentence (under 90 characters) saying what the item is, based only on the given text. If the item clearly matters for a jelly snack, a bottled drink, a hangover product, sugar or nutrition labeling, food labeling, or food/supplement advertising, add why briefly; if it does not, end with "(REBOOT 직접 관련 낮음)".
@@ -75,8 +76,14 @@ def _save_cache(cache):
     path = _cache_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(path)
+    # 캐시 저장 실패(Windows 파일 잠금 등)가 한글 요약 결과를 버리지 않게 (2026-10-25 · translate.py와 같은 처리)
+    for attempt in range(3):
+        try:
+            tmp.write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(path)
+            return
+        except OSError:
+            time.sleep(0.2 * (attempt + 1))
 
 
 def _call(client, batch):

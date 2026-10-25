@@ -9,7 +9,7 @@ import time
 
 from server.core.ai import AIError
 from . import options as O
-from . import assets, brandkit, prompts, providers, review, schemas
+from . import assets, brandkit, prompts, providers, repository, review, schemas
 
 ASSET_KINDS = ("copy", "cardnews", "script")  # 장·장면·이미지에 쓸 자산 ID를 적는 결과물
 SLIDE_HEAD_RE = re.compile(r"^#{2,3}\s*S(\d{1,2})\b.*$", re.M)
@@ -128,7 +128,9 @@ def build_user(*, kind, mode, n, sheet, decisions, facts, labels, base, request,
         "decisions": {k: {"value": v.get("value"), "status": v.get("status")} for k, v in decisions.items()},
         "brand_facts": _brand(facts), "product_facts": facts.get("products") or [], "facts_version": facts.get("facts_version"),
         "character_use": assets.character_choice(decisions),
-        "brand_assets": assets.catalog_for(sheet["product_ids"], assets.character_choice(decisions)) if kind in ASSET_KINDS else None,
+        "brand_assets": assets.catalog_for(sheet["product_ids"], assets.character_choice(decisions),
+                                           assets.product_flavors_of(decisions, sheet["product_ids"], repository.products_index()))
+                        if kind in ASSET_KINDS else None,
         "base_version": base, "unit_targets": targets if mode == "edit" else None,
         "user_request": request, "instructions": instructions,
         "user_materials": {"reference_text": reference} if reference else None,

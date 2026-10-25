@@ -53,6 +53,8 @@ check('제품 추정: 정식 제품명·저당 표현을 먼저 (GPT 검토 ㉚)
   assert.strictEqual(guess('저당 음료를 샀어요'), 'drink-ls');
   assert.strictEqual(guess('Reboot Drink Balance tastes odd'), 'drink-ls');
   assert.strictEqual(guess('Jelly Balance box'), 'jelly-ls');
+  assert.strictEqual(guess('Is the Zero Sugar drink caffeine free?'), 'drink-ls');   // 브랜드 키트(10-24) 'Zero Sugar'
+  assert.strictEqual(guess('The zero-sugar jellies came in a torn pouch'), 'jelly-ls');
   assert.strictEqual(guess('The drink leaked'), 'drink');
   assert.strictEqual(guess('jelly sticks'), 'jelly');
 });

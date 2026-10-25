@@ -53,7 +53,7 @@ function build() {
     allow: r.allow || []
   }));
   const texts = [...new Set([].concat(
-    C.warningQuotes.map(q => q.text), C.safePhrases.map(p => p.text), (C.selfTest || []).map(t => t.text),
+    C.warningQuotes.map(q => q.text), C.safePhrases.map(p => p.text), (C.humanReviewPhrases || []).map(p => p.text), (C.selfTest || []).map(t => t.text),
     (C.evalSet || []).map(t => t.text),
     (C.mappings || []).map(m => m.us), EXTRA))].filter(Boolean);
   const golden = texts.map(t => [t, api.review(t, { channel: 'cs' }).verdict]);

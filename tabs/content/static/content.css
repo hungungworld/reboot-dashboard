@@ -58,6 +58,11 @@
 .part-content .cnt-target:hover { border-color: var(--lime-soft-line); }
 .part-content .cnt-target.on { background: var(--lime-soft); border-color: var(--lime-soft-line); }
 .part-content .cnt-target input { width: 16px; height: 16px; margin: 1px 0 0; accent-color: #9cc20e; flex-shrink: 0; }
+.part-content .cnt-prod { flex-direction: column; gap: 8px; cursor: default; }
+.part-content .cnt-prod-main { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; }
+.part-content .cnt-flavors { gap: 4px; padding-left: 25px; }
+.part-content .cnt-flavors .chip { font-size: 10px; padding: 2px 8px; }
+.part-content .cnt-prod-refs { margin-top: 8px; }
 .part-content .cnt-target b { display: block; font-size: 12px; font-weight: 600; color: var(--ink); }
 .part-content .cnt-target small { display: block; color: var(--muted); font-size: 10px; margin-top: 2px; }
 .part-content .cnt-goal { margin-top: 9px; }
@@ -425,6 +430,6 @@
 .part-content .cnt-social { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; }
 .part-content .cnt-social-caps { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 8px; }
 .part-content .cnt-social-caps p { margin: 2px 0 0; white-space: pre-wrap; }
-.part-content .cnt-social-tags { margin-top: 8px; gap: 8px; font-size: 13px; color: var(--lime); }
+.part-content .cnt-social-tags { margin-top: 8px; gap: 8px; font-size: 13px; color: #000; }
 .part-content .cnt-ref-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .part-content .cnt-ref-thumbs img { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line-2); display: block; }

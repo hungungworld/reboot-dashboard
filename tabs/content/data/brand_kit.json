@@ -17,7 +17,7 @@
       "slug": "jelly-original",
       "form": "개별 포장된 모양 젤리 (카우보이 부츠 · 카우보이 모자 · 올가미 3가지 모양)",
       "flavors": {"value": "Lime, Lemon, Cherry", "status": "confirmed"},
-      "flavor_shapes": "Cherry = 카우보이 모자(진한 분홍) · Lemon = 올가미(진한 노랑) · Lime = 카우보이 부츠(연두)",
+      "shapes": "카우보이 부츠 · 카우보이 모자 · 올가미 — 모양과 맛은 관계없음 (어느 맛이든 세 모양으로 나옴) · 진한 색",
       "pack": "개별 포장된 젤리가 든 한 봉지 (봉지 안 개수 미정)",
       "price": [{"sku": "jelly-original-pouch", "option": "한 봉지 (pouch)", "usd": 16}],
       "development_direction": "기본 젤리",
@@ -27,7 +27,7 @@
       "volume": null,
       "piece_size": "한 조각 약 30~37mm (모양별 규격도 참고)",
       "package_text": "봉지 앞면: REBOOT 로고 · RESTART YOUR DAY · LIME • LEMON • CHERRY",
-      "look": "matte black stand-up zipper pouch with a clear window, glossy REBOOT logo (black letters, neon lime infinity OO) with neon glow outline, 'RESTART YOUR DAY', 'LIME • LEMON • CHERRY'; inside, individually wrapped translucent jellies in vivid colors — magenta-pink cowboy hat, bright yellow coiled lasso, lime-green cowboy boot",
+      "look": "matte black stand-up zipper pouch with a clear window, glossy REBOOT logo (black letters, neon lime infinity OO) with neon glow outline, 'RESTART YOUR DAY', 'LIME • LEMON • CHERRY'; inside, individually wrapped translucent jellies in vivid cherry pink, lemon yellow and lime green, shaped as cowboy boots, cowboy hats and coiled lassos (any shape can come in any flavor color)",
       "evidence": "사용자 제공 (최종 패키지 사진)"
     },
     "jelly_balance": {
@@ -36,7 +36,7 @@
       "slug": "jelly-balance",
       "form": "개별 포장된 모양 젤리 (카우보이 부츠 · 카우보이 모자 · 올가미 3가지 모양) · 제로슈가",
       "flavors": {"value": "Cherry, Lime, Lemon", "status": "confirmed"},
-      "flavor_shapes": "Cherry = 카우보이 모자(연한 분홍) · Lemon = 올가미(연한 노랑) · Lime = 카우보이 부츠(연한 연두)",
+      "shapes": "카우보이 부츠 · 카우보이 모자 · 올가미 — 모양과 맛은 관계없음 (어느 맛이든 세 모양으로 나옴) · 연한 색",
       "pack": "개별 포장된 젤리가 든 한 봉지 (봉지 안 개수 미정)",
       "price": [{"sku": "jelly-balance-pouch", "option": "한 봉지 (pouch)", "usd": 18}],
       "development_direction": "제로슈가 젤리 (ZERO SUGAR 표기 조건 충족으로 가정 — 사용자 결정 2026-10-24)",
@@ -46,7 +46,7 @@
       "volume": null,
       "piece_size": "한 조각 약 28~37mm (모양별 규격도 참고)",
       "package_text": "봉지 앞면: ZERO SUGAR · REBOOT 로고 · RESTART YOUR DAY · 민트색 BALANCE 띠 · CHERRY • LIME • LEMON",
-      "look": "matte black stand-up zipper pouch with a clear window, 'ZERO SUGAR' at the top, glossy REBOOT logo with neon glow outline, 'RESTART YOUR DAY', a mint-green 'BALANCE' band, 'CHERRY • LIME • LEMON'; inside, individually wrapped translucent jellies in soft pastel colors — light pink cowboy hat, pale yellow coiled lasso, pale lime cowboy boot",
+      "look": "matte black stand-up zipper pouch with a clear window, 'ZERO SUGAR' at the top, glossy REBOOT logo with neon glow outline, 'RESTART YOUR DAY', a mint-green 'BALANCE' band, 'CHERRY • LIME • LEMON'; inside, individually wrapped translucent jellies in soft pastel pink, pale yellow and pale lime, shaped as cowboy boots, cowboy hats and coiled lassos (any shape can come in any flavor color)",
       "evidence": "사용자 제공 (최종 패키지 사진)"
     },
     "drink_original": {

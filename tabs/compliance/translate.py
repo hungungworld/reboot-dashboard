@@ -7,6 +7,7 @@ Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽
 import hashlib
 import json
 import threading
+import time
 from pathlib import Path
 
 import anthropic
@@ -19,7 +20,7 @@ from . import ai_usage
 MODEL = "claude-opus-5-5"
 MAX_TEXT = 2000
 
-SYSTEM = """You translate Korean marketing copy into natural US English for REBOOT ("Restart Your Day"), a Korean after-party brand of stick jelly and non-carbonated drinks sold in the US as conventional foods.
+SYSTEM = """You translate Korean marketing copy into natural US English for REBOOT ("Restart Your Day"), a Korean after-party brand of individually wrapped shaped jellies and non-carbonated drinks in 100 ml glass bottles, sold in the US as conventional foods.
 
 Translate faithfully:
 - Keep the meaning, tone and every claim exactly as written. Do not soften, remove, add or "fix" any claim, including health, hangover, safety, sugar or effectiveness claims. A separate compliance check runs on your translation, so it must show what the Korean actually says.
@@ -144,8 +145,16 @@ def cache_put(kind, text, value):
         p = _cache_path()
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(p)
+        # 재사용 캐시는 비용 절약용일 뿐 → 파일 저장이 실패해도(Windows에서 다른 프로그램이 파일을 잡고 있을 때 등)
+        # 번역 결과는 그대로 돌려줌 (2026-10-25 · 일괄 번역이 저장 실패로 500이 나던 문제). 메모리 캐시에는 남음
+        for attempt in range(3):
+            try:
+                tmp.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+                tmp.replace(p)
+                return
+            except OSError:
+                time.sleep(0.2 * (attempt + 1))
+        current_app.logger.warning("번역 재사용 캐시를 저장하지 못했습니다 (이번 번역 결과는 정상 반환)")
 
 
 def to_english(text):

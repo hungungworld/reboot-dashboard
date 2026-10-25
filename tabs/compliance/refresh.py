@@ -8,11 +8,11 @@ Flask 통합: 저장 위치는 DATA_DIR/parts_override/compliance/monitor-data.j
   python -m tabs.compliance.refresh --dry    저장하지 않고 개수만 출력
 
 출처
-- openFDA 식품 리콜 (food/enforcement): 젤리·곤약·숙취 · 한국산 음료 · 헛개. 키 없이 먼저 부르고 실패하면 OPENFDA_API_KEY로 다시
+- openFDA 식품 리콜 (food/enforcement): 젤리(구미)·숙취 · 한국산 음료 · 헛개. 키 없이 먼저 부르고 실패하면 OPENFDA_API_KEY로 다시
 - Regulations.gov: FDA·FTC 규칙·규칙안 (FDA는 식품·표시·광고 관련 제목만)
 - CourtListener: 숙취 제품·건강식품 허위광고 판결 (관련성 낮은 결과가 섞일 수 있음 → 참고용)
 - FDA 수입 거부: Data Dashboard API (FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY) · 한국산 식품만
-- CBP CROSS: 품목분류 결정 검색 API (키 없음) · 젤리·2106.90·곤약 · 음료 2202.10·2202.99 · 헛개
+- CBP CROSS: 품목분류 결정 검색 API (키 없음) · 젤리·2106.90 · 음료 2202.10·2202.99 · 헛개
 - Federal Register: FTC 전체 + FDA 식품 관련 공고 (키 없음). FTC 보도자료 RSS는 봇 차단이라 대신 씀
 - 자동으로 못 읽는 곳 (2026-10-24 확인): NAD(화면을 자바스크립트로 그림 · 피드 없음) · Prop 65(OEHHA 봇 차단) → 화면의 바로가기 버튼
 - FDA 경고장: warning_letters.py (Data Dashboard API · fda.gov XLSX · 사람이 올린 XLSX·본문). fda.gov는 자동 요청을
@@ -69,9 +69,9 @@ def _iso(d8):
     return f"{d8[:4]}-{d8[4:6]}-{d8[6:8]}" if re.fullmatch(r"\d{8}", d8 or "") else (d8 or "")
 
 
-# 우리 제품군 전체 (2026-10-24): 젤리 · 음료(한국산으로 좁힘 — 음료만으로는 수백 건) · 숙취 연상 성분(헛개)
+# 우리 제품군 전체 (2026-10-24): 젤리 · 곤약은 뺌 (2026-10-25 · 우리 젤리는 곤약이 아닌 구미형) · 음료(한국산으로 좁힘 — 음료만으로는 수백 건) · 숙취 연상 성분(헛개)
 RECALL_SEARCHES = (
-    "product_description:(jelly OR konjac OR hangover OR gummy)",
+    "product_description:(jelly OR gummy OR gummies OR hangover)",
     "product_description:(drink OR beverage) AND product_description:(korea OR korean)",
     'product_description:(hovenia OR "raisin tree")',
 )
@@ -151,7 +151,7 @@ def courtlistener():
     queries = [
         ('"hangover" AND ("false advertising" OR "Lanham Act" OR misbranded OR "unfair competition")', None),
         ('("dietary supplement" OR "functional beverage") AND ("false advertising" OR misbranded)', _lookback().strftime("%m/%d/%Y")),
-        # 저당 제품 표시 (2026-10-24 · 저당 젤리·저당 음료)
+        # 당 표시 관련 허위광고 판결 (2026-10-24 · Balance 제품의 'Zero Sugar' 표기 참고)
         ('("low sugar" OR "sugar free" OR "no sugar added") AND ("false advertising" OR misleading OR misbranded)', _lookback().strftime("%m/%d/%Y")),
     ]
     seen, items = set(), []
@@ -178,9 +178,9 @@ def courtlistener():
     return items
 
 
-CROSS_FOOD = re.compile(r"jelly|konjac|gumm|confection|candy|beverage|drink|food preparation|dietary supplement|hangover|hovenia|raisin tree", re.I)
-# 젤리(2106.90 · 곤약) + 비탄산 음료 HS 후보(2202.10 · 2202.99 — 실제 코드는 관세사 확인) + 헛개 (2026-10-24 제품군 전체)
-CROSS_TERMS = ("jelly", "2106.90", "konjac", "2202.10", "2202.99", "hovenia")
+CROSS_FOOD = re.compile(r"jelly|gumm|confection|candy|beverage|drink|food preparation|dietary supplement|hangover|hovenia|raisin tree", re.I)
+# 젤리(2106.90 · 구미형) + 비탄산 음료 HS 후보(2202.10 · 2202.99 — 실제 코드는 관세사 확인) + 헛개 (2026-10-24 제품군 전체)
+CROSS_TERMS = ("jelly", "gummy", "2106.90", "2202.10", "2202.99", "hovenia")
 CROSS_HTS = re.compile(r"\b(1704|2106|2202|2009)\.")   # 설탕 과자 · 기타 조제 식료품 · 음료 · 주스
 
 
