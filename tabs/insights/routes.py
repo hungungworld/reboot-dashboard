@@ -17,6 +17,7 @@
   PATCH /api/insights/competitors/<id>         {status: active|archived, website}
   GET   /api/insights/competitors.csv · /competitors.json
   POST  /api/insights/reviews/<id>/translate   리뷰 한국어 번역 (OpenAI · 같은 원문은 저장된 번역)
+  POST  /api/insights/amazon-summaries/<asin>/translate   아마존 리뷰 요약 한국어 번역 (같은 방식)
   POST  /api/insights/reviews/<id>/cs          자사 리뷰 CS 대응 {status: new · todo · done · skip, memo}
   POST  /api/insights/reviews/<id>/slack       슬랙 채널로 보내기 {note, preview} (preview면 글만 돌려줌 · 웹훅 SLACK_WEBHOOK_URL)
   POST  /api/insights/trends/upload            Google Trends CSV {csv} (SerpApi 키가 없을 때)
@@ -304,6 +305,18 @@ def review_translate(rid):
     if not insights_ai.ready():
         raise ApiError("OpenAI 키가 없어 번역할 수 없어요. 설정 › 연결에서 키를 넣으세요.")
     return jsonify(textKo=insights_ai.translate_review(r.text))
+
+
+@bp.post("/amazon-summaries/<asin>/translate")
+def amazon_summary_translate(asin):
+    s = kv_get("amazon_summaries", {}).get(asin)
+    if not s or not s.get("text"):
+        raise ApiError("리뷰 요약을 찾지 못했어요.", 404)
+    if insights_ai.is_korean(s["text"]):
+        return jsonify(textKo=s["text"])
+    if not insights_ai.ready():
+        raise ApiError("OpenAI 키가 없어 번역할 수 없어요. 설정 › 연결에서 키를 넣으세요.")
+    return jsonify(textKo=insights_ai.translate_review(s["text"]))
 
 
 @bp.post("/reviews/<int:rid>/cs")

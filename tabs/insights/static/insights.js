@@ -391,6 +391,13 @@
       case 'rv-fclear': S.rv.f = Object.assign({}, RV_F_EMPTY); S.rv.todo = false; S.rv.shared = false; S.rv.page = 1; drawRvTable(); break;
       case 'rv-page': S.rv.page = Number(d.p) || 1; drawRvTable(); break;
       case 'rv-open': openReview(d.id); break;
+      case 'sum-ko': showKo(b, null, $(S.root, `[data-ref="sum-ko-${d.asin}"]`), `/api/insights/amazon-summaries/${encodeURIComponent(d.asin)}/translate`); break;
+      case 'sum-all': {
+        const list = $$(S.root, '.ins-sum-rv'), open = !list.every(x => x.open);
+        list.forEach(x => { x.open = open; });
+        b.textContent = open ? '모두 접기' : '모두 펼치기';
+        break;
+      }
       case 'month': S.monthly = null; S.brief = null; S.month = d.month; loadMonthly(d.month); break;
       case 'brief-make': makeBrief(b); break;
       case 'brief-save': saveBrief(b, false); break;
@@ -1051,22 +1058,24 @@
         <div class="ins-sw-key-g"><span class="ins-sw-key-h">색상</span><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg own"></i>자사</span>
           <span><i class="ins-lg watched"></i>주시</span><span><i class="ins-lg oos"></i>품절</span><span title="중앙값"><i class="ins-lg med"></i>보통 가격</span></div>
         <div class="ins-sw-key-g"><span class="ins-sw-key-h">크기</span><span class="ins-sw-key-size" aria-hidden="true"><i></i><i></i><i></i></span><span>리뷰 많을수록 크게</span></div>
-        <div class="ins-sw-key-g"><span class="ins-sw-key-h">사용법</span><span>끌어서 이동 · Ctrl+휠이나 두 손가락으로 확대 · 빈 곳 두 번 누르면 2배 · 점에 올리면(터치는 한 번) 미리보기, 누르면 상세</span></div>
+        <div class="ins-sw-key-g"><span class="ins-sw-key-h">사용법</span><span>휠로 확대 · 끌어서 이동 · 두 손가락으로 확대 · 빈 곳 두 번 누르면 2배 · 점에 올리면(터치는 한 번) 미리보기, 누르면 상세</span></div>
       </div>`;
   }
   // 화면에 붙은 뒤 상자 폭에 맞춰 다시 그림 (창 크기가 바뀔 때도)
-  // 확대(zoom)는 1~8배: 상자 폭에 맞춘 $1 폭 × zoom. anchorX(화면 x)에 있던 가격이 그 자리에 남게 스크롤을 맞춤
+  // 확대(zoom)는 1~8배: 상자 폭에 맞춘 $1 폭 × zoom. 확대 중에는 anchorX(화면 x)에 있던 가격이 그 자리에 남게 스크롤을 맞춤
+  // 1배(처음 · 창 크기 변경 · '전체')는 항상 맨 앞($0)부터
   const SWARM_ZMAX = 8;
   function fitSwarm(anchorX) {
     const box = $(panel(S.tab), '[data-ref="swarm"]');
     if (!box || !box.clientWidth || !S.swarm) return;
-    const px = Math.max(40, (box.clientWidth - SWARM_PL - 18) / SWARM_FULL) * (S.swarm.zoom || 1);
+    const zoom = S.swarm.zoom || 1;
+    const px = Math.max(40, (box.clientWidth - SWARM_PL - 18) / SWARM_FULL) * zoom;
     if (Math.abs(px - S.swarm.px) < 1) return;
     const r = box.getBoundingClientRect(), ax = (anchorX == null ? r.left + r.width / 2 : anchorX) - r.left;
     const v = (box.scrollLeft + ax - SWARM_PL) / S.swarm.px;
     S.swarm.px = px;
     box.innerHTML = swarmSvg(S.swarm.priced, px);
-    box.scrollLeft = SWARM_PL + v * px - ax;
+    box.scrollLeft = zoom <= 1 ? 0 : SWARM_PL + v * px - ax;
     const wrap = box.parentNode, z = $(wrap, '[data-ref="sw-z"]'), tip = $(wrap, '.ins-sw-tip');
     if (z) z.textContent = `${Math.round(S.swarm.zoom * 10) / 10}×`;
     if (tip) tip.hidden = true;
@@ -1076,18 +1085,20 @@
     S.swarm.zoom = Math.max(1, Math.min(SWARM_ZMAX, z));
     fitSwarm(anchorX);
   }
-  // 차트 손 조작: 마우스 끌기(+관성) · Ctrl+휠/트랙패드 벌리기 확대 · 두 손가락 벌리기 · 빈 곳 두 번 누르기 · 터치는 점 한 번 = 미리보기
-  // 세로 휠은 막지 않음(페이지 스크롤), 한 손가락 끌기는 브라우저 기본 가로 스크롤
+  // 차트 손 조작: 마우스 끌기(+관성) · 휠 줌(마우스 자리 중심) · 두 손가락 벌리기 · 빈 곳 두 번 누르기 · 터치는 점 한 번 = 미리보기
+  // 휠: 1배에서 아래로 · 8배에서 위로는 막지 않음(페이지 스크롤), 좌우 휠 · Shift+휠은 좌우 이동. 한 손가락 끌기는 브라우저 기본 가로 스크롤
   function initSwarm() {
     const box = $(panel(S.tab), '[data-ref="swarm"]');
     if (!box || box._sw) return;
     box._sw = true;
     let drag = null, dragged = false, raf = 0, ptype = 'mouse', pinch = null, wheelZ = null;
     box.addEventListener('wheel', e => {
-      if (!e.ctrlKey) return;
+      if (!e.ctrlKey && (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY))) return;
+      const dy = e.deltaMode ? e.deltaY * 40 : e.deltaY, cur = wheelZ != null ? wheelZ : S.swarm.zoom;
+      if (!e.ctrlKey && ((dy > 0 && cur <= 1) || (dy < 0 && cur >= SWARM_ZMAX))) return;
       e.preventDefault();
-      const base = wheelZ != null ? wheelZ : S.swarm.zoom;
-      wheelZ = Math.max(1, Math.min(SWARM_ZMAX, base * Math.exp(-e.deltaY * 0.01)));
+      // 트랙패드 벌리기(ctrlKey)는 작은 값이 자주 와서 더 민감하게, 마우스 휠은 한 칸에 약 1.3배
+      wheelZ = Math.max(1, Math.min(SWARM_ZMAX, cur * Math.exp(-dy * (e.ctrlKey ? 0.01 : 0.0025))));
       if (raf) return;
       raf = requestAnimationFrame(() => { raf = 0; zoomSwarm(wheelZ, e.clientX); wheelZ = null; });
     }, { passive: false });
@@ -2538,13 +2549,18 @@
     };
     const rows = d.table.map(b => `<tr><td>${b.own ? badge('자사', 'green') + ' ' : ''}${b.watched ? '<span class="ins-star">★</span> ' : ''}${esc(b.brand)}</td>
       <td class="num">${esc(b.total)}</td><td class="num">${b.avgRating == null ? '—' : esc(b.avgRating)}</td>${d.topics.map(t => cell(b, t)).join('')}</tr>`).join('');
-    const sums = d.summaries.map(s => `<li><details class="ins-rv" data-fold="sum-${esc(s.asin)}"${S.open['sum-' + s.asin] ? ' open' : ''}>
-      <summary><b>${esc(s.title || s.asin)}</b><span class="ins-rv-pre">${esc(clip(s.text, 120))}</span></summary><div class="ins-rv-body"><p class="ins-quote">${esc(s.text)}</p></div></details></li>`).join('');
+    // 아마존 리뷰 요약: 펼치면 원문 + 번역 보기(AI · 한 번 받은 번역은 화면에 남김) + 아마존 리뷰 원문 링크
+    const sums = d.summaries.map(s => `<li><details class="ins-rv ins-sum-rv" data-fold="sum-${esc(s.asin)}"${S.open['sum-' + s.asin] ? ' open' : ''}>
+      <summary><b>${esc(s.title || s.asin)}</b><span class="ins-rv-pre">${esc(clip(s.text, 120))}</span></summary><div class="ins-rv-body"><p class="ins-quote">${esc(s.text)}</p>
+        <div class="ins-sum-act"><button type="button" class="btn small" data-act="sum-ko" data-asin="${esc(s.asin)}">번역 보기</button>
+          ${extLink(`https://www.amazon.com/dp/${encodeURIComponent(s.asin)}#customerReviews`, '아마존에서 리뷰 보기')}</div>
+        <div class="ins-sum-ko" data-ref="sum-ko-${esc(s.asin)}" hidden></div></div></details></li>`).join('');
+    const allBtn = d.summaries.length > 1 ? `<button type="button" class="btn small ghost" data-act="sum-all">${d.summaries.every(s => S.open['sum-' + s.asin]) ? '모두 접기' : '모두 펼치기'}</button>` : '';
     return `<section class="card mt-24"><div class="card-head"><h2>브랜드 × 주제</h2><span class="small muted">+칭찬 / −불만을 누르면 리뷰 목록에서 그 리뷰만 보여요</span></div>
         ${d.table.length ? `<div class="table-wrap"><table class="data-table ins-matrix"><thead>${head}</thead><tbody>${rows}</tbody></table></div>`
           : ui.empty('리뷰가 없어요. 데이터 업데이트에서 Amazon · Weee! 진열대를 모으세요.', 'chat')}
         <p class="panel-note mt-8">Amazon은 대표 리뷰만 모아요. 주제 · 칭찬/불만은 단어와 별점으로 나누고, OpenAI 키가 있으면 AI가 다시 나눠요.</p></section>
-      <section class="card mt-24"><div class="card-head"><h2>아마존 리뷰 요약</h2>${badge('원문')}</div>
+      <section class="card mt-24"><div class="card-head"><h2>아마존 리뷰 요약</h2>${badge('원문')}<span class="grow"></span>${allBtn}</div>
         ${sums ? `<ul class="ins-reviews ins-rv-list">${sums}</ul>` : '<p class="small muted">아마존 상품 상세 조회 때 리뷰 요약이 있으면 여기에 보여요.</p>'}</section>`;
   }
 
@@ -2575,12 +2591,13 @@
     }
   }
 
-  async function showKo(btn, id, box) {
+  // url을 주면 그 주소로 번역 (아마존 리뷰 요약), 없으면 리뷰 번호로
+  async function showKo(btn, id, box, url) {
     if (!box) return;
     if (box.dataset.loaded) { box.hidden = !box.hidden; btn.textContent = box.hidden ? '번역 보기' : '번역 숨기기'; return; }
     ui.busy(btn, true);
     try {
-      const res = await api(`/api/insights/reviews/${encodeURIComponent(id)}/translate`, {});
+      const res = await api(url || `/api/insights/reviews/${encodeURIComponent(id)}/translate`, {});
       box.innerHTML = `${badge('AI 번역', 'purple')}<p>${esc(res.textKo)}</p>`;
       box.dataset.loaded = '1';
       box.hidden = false;
