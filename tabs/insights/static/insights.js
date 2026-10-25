@@ -6,7 +6,8 @@
    - 검색 수요 탭은 2026-10-25 삭제 → '다음 급등 예상'은 홈 › 콘텐츠 캘린더 맨 아래로 옮김
    - 판단은 규칙(서버 rules.py), AI는 문장 · 분류 · 요약만 (AI 배지 · 참고용)
    - 데이터 업데이트는 서버가 뒤에서 실행 → 이 화면은 진행 상황만 봄
-   - 다른 파트에는 REBOOT.use('insights')로 searchTrend · personas 공개 (Promise · 없으면 빈 값)
+   - 다른 파트에는 REBOOT.use('insights')로 searchTrend · personas · weeklySignals · contentBrief 공개 (Promise · 없으면 빈 값)
+   - 콘텐츠 브리프(월간 리뷰 맨 아래 카드 · 서버 brief.py): 사람이 승인한 것만 contentBrief()로 콘텐츠 탭에 넘김
    주소: #weekly · #market/brands · #customers/reviews 처럼 바로 열 수 있음 (옛 #data/… 주소는 새 주소로 넘김) */
 (function (global) {
   'use strict';
@@ -81,13 +82,17 @@
       })
     } : null));
   }
-  REBOOT.expose('insights', { searchTrend, personas, weeklySignals });
+  // 콘텐츠 브리프 승인본 (콘텐츠 탭 제작 프롬프트용) — 승인 전 · 오류면 null. 승인하면 바로 바뀌므로 저장해 두지 않음
+  function contentBrief() {
+    return api('/api/insights/brief').then(v => (v && Array.isArray(v.themes) ? copy(v) : null)).catch(() => null);
+  }
+  REBOOT.expose('insights', { searchTrend, personas, weeklySignals, contentBrief });
 
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit', saved: 'news' }, weekly: null, monthly: null, month: null, data: {}, open: {},
     poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1 }, chg: 'all',
-    rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, news: { q: '', kind: '' },
+    rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, news: { q: '', kind: '' }, pf: 'all',
     mk: Object.assign({ sort: 'signal', dir: 1, page: 1, more: false, open: {}, items: {}, focus: '', cache: null }, MK_F_EMPTY)
   };
   const panel = id => $(S.root, `[data-panel="${id}"]`);
@@ -351,7 +356,7 @@
       case 'run-close': S.showResult = false; drawRun(S.run); break;
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'tbl-page': S.tbl.page = Number(d.p) || 1; drawShelfTable(); break;
-      case 'pantry-more': S.open['pantry-' + d.k] = !S.open['pantry-' + d.k]; drawSub('price'); break;
+      case 'pf-tier': S.pf = d.k; drawSub('price'); break;
       case 'brand-go': openBrand(d.brand); break;
       case 'mk-toggle': S.mk.open[d.brand] = !S.mk.open[d.brand]; drawBrandTable(); break;
       case 'mk-items': S.mk.items[d.k] = !S.mk.items[d.k]; drawBrandTable(); break;
@@ -378,7 +383,10 @@
       case 'rv-fclear': S.rv.f = Object.assign({}, RV_F_EMPTY); S.rv.todo = false; S.rv.shared = false; S.rv.page = 1; drawRvTable(); break;
       case 'rv-page': S.rv.page = Number(d.p) || 1; drawRvTable(); break;
       case 'rv-open': openReview(d.id); break;
-      case 'month': S.monthly = null; S.month = d.month; loadMonthly(d.month); break;
+      case 'month': S.monthly = null; S.brief = null; S.month = d.month; loadMonthly(d.month); break;
+      case 'brief-make': makeBrief(b); break;
+      case 'brief-save': saveBrief(b, false); break;
+      case 'brief-approve': saveBrief(b, true); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'aud-q': openAudQuestion(Number(d.i)); break;
       case 'weee-raw': openWeeeRaw(); break;
@@ -807,9 +815,97 @@
           <a class="link mt-8" href="#market/brands">브랜드 비교 보기 ${icon('arrow')}</a></section>
       </div>
       <section class="card"><div class="card-head"><h2>전략 업데이트</h2>${st ? badge('AI 분석', 'purple') : ''}</div>${strategy}</section>
+      <section class="card ins-brief" data-ref="brief">${skel}</section>
       ${sourcesCard(m)}
       </div>`;
     fillPeeps(el);
+    if (S.brief && S.brief.month === m.month) drawBrief(); else loadBrief(m.month);
+  }
+
+  /* ───────── 콘텐츠 브리프 (월간 리뷰 맨 아래 · 서버 brief.py) ─────────
+     규칙이 고른 주제(최대 5개) → AI 문장 → 컴플라이언스 검사 → 사람이 [전체 승인] → 콘텐츠 탭에 공개
+     지난 승인 문장을 이은 주제는 접어 둠 → 새 주제만 보면 됨 */
+  const VERDICT = { PASS: ['검사 통과', 'green'], COND: ['검사 통과 (조건)', 'green'], REVIEW: ['직접 확인', 'orange'],
+    REVISE: ['고쳐야 함', 'red'], BLOCK: ['쓸 수 없음', 'red'] };
+  async function loadBrief(month) {
+    try { S.brief = await api('/api/insights/brief/draft' + (month ? `?month=${encodeURIComponent(month)}` : '')); }
+    catch (e) { S.brief = { month, error: e.message }; }
+    drawBrief();
+  }
+
+  function briefTheme(t) {
+    const v = VERDICT[t.check.verdict];
+    const hits = Object.values(t.check.hits || {}).flat();
+    const by = t.carried ? badge('지난 승인 문장', 'blue') : t.by === 'AI' ? badge('AI 초안', 'purple') : t.by === '사람' ? badge('직접 고침') : badge('비어 있음', 'orange');
+    const field = (k, label, val, ph) => `<label class="ins-brief-f"><span class="field-label">${label}</span>
+      <input class="input" data-bf="${k}" value="${esc(val)}" placeholder="${esc(ph)}" maxlength="${k === 'avoid' ? 250 : 200}"></label>`;
+    const open = t.carried ? S.open['brief-' + t.id] : S.open['brief-' + t.id] !== false;
+    return `<details class="ins-brief-t" data-brief-id="${esc(t.id)}" data-fold="brief-${esc(t.id)}"${open ? ' open' : ''}>
+      <summary><input type="checkbox" data-bf="use"${t.use ? ' checked' : ''} aria-label="${esc(t.theme)} 공개">
+        <b>${esc(t.theme)}</b> ${badge('신뢰도 ' + t.confidence, t.confidence === '높음' ? 'green' : '')} ${v ? badge(v[0], v[1]) : ''} ${by}
+        <span class="small muted ins-brief-ev">${esc(t.evidence)}</span></summary>
+      ${hits.length ? `<div class="note error">검사에 걸린 말: ${esc(hits.join(', '))}</div>` : ''}${t.check.note ? `<div class="note warn">${esc(t.check.note)}</div>` : ''}
+      ${field('angle', '콘텐츠 각도', t.angle, '예: 언제 · 어떻게 먹는지 한눈에 보여 주기')}
+      ${field('say', '말할 방향', t.say, '예: 모임 전후 루틴, 가방 속 하나')}
+      ${field('avoid', '피할 말 (쉼표로 구분 · 최대 3개)', (t.avoid || []).join(', '), '예: 맛있다고 단정')}
+    </details>`;
+  }
+
+  function drawBrief() {
+    const el = $(panel('monthly'), '[data-ref="brief"]');
+    const b = S.brief;
+    if (!el || !b) return;
+    const head = `<div class="card-head"><h2>콘텐츠 브리프</h2>${badge('콘텐츠 탭에 넘김', 'lime')}</div>`;
+    if (b.error) { el.innerHTML = `${head}<div class="note error">브리프를 불러오지 못했어요: ${esc(b.error)}</div>`; return; }
+    const d = b.draft;
+    const p = b.published;
+    const pub = p
+      ? `<p class="small">지금 공개 중: <b>${esc(p.month)}</b> 승인본 · ${esc(p.approvedBy)} · ${esc(fmt.date(p.approvedAt))} · 주제 ${esc(p.themes)}개</p>`
+      : '<p class="small muted">아직 공개한 브리프가 없어요. 승인 전에는 콘텐츠 탭에 아무것도 넘어가지 않아요.</p>';
+    const make = `<button type="button" class="btn small" data-act="brief-make">${icon('spark')}${d ? '초안 다시 만들기' : '초안 만들기'}</button>`;
+    if (!d) {
+      el.innerHTML = `${head}<p class="small muted">리뷰 · 유튜브 질문을 주제로 묶어 콘텐츠 팀이 쓸 각도 · 말할 방향 · 피할 말을 만들어요. 매달 한 번 확인하고 [전체 승인]을 누르면 돼요.${b.aiReady ? '' : ' OpenAI 키가 없으면 빈 칸으로 만들어져 직접 써요.'}</p>
+        ${pub}<div class="flex wrap mt-8">${make}</div>`;
+      return;
+    }
+    el.innerHTML = `${head}${pub}
+      ${d.status === 'approved' ? `<div class="note lime">이 달 브리프는 승인됐어요 (${esc(d.approvedBy)}). 고친 뒤 다시 승인하면 공개본이 바뀌어요.</div>` : ''}
+      <div class="ins-brief-list">${d.themes.map(briefTheme).join('') || '<p class="small muted">근거가 5건 이상인 주제가 없어요.</p>'}</div>
+      <p class="panel-note mt-8">AI 초안 · 참고용 · 법적 승인 아님. 건수는 규칙 분류로 센 값이고, 소비자에게 보이는 문구는 콘텐츠 탭에서 다시 컴플라이언스 검토를 거쳐요.</p>
+      <div class="flex wrap mt-8">${make}<button type="button" class="btn small" data-act="brief-save">저장</button>
+        <button type="button" class="btn small lime" data-act="brief-approve">${icon('check')}전체 승인</button></div>`;
+  }
+
+  function briefInputs() {
+    return $$(S.root, '.ins-brief-t').map(box => {
+      const v = k => { const i = $(box, `[data-bf="${k}"]`); return i ? (i.type === 'checkbox' ? i.checked : i.value) : ''; };
+      return { id: box.dataset.briefId, angle: v('angle'), say: v('say'), use: v('use'),
+        avoid: String(v('avoid')).split(',').map(x => x.trim()).filter(Boolean) };
+    });
+  }
+
+  async function makeBrief(btn) {
+    if (S.brief && S.brief.draft && !(await ui.confirm('지금 초안을 버리고 새로 만들어요. 지난 승인 문장이 있는 주제는 그대로 이어져요. 진행할까요?'))) return;
+    ui.busy(btn, true);
+    try {
+      S.brief = await api('/api/insights/brief/draft', { month: S.brief ? S.brief.month : S.month });
+      toast(S.brief.draft.ai ? '새 주제는 AI가 초안을 썼어요. 확인하고 승인하세요.' : '초안을 만들었어요. 빈 칸을 채우고 승인하세요.');
+    } catch (e) { toast(e.message, 'error'); }
+    ui.busy(btn, false);
+    drawBrief();
+  }
+
+  async function saveBrief(btn, approve) {
+    const month = S.brief.month;
+    ui.busy(btn, true);
+    try {
+      S.brief = await api('/api/insights/brief/draft', { month, themes: briefInputs(), approve }, { method: 'PUT' });
+      toast(approve ? '승인했어요. 콘텐츠 탭에 이 브리프가 넘어가요.' : '저장했어요. 고친 문장은 다시 검사했어요.');
+      drawBrief();
+    } catch (e) {
+      toast(e.message, 'error');
+      await loadBrief(month);   // 승인이 막혀도 고친 문장은 서버에 남아 있음 → 검사 결과를 다시 보여 줌
+    }
   }
 
   /* ═════════ 시장 · 고객 · 데이터 관리: 화면 안 탭 ═════════ */
@@ -862,7 +958,7 @@
       accuracy: () => accuracyHtml(D.accuracy), news: () => newsHtml(D.news)
     }[sub]();
     if (sub === 'news') drawNewsList();
-    if (sub === 'price') fitSwarm();
+    if (sub === 'price') { fitSwarm(); initPantryFlow(); }
     if (sub === 'brands') focusBrand();
     if (sub === 'changes' && S.focusChg) {
       S.focusChg = false;
@@ -1091,9 +1187,9 @@
       `<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${cur === k}">${esc(l)}${n == null ? '' : ` <span class="n">${esc(n)}</span>`}</button>`).join('')}</div></div>`;
   }
 
-  /* 선반 보기: 1회분 가격대마다 카드 한 줄(가로 스크롤), 같은 제품(라인)은 판매처가 여러 곳이어도 한 번만 (가장 싼 쪽) */
+  /* 선반 보기 (커버플로우, 2026-10-26): 1회분 싼 순서로 한 줄 · 처음엔 REBOOT가 가운데 · 가격대 버튼으로 거름
+     같은 제품(라인)은 판매처가 여러 곳이어도 한 번만 (가장 싼 쪽) */
   const PANTRY_SHELVES = [['low', '저렴한 편', '1회분 $3 미만'], ['mid', '보통', '1회분 $3~6'], ['high', '비싼 편', '1회분 $6 이상']];
-  const PANTRY_MAX = 8;
   // 제형 선 아이콘 (24 × 24, 글자색을 따라감) — 분말은 가루 더미
   const FORM_ICON = {
     liquid: '<path d="M10 2h4v3h-4z"/><path d="M10 5c-2 1.5-3 3.5-3 6v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9c0-2.5-1-4.5-3-6"/><path d="M7 13h10"/>',
@@ -1121,7 +1217,7 @@
     });
   }
 
-  function pantryItem(p) {
+  function pantryItem(p, i) {
     const x = p.rep;
     const flag = p.own ? ['우리', 'own'] : p.state === 'oos' ? ['품절', 'oos'] : p.state === 'low' ? ['곧 품절', 'low']
       : p.pricePct != null ? [`가격 ${fmt.signed(p.pricePct, 0, '%')}`, p.pricePct < 0 ? 'cut' : 'up'] : null;
@@ -1130,7 +1226,7 @@
       STOCK[p.state][0], p.pricePct != null ? `지난 수집 대비 ${fmt.signed(p.pricePct, 0, '%')}` : '', '누르면 브랜드 비교에서 펼쳐요'].filter(Boolean).join(' · ');
     const cls = ['ins-pc', p.own ? 'own' : '', p.state === 'oos' ? 'oos' : '', p.watched ? 'watched' : ''].filter(Boolean).join(' ');
     const brand = p.own ? 'REBOOT' : (x.line && x.line.brand) || x.brand || '브랜드 모름';
-    return `<button type="button" class="${cls}" data-act="brand-go" data-brand="${esc(brand)}" title="${esc(tipText)}" aria-label="${esc(tipText)}">
+    return `<button type="button" class="${cls}" data-act="brand-go" data-brand="${esc(brand)}" data-pf="${i}" data-ps="${x.perServing}" title="${esc(tipText)}" aria-label="${esc(tipText)}">
       <span class="ins-pc-top">${formIcon(p.form)}
         <span class="ins-pc-form">${esc(FORM_KO[p.form] || '기타')}</span>${flag ? `<span class="ins-pc-flag ${flag[1]}">${esc(flag[0])}</span>` : ''}</span>
       <span class="ins-pc-name">${esc(p.own ? 'REBOOT' : x.brand || '브랜드 모름')}</span>
@@ -1141,25 +1237,150 @@
 
   function pantryHtml(d) {
     const all = pantryLines(d);
-    const rank = p => (p.own ? 0 : p.state === 'oos' ? 1 : p.state === 'low' ? 2 : p.pricePct != null ? 3 : 4);
-    const shelves = PANTRY_SHELVES.map(([k, label, range]) => {
-      const ps = all.filter(p => p.rep.bucket === k).sort((a, b) => rank(a) - rank(b) || b.reviews - a.reviews);
-      const open = S.open['pantry-' + k];
-      const shown = open ? ps : ps.slice(0, PANTRY_MAX);
-      const more = ps.length - shown.length;
-      return `<div class="ins-shelf">
-        <div class="ins-shelf-head"><b>${esc(label)}</b><span>${esc(range)} · ${ps.length}개</span></div>
-        <div class="ins-shelf-row">${shown.map(pantryItem).join('') || '<span class="small muted ins-shelf-empty">이 가격대에는 제품이 없어요</span>'}
-          ${more > 0 ? `<button type="button" class="ins-pc-more" data-act="pantry-more" data-k="${k}">+${more}개 더</button>`
-            : open && ps.length > PANTRY_MAX ? `<button type="button" class="ins-pc-more" data-act="pantry-more" data-k="${k}">접기</button>` : ''}</div></div>`;
-    }).join('');
+    const priced = all.filter(p => p.rep.bucket && p.rep.perServing != null).sort((a, b) => a.rep.perServing - b.rep.perServing || b.reviews - a.reviews);
+    const tier = PANTRY_SHELVES.some(([k]) => k === S.pf) ? S.pf : 'all';
+    const ps = tier === 'all' ? priced : priced.filter(p => p.rep.bucket === tier);
+    const lo = ps.length ? ps[0].rep.perServing : 0, hi = ps.length ? ps[ps.length - 1].rep.perServing : 0;
+    const own = priced.filter(p => p.own)[0];
+    const tierBtn = (k, label, n) => `<button type="button" data-act="pf-tier" data-k="${k}" aria-pressed="${tier === k}">${esc(label)}<span class="n">${n}</span></button>`;
+    const tiers = `<div class="seg ins-pf-tiers" role="group" aria-label="1회분 가격대">${tierBtn('all', '전체', priced.length)}${PANTRY_SHELVES.map(([k, label, range]) =>
+      tierBtn(k, `${label} · ${range.replace('1회분 ', '')}`, priced.filter(p => p.rep.bucket === k).length)).join('')}</div>`;
+    const ticks = ps.map((p, i) => `<button type="button" class="ins-pf-tk${p.own ? ' own' : ''}" data-pf-go="${i}" tabindex="-1" aria-hidden="true"
+      style="left:${hi > lo ? ((p.rep.perServing - lo) / (hi - lo)) * 100 : 50}%" title="${esc(`${p.own ? 'REBOOT' : p.rep.brand || '브랜드 모름'} ${money(p.rep.perServing)}`)}"></button>`).join('');
+    const flow = ps.length ? `<div class="ins-pf" data-ref="pf" tabindex="0" data-own-ps="${own ? own.rep.perServing : ''}"
+        aria-label="진열대 ${ps.length}개, 1회분 싼 순서. 끌거나 왼쪽 · 오른쪽 화살표 키로 넘겨요">${ps.map(pantryItem).join('')}</div>
+      <div class="ins-pf-axis"><div class="ins-pf-line"></div>${ticks}<span class="ins-pf-end">← 더 싸요</span><span class="ins-pf-end r">더 비싸요 →</span></div>
+      <p class="ins-pf-note small" data-ref="pf-note" aria-live="polite"></p>`
+      : '<div class="ins-pf-empty small muted">이 가격대에는 제품이 없어요</div>';
     const unpriced = all.filter(p => !p.rep.bucket).length;
     return `<section class="card mt-24 ins-pantry">
-      ${shelves}
+      ${tiers}
+      ${flow}
       <div class="ins-legend small mt-16"><span><i class="ins-lg own"></i>우리 제품</span><span><i class="ins-lg oos"></i>품절 (빈자리)</span>
         <span><i class="ins-lg low"></i>곧 품절</span></div>
-      <p class="panel-note mt-8">같은 제품은 1회분이 가장 싼 판매처 한 곳만 놓았어요.${unpriced ? ` 가격을 못 읽은 ${unpriced}개는 뺐어요 (데이터 관리에서 가격을 넣을 수 있어요).` : ''} 카드를 누르면 브랜드 비교에서 판매처별 상품을 펼쳐 봐요.</p>
+      <p class="panel-note mt-8">같은 제품은 1회분이 가장 싼 판매처 한 곳만 놓았어요.${unpriced ? ` 가격을 못 읽은 ${unpriced}개는 뺐어요 (데이터 관리에서 가격을 넣을 수 있어요).` : ''} 카드를 끌어 휙 돌려 보고, 가운데 카드를 누르면 브랜드 비교에서 판매처별 상품을 펼쳐 봐요.</p>
     </section>`;
+  }
+
+  // 커버플로우 움직임: 끌기 · 던지면 관성 · 카드에 맞춰 멈춤 · 양끝 고무줄 · ← → 키 · 트랙패드 옆으로 쓸기
+  // pos = 가운데에 온 카드 순번(소수 가능). 움직임 줄이기 설정이면 관성 없이 바로 그 카드로
+  const PF_GAP = 120, PF_STEP = 48, PF_TILT = 55;
+  let pfRaf = 0;
+  function initPantryFlow() {
+    cancelAnimationFrame(pfRaf);
+    const stage = $(S.root, '[data-ref="pf"]');
+    if (!stage) return;
+    const cards = $$(stage, '.ins-pc'), ticks = $$(S.root, '.ins-pf-tk'), note = $(S.root, '[data-ref="pf-note"]');
+    const n = cards.length, ownPs = parseFloat(stage.dataset.ownPs);
+    const still = global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const ownAt = cards.findIndex(c => c.classList.contains('own'));
+    let pos = ownAt >= 0 ? ownAt : Math.floor((n - 1) / 2), vel = 0, target = null, drag = null, moved = false, shown = -1;
+    const clamp = v => Math.max(0, Math.min(n - 1, v));
+    const center = () => clamp(Math.round(pos));
+
+    // 좁은 화면(휴대폰 · 좁은 창)에서는 간격을 줄여 옆 카드가 보이게
+    const gap = () => Math.min(PF_GAP, stage.clientWidth * 0.3);
+    function render() {
+      const g = gap(), st = g * (PF_STEP / PF_GAP);
+      cards.forEach((c, k) => {
+        const r = k - pos, a = Math.abs(r), s = Math.sign(r), m = Math.min(a, 1);
+        const x = a <= 1 ? r * g : s * (g + (a - 1) * st);
+        c.style.transform = `translateX(${x}px) translateZ(${40 * (1 - m)}px) rotateY(${-Math.max(-1, Math.min(1, r)) * PF_TILT}deg) scale(${1 - 0.08 * m})`;
+        c.style.opacity = a > 4 ? 0 : a > 3 ? 4 - a : 1;
+        c.style.visibility = a > 4 ? 'hidden' : '';
+        c.style.zIndex = Math.round(100 - a * 10);
+        c.classList.toggle('side', a > 0.5);
+      });
+      const ci = center();
+      if (ci === shown) return;
+      shown = ci;
+      cards.forEach((c, k) => { c.tabIndex = k === ci ? 0 : -1; });
+      ticks.forEach((t, k) => t.classList.toggle('cur', k === ci));
+      if (!note) return;
+      const c = cards[ci], ps = parseFloat(c.dataset.ps), name = c.classList.contains('own') ? 'REBOOT' : c.dataset.brand;
+      note.textContent = c.classList.contains('own') ? 'REBOOT · 이 줄의 기준점'
+        : Number.isFinite(ownPs) ? `${name} · REBOOT보다 1회분 ${money(Math.abs(ps - ownPs))} ${ps < ownPs ? '싸요' : ps > ownPs ? '비싸요' : '같아요'}`
+          : `${name} · 1회분 ${money(ps)}`;
+    }
+    function run() {
+      cancelAnimationFrame(pfRaf);
+      if (still) { pos = target != null ? target : center(); target = null; vel = 0; render(); return; }
+      let prev = performance.now();
+      const step = now => {
+        if (!stage.isConnected) return;
+        const dt = Math.min(32, now - prev);
+        prev = now;
+        if (target == null) {
+          pos += vel * dt;
+          vel *= Math.pow(0.94, dt / 16);
+          if (pos < 0 || pos > n - 1) { vel *= 0.7; pos += (clamp(pos) - pos) * 0.2; }
+          if (Math.abs(vel) < 0.0015) target = center();
+        } else {
+          pos += (target - pos) * Math.min(1, dt / 90);
+          if (Math.abs(target - pos) < 0.002) { pos = target; target = null; vel = 0; render(); return; }
+        }
+        render();
+        pfRaf = requestAnimationFrame(step);
+      };
+      pfRaf = requestAnimationFrame(step);
+    }
+    const goTo = k => { vel = 0; target = clamp(k); run(); };
+
+    stage.addEventListener('pointerdown', e => {
+      if (e.button) return;
+      cancelAnimationFrame(pfRaf);
+      target = null; vel = 0; moved = false;
+      drag = { x: e.clientX, p: pos, lx: e.clientX, lt: performance.now(), id: e.pointerId };
+    });
+    stage.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (!moved && Math.abs(dx) > 5) { moved = true; stage.classList.add('drag'); stage.setPointerCapture(drag.id); }
+      if (!moved) return;
+      let p = drag.p - dx / gap();
+      if (p < 0) p /= 3; else if (p > n - 1) p = n - 1 + (p - (n - 1)) / 3;
+      pos = p;
+      const now = performance.now(), dt = now - drag.lt;
+      if (dt > 0) vel = 0.8 * vel + 0.2 * (-(e.clientX - drag.lx) / gap() / dt);
+      drag.lx = e.clientX; drag.lt = now;
+      render();
+    });
+    const end = () => {
+      if (!drag) return;
+      stage.classList.remove('drag');
+      if (performance.now() - drag.lt > 80) vel = 0;
+      drag = null;
+      if (!moved) return;
+      if (still) target = clamp(Math.round(pos + Math.sign(vel)));
+      run();
+    };
+    stage.addEventListener('pointerup', end);
+    stage.addEventListener('pointercancel', end);
+    // 끌고 난 뒤의 클릭 · 옆 카드 클릭은 브랜드 비교로 가지 않게 (root 클릭 처리보다 먼저)
+    stage.addEventListener('click', e => {
+      const dragged = moved, c = e.target.closest('.ins-pc');
+      moved = false;
+      if (!c) return;
+      const k = cards.indexOf(c);
+      if (dragged || k !== center()) { e.stopPropagation(); e.preventDefault(); if (!dragged) goTo(k); }
+    }, true);
+    stage.addEventListener('wheel', e => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      if (still) { if (Math.abs(e.deltaX) > 20 && target == null) goTo(center() + Math.sign(e.deltaX)); return; }
+      target = null;
+      vel += e.deltaX / PF_GAP / 400;
+      run();
+    }, { passive: false });
+    stage.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      goTo((target != null ? target : center()) + (e.key === 'ArrowRight' ? 1 : -1));
+      const c = cards[clamp(target != null ? target : center())];
+      if (stage.contains(document.activeElement) && c) c.focus({ preventScroll: true });
+    });
+    ticks.forEach((t, k) => t.addEventListener('click', () => goTo(k)));
+    render();
   }
 
 

@@ -302,3 +302,32 @@ def monthly_analysis(payload):
     out["personas"] = (out.get("personas") or [])[:3]
     out["swot"] = {k: ((out.get("swot") or {}).get(k) or [])[:3] for k in ("S", "W", "O", "T")}
     return out
+
+
+# ───────── 콘텐츠 브리프 (brief.py) ─────────
+
+BRIEF_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["items"],
+    "properties": {"items": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["id", "angle", "say", "avoid"],
+        "properties": {"id": _STR, "angle": _STR, "say": _STR, "avoid": _STRS}}}},
+}
+
+
+def content_brief(themes):
+    """규칙이 고른 주제마다 콘텐츠 각도 · 말할 방향 · 피할 말 → {id: {angle, say, avoid}}. 숫자 · 근거는 서버가 붙임."""
+    data, _ = cache_get("content_brief", themes)
+    if data:
+        return data.get("items") or {}
+    system = ("너는 미국에 진출한 한국 젤리 · 음료 브랜드(REBOOT, 실제 데이터는 알디콤)의 콘텐츠 기획 보조야. "
+              "주제마다 이미지 · 카드뉴스 · 숏폼을 만드는 팀이 바로 쓸 수 있게 angle(콘텐츠 각도 1문장), "
+              "say(말할 방향 1문장), avoid(이 주제에서 피할 말 최대 3개)를 써. id는 그대로 돌려줘. "
+              "숫자 · 건수를 쓰지 말고, 리뷰 원문을 인용하지 말고, 과음을 부추기거나 경쟁사를 언급하지 마. "
+              "'숙취'라는 단어도 angle · say에 쓰지 마. " + SAFE)
+    out = openai_json(system, {"themes": themes}, schema=BRIEF_SCHEMA, schema_name="content_brief", part=PART,
+                      action="콘텐츠 브리프 작성", max_tokens=2000)
+    ids = {t["id"] for t in themes}
+    items = {i["id"]: {"angle": i["angle"].strip(), "say": i["say"].strip(), "avoid": i.get("avoid") or []}
+             for i in out.get("items") or [] if i.get("id") in ids and i.get("angle")}
+    cache_put("content_brief", themes, {"items": items})
+    return items

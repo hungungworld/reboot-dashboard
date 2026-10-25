@@ -108,6 +108,25 @@ SERPAPI_KEY=...
 - **월간 리포트 받기:** Word
 - **데이터 받기:** Excel
 
+### 콘텐츠 브리프 (월간 리뷰 맨 아래 · 콘텐츠 탭에 넘기는 요약)
+
+리뷰 · 유튜브 질문을 주제로 묶어 콘텐츠 팀이 쓸 **각도 · 말할 방향 · 피할 말**을 만들고, 사람이 승인한 것만 넘겨요. 원본 리뷰 · 댓글은 넘기지 않아요.
+
+1. **규칙** (`brief.py`): 주제별 근거 개수를 세요. 효능 · 안전 · 비교 주제는 처음부터 빼고, 근거 5건 미만도 빼요. 최대 5개. 자사 리뷰가 Olive Young(한국) 위주면 근거에 표시해요.
+2. **AI**: 새 주제만 문장을 써요 (OpenAI 1회 · 같은 입력이면 저장된 결과). 숫자는 서버가 붙여요. 키가 없으면 빈 칸으로 만들어지고 직접 써요.
+3. **검사**: 각도 · 말할 방향을 컴플라이언스 서버 판정(`tabs.compliance.server_review`, 읽기만)으로 검사해요. 고쳐야 함 · 쓸 수 없음이면 승인할 수 없어요.
+4. **승인**: 매달 한 번 확인하고 **전체 승인**. 지난 승인본에 있던 주제는 그 문장을 이어 쓰고 접혀 있어서 새 주제만 보면 돼요.
+5. **공개**: 승인본만 `GET /api/insights/brief` · `REBOOT.use('insights').contentBrief()` (없으면 `null`). 다시 승인하기 전까지 지난 승인본이 계속 공개돼요.
+
+**콘텐츠 탭이 쓰는 법** (콘텐츠 담당이 넣을 코드 예시 · 인사이트가 없거나 실패해도 제작은 그대로)
+```js
+let brief = null;
+try { brief = await Promise.resolve(REBOOT.use('insights').contentBrief()); } catch (e) { brief = null; }
+// brief.themes: [{theme, evidence, confidence, angle, say, avoid}] · brief.avoid: 공통으로 피할 말
+```
+
+**지울 때**: `brief.py` · `routes.py`의 '콘텐츠 브리프' 묶음 · `ai.py`의 `content_brief` · `insights.js`의 브리프 카드와 `contentBrief` · `insights.css`의 `ins-brief-*` · 테스트 2개. 저장값은 `insights_kv`의 `content_brief:*` 줄뿐이라 DB 표는 그대로 둬도 돼요.
+
 ### 데이터 (탭마다 "질문 제목 → 한 줄 정리 → 핵심 → 접어둔 원본")
 
 | 탭 | 질문 | 핵심 화면 |

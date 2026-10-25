@@ -29,6 +29,11 @@
 다른 파트 공개 (REBOOT.use('insights'))
   GET   /api/insights/trends                   {keywords:[{keyword, points:[{date, value}]}], updatedAt}
   GET   /api/insights/personas                 [{name, oneLine, needs, message}]
+  GET   /api/insights/brief                    콘텐츠 브리프 승인본 (없으면 null) — brief.public()
+콘텐츠 브리프 (월간 리뷰 화면 · brief.py)
+  GET   /api/insights/brief/draft?month=       이 달 초안 + 공개 중인 승인본 요약
+  POST  /api/insights/brief/draft              초안 만들기 {month} (새 주제만 OpenAI 1회 · 키 없으면 빈 칸)
+  PUT   /api/insights/brief/draft              고치기 · 승인 {month, themes:[{id, angle, say, avoid, use}], approve}
 """
 import csv
 import io
@@ -43,7 +48,7 @@ from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
 from . import ai as insights_ai
-from . import accuracy, competitors, lines, reports, service, slack, store, trends, update
+from . import accuracy, brief, competitors, lines, reports, service, slack, store, trends, update
 from .http import CollectError
 from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
@@ -409,6 +414,46 @@ def trends_expose():
 @bp.get("/personas")
 def personas_expose():
     return jsonify(service.personas_expose())
+
+
+@bp.get("/brief")
+def brief_expose():
+    return jsonify(brief.public())
+
+
+# ───────── 콘텐츠 브리프 ─────────
+
+def _brief_month(value):
+    m = str(value or "").strip()
+    if m and not MONTH_RE.match(m):
+        raise ApiError("월은 YYYY-MM 형식으로 주세요.")
+    return m or review_month(service.today())
+
+
+@bp.get("/brief/draft")
+def brief_draft():
+    return jsonify(brief.view(_brief_month(request.args.get("month"))))
+
+
+@bp.post("/brief/draft")
+def brief_make():
+    month = _brief_month(json_body().get("month"))
+    draft = brief.make_draft(month, service.top_questions(month, limit=20), _who()[:100])
+    worklog.add("insights", "기타", "콘텐츠 브리프 초안", detail={"month": month, "themes": len(draft["themes"]), "ai": draft["ai"]})
+    return jsonify(brief.view(month))
+
+
+@bp.put("/brief/draft")
+def brief_save():
+    data = json_body()
+    month = _brief_month(data.get("month"))
+    items = data.get("themes") if isinstance(data.get("themes"), list) else []
+    _draft, err = brief.save_draft(month, items, bool(data.get("approve")), _who()[:100])
+    if err:
+        raise ApiError(err)
+    if data.get("approve"):
+        worklog.add("insights", "기타", "콘텐츠 브리프 승인", detail={"month": month})
+    return jsonify(brief.view(month))
 
 
 @bp.get("/meta")
