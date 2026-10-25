@@ -441,3 +441,5 @@
 .part-cs .cs-sent-meta dt { color: var(--cs-muted); font-weight: 600; font-size: 11.5px; }
 .part-cs .cs-sent-meta dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .part-cs .cs-sent-detail .cs-mail-out { margin-left: 0; }
+.part-cs .cs-voc-list { margin: 0 0 8px; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.part-cs .cs-voc-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
