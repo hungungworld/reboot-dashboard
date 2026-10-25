@@ -406,14 +406,14 @@
   const isRegulation = a => a.area === 'regulation' || a.topic === '규제·정책';
   const compLink = a => (isRegulation(a) ? `<a class="home-comp-link" href="/dashboard/compliance">컴플라이언스에서 점검 ${icon('arrow')}</a>` : '');
 
-  /* 기사 보관 (책갈피): /api/home/news/saved — 시장·고객 인사이트 › 데이터 › 뉴스 수집에서 모아 봄 */
+  /* 기사 보관 (책갈피): /api/home/news/saved — 브리핑 아래 '보관함 N건'을 누르면 창으로 모아 봄 (openSaved) */
   const BOOKMARK = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg>';
   const savedOf = url => (S.saved || []).find(s => s.url === url);
   function saveBtn(a) {
     if (!isUrl(a.url) || !S.saved) return '';
     const on = !!savedOf(a.url);
     return `<button type="button" class="home-save${on ? ' on' : ''}" data-act="news-save" data-url="${esc(a.url)}" aria-pressed="${on}"
-      aria-label="${on ? '보관 해제' : '보관'}" title="${on ? '보관됨 · 누르면 해제' : '보관 (시장·고객 인사이트 › 데이터 › 뉴스 수집)'}">${BOOKMARK}</button>`;
+      aria-label="${on ? '보관 해제' : '보관'}" title="${on ? '보관됨 · 누르면 해제' : '보관 (브리핑 아래 보관함)'}">${BOOKMARK}</button>`;
   }
   async function loadSaved() {
     const r = await safe(() => REBOOT.api('/api/home/news/saved'));
@@ -433,10 +433,65 @@
         const s = await REBOOT.api('/api/home/news/saved', { url, title: a.title, titleKo: a.titleKo || '', summaryKo: a.summaryKo || '',
           whyKo: a.whyKo || '', kind: a.kind || 'flow', areaLabel: a.areaLabel || a.topic || a.groupLabel || '', domain: a.domain || '', date: a.date || '' });
         S.saved = [s].concat(S.saved.filter(x => x.url !== url));
-        toast('보관했어요. 시장·고객 인사이트 › 데이터 › 뉴스 수집에서 볼 수 있어요.');
+        toast('보관했어요. 브리핑 아래 보관함에서 볼 수 있어요.');
       }
     } catch (e) { toast(e.message, 'error'); }
     paintNews();
+  }
+
+  // 보관함 창: 검색(띄어쓰기로 나눈 낱말이 모두 들어간 기사, 대소문자 무시) + 업계 뉴스 / 트렌드 고르기 + 보관 해제
+  const SAVED_KINDS = [['', '전체'], ['flow', '업계 뉴스'], ['trend', '트렌드']];
+  const savedText = x => [x.titleKo, x.title, x.summaryKo, x.whyKo, x.domain, x.areaLabel, x.savedBy].join(' ').toLowerCase();
+  function openSaved() {
+    const f = { q: '', kind: '' };
+    const box = doc.createElement('div');
+    box.className = 'part-home home-saved';
+    const ai = (S.saved || []).some(x => x.summaryKo || x.whyKo);
+    box.innerHTML = `<div class="home-saved-tools"><input class="input" type="search" data-ref="saved-q" placeholder="제목 · 요약 · 마케터의 시선 · 매체 · 분야 검색" aria-label="보관한 기사 검색">
+        <div class="chips" data-ref="saved-kinds"></div></div><div data-ref="saved-list"></div>
+      ${ai ? '<p class="panel-note mt-8">제목 · 요약 · 마케터의 시선은 AI가 정리했어요. 사실은 원문으로 확인해 주세요.</p>' : ''}`;
+    const paint = () => {
+      const items = S.saved || [];
+      const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
+      const byKind = items.filter(x => !f.kind || x.kind === f.kind);
+      const rows = byKind.filter(x => { const t = savedText(x); return words.every(w => t.includes(w)); });
+      const title = box.closest('.modal') && box.closest('.modal').querySelector('.modal-head h2');
+      if (title) title.textContent = `보관한 기사 ${fmt.num(items.length)}건`;   // 보관 해제 뒤 숫자
+      box.querySelector('[data-ref="saved-kinds"]').innerHTML = SAVED_KINDS.map(([k, l]) =>
+        `<button type="button" class="chip${f.kind === k ? ' selected' : ''}" aria-pressed="${f.kind === k}" data-kind="${k}">${esc(l)}<span class="n">${k ? items.filter(x => x.kind === k).length : items.length}</span></button>`).join('');
+      // 찾은 낱말 강조: 원문을 낱말로 나눠 조각마다 esc (HTML 엔티티가 깨지지 않게)
+      const re = words.length ? new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi') : null;
+      const mark = text => (re ? String(text == null ? '' : text).split(re).map((p, i) => (i % 2 ? `<mark>${esc(p)}</mark>` : esc(p))).join('') : esc(text));
+      const li = x => `<li class="home-saved-item"><div class="home-saved-main">
+          <b>${isUrl(x.url) ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${mark(x.titleKo || x.title)}</a>` : mark(x.titleKo || x.title)}</b>
+          ${x.summaryKo ? `<small>${mark(x.summaryKo)}</small>` : ''}
+          ${x.whyKo ? `<small class="home-saved-why"><b>${x.kind === 'trend' ? '적용점' : '마케터의 시선'}</b> ${mark(x.whyKo)}</small>` : ''}
+          <small>${[x.kind === 'trend' ? '트렌드' : '업계 뉴스', x.areaLabel, x.domain, x.date ? fmt.relative(x.date) : ''].filter(Boolean).map(mark).join(' · ')}</small>
+          ${x.titleKo && x.title ? `<small lang="en">${mark(x.title)}</small>` : ''}
+          <small class="muted">${esc(x.savedBy || '')} · ${esc(fmt.datetime(x.savedAt))} 보관</small></div>
+        <button type="button" class="btn small home-saved-unsave" data-unsave="${esc(x.id)}" title="보관 해제">${BOOKMARK} 보관됨</button></li>`;
+      box.querySelector('[data-ref="saved-list"]').innerHTML = !items.length
+        ? '<p class="small muted mt-16">아직 보관한 기사가 없어요. 브리핑 기사 카드의 책갈피를 누르면 여기 모여요.</p>'
+        : (words.length || f.kind ? `<p class="small muted home-saved-count">${byKind.length}건 중 ${rows.length}건</p>` : '') +
+          (rows.length ? `<ul class="home-saved-list">${rows.map(li).join('')}</ul>` : `<p class="small muted mt-16">${words.length ? `'${esc(f.q)}'에 맞는 보관 기사가 없어요. 다른 낱말로 찾아보세요.` : '이 종류로 보관한 기사가 없어요.'}</p>`);
+    };
+    box.addEventListener('input', e => { if (e.target.dataset.ref === 'saved-q') { f.q = e.target.value; paint(); } });
+    box.addEventListener('click', async e => {
+      const k = e.target.closest('[data-kind]');
+      if (k) { f.kind = k.dataset.kind; paint(); return; }
+      const u = e.target.closest('[data-unsave]');
+      if (!u) return;
+      busy(u, true);
+      try {
+        await REBOOT.api(`/api/home/news/saved/${encodeURIComponent(u.dataset.unsave)}`, undefined, { method: 'DELETE' });
+        S.saved = S.saved.filter(s => String(s.id) !== u.dataset.unsave);
+        toast('보관을 해제했어요.');
+        paint();
+        paintNews();
+      } catch (err) { toast(err.message, 'error'); busy(u, false); }
+    });
+    paint();
+    ui.modal({ title: `보관한 기사 ${fmt.num((S.saved || []).length)}건`, body: box, wide: true, actions: [{ label: '닫기', value: null }] });
   }
   // 목록은 처음 3개만. 나머지는 목록 끝 얇은 한 줄('N건 더 보기')로 그 자리에서 펼침 (펼친 기사도 위와 같은 모양: 제목 · → 마케터의 시선)
   // 업계 · 트렌드 칸마다 펼친 상태를 따로 기억
@@ -548,7 +603,7 @@
       if (n.status === 'failed' && n.lastSuccessAt) bits.push(`마지막 성공 ${fmt.datetime(n.lastSuccessAt)}`);
     }
     if (n.articleCount7d) bits.push(`최근 7일 기사 ${fmt.num(n.articleCount7d)}건`);
-    ref('news-saved').innerHTML = S.saved ? `<a href="/dashboard/insights#data/news">${BOOKMARK} 보관함 ${fmt.num(S.saved.length)}건</a>` : '';
+    ref('news-saved').innerHTML = S.saved ? `<button type="button" class="home-saved-open" data-act="saved-open">${BOOKMARK} 보관함 ${fmt.num(S.saved.length)}건</button>` : '';
     ref('news-badges').innerHTML = newsBadges(n);
     ref('news-meta').textContent = bits.join(' · ');
     const errs = last && !n.running && (n.status === 'failed' || n.status === 'partial') ? (last.errors || []) : [];
@@ -732,6 +787,7 @@
       else if (act === 'todo-cancel') { ref('todo-form').hidden = true; }
       else if (act === 'news-collect') collectNews(b);
       else if (act === 'news-save') toggleSave(b);
+      else if (act === 'saved-open') openSaved();
       else if (act === 'news-kind') { store.set('newsKind', b.dataset.kind); paintNews(); }
       else if (act === 'news-more') { const k = b.dataset.key || 'news'; S.newsOpen[k] = !S.newsOpen[k]; paintNews(); }
       else if (act === 'cal-prev') moveMonth(-1);

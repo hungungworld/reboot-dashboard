@@ -3,7 +3,7 @@
   GET    /api/home/news              저장된 뉴스 (구글 뉴스를 부르지 않음) — 기사 · AI 한국어 요약 · 급증 시그널 · 수집 상태
   POST   /api/home/news/collect      지금 수집 (뒤에서 실행, 바로 응답) → 화면이 /news/status로 끝났는지 확인
   GET    /api/home/news/status       수집 중인지 · 마지막 수집 결과
-  GET    /api/home/news/saved        보관한 기사 (최신 보관 순) — 시장·고객 인사이트 › 데이터 › 뉴스 수집도 이 주소를 씀
+  GET    /api/home/news/saved        보관한 기사 (최신 보관 순) — 브리핑 보관함 창이 씀
   POST   /api/home/news/saved        {url, title, titleKo, summaryKo, whyKo, kind, areaLabel, domain, date} 보관 (같은 URL이면 덮어씀)
   DELETE /api/home/news/saved/<id>   보관 해제
   GET    /api/home/todos             이번 주 To-Do (?week=YYYY-MM-DD 그 주 월요일)

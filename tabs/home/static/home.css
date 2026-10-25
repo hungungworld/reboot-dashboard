@@ -176,8 +176,8 @@
 .part-home .home-save.on .icon { fill: currentColor; }
 .part-home .home-brief-empty { margin-top: 14px; }
 .part-home .home-brief-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line-3); font-size: 11px; }
-.part-home .home-brief-saved a { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); font-weight: 600; text-decoration: none; }
-.part-home .home-brief-saved a:hover { color: var(--lime-deep); }
+.part-home .home-brief-saved .home-saved-open { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; color: var(--ink-2); font-weight: 600; cursor: pointer; }
+.part-home .home-brief-saved .home-saved-open:hover { color: var(--lime-deep); }
 .part-home .home-brief-saved .icon { width: 13px; height: 13px; }
 .part-home .home-brief-info { margin-left: auto; color: var(--muted); }
 .part-home .home-brief-info summary { cursor: pointer; text-align: right; }
@@ -185,3 +185,19 @@
 .part-home .home-brief-info[open] summary { text-align: left; }
 .part-home .home-brief-info .panel-note { margin-top: 6px; }
 @media (max-width: 640px) { .part-home .home-row-side { display: none; } .part-home .home-row-title { white-space: normal; } }
+/* 보관함 창 (openSaved) */
+.part-home.home-saved .home-saved-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
+.part-home.home-saved .home-saved-tools .input { flex: 1; min-width: 220px; }
+.part-home.home-saved .home-saved-count { margin: 8px 0 0; }
+.part-home.home-saved .home-saved-list { list-style: none; margin: 0; padding: 0; }
+.part-home.home-saved .home-saved-item { display: flex; gap: 12px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
+.part-home.home-saved .home-saved-item:last-child { border-bottom: 0; }
+.part-home.home-saved .home-saved-main { flex: 1; min-width: 0; }
+.part-home.home-saved .home-saved-main small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; line-height: 1.55; }
+.part-home.home-saved .home-saved-main b a { color: inherit; text-decoration: none; }
+.part-home.home-saved .home-saved-main b a:hover { text-decoration: underline; }
+.part-home.home-saved .home-saved-why { color: var(--ink-2); }
+.part-home.home-saved .home-saved-why b { color: var(--lime-deep); margin-right: 4px; }
+.part-home.home-saved .home-saved-unsave { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--lime-deep); border-color: var(--lime-deep); }
+.part-home.home-saved .home-saved-unsave .icon { width: 13px; height: 13px; fill: currentColor; }
+.part-home.home-saved mark { background: color-mix(in srgb, var(--lime) 55%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
