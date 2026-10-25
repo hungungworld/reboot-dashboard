@@ -494,30 +494,47 @@
 
   /* ───────── 화면 ───────── */
 
-  const TABS = [['single', '단건 심의'], ['batch', '일괄 심의'], ['history', '점검 기록'], ['rules', '규칙·검증'], ['monitor', '규제 모니터링'], ['agencies', '기관 안내']];
+  /* 탭 4개 (2026-10-26 개편: 단건·일괄 → 문구 심의, 규칙·검증·기관 안내 → 기준·참고)
+     세부 탭은 패널 안의 두 번째 탭 줄 → core가 왼쪽 메뉴에 들여 써서 보여 줌 */
+  const TABS = [['review', '문구 심의'], ['history', '점검 기록'], ['monitor', '규제 모니터링'], ['refs', '기준·참고']];
+  const SUBS = {
+    review: [['single', '한 문구', 'shield'], ['batch', 'CSV 여러 줄', 'doc']],
+    refs: [['rules', '규칙 표', 'edit'], ['map', '한↔미 매핑', 'link'], ['ingredients', '원료 표', 'grid'], ['agencies', '기관·플랫폼', 'globe'], ['admin', '관리', 'user']]
+  };
+  // 예전 탭 이름(data.js 기관 카드 goto · 자세히 창 버튼) → [탭, 세부 탭]
+  const GOTO = { single: ['review', 'single'], batch: ['review', 'batch'], rules: ['refs', 'rules'], agencies: ['refs', 'agencies'], admin: ['refs', 'admin'] };
+
+  function subtabsHTML(panel, cur) {
+    return `<div class="cmp-subtabs" role="tablist" aria-label="${esc(TABS.find(t => t[0] === panel)[1])} 세부 메뉴">
+  ${SUBS[panel].map(([id, label, ic]) => `<button type="button" role="tab" class="cmp-subtab" data-subtab="${id}" data-icon="${ic}" aria-selected="${id === cur}">${label}</button>`).join('')}
+</div>`;
+  }
+  const subHid = (cur, id) => (id === cur ? '' : ' hidden');
 
   function render(root) {
     root.classList.add('part-compliance');
     root.innerHTML = `
 <div class="cmp-wrap">
-  <div class="cmp-kpis" data-el="kpis" aria-label="심의 현황"></div>
   <div class="cmp-tabs" role="tablist">
     ${TABS.map(([id, label], i) => `<button type="button" role="tab" class="cmp-tab" data-tab="${id}" aria-selected="${i === 0}">${label}</button>`).join('')}
   </div>
-  <section class="cmp-panel" data-panel="single">${singleHTML()}</section>
-  <section class="cmp-panel" data-panel="batch" hidden>${batchHTML()}</section>
+  <section class="cmp-panel" data-panel="review">${subtabsHTML('review', 'single')}
+    <div class="cmp-subpanel" data-sub="single">${singleHTML()}</div>
+    <div class="cmp-subpanel" data-sub="batch" hidden>${batchHTML()}</div></section>
   <section class="cmp-panel" data-panel="history" hidden></section>
-  <section class="cmp-panel" data-panel="rules" hidden>${rulesHTML()}</section>
   <section class="cmp-panel" data-panel="monitor" hidden>${monitorHTML()}</section>
-  <section class="cmp-panel" data-panel="agencies" hidden>${agenciesHTML()}</section>
+  <section class="cmp-panel" data-panel="refs" hidden>${subtabsHTML('refs', 'rules')}${refsHTML()}</section>
 </div>`;
 
     const showTab = id => {
-      root.querySelectorAll('.cmp-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === id)));
-      root.querySelectorAll('.cmp-panel').forEach(p => { p.hidden = p.dataset.panel !== id; });
-      if (id === 'single') paintSingle(root);
-      if (id === 'history') renderHistory(root);
-      if (id === 'monitor') renderServer(root);
+      const [tab, sub] = GOTO[id] || [id, null];
+      root.querySelectorAll('.cmp-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+      root.querySelectorAll('.cmp-panel').forEach(p => { p.hidden = p.dataset.panel !== tab; });
+      if (sub) showSub(root, sub);
+      if (tab === 'review') paintSingle(root);
+      if (tab === 'history') renderHistory(root);
+      if (tab === 'monitor') renderServer(root);
+      return tab;
     };
     root.querySelectorAll('.cmp-tab').forEach(btn => btn.addEventListener('click', () => showTab(btn.dataset.tab)));
 
@@ -535,20 +552,19 @@
         return;
       }
       const kpi = e.target.closest('[data-act="kpi"]');
-      if (kpi) {
+      if (kpi) {   // 점검 기록 위 숫자 카드 = 판정 필터 (다시 누르면 전체)
         const hp = root.querySelector('[data-panel="history"]');
-        hp.dataset.filter = kpi.dataset.filter;
-        showTab('history');
-        hp.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        hp.dataset.filter = hp.dataset.filter === kpi.dataset.filter ? 'all' : kpi.dataset.filter;
+        renderHistory(root);
         return;
       }
       const sub = e.target.closest('[data-subtab]');
-      if (sub) { showMonSub(root, sub.dataset.subtab); return; }
+      if (sub) { showSub(root, sub.dataset.subtab); return; }
       const btn = e.target.closest('[data-act="goto"]');
       if (!btn) return;
-      showTab(btn.dataset.goto);
+      const tab = showTab(btn.dataset.goto);
       if (btn.dataset.agency) {
-        showMonSub(root, 'manual');   // Federal Register 조회는 '사람이 확인' 메뉴에 있음
+        showSub(root, 'manual');   // Federal Register 조회는 '사람이 확인' 메뉴에 있음
         const sel = root.querySelector('[data-el="fra"]');
         if (sel) {
           sel.value = btn.dataset.agency;
@@ -556,7 +572,7 @@
           if (d) { d.open = true; d.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
         }
       }
-      root.querySelector(`.cmp-tab[data-tab="${btn.dataset.goto}"]`).focus();
+      root.querySelector(`.cmp-tab[data-tab="${tab}"]`).focus();
     });
 
     wireSingle(root);
@@ -661,14 +677,14 @@
     <div data-el="trmsg" aria-live="polite"></div>
     <label class="cmp-field"><span>광고 카피 (영어 · 점검 대상)</span>
       <textarea class="cmp-input" rows="5" data-el="text" placeholder="예: Part of the Korean after-party tradition."></textarea></label>
-    <div class="cmp-foot">
+    <div class="cmp-road-msg" data-el="roadmsg" aria-live="polite"></div>
+    <div data-el="result"></div>
+    <div class="cmp-foot">   <!-- 판정을 본 다음에 누르는 버튼이라 결과 아래 (2026-10-26) -->
       <div class="cmp-actions">
         <button type="button" class="cmp-btn" data-act="rq-open" disabled title="먼저 문구를 입력하세요">검토 요청 (법무·인허가·품질)</button>
         <button type="button" class="cmp-btn" data-act="ai" disabled title="먼저 문구를 입력하세요">${icon('spark')} AI 2차 판정</button>
       </div>
     </div>
-    <div class="cmp-road-msg" data-el="roadmsg" aria-live="polite"></div>
-    <div data-el="result"></div>
     <div data-el="ai" aria-live="polite"></div>
     <div data-el="reviews" aria-live="polite"></div>
   </div>
@@ -680,14 +696,8 @@
       <p><b>BLOCK</b> 문구는 복사할 수 없습니다. 표현을 바꾼 뒤 다시 점검하세요.</p>
       <p>이 점검은 1차 참고용입니다. FDA 공식 판단이나 법률 자문이 아니며, 최종 사용 여부는 문구를 쓰는 사람이 확인합니다.</p>
       <p>당류 표현: <b>Zero Sugar</b>는 Balance 제품을 고르면 사용 가능(PASS) · Original·전체 제품은 사용 불가 · low sugar·저당·reduced sugar 등은 사용 불가(BLOCK) (R11·R12).</p></details>
-    <details class="cmp-card cmp-notes cmp-notes-fold cmp-persona"><summary class="cmp-card-head"><h3>AI 검토자 페르소나</h3><span class="cmp-muted" data-el="persona-sum"></span></summary>
-      <p class="cmp-muted">[AI 2차 판정]을 누를 때 AI가 이 관점으로 검토합니다. 관점·말투만 바뀌고, FDA·FTC 기준과 ${RULE_SPAN} 판정 단계는 그대로입니다. 저장하면 팀 모두에게 적용됩니다.</p>
-      <textarea class="cmp-input" rows="8" maxlength="${PERSONA_MAX}" data-el="persona"></textarea>
-      <p class="cmp-muted" data-el="persona-count" aria-live="polite"></p>
-      <div class="cmp-actions">
-        <button type="button" class="cmp-btn" data-act="persona-reset">기본값으로</button>
-        <button type="button" class="cmp-btn cmp-primary" data-act="persona-save">저장</button>
-      </div></details>
+    <p class="cmp-muted cmp-side-note">AI 검토자 페르소나: <span data-el="persona-now"></span>
+      <button type="button" class="cmp-btn cmp-btn-sm" data-act="goto" data-goto="admin">바꾸기</button></p>
   </aside>
 </div>`;
   }
@@ -714,8 +724,10 @@
       { label: '규칙 미탐지', icon: 'check', value: n('PASS'), sub: '<b>PASS</b>법적 승인은 아님', filter: 'PASS' },
       { label: '전체 점검', icon: 'list', value: list.length, sub: '<b>누적</b>팀 공용 점검 기록', filter: 'all' }
     ];
+    const hp = root.querySelector('[data-panel="history"]');
+    const cur = hp && hp.dataset.filter ? hp.dataset.filter : 'all';
     box.innerHTML = cards.map(c => `
-<button type="button" class="cmp-kpi${c.featured ? ' is-featured' : ''}" data-act="kpi" data-filter="${c.filter}" title="점검 기록에서 '${c.label}' 문구 보기${c.tip ? `\n${c.tip}` : ''}">
+<button type="button" class="cmp-kpi${c.featured ? ' is-featured' : ''}${c.filter === cur ? ' is-on' : ''}" data-act="kpi" data-filter="${c.filter}" aria-pressed="${c.filter === cur}" title="'${c.label}' 문구만 보기${c.tip ? `\n${c.tip}` : ''}">
   <span class="cmp-kpi-top"><span>${c.label}</span><span class="cmp-kpi-icon">${icon(c.icon)}</span></span>
   <span class="cmp-kpi-num">${c.value}<small>건</small></span>
   <span class="cmp-kpi-sub">${c.sub}</span>
@@ -819,7 +831,7 @@
     중요한 문구는 <b>AI 2차 판정</b>으로 한 번 더 확인하세요.</p></section>
 </div>
 <div class="cmp-dlg-foot">
-  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">규칙·검증 탭에서 보기</button>
+  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">기준·참고에서 규칙 보기</button>
 </div>`;
   }
 
@@ -934,8 +946,8 @@
   ${ai.length ? `<section><h4>${icon('spark')} AI 2차 판정 의견 <span class="cmp-muted">(참고용)</span></h4>${ai.map(x => `<p>${badge(LABEL[x.verdict] ? x.verdict : 'REVIEW')} ${esc(x.reason)}${x.suggestion ? `<br><span class="cmp-muted">제안: ${esc(x.suggestion)}</span>` : ''}</p>`).join('')}</section>` : ''}
 </div>
 <div class="cmp-dlg-foot">
-  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">규칙·검증 탭에서 보기</button>
-  ${agencies.length ? `<button type="button" class="cmp-btn" data-act="goto" data-goto="agencies">기관 안내 보기</button>` : ''}
+  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">기준·참고에서 규칙 보기</button>
+  ${agencies.length ? `<button type="button" class="cmp-btn" data-act="goto" data-goto="agencies">기관·플랫폼 안내 보기</button>` : ''}
   ${fromSingle && f.legal === 'yellow' ? `<button type="button" class="cmp-btn" data-act="rq-open">법무 검토 요청</button>` : ''}
   ${fromSingle ? `<button type="button" class="cmp-btn cmp-primary" data-act="select-term" data-term="${esc(term)}">문구 칸에서 이 표현 고치기</button>` : ''}
 </div>`;
@@ -987,7 +999,7 @@
         else if (btn.dataset.act === 'select-term') {
           dlg._opener = null;   // 포커스는 문구 칸으로
           dlg.close();
-          const ta = root.querySelector('[data-panel="single"] [data-el="text"]');
+          const ta = root.querySelector('[data-sub="single"] [data-el="text"]');
           const i = ta.value.toLowerCase().indexOf(btn.dataset.term.toLowerCase());
           ta.focus();
           if (i >= 0) ta.setSelectionRange(i, i + btn.dataset.term.length);
@@ -1011,7 +1023,7 @@
 
   /** 저장된 진행 상태로 로드맵·안내·결과를 다시 그림 */
   function paintSingle(root) {
-    const p = root.querySelector('[data-panel="single"]');
+    const p = root.querySelector('[data-sub="single"]');
     const el = n => p.querySelector(`[data-el="${n}"]`);
     const j = loadJourney();
     const s = journeyState(j);
@@ -1097,7 +1109,7 @@
       if (!res.ok) return;
       REVIEW_REQS = (await res.json()).items || [];
     } catch (e) { return; }
-    const p = root.querySelector('[data-panel="single"]');
+    const p = root.querySelector('[data-sub="single"]');
     if (p) paintReviews(p, loadJourney());
   }
 
@@ -1157,10 +1169,10 @@
     ${out.slack.ok ? '' : `<p class="cmp-muted">${esc(out.slack.error)}</p>`}</section>
   <section><h4>팀별 회신 링크 (14일 · 로그인 없음)</h4><ul class="cmp-dlg-list">${RQ_TEAMS.filter(([k]) => out.links[k]).map(([k]) => [k, out.links[k]]).map(([k, url]) => `
     <li><b>${esc(label[k] || k)}</b> <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-copy" data-link="${esc(url)}">링크 복사</button></li>`).join('')}</ul>
-    <p class="cmp-muted">회신이 오면 단건 심의 문구 아래에 팀별 상태가 보입니다.</p></section>`;
+    <p class="cmp-muted">회신이 오면 문구 심의의 문구 아래에 팀별 상태가 보입니다.</p></section>`;
         dlg.querySelector('[data-el="rq-foot"]').innerHTML = '<button type="button" class="cmp-btn cmp-primary" data-act="dlg-close">확인</button>';
         REVIEW_REQS = [out.request].concat(REVIEW_REQS);
-        paintReviews(root.querySelector('[data-panel="single"]'), loadJourney());
+        paintReviews(root.querySelector('[data-sub="single"]'), loadJourney());
       } catch (e) {
         btn.disabled = false;
         toast(`검토 요청 실패: ${e.message}`);
@@ -1169,7 +1181,7 @@
   }
 
   function wireSingle(root) {
-    const p = root.querySelector('[data-panel="single"]');
+    const p = root.querySelector('[data-sub="single"]');
     const el = n => p.querySelector(`[data-el="${n}"]`);
     const saved = loadJourney();
     el('text').value = saved.text;
@@ -1255,7 +1267,7 @@
   /** 한→영 자동 번역 (Claude · 서버): 한국어 칸의 문구를 영어로 옮겨 광고 카피 칸에 넣고 바로 점검.
       같은 한국어는 다시 번역하지 않고, 영어 칸을 직접 고쳐 두었으면 덮어쓰지 않음 (영어 칸을 비우면 다시 번역) */
   async function runTranslateEn(root, run) {
-    const p = root.querySelector('[data-panel="single"]');
+    const p = root.querySelector('[data-sub="single"]');
     const el = n => p.querySelector(`[data-el="${n}"]`);
     const ko = el('ko').value.trim();
     if (!ko) return;
@@ -1300,14 +1312,15 @@
   }
 
   function wirePersona(root) {
-    const p = root.querySelector('[data-panel="single"]');
+    const p = root.querySelector('[data-sub="admin"]');
     const box = p.querySelector('[data-el="persona"]');
     const count = p.querySelector('[data-el="persona-count"]');
-    const sum = p.querySelector('[data-el="persona-sum"]');
+    const sums = [p.querySelector('[data-el="persona-sum"]'), root.querySelector('[data-sub="single"] [data-el="persona-now"]')];
     const paint = () => {
       const saved = store.get(KEY.persona, null);
       count.textContent = `${box.value.length} / ${PERSONA_MAX}자` + (box.value.trim() !== persona() ? ' · 저장 안 됨' : '');
-      sum.textContent = saved && saved.text != null ? `팀 수정본 · ${saved.by || ''} ${fmt(saved.at)}`.trim() : '기본값';
+      const s = saved && saved.text != null ? `팀 수정본 · ${saved.by || ''} ${fmt(saved.at)}`.trim() : '기본값';
+      sums.forEach(x => { if (x) x.textContent = s; });
     };
     box.value = persona();
     paint();
@@ -1331,7 +1344,7 @@
 
   /** AI 2차 판정 요청 → 진행 상태(journey.ai)에 저장 */
   async function runAi(root, j) {
-    const p = root.querySelector('[data-panel="single"]');
+    const p = root.querySelector('[data-sub="single"]');
     const box = p.querySelector('[data-el="ai"]');
     const s = journeyState(j);
     if (!s.r || p.dataset.aiBusy === '1') return;
@@ -1369,11 +1382,12 @@
   function batchHTML() {
     const n = (DATA.batchSample || []).length;
     return `
-<div class="cmp-card-head"><h3>CSV 일괄 심의</h3><span class="cmp-tag">${RULE_SPAN} · 1차 참고용</span></div>
-<p class="cmp-muted"><code>copy</code> 열이 있는 CSV를 올리면 한 줄씩 판정합니다 (최대 1MB · ${MAX_ROWS}행 · UTF-8 권장). <b>PASS(규칙 미탐지)는 법적 승인이 아닙니다.</b><br>
+<div class="cmp-card-head"><h3>CSV 일괄 심의</h3><span class="cmp-tag">일반식품 기준 · ${RULE_SPAN} · 1차 참고용</span></div>
+<p class="cmp-muted"><code>copy</code> 열이 있는 CSV를 올리면 한 줄씩 판정합니다 (최대 1MB · ${MAX_ROWS}행 · UTF-8 권장). <b>PASS(규칙 미탐지)는 법적 승인이 아닙니다.</b></p>
+<details class="cmp-more"><summary>CSV 열 안내 · 한국어 문구 · 건강기능식품 비교</summary><p class="cmp-muted">
   <b>한국어 문구</b>는 서버 AI(Claude)가 영어로 옮긴 뒤 <b>영어와 한국어를 둘 다</b> 점검합니다 (뜻 그대로 번역 · 1회 소액 과금). 결과에는 한국어 원문 아래에 영어 번역과 걸린 표현이 함께 나옵니다.<br>
   <code>channel</code>·<code>product</code> 열이 있으면 줄마다 그 채널·제품으로 점검합니다 (값: <code>${Object.keys(DATA.channels).join(' · ')} · all</code> / <code>${(DATA.products || []).map(p => p.id).join(' · ')} · all</code>, 한국어 이름도 됨). 없으면 아래 선택값을 씁니다.<br>
-  <code>category</code> 열(선택): <code>SUPPLEMENT</code>(또는 '건강기능식품')이면 그 줄만 <b>건강기능식품 기준으로 비교</b>합니다 → 같은 구조·기능 표현이 일반식품은 수정 필요, 건강기능식품은 <b>조건부(COND)</b>. 비우면 일반식품.</p>
+  <code>category</code> 열(선택): <code>SUPPLEMENT</code>(또는 '건강기능식품')이면 그 줄만 <b>건강기능식품 기준으로 비교</b>합니다 → 같은 구조·기능 표현이 일반식품은 수정 필요, 건강기능식품은 <b>조건부(COND)</b>. 비우면 일반식품.</p></details>
 <div class="cmp-row">
   <label class="cmp-field"><span>CSV 파일</span><input type="file" accept=".csv,text/csv" class="cmp-input" data-el="file"></label>
   <label class="cmp-field"><span>채널 (열이 없을 때)</span><select class="cmp-input" data-el="channel">${channelOptions(ALL)}</select></label>
@@ -1431,7 +1445,7 @@
   }
 
   function wireBatch(root) {
-    const p = root.querySelector('[data-panel="batch"]');
+    const p = root.querySelector('[data-sub="batch"]');
     const el = n => p.querySelector(`[data-el="${n}"]`);
     const dlBtn = p.querySelector('[data-act="download"]');
     let rows = null;      // [{ src, ko, en, note, channel, product, category, colChannel, colProduct }]
@@ -1574,29 +1588,41 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
     const all = loadHistory();
     const filter = HIST_FILTERS.some(([id]) => id === p.dataset.filter) ? p.dataset.filter : 'all';
     const list = all.filter(x => matchFilter(recheck(x).verdict, filter));
-    paintKpis(root);
     p.innerHTML = `
-<div class="cmp-card-head"><h3>점검 기록</h3><span class="cmp-tag">단건 심의에서 입력하면 자동 저장</span></div>
-<p class="cmp-muted">팀 공용 서버에 최근 500건까지 남습니다. 걸린 표현을 누르면 자세한 설명 창이 열립니다. 위 숫자 카드를 누르면 그 판정만 볼 수 있습니다.</p>
-<div class="cmp-row">
-  <label class="cmp-field"><span>판정</span><select class="cmp-input" data-el="hist-filter">
-    ${HIST_FILTERS.map(([id, label]) => `<option value="${id}"${id === filter ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
-  <p class="cmp-muted">${list.length}건${filter === 'all' ? '' : ` / 전체 ${all.length}건`}</p>
-</div>
-${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록이 없습니다.' : '아직 기록이 없습니다. 단건 심의에서 문구를 입력하면 자동으로 점검되어 여기에 쌓입니다.'}</p>`}
+<div class="cmp-kpis" data-el="kpis" aria-label="판정별 점검 기록 · 누르면 그 판정만"></div>
+<div class="cmp-card-head"><h3>점검 기록</h3><span class="cmp-tag">문구 심의에서 입력하면 자동 저장</span></div>
+<p class="cmp-muted">팀 공용 서버에 최근 500건까지 남습니다. 위 숫자 카드를 누르면 그 판정만 보고, 다시 누르면 전체로 돌아갑니다. 걸린 표현을 누르면 자세한 설명 창이 열립니다.</p>
+<p class="cmp-muted">${filter === 'all' ? `전체 ${all.length}건` : `${esc(HIST_FILTERS.find(([id]) => id === filter)[1])} ${list.length}건 / 전체 ${all.length}건`}</p>
+${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록이 없습니다.' : '아직 기록이 없습니다. 문구 심의에서 문구를 입력하면 자동으로 점검되어 여기에 쌓입니다.'}</p>`}
 <div class="cmp-list">${list.map(historyItemHTML).join('')}</div>`;
-    p.querySelector('[data-el="hist-filter"]').onchange = e => { p.dataset.filter = e.target.value; renderHistory(root); };
+    paintKpis(root);
   }
 
-  /* 규칙·검증 */
+  /* 기준·참고 (2026-10-26: 규칙·검증 + 기관 안내를 세부 탭 5개로) — 관리 = 담당자만 쓰는 시험·설정 */
 
-  function rulesHTML() {
+  function refsHTML() {
     const active = DATA.rules.filter(r => !r.off).length;
+    const head = (title, sum) => `<div class="cmp-card-head"><h3>${title} <span class="cmp-muted cmp-h-sub">${sum}</span></h3></div>`;
+    return `
+<div class="cmp-subpanel" data-sub="rules">${head(`규칙 ${RULE_SPAN}`, `사용 ${active}개 · 사용 안 함 ${DATA.rules.length - active}개`)}${rulesTableHTML()}</div>
+<div class="cmp-subpanel" data-sub="map" hidden>${head(`한국 → 미국 표현 매핑 · ${DATA.mappings.length}쌍`, '한국식 표현을 미국에서 쓸 대안으로')}${mappingHTML()}</div>
+<div class="cmp-subpanel" data-sub="ingredients" hidden>${head(`원료 표 · ${(DATA.ingredients || []).length}개`, `확정 ${(DATA.ingredients || []).filter(x => x.status === 'confirmed').length}개 · 후보·금지는 심의에서 걸림`)}${ingredientsHTML()}</div>
+<div class="cmp-subpanel" data-sub="agencies" hidden>${head('기관·플랫폼 안내', `기관 ${(DATA.agencies || []).length}곳 · 플랫폼 ${(DATA.platforms || []).length}곳`)}${agenciesHTML()}</div>
+<div class="cmp-subpanel" data-sub="admin" hidden>${head('관리', '담당자용 · 규칙 시험 · AI 설정·비용 · 자동 수집 키')}${adminHTML()}</div>`;
+  }
+
+  function adminHTML() {
     return `<div class="cmp-folds">` +
-      fold('rules-table', `규칙 ${RULE_SPAN}`, `사용 ${active}개 · 사용 안 함 ${DATA.rules.length - active}개`, rulesTableHTML(), true) +
-      fold('rules-map', `한국 → 미국 표현 매핑 · ${DATA.mappings.length}쌍`, '한국식 표현을 미국에서 쓸 대안으로', mappingHTML(), false) +
-      fold('rules-ingredients', `원료 표 · ${(DATA.ingredients || []).length}개`, `확정 ${(DATA.ingredients || []).filter(x => x.status === 'confirmed').length}개 · 후보·금지는 심의에서 걸림`, ingredientsHTML(), false) +
-      fold('rules-validate', '규칙 검증 · 검사기 시험', 'FDA 문장을 놓치지 않는지 · 괜찮은 문장을 막지 않는지 · 처음 보는 문장 점수', validateHTML(), true) +
+      fold('persona', 'AI 검토자 페르소나', '<span data-el="persona-sum"></span>', `
+<p class="cmp-muted">[AI 2차 판정]을 누를 때 AI가 이 관점으로 검토합니다. 관점·말투만 바뀌고, FDA·FTC 기준과 ${RULE_SPAN} 판정 단계는 그대로입니다. 저장하면 팀 모두에게 적용됩니다.</p>
+<textarea class="cmp-input" rows="8" maxlength="${PERSONA_MAX}" data-el="persona"></textarea>
+<p class="cmp-muted" data-el="persona-count" aria-live="polite"></p>
+<div class="cmp-actions">
+  <button type="button" class="cmp-btn" data-act="persona-reset">기본값으로</button>
+  <button type="button" class="cmp-btn cmp-primary" data-act="persona-save">저장</button>
+</div>`, true) +
+      fold('rules-validate', '규칙 검증 · 검사기 시험', 'FDA 문장을 놓치지 않는지 · 괜찮은 문장을 막지 않는지 · 처음 보는 문장 점수', validateHTML(), false) +
+      fold('setup', '자동 수집 키 신청 · FDA Data Dashboard', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', fdaKeyHTML(), false) +
       fold('ai-usage', 'AI 사용량 · 예상 비용 (이번 달)', '컴플라이언스·CS의 Claude 호출 · 팀 API 예산 관리', `
 <p class="cmp-muted">AI를 부를 때마다 서버가 모델·토큰을 기록하고 예상 비용을 계산합니다 (단가: Claude API 공식 · 환율은 1달러 ≈ 1,400원으로 어림).
   이번 달 합계가 한도를 넘으면 AI 기능만 멈추고 규칙 판정은 그대로 씁니다. 실제 청구액은 Claude Console의 Usage에서 확인하세요.</p>
@@ -1736,7 +1762,7 @@ ${pct >= 80 ? '<p class="cmp-note cmp-note-block">한도의 80%를 넘었습니�
   }
 
   function wireRules(root) {
-    const p = root.querySelector('[data-panel="rules"]');
+    const p = root.querySelector('[data-sub="admin"]');
     const usageBox = p.querySelector('[data-el="aiusage"]');
     p.querySelector('[data-act="ai-usage"]').addEventListener('click', () => paintUsage(usageBox));
     const usageFold = p.querySelector('details[data-src="ai-usage"]');
@@ -1776,48 +1802,33 @@ ${v.selfBad.length ? `<h4 class="cmp-h4">기대와 다른 예문</h4><ul class="
      ② Federal Register: 키 없이 브라우저에서 바로 (CORS 허용 확인 2026-10-23)
      ③ openFDA 식품 리콜: 키 없이 브라우저에서 바로 (404는 0건) */
 
-  /* 세부 메뉴 (영역별): 이 탭 줄은 core가 왼쪽 메뉴 '규제 모니터링' 아래에 들여 써서 보여 줌 */
+  /* 세부 메뉴 (2026-10-26: 출처 안내·직접 올리기 → 수집 결과 안 접힘, 사례집 후보는 따로)
+     이 탭 줄은 core가 왼쪽 메뉴 '규제 모니터링' 아래에 들여 써서 보여 줌 */
   const MON_TABS = [
-    ['auto', '자동 수집', 'filter', '서버가 하루 1회 기관 공식 데이터에서 가져옴 · 기관별로 묶어 보여 줌'],
-    ['guide', '출처 안내', 'link', '어디서 무엇을 가져와 어디에 쓰나 · 필요한 키 · 지금 상태'],
-    ['upload', '직접 올리기', 'doc', '사람이 받은 FDA 경고장 파일·본문을 올림 · 자동 수집 결과에 합쳐짐'],
+    ['auto', '수집 결과', 'filter', '서버가 하루 1회 기관 공식 데이터에서 가져옴 · 직접 올린 경고장도 여기에 합쳐짐'],
+    ['cands', '사례집 후보', 'edit', '경고장에서 뽑은 문구 · 사람이 승인한 것만 사례집·규칙 검증에 씀'],
     ['manual', '사람이 확인', 'user', '서버가 자동으로 못 읽는 사이트 바로가기 · 저장되지 않는 즉석 조회']
   ];
-  let MON_TAB = 'auto';
+  SUBS.monitor = MON_TABS;
 
   function monHead(id, extra) {
     const t = MON_TABS.find(x => x[0] === id);
     return `<div class="cmp-card-head"><h3>${t[1]} <span class="cmp-muted cmp-h-sub">${t[3]}</span></h3>${extra || ''}</div>`;
   }
 
-  function showMonSub(root, id) {
-    MON_TAB = MON_TABS.some(t => t[0] === id) ? id : 'auto';
-    const p = root.querySelector('[data-panel="monitor"]');
-    p.querySelectorAll('.cmp-subtab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.subtab === MON_TAB)));
-    p.querySelectorAll('.cmp-subpanel').forEach(s => { s.hidden = s.dataset.sub !== MON_TAB; });
+  /** 세부 탭 바꾸기 (문구 심의 · 규제 모니터링 · 기준·참고 공통) — id는 화면 전체에서 하나뿐 */
+  function showSub(root, id) {
+    const sp = root.querySelector(`.cmp-subpanel[data-sub="${id}"]`);
+    const p = sp && sp.closest('.cmp-panel');
+    if (!p) return;
+    p.querySelectorAll('.cmp-subtab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.subtab === id)));
+    p.querySelectorAll('.cmp-subpanel').forEach(s => { s.hidden = s.dataset.sub !== id; });
+    if (id === 'single') paintSingle(root);
   }
 
-  function monitorHTML() {
-    const auto = (DATA.monitorSources || []).filter(s => s.modes.includes('auto')).length;
-    const hid = id => (id === MON_TAB ? '' : ' hidden');
+  /** FDA Data Dashboard 키 신청 순서 (관리 › 자동 수집 키 신청) */
+  function fdaKeyHTML() {
     return `
-<div class="cmp-subtabs" role="tablist" aria-label="규제 모니터링 세부 메뉴">
-  ${MON_TABS.map(([id, label, ic]) => `<button type="button" role="tab" class="cmp-subtab" data-subtab="${id}" data-icon="${ic}" aria-selected="${id === MON_TAB}">${label}</button>`).join('')}
-</div>
-<div class="cmp-subpanel" data-sub="guide"${hid('guide')}>
-${monHead('guide')}
-<div class="cmp-mon-map">
-  <button type="button" data-subtab="auto"><b>자동 수집</b><span class="cmp-muted">서버가 하루 1회 · [지금 수집] · 공식 API ${auto}곳</span></button>
-  <button type="button" data-subtab="upload"><b>직접 올리기</b><span class="cmp-muted">사람이 받은 파일·본문을 올림 · FDA 경고장</span></button>
-  <button type="button" data-subtab="manual"><b>사람이 확인</b><span class="cmp-muted">자동으로 못 읽는 사이트 · 즉석 조회</span></button>
-</div>
-<div data-el="mon-guide">${monGuideHTML(null, [])}</div>
-</div>
-<div class="cmp-subpanel" data-sub="auto"${hid('auto')}>
-${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refresh" disabled>${icon('refresh')} 지금 수집</button>`)}
-<div data-el="refreshmsg" aria-live="polite"></div>
-<div data-el="server"></div>
-<div class="cmp-folds">` + fold('setup', '자동 수집 키 신청 · FDA Data Dashboard', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', `
 <p class="cmp-muted">FDA 공식 Data Dashboard API 키가 있으면 <b>식품 경고장 목록</b>과 <b>한국산 식품 수입 거부</b>를 매일 자동으로 모읍니다 (키 1개로 둘 다). 무료이며 이메일로 받습니다.</p>
 <ol class="cmp-steps">
   <li>${link('https://www.accessdata.fda.gov/scripts/oul', 'OII Unified Logon 열기 ↗')} → 오른쪽 <b>New User</b>의 <b>Create Account</b> 버튼 (이미 계정이 있으면 왼쪽 Email·Password로 Login)</li>
@@ -1825,15 +1836,21 @@ ${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refre
   <li>신청할 프로그램 목록에서 <b>Data Dashboard API</b>를 골라 접근 요청 (계정을 만든 뒤 로그인해서 요청해도 됨)</li>
   <li>FDA 메일 기다리기: 요청 접수 → 승인·안내 메일. 키는 메일로 오고, 로그인 후 <b>Data Dashboard API 옆 돋보기</b>를 눌러도 보임 · 신청한 이메일이 사용자 이름(Authorization-User)</li>
   <li><code>.env</code>에 <code>FDA_DASHBOARD_USER=신청한 이메일</code> · <code>FDA_DASHBOARD_KEY=받은 키</code>를 넣고 서버를 껐다 켜기</li>
-  <li>위 [지금 수집]을 눌러 'FDA 경고장' · 'FDA 수입 거부'에 항목이 생기는지 확인</li>
+  <li>규제 모니터링 › 수집 결과의 [지금 수집]을 눌러 'FDA 경고장' · 'FDA 수입 거부'에 항목이 생기는지 확인</li>
 </ol>
 <p class="cmp-muted">안내 문서: ${link('https://datadashboard.fda.gov/oii/api/index.htm', 'Data Dashboard API 사용 안내 ↗')} · 문의 <code>FDADataDashboard@fda.hhs.gov</code>.
-  이 API는 경고장 <b>본문 문구는 주지 않으므로</b> 사례집 후보는 '직접 올리기' 메뉴에서 넣습니다.</p>`, false) + `</div>
-</div>
-<div class="cmp-subpanel" data-sub="upload"${hid('upload')}>
-${monHead('upload')}
+  이 API는 경고장 <b>본문 문구는 주지 않으므로</b> 사례집 후보는 '규제 모니터링 › 수집 결과'의 [FDA 경고장 직접 올리기]에서 넣습니다.</p>`;
+  }
+  function monitorHTML() {
+    const auto = (DATA.monitorSources || []).filter(s => s.modes.includes('auto')).length;
+    return `
+${subtabsHTML('monitor', 'auto')}
+<div class="cmp-subpanel" data-sub="auto">
+${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refresh" disabled>${icon('refresh')} 지금 수집</button>`)}
+<div data-el="refreshmsg" aria-live="polite"></div>
+<div data-el="server"></div>
 <div class="cmp-folds">` + fold('letters', 'FDA 경고장 직접 올리기', 'fda.gov가 자동 수집을 막을 때 · XLSX 목록 · 본문 붙여넣기', `
-<p class="cmp-muted">fda.gov는 서버의 자동 요청을 봇 차단으로 막습니다 (2026-10-24 확인). 사람이 브라우저로 여는 것은 됩니다. 올린 경고장은 '자동 수집' 결과의 FDA 묶음에 <b>직접 올림</b>으로 합쳐지고, 본문에서 뽑은 인용 문구는 '사례집 후보'로만 들어갑니다 (사람이 승인).</p>
+<p class="cmp-muted">fda.gov는 서버의 자동 요청을 봇 차단으로 막습니다 (2026-10-24 확인). 사람이 브라우저로 여는 것은 됩니다. 올린 경고장은 위 수집 결과의 FDA 묶음에 <b>직접 올림</b>으로 합쳐지고, 본문에서 뽑은 인용 문구는 '사례집 후보' 세부 탭으로만 들어갑니다 (사람이 승인).</p>
 <h4 class="cmp-h4">① 경고장 목록 XLSX</h4>
 <ol class="cmp-steps">
   <li>${link('https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/compliance-actions-and-activities/warning-letters', 'FDA 경고장 목록 페이지 열기 ↗')}
@@ -1848,7 +1865,7 @@ ${monHead('upload')}
 </div>
 <h4 class="cmp-h4">② 경고장 본문 붙여넣기 → 인용 문구 추출</h4>
 <ol class="cmp-steps">
-  <li>'자동 수집' 결과의 FDA 경고장 목록에서 제목 링크를 누르거나, 경고장 목록 페이지 표에서 회사 이름을 눌러 경고장을 엶</li>
+  <li>위 수집 결과의 FDA 경고장 목록에서 제목 링크를 누르거나, 경고장 목록 페이지 표에서 회사 이름을 눌러 경고장을 엶</li>
   <li>주소창의 주소를 복사해 아래 '경고장 주소'에 붙여 넣음 (같은 경고장과 자동으로 묶임)</li>
   <li>경고장 화면에서 <b>Ctrl+A → Ctrl+C</b>로 전체 복사 → '경고장 본문'에 붙여 넣고 [본문에서 문구 뽑기]</li>
 </ol>
@@ -1861,12 +1878,17 @@ ${monHead('upload')}
 </div>
 <label class="cmp-field"><span>경고장 본문</span><textarea class="cmp-input" rows="6" data-el="wltext"></textarea></label>
 <div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="wl-text" disabled>본문에서 문구 뽑기</button></div>
-<div data-el="wlmsg" aria-live="polite"></div>`, true) + `</div>
+<div data-el="wlmsg" aria-live="polite"></div>`, false) + fold('guide', '출처 안내', `공식 API ${auto}곳 · 어디서 무엇을 가져와 어디에 쓰나 · 필요한 키 · 지금 상태`, `
+<div data-el="mon-guide">${monGuideHTML(null, [])}</div>`, false) + `</div>
 </div>
-<div class="cmp-subpanel" data-sub="manual"${hid('manual')}>
+<div class="cmp-subpanel" data-sub="cands" hidden>
+${monHead('cands')}
+<div data-el="cands"></div>
+</div>
+<div class="cmp-subpanel" data-sub="manual" hidden>
 ${monHead('manual')}
 <div class="cmp-folds">` + fold('manual', '바로가기로 확인하는 곳', `${(DATA.manualChecks || []).length}곳 · 서버가 자동으로 못 읽는 사이트`, `
-<p class="cmp-muted">아래 사이트는 서버 자동 수집이 막혀 있어 버튼으로 열어 확인합니다 (2026-10-24 확인). 나머지 출처(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)는 '자동 수집' 메뉴에서 [지금 수집]과 하루 1회 작업으로 모읍니다.</p>
+<p class="cmp-muted">아래 사이트는 서버 자동 수집이 막혀 있어 버튼으로 열어 확인합니다 (2026-10-24 확인). 나머지 출처(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)는 '수집 결과' 메뉴에서 [지금 수집]과 하루 1회 작업으로 모읍니다.</p>
 <div class="cmp-table-wrap"><table class="cmp-table">
   <thead><tr><th>사이트</th><th>무엇을 보나</th><th>자동으로 못 읽는 이유</th></tr></thead>
   <tbody>${(DATA.manualChecks || []).map(m => `<tr><td class="cmp-nowrap">${link(m.url, m.name + ' ↗')}</td><td>${esc(m.what)}</td><td class="cmp-muted">${esc(m.why)}</td></tr>`).join('')}</tbody>
@@ -2101,9 +2123,13 @@ ${monHead('manual')}
   function renderServer(root) {
     const box = root.querySelector('[data-panel="monitor"] [data-el="server"]');
     const guide = root.querySelector('[data-panel="monitor"] [data-el="mon-guide"]');
+    const cbox = root.querySelector('[data-panel="monitor"] [data-el="cands"]');   // 사례집 후보 세부 탭
+    const candTab = root.querySelector('[data-panel="monitor"] [data-subtab="cands"]');
     const data = monitorData();
     if (!data) {
       guide.innerHTML = monGuideHTML(null, []);
+      cbox.innerHTML = '<p class="cmp-muted">아직 서버 수집 결과가 없습니다. 수집 결과의 경고장 인용 문구가 여기에 후보로 들어옵니다.</p>';
+      candTab.textContent = '사례집 후보';
       box.innerHTML = `<p class="cmp-note">아직 서버 수집 결과가 없습니다. 위의 [지금 수집]을 누르면(30초~1분) 서버에 저장되어 여기에 표시됩니다. 하루 1회 자동 수집을 켜 두었다면 매일 08:00에도 모읍니다. 그 전에는 '사람이 확인' 메뉴의 Federal Register·openFDA 즉석 조회를 쓰세요.</p>`;
       return;
     }
@@ -2117,7 +2143,9 @@ ${monHead('manual')}
     const stale = !isNaN(gen) && Date.now() - gen > STALE_HOURS * 3600 * 1000;
     const cands = candidatesOf(sources, m.candidates);
     const approved = cands.filter(c => c.status === '승인');
-    const reviewer = box.dataset.reviewer || '';
+    const reviewer = cbox.dataset.reviewer || '';
+    const nCand = cands.filter(c => c.status === '후보').length;
+    candTab.innerHTML = `사례집 후보${nCand ? ` <span class="count">${nCand}</span>` : ''}`;   // 승인 대기 수 → 왼쪽 메뉴 숫자
 
     box.innerHTML = `
 <p class="cmp-summary">서버 수집 ${isNaN(gen) ? '시각 미상' : fmt(gen)}${stale ? ` <span class="cmp-fail">· ${STALE_HOURS}시간 넘게 갱신 안 됨</span>` : ''}
@@ -2129,9 +2157,10 @@ ${m.baseline ? '' : '<p class="cmp-note">첫 확인입니다. 지금 목록을 �
   <button type="button" class="cmp-btn" data-act="fold-all" data-open="">모두 접기</button>
 </div>
 ${monFilterHTML()}
-<div data-el="mon-results">${monResultsHTML(sources)}</div>
+<div data-el="mon-results">${monResultsHTML(sources)}</div>`;
 
-${fold('cands', '사례집 후보', `${cands.length}개 · 승인 ${approved.length}개`, `
+    cbox.innerHTML = `
+<p class="cmp-summary">후보 ${cands.length}개 · 승인 대기 ${nCand}개 · 승인 ${approved.length}개</p>
 <p class="cmp-muted">수집한 경고장 문구는 자동으로 사례집이나 규칙에 들어가지 않습니다. 사람이 승인한 문구만 내려받아 <code>data.js</code>의 <code>warningQuotes</code>에 옮기고 규칙 검증을 다시 실행합니다. <b>PASS로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요합니다.</p>
 ${cands.length ? `
 <div class="cmp-row">
@@ -2150,8 +2179,7 @@ ${cands.length ? `
       <button type="button" class="cmp-btn cmp-primary" data-act="cand-approve">사례집 후보 승인</button>
       <button type="button" class="cmp-btn" data-act="cand-reject">제외</button></div>` :
       `<p class="cmp-muted">${esc(c.status)} · ${esc(c.by)} · ${fmt(c.at)} <button type="button" class="cmp-btn cmp-btn-sm" data-act="cand-reset">되돌리기</button></p>`}
-  </article>`).join('')}</div>` : '<p class="cmp-muted">이번 수집 결과에 경고장 원문 문구(quotes)가 없습니다.</p>'}`,
-      FOLD_OPEN.has('cands') ? FOLD_OPEN.get('cands') : cands.length > 0)}`;
+  </article>`).join('')}</div>` : '<p class="cmp-muted">이번 수집 결과에 경고장 원문 문구(quotes)가 없습니다. 수집 결과의 [FDA 경고장 직접 올리기]로 본문을 넣으면 인용 문구가 여기에 들어옵니다.</p>'}`;
 
     const keepFolds = () => box.querySelectorAll('details.cmp-fold').forEach(d => d.addEventListener('toggle', () => FOLD_OPEN.set(d.dataset.src, d.open)));
     // 필터를 바꾸면 결과만 다시 그림 (출처 안내·사례집 후보는 그대로)
@@ -2160,7 +2188,6 @@ ${cands.length ? `
       keepFolds();
     };
     box.oninput = e => {
-      if (e.target.dataset.el === 'reviewer') box.dataset.reviewer = e.target.value;
       if (e.target.dataset.monf === 'q') { MON_F.q = e.target.value; refilter(); }
     };
     box.onchange = e => {
@@ -2170,7 +2197,8 @@ ${cands.length ? `
       refilter();
     };
     keepFolds();
-    box.onclick = e => {
+    cbox.oninput = e => { if (e.target.dataset.el === 'reviewer') cbox.dataset.reviewer = e.target.value; };
+    box.onclick = cbox.onclick = e => {
       const btn = e.target.closest('[data-act]');
       if (!btn || btn.disabled || btn.dataset.act === 'translate') return;   // 번역 버튼은 render에서 처리
       const act = btn.dataset.act;
@@ -2198,8 +2226,8 @@ ${cands.length ? `
       if (act === 'cand-reset') {
         delete cur.candidates[id];
       } else {
-        const name = (box.dataset.reviewer || '').trim();
-        if (!name) { box.querySelector('[data-el="cmsg"]').innerHTML = '<span class="cmp-note cmp-note-block">검토자 이름을 먼저 입력하세요.</span>'; return; }
+        const name = (cbox.dataset.reviewer || '').trim();
+        if (!name) { cbox.querySelector('[data-el="cmsg"]').innerHTML = '<span class="cmp-note cmp-note-block">검토자 이름을 먼저 입력하세요.</span>'; return; }
         const cand = cands.find(c => c.id === id);
         if (!cand) return;
         cur.candidates[id] = { status: act === 'cand-approve' ? '승인' : '제외', by: name, at: Date.now(), text: cand.text };
@@ -2348,8 +2376,7 @@ ${cands.length ? `
           text: el('wltext').value, url: el('wlurl').value.trim(), firm: el('wlfirm').value.trim(),
           issued: el('wldate').value, subject: el('wlsubject').value.trim()
         });
-        FOLD_OPEN.set('cands', true);
-        wlDone(data, `인용 문구 ${(data.letters || {}).quotes}개를 '사례집 후보'에 넣었습니다. 판정을 확인하고 승인·제외하세요.`);
+        wlDone(data, `인용 문구 ${(data.letters || {}).quotes}개를 '사례집 후보'에 넣었습니다. 규제 모니터링 › 사례집 후보에서 판정을 확인하고 승인·제외하세요.`);
         el('wltext').value = '';
       } catch (e) { wlFail(e); }
       wlText.disabled = false;
