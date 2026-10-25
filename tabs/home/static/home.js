@@ -692,7 +692,7 @@
         `<button type="button" role="tab" data-view="${id}" data-icon="${ic}" aria-selected="false">${esc(label)}</button>`).join('')}</div>
 
       <div data-view-panel="briefing" role="tabpanel" hidden>
-        <section class="brief-hero">
+        <section class="brief-hero" data-go-view="calendar" title="콘텐츠 캘린더 보기">
           <div><span class="eyebrow">YOUR DAILY START</span><h2 data-ref="hero-title">—</h2>
             <p>시즌의 타이밍과 업계의 이야기를 연결해 이번 주 우선순위를 정해보세요.</p>
             <div class="flex wrap" style="margin-top:19px"><a class="btn lime" href="/dashboard/content">${icon('spark')} 캠페인 준비하기</a>
@@ -708,16 +708,6 @@
         <div class="kpis section-gap" data-ref="kpis" aria-label="이번 주 요약">${'<div class="kpi"><div class="skeleton" style="height:100%"></div></div>'.repeat(4)}</div>
         <div class="home-layout">
           <div class="stack">
-            <section class="card home-brief" aria-label="미국 시장 브리핑">
-              <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="home-brief-sub" data-ref="news-sub"></span></div>
-                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="지금 받기" title="지금 받기">${icon('refresh')}</button></div>
-              <div class="home-brief-tabs" data-ref="news-tabs"></div>
-              <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
-              <div data-ref="news-errors"></div>
-              <div class="home-brief-foot"><span class="home-brief-saved" data-ref="news-saved"></span><span class="flex home-news-badges" data-ref="news-badges"></span>
-                <details class="home-brief-info"><summary>수집 정보 · 검색어 점검</summary>
-                  <p class="panel-note" data-ref="news-meta"></p><p class="panel-note" data-ref="news-note"></p><div data-ref="news-stats"></div></details></div>
-            </section>
             <section class="card" data-ref="chart-card">
               <div class="card-head"><h2>이번 주 성과 <span data-ref="chart-tag"></span></h2>
                 <div class="flex wrap">
@@ -734,6 +724,16 @@
                 </div>
                 <div class="home-chart"><canvas data-ref="chart" role="img" aria-label="최근 7일 일별 매출(실선)과 광고비(점선) — 자세한 숫자는 성과분석"></canvas></div>
               </div>
+            </section>
+            <section class="card home-brief" aria-label="미국 시장 브리핑">
+              <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="home-brief-sub" data-ref="news-sub"></span></div>
+                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="지금 받기" title="지금 받기">${icon('refresh')}</button></div>
+              <div class="home-brief-tabs" data-ref="news-tabs"></div>
+              <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
+              <div data-ref="news-errors"></div>
+              <div class="home-brief-foot"><span class="home-brief-saved" data-ref="news-saved"></span><span class="flex home-news-badges" data-ref="news-badges"></span>
+                <details class="home-brief-info"><summary>수집 정보 · 검색어 점검</summary>
+                  <p class="panel-note" data-ref="news-meta"></p><p class="panel-note" data-ref="news-note"></p><div data-ref="news-stats"></div></details></div>
             </section>
           </div>
           <aside class="stack">
@@ -760,7 +760,7 @@
       <div data-view-panel="calendar" role="tabpanel" hidden><div data-ref="calendar"></div><div data-ref="surge"></div></div>`;
 
     root.addEventListener('click', e => {
-      const v = e.target.closest('[data-view], [data-go-view]');
+      const v = e.target.closest('a') ? null : e.target.closest('[data-view], [data-go-view]');
       if (v) {
         showView(v.dataset.view || v.dataset.goView);
         if (v.dataset.goView && global.scrollTo) global.scrollTo({ top: 0, behavior: 'smooth' });

@@ -19,6 +19,9 @@
 .part-home .season-card .link { margin-top: 6px; }
 .part-home .season-card .days-left { font-size: 18px; }
 
+/* 히어로 카드 — 누르면 콘텐츠 캘린더로 (안의 버튼은 원래 링크) */
+.part-home .brief-hero[data-go-view] { cursor: pointer; }
+
 /* KPI 카드 — 누르면 해당 파트로 */
 .part-home .home-kpi-link { display: block; color: inherit; text-decoration: none; border-radius: 14px; min-width: 0; }
 .part-home .home-kpi-link .kpi { height: 100%; transition: border-color .15s; }
