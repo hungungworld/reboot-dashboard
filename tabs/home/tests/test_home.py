@@ -252,11 +252,31 @@ def test_requires_login(client):
     assert client.get("/api/home/todos").status_code == 401
     assert client.post("/api/home/todos", json={"title": "x"}).status_code == 401
     assert client.post("/api/home/news/collect").status_code == 401
+    assert client.get("/api/home/news/saved").status_code == 401
+
+
+def test_saved_news(auth_client):
+    assert auth_client.get("/api/home/news/saved").get_json()["items"] == []
+    assert auth_client.post("/api/home/news/saved", json={"url": "javascript:alert(1)", "title": "x"}).status_code == 400
+    assert auth_client.post("/api/home/news/saved", json={"url": "https://example.com/a"}).status_code == 400
+    body = {"url": "https://example.com/a", "title": "FDA Finalizes NDI Guidance", "titleKo": "FDA NDI 지침 확정",
+            "summaryKo": "요약", "whyKo": "성분 표기 다시 점검", "kind": "nope", "areaLabel": "규제", "domain": "BevNET",
+            "date": "2026-10-20T13:00:00Z"}
+    r = auth_client.post("/api/home/news/saved", json=body)
+    s = r.get_json()
+    assert r.status_code == 201 and s["kind"] == "flow" and s["date"] == "2026-10-20T13:00:00Z" and s["savedBy"]
+    r = auth_client.post("/api/home/news/saved", json=dict(body, kind="trend", whyKo="고친 시선", date="bad"))
+    assert r.status_code == 200 and r.get_json()["id"] == s["id"] and r.get_json()["date"] is None   # 같은 URL은 덮어씀
+    items = auth_client.get("/api/home/news/saved").get_json()["items"]
+    assert len(items) == 1 and items[0]["kind"] == "trend" and items[0]["whyKo"] == "고친 시선"
+    assert auth_client.delete(f"/api/home/news/saved/{s['id']}").get_json()["ok"] is True
+    assert auth_client.delete(f"/api/home/news/saved/{s['id']}").status_code == 404
+    assert auth_client.get("/api/home/news/saved").get_json()["items"] == []
 
 
 def test_news_before_first_collection(auth_client):
     j = auth_client.get("/api/home/news").get_json()
-    assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False
+    assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False and j["issueNo"] == 0
     assert len(j["groups"]) >= 3 and "판매량" in j["limitNote"]
     assert len(j["queryStats"]) == 14 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
 
@@ -281,7 +301,7 @@ def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
         again = news.collect(trigger="manual", user_name="테스터")
         assert sum(c["new"] for c in json.loads(again.counts).values()) == 0
     j = auth_client.get("/api/home/news").get_json()
-    assert j["status"] == "ok" and j["running"] is False and j["ai"] is None
+    assert j["status"] == "ok" and j["running"] is False and j["ai"] is None and j["issueNo"] == 2   # 마켓 레터 호수 = 성공한 수집 횟수
     assert 0 < len(j["articles"]) <= 8 and all(a["url"].startswith("https://") for a in j["articles"])
     assert j["signals"][0]["group"] == "category" and j["signals"][0]["surge"] is True
     hang = next(q for q in j["queryStats"] if q["id"] == "category")

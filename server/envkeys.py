@@ -51,6 +51,7 @@ SERVICES = [
             aliases=("GMAIL_APP_PASSWORD", "gmail_api")),
     Service("GOOGLE_CLIENT_ID", "Google OAuth 클라이언트 ID", "Google로 로그인 (CS Gmail 문의함·답장 초안)", secret=False),
     Service("GOOGLE_CLIENT_SECRET", "Google OAuth 클라이언트 보안 비밀", "Google로 로그인 (CS Gmail 문의함·답장 초안)"),
+    Service("SLACK_WEBHOOK_URL", "Slack 웹훅 주소", "인사이트 리뷰 카드 '슬랙으로 보내기' (보내기 전 확인)", "무료"),
     # 키가 아닌 설정값
     Service("OPENAI_MODEL", "OpenAI 모델", "OpenAI를 쓰는 모든 기능", secret=False, group="setting"),
     Service("GMAIL_QUERY", "CS 문의 메일 조건", "CS 문의함 (Gmail 검색어)", secret=False, group="setting"),

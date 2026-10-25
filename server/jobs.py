@@ -74,8 +74,12 @@ def file_lock(name, stale_seconds=3600):
         _release(fd, path)
 
 
-def is_running(name):
-    return _lock_path(name).exists()
+def is_running(name, stale_seconds=3600):
+    """잠금 파일이 있으면 실행 중. 오래된 잠금(서버가 중간에 꺼져 남은 것)은 실행 중으로 보지 않음."""
+    try:
+        return time.time() - _lock_path(name).stat().st_mtime <= stale_seconds
+    except FileNotFoundError:
+        return False
 
 
 def run_background(app, name, fn, *args, stale_seconds=3600, **kwargs):

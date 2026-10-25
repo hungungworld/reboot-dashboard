@@ -2,6 +2,7 @@
 
 - 검색: engine=amazon · 검색어마다 광고(sponsored)를 뺀 상위 8개
 - 상세: engine=amazon_product · 리뷰 많은 상품 N개 + 추적 ASIN → 재고 · 브랜드 · 판매 문구 · 대표 리뷰
+  (제품 선택 · 상품 정보의 Item Form이 있으면 판매 문구 맨 앞에 'Item Form: …'으로 붙임 → 제형 판단용)
 - 응답 모양이 조금씩 달라서 여러 이름을 차례로 확인합니다 (못 찾으면 빈 값)
 """
 import re
@@ -96,6 +97,32 @@ def _first_list(*vals):
     return []
 
 
+FORM_KEY_RE = re.compile(r"^(item[\s_]*form|product[\s_]*form|form)$", re.I)
+
+
+def _item_form(data, pr):
+    """'제품 선택' · 상품 정보 표의 Item Form (예: Tablet). 응답 모양이 달라 여러 곳을 봄, 못 찾으면 ''."""
+    for v in (pr.get("variants"), data.get("variants")):   # [{"title": "Item Form", "items": [{"name", "selected"}]}]
+        for g in v if isinstance(v, list) else []:
+            if isinstance(g, dict) and FORM_KEY_RE.match(str(g.get("title") or "").strip().rstrip(":")):
+                items = [i for i in g.get("items") or [] if isinstance(i, dict)]
+                sel = next((i for i in items if i.get("selected")), items[0] if len(items) == 1 else None)
+                if sel and sel.get("name"):
+                    return clean(sel["name"], 60)
+    for v in (data.get("product_details"), pr.get("product_details"), data.get("item_specifications"),
+              data.get("specifications"), data.get("product_information"), pr.get("item_specifications")):
+        if isinstance(v, dict):
+            pairs = v.items()
+        elif isinstance(v, list):   # [{"name": "Item Form", "value": "Tablet"}]
+            pairs = [(r.get("name") or r.get("title"), r.get("value")) for r in v if isinstance(r, dict)]
+        else:
+            continue
+        for k, val in pairs:
+            if FORM_KEY_RE.match(str(k or "").strip().rstrip(":")) and isinstance(val, str) and val.strip():
+                return clean(val, 60)
+    return ""
+
+
 def _reviews(data):
     info = data.get("reviews_information") if isinstance(data.get("reviews_information"), dict) else {}
     rows = _first_list(info.get("authors_reviews"), info.get("reviews"), data.get("authors_reviews"), data.get("top_reviews"),
@@ -134,12 +161,14 @@ def product(key, asin):
         stock_text = stock_text.get("text") or ""
     bullets = _first_list(data.get("about_item"), pr.get("about_item"), pr.get("feature_bullets"), data.get("feature_bullets"))
     reviews, summary = _reviews(data)
+    form = _item_form(data, pr)   # 판매 문구 앞에 붙여 저장 → competitors.rule_form_of가 상품명 다음으로 봄
+    bullets = [f"Item Form: {form}"] + bullets[:3] if form else bullets
     return {
         "asin": asin, "title": clean(pr.get("title"), 500), "brand": _brand(pr.get("brand")), "price": price,
         "price_text": clean(pr.get("price") if isinstance(pr.get("price"), str) else "", 60),
         "rating": to_float(pr.get("rating")), "reviews": to_int(pr.get("reviews") if pr.get("reviews") is not None else pr.get("ratings_total")),
         "availability": clean(stock_text, 200), "in_stock": stock_state(stock_text),
-        "message": clean(" / ".join(str(b) for b in bullets[:3] if b), 1200),
+        "message": clean(" / ".join(str(b) for b in bullets[:4 if form else 3] if b), 1200),
         "review_rows": reviews, "summary": summary,
     }
 

@@ -12,7 +12,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import channel_reviews, competitors, rules
+from . import channel_reviews, competitors, lines, rules, slack
 from .classify import QUESTION_LABEL, TOPICS, expressions
 from .models import (Comment, Competitor, Monthly, Review, ReviewCS, Run, ServingOverride, ShelfItem, TrendSeries, Video, kv_get,
                      load_json)
@@ -64,10 +64,11 @@ def shelf_dict(r, ovr=None, own_ovr=None, watch=None):
     else:
         servings, src = 1, "default"
     ps = per_serving(r.price, servings)
-    brand = r.brand or guess_brand(r.title)
+    known = lines.known_brand(r.brand, r.title)  # 별칭 사전 (Q.one · Easy Tomorrow → 상쾌환)
+    brand = known["name"] if known else (r.brand or guess_brand(r.title))
     return {
         "id": r.id, "week": r.week, "source": r.source, "sourceLabel": SOURCE_LABEL.get(r.source, r.source), "key": r.key,
-        "position": r.position, "queries": r.queries, "title": r.title, "brand": brand, "brandGuessed": not r.brand,
+        "position": r.position, "queries": r.queries, "title": r.title, "brand": brand, "brandGuessed": not (known or r.brand),
         "price": r.price, "priceText": r.price_text, "servings": servings, "servingsSource": src, "servingsRule": r.servings_rule,
         "perServing": ps, "bucket": bucket(ps), "rating": r.rating, "reviews": r.reviews, "availability": r.availability,
         "in_stock": r.in_stock, "link": r.link, "message": r.message, "own": bool(own_ovr.get(r.key, r.own)),
@@ -92,7 +93,7 @@ def shelf_rows(week, source):
     ovr, own_ovr, watch = shelf_maps()
     rows = ShelfItem.query.filter_by(week=week, source=source).order_by(ShelfItem.position.is_(None), ShelfItem.position,
                                                                         ShelfItem.id).all()
-    return [shelf_dict(r, ovr, own_ovr, watch) for r in rows]
+    return lines.annotate([shelf_dict(r, ovr, own_ovr, watch) for r in rows])
 
 
 def snapshots(upto=None):
@@ -151,7 +152,8 @@ def shelf_view():
         one = ""
     raw = kv_get("weee_raw", {})
     return {
-        "oneLine": one, "items": now, "groups": groups, "unknown": unknown, "info": info,
+        "oneLine": one, "items": now, "groups": groups, "unknown": unknown, "info": info, "lines": lines.build(now),
+        "lowStock": lines.LOW_STOCK, "demo": demo_info(), "forms": competitors.FORMS,
         "weekLabels": {src: week_label(i["week"]) for src, i in info.items()},
         "compare": bool(prev), "weeeRaw": [{"url": u, **v} for u, v in raw.items()],
         "bucketLabels": BUCKET_LABEL,
@@ -310,10 +312,37 @@ def last_run():
     return run_dict(r) if r else None
 
 
+def last_collect(items=SOURCES, scan=30):
+    """판매처마다 가장 최근 실행의 결과 {ok, count, message, at} (마지막 실행에 없던 항목도 찾음)."""
+    out = {}
+    for r in Run.query.order_by(Run.id.desc()).limit(scan).all():
+        res = load_json(r.results, {})
+        for k in items:
+            if k not in out and isinstance(res.get(k), dict):
+                out[k] = {key: res[k].get(key) for key in ("ok", "count", "message", "at")}
+        if len(out) == len(items):
+            break
+    return out
+
+
+def demo_info():
+    """시연 전용 DB 표시 (kv 'demo' = {weeks: [...], note}) — 실제 DB에는 없음."""
+    d = kv_get("demo", {})
+    return d if d.get("weeks") else None
+
+
 def run_dict(r):
     return {"id": r.id, "status": r.status, "items": load_json(r.items, []), "results": load_json(r.results, {}),
             "current": r.current, "usage": load_json(r.usage, {}), "startedAt": iso(r.started_at),
             "finishedAt": iso(r.finished_at), "user": r.user_name}
+
+
+def comp_changes(now, prev):
+    """이번 주 경쟁사 변화 — 경쟁사 탭 · 주간 리뷰 요약이 같은 숫자를 쓰도록 여기서만 계산 → (변화 목록 또는 None, 예시 여부)."""
+    changes = competitors.weekly_changes(now, prev)
+    if changes is None and any(not x["own"] for x in now):   # 지난주 수집이 없으면 시연용 예시 지난주와 비교 (화면에 '예시' 배지)
+        return competitors.weekly_changes(now, competitors.demo_prev(now)), True
+    return changes, False
 
 
 def weekly_view(t=None):
@@ -328,8 +357,7 @@ def weekly_view(t=None):
             a.update(fact=w["fact"], why=w["why"], todo=w["todo"], ai=True)
         a.pop("weight", None)
     now, prev = ctx["shelf_now"], ctx["shelf_prev"]
-    changes = _changes(now, prev)
-    price_moves = [v for v in changes.values() if not v["new"] and v.get("pricePct") is not None and abs(v["pricePct"]) >= 10]
+    chg, chg_demo = comp_changes(now, prev)
     weee = sorted([x for x in now if x["source"] == "weee" and x["perServing"] is not None], key=lambda x: x["perServing"])
     own_pos = None
     for i, x in enumerate(weee, start=1):
@@ -352,17 +380,33 @@ def weekly_view(t=None):
     if now and all(i["week"] != week_key(t) for i in info.values()):
         latest = max(i["week"] for i in info.values())
         stale = {"week": latest, "label": week_label(latest)}
+    comp = [x for x in now if not x["own"]]
+    line_list = lines.build(comp)
+    before = {(x["source"], x["key"]): x for x in prev or []}
+    restocks = [x for x in comp if before.get((x["source"], x["key"]), {}).get("in_stock") is False and x["in_stock"] is True]
+    watch_lines = [{"id": g["id"], "label": g["label"], "oosChannels": [SOURCE_LABEL[s] for s in g["oosChannels"]], "partialOos": g["partialOos"],
+                    "low": [{"source": SOURCE_LABEL[v["source"]], "left": v["left"], "servings": v["servings"]} for v in g["low"][:2]],
+                    "channels": [SOURCE_LABEL[s] for s in g["channels"]], "perServing": g["perServing"], "confirmed": g["confirmed"]}
+                   for g in line_list if g["oosChannels"] or g["low"] or g["partialOos"]][:4]
     return {
         "week": week_key(t), "weekLabel": week_label(week_key(t)), "today": t.isoformat(), "hasData": has_data, "stale": stale,
         "actions": actions, "aiUsed": any(a["ai"] for a in actions), "aiReady": insights_ai.ready(),
         "aiAt": iso(ai_row.created_at) if ai_row else None,
         "shelf": {"total": len(now), "oos": sum(1 for x in now if x["in_stock"] is False and not x["own"]),
-                  "ownOos": sum(1 for x in now if x["in_stock"] is False and x["own"]), "priceChanges": len(price_moves),
-                  "newEntries": sum(1 for v in changes.values() if v["new"]), "compare": prev is not None,
+                  "ownOos": sum(1 for x in now if x["in_stock"] is False and x["own"]), "compare": prev is not None,
+                  "compChanges": None if chg is None else {
+                      "total": len(chg), "demo": chg_demo, "price": sum(1 for c in chg if c["kind"] == "price"),
+                      "new": sum(1 for c in chg if c["kind"] == "new"),
+                      **{g: sum(1 for c in chg if c["group"] == g) for g in ("threat", "chance", "watch")}},
                   "weeks": {src: {"now": week_label(i["week"]), "prev": week_label(i["prev"]) if i["prev"] else None}
                             for src, i in info.items()},
-                  "ownWeee": own_pos, "ownCount": sum(1 for x in now if x["own"])},
-        "reviews": _new_reviews(), "seasons": seasons, "lastRun": last_run(),
+                  "ownWeee": own_pos, "ownCount": sum(1 for x in now if x["own"]),
+                  "lines": len(line_list), "oosLines": sum(1 for g in line_list if g["oosChannels"]),
+                  "lowStock": sum(len(g["low"]) for g in line_list), "lowLimit": lines.LOW_STOCK, "restocks": len(restocks),
+                  "unknownStock": sum(1 for x in comp if x["in_stock"] is None), "watchLines": watch_lines,
+                  "unconfirmed": sum(1 for g in line_list if not g["confirmed"]),
+                  "lastCollect": last_collect()},
+        "reviews": _new_reviews(), "seasons": seasons, "lastRun": last_run(), "demo": demo_info(),
     }
 
 
@@ -452,7 +496,6 @@ def monthly_view(month=None, t=None):
     watch_first = sorted([x for col in comp["columns"].values() for x in col], key=lambda x: (not x["watched"], -x["score"]))
     rule_comp = [f"{x['brand']}: {x['reason']}" for x in watch_first[:3]]
     prev_row = _monthly_row(prev_month(month))
-    creators = audience_view(month).get("creators", []) if Video.query.filter_by(month=month).first() else []
     return {
         "month": month, "label": f"{int(month[:4])}년 {int(month[5:])}월", "isPrevMonth": month != month_key(t),
         "metrics": metrics, "ai": bool(row), "aiReady": insights_ai.ready(),
@@ -461,7 +504,8 @@ def monthly_view(month=None, t=None):
         "insights": data.get("insights") or rule_insights, "insightsAi": bool(data.get("insights")),
         "competitorTrends": data.get("competitor_trends") or rule_comp, "competitorAi": bool(data.get("competitor_trends")),
         "strategy": {k: data.get(k) for k in ("changes", "personas", "swot", "target", "positioning")} if row else None,
-        "prevStrategy": bool(prev_row), "creators": creators[:5],
+        "prevStrategy": bool(prev_row),
+        "sources": data.get("sources"),
         "questions": q, "expressions": ex,
     }
 
@@ -486,6 +530,14 @@ def monthly_payload(month, t=None):
         "trends": trends_view(t)["next"][:5],
         "lastMonthStrategy": {k: prev.get(k) for k in ("personas", "swot", "target", "positioning")} if prev else None,
     }
+
+
+def monthly_sources(payload):
+    """월간 AI에 넘긴 자료 개수 (화면 'AI가 읽은 자료')."""
+    return {"shelf": len(payload["shelf"]), "reviews": len(payload["reviews"]),
+            "questions": sum(q["count"] for q in payload["questions"]), "expressions": len(payload["expressions"]),
+            "competitors": len(payload["competitors"]), "trends": len(payload["trends"]),
+            "lastMonth": bool(payload["lastMonthStrategy"])}
 
 
 # ───────── 경쟁사 ─────────
@@ -586,13 +638,13 @@ def _analysis_view(now, prev, cols, watch, total):
     if own_items:
         own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤 (자사)", own=True,
                    tierLabel="자사", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
-    changes = competitors.weekly_changes(now, prev)
+    changes, changes_demo = comp_changes(now, prev)
     analyzed = sum(1 for d in rows if d["analyzed"])
     chans = sorted({ch["label"] for d in rows for ch in d["channels"]})
     one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 판매 채널 {' · '.join(chans) or '없음'}"
-           + (f" · 이번 주 변화 {len(changes)}건" if changes else "")
+           + (f" · 이번 주 변화 {len(changes)}건" + (" (예시)" if changes_demo else "") if changes else "")
            + (f" · 주시 중 {len(watch)}개" if watch else "")) if total or rows else ""
-    return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes,
+    return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes, "changesDemo": changes_demo,
             "fields": [{"key": k, "label": label} for k, label in competitors.FIELDS],
             "channelLabels": competitors.CHANNEL_LABEL, "formLabels": competitors.FORM_LABEL,
             "aiReady": insights_ai.ready(), "firecrawlReady": envkeys.has("FIRECRAWL_API_KEY"), "deepTop": competitors.DEEP_TOP}
@@ -685,12 +737,16 @@ def reviews_view():
     if rows:
         neg = Counter(t for r in rows if r.sentiment == "-" for t in r.topic_list())
         pos = Counter(t for r in rows if r.sentiment == "+" for t in r.topic_list())
-        one = f"리뷰 {len(rows)}개 (Amazon 대표 리뷰 · Olive Young · Yami · Weee! CSV)"
+        one = f"리뷰 {len(rows)}개 (Amazon 대표 리뷰 · Olive Young · Yami · Weee!)"
         if pos:
             one += f" · 칭찬 1위 {pos.most_common(1)[0][0]}"
         if neg:
             one += f" · 불만 1위 {neg.most_common(1)[0][0]}"
     cs = _cs_items(rows)
+    shared = slack.shared_map()
+    for x in items + cs:  # 슬랙으로 보낸 리뷰 (누가 · 언제)
+        s = shared.get(str(x["id"])) or {}
+        x["slackBy"], x["slackAt"] = s.get("by", ""), s.get("at")
     return {"oneLine": one, "table": table, "topics": list(TOPICS), "items": items, "summaries": summaries,
             "cs": cs, "csStatus": list(CS_STATUS.items()), "lines": list(channel_reviews.LINES), "channels": _channel_stats(),
             "stats": {"total": len(rows), "amazon": sum(1 for r in rows if r.source == "amazon"),
@@ -699,10 +755,10 @@ def reviews_view():
                       "weee": sum(1 for r in rows if r.source == "weee"), "own": sum(1 for r in rows if r.own),
                       "csTodo": sum(1 for x in cs if x["cs"] == "todo"),
                       "ai": sum(1 for r in rows if r.classified_by == "ai")},
-            "new7d": _new_reviews()["count"]}
+            "new7d": _new_reviews()["count"], "slackReady": slack.ready()}
 
 
-# ───────── 잠재 고객 (유튜브) ─────────
+# ───────── 유튜브 댓글 ─────────
 
 def audience_view(month=None):
     months = [m for (m,) in db.session.query(Video.month).distinct().order_by(Video.month.desc()).all()]
@@ -715,7 +771,7 @@ def audience_view(month=None):
     vids = {v.id: v for v in videos}
     comments = Comment.query.filter_by(month=month).order_by(Comment.likes.desc()).all()
     relevant = [c for c in comments if c.relevant]
-    questions = top_questions(month)
+    questions = top_questions(month, limit=None)  # 주제 전체 (비율이 전체 질문 기준이 되도록)
     ex = expressions([c.text for c in relevant], 5)
     ch = defaultdict(lambda: {"views": 0, "videos": 0, "relevant": 0, "titles": []})
     for v in kept:
@@ -738,8 +794,8 @@ def audience_view(month=None):
     return {
         "month": month, "months": months, "oneLine": one, "questions": questions, "expressions": ex, "creators": creators,
         "comments": [{"text": c.text[:600], "likes": c.likes, "question": c.is_question, "topic": QUESTION_LABEL.get(c.topic, ""),
-                      "video": vids[c.video_id].title if c.video_id in vids else "", "videoId": c.video_id, "by": c.classified_by}
-                     for c in relevant[:150]],
+                      "video": vids[c.video_id].title if c.video_id in vids else "", "videoId": c.video_id, "id": c.id, "by": c.classified_by}
+                     for i, c in enumerate(relevant) if i < 150 or c.is_question],  # 질문 댓글은 모두 (질문 주제를 누르면 보여 줌)
         "process": {"found": len(videos), "kept": len(kept), "minViews": cfg.get("min_views"), "comments": len(comments),
                     "relevant": len(relevant), "noisePct": round((len(comments) - len(relevant)) * 100 / len(comments))
                     if comments else None, "bySet": dict(by_set),

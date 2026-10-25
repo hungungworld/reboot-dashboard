@@ -40,16 +40,20 @@ FIELD_LABEL = dict(FIELDS)
 FACT_FIELDS = ("message", "ingredients", "retail", "news")   # 출처가 있어야 채움
 LIST_FIELDS = ("ingredients",)
 
-FORMS = [("liquid", "Liquid (샷 · 음료)"), ("powder", "Powder (분말 · 스틱)"), ("gummy", "Gummy/Jelly (구미 · 젤리)"),
-         ("tablet", "Tablet/Capsule (정제 · 캡슐)"), ("other", "기타")]
+FORMS = [("liquid", "Liquid (샷 · 음료)"), ("powder", "Powder (분말 · 과립)"), ("stick", "Stick (스틱 포장)"), ("gummy", "Gummy/Jelly (구미 · 젤리)"),
+         ("pellet", "Pellet (환)"), ("tablet", "Tablet/Capsule (정제 · 캡슐)"), ("other", "기타")]
 FORM_LABEL = dict(FORMS)
 FORM_RULES = [  # 앞에서부터 먼저 맞는 것 (예: 'Jelly … Powder'는 젤리, 'Drink Mix Powder'는 분말)
-    ("tablet", re.compile(r"\b(tablets?|capsules?|caps|pills?|softgels?|veggie caps)\b", re.I)),
+    ("pellet", re.compile(r"\bpellets?\b|(?<![가-힣])환(?![가-힣])|상쾌환|컨디션\s?환|여명환", re.I)),   # 한국식 환 (알갱이를 삼킴)
+    ("tablet", re.compile(r"\b(tablets?|capsules?|caps|pills?|softgels?|veggie caps|effervescent|fizz(?:y|ies)?)\b|발포", re.I)),   # 발포정도 정제
+    ("stick", re.compile(r"\bsticks?\b|스틱", re.I)),   # 스틱 포장이면 내용물(젤리 · 분말 · 액상)과 상관없이 스틱
     ("gummy", re.compile(r"\b(gumm(?:y|ies)|jell(?:y|ies)|chews?|chewables?)\b|젤리|구미", re.I)),
     ("powder", re.compile(r"\b(powders?|drink mix|granules?|packets?|sachets?)\b|분말|가루", re.I)),
     ("liquid", re.compile(r"\b(shots?|drinks?|liquid|beverages?|tonic|elixir|bottles?|ready to drink|rtd|"
                           r"\d+(?:\.\d+)?\s*(?:ml|fl\.?\s*oz))\b|음료|드링크", re.I)),
+    ("liquid", re.compile(r"\bginseng\b|인삼|홍삼", re.I)),   # 인삼은 보통 액상 — 다른 제형 단어가 있으면 그쪽이 먼저
 ]
+ITEM_FORM_RE = re.compile(r"^Item Form:\s*([^/]+?)\s*(?:/|$)", re.I)   # amazon.py가 판매 문구 앞에 붙인 '제품 선택' 값
 SKIP_HOSTS = ("amazon.", "walmart.", "target.", "ebay.", "reddit.", "youtube.", "facebook.", "instagram.", "tiktok.",
               "cvs.", "walgreens.", "iherb.", "wikipedia.", "google.", "pinterest.", "x.com", "twitter.", "linkedin.",
               "costco.", "gnc.", "vitaminshoppe.", "sayweee.", "yami.", "trustpilot.", "yelp.", "oliveyoung.")
@@ -97,12 +101,23 @@ def stored_positions():
     return {p.key: p for p in ProductPosition.query.all()}
 
 
+def rule_form_of(x):
+    """상품명 → 제품 선택(Amazon Item Form) → 판매 문구 ('Do not chew' 같은 문구가 상품명보다 앞서지 않게)."""
+    msg = str(x.get("message", "") or "")
+    m = ITEM_FORM_RE.match(msg)
+    return rule_form(x.get("title", "")) or (rule_form(m.group(1)) if m else "") or rule_form(msg)
+
+
 def form_of(x, stored=None):
-    """진열대 한 줄 → 제형. 저장된 분류(문구가 같을 때) → 상품명 규칙 → 기타."""
+    """진열대 한 줄 → 제형. 규칙이 정하면 규칙 → 저장된 AI 분류(문구가 같을 때) → 기타.
+    규칙 결과는 저장값보다 앞섬 (규칙을 고치면 예전 상품도 바로 바뀜)."""
+    form = rule_form_of(x)
+    if form:
+        return form
     row = (stored or {}).get(x["key"])
-    if row is not None and row.sig == _sig(x) and row.form in FORM_LABEL:  # 예전 값(solid 등)은 다시 규칙으로
+    if row is not None and row.sig == _sig(x) and row.form in FORM_LABEL:  # 예전 값(solid 등)은 기타
         return row.form
-    return rule_form(f"{x.get('title', '')} {x.get('message', '')}") or "other"
+    return "other"
 
 
 def classify_products(rows):
@@ -114,7 +129,7 @@ def classify_products(rows):
         if row is not None and row.sig == sig and row.form in FORM_LABEL and (row.form != "other" or not insights_ai.ready()
                                                                 or row.classified_by == "ai"):
             continue
-        form = rule_form(f"{x.get('title', '')} {x.get('message', '')}")
+        form = rule_form_of(x)
         row = row or ProductPosition(key=x["key"][:200])
         row.brand, row.sig, row.updated_at = (x["brand"] or "")[:120], sig, utcnow()
         row.form, row.timing, row.wellness, row.classified_by = form or "other", "", False, "rule"
@@ -253,32 +268,113 @@ def brand_facts(items, stored, yt_texts=None, name=None):
     }
 
 
-def weekly_changes(now, prev, limit=10):
-    """지난 묶음 대비 경쟁 상품 변화: 가격(±5% 이상) · 새 상품 · 품절 · 재입고 · 판매 문구 변경."""
+# 변화 → 알디콤 입장: 위협(고객을 뺏길 수 있음) · 기회(빈자리) · 관찰(말하는 방식)
+CHANGE_GROUP = {"down": "threat", "new": "threat", "back": "threat", "oos": "chance", "up": "chance", "message": "watch"}
+
+
+def _phrases(text):
+    parts = re.split(r"(?<=[.!?])\s+|\s*/\s+", clean(text, 3000))
+    return [x.strip(" ./") for x in parts if len(x.strip(" ./")) > 3]
+
+
+def demo_prev(now):
+    """시연용 '지난주' 진열대 — 지난주 수집이 없을 때만 씀 (화면에 '예시' 배지 · DB에 저장 안 함 · 보고서 · 숫자 요약에는 안 씀).
+    이번 주 실제 진열대를 복사한 뒤, 상품 key로 순서를 고정해 몇 개만 바꿈 (새로고침해도 같은 결과):
+    새 상품 2 · 가격 인하 2 · 가격 인상 2 · 재입고 1 · 품절 1 · 판매 문구 변경 1."""
+    import hashlib
+    comp = sorted((x for x in now if not x["own"]), key=lambda x: hashlib.md5(f"{x['source']}:{x['key']}".encode()).hexdigest())
+    priced = [x for x in comp if x.get("price")]
+    oos_now = [x for x in comp if x.get("in_stock") is False]
+    in_now = [x for x in comp if x.get("in_stock") is True]
+    msg_now = [x for x in comp if len(_phrases(x.get("message") or "")) >= 2]
+    used, plan = set(), {}
+
+    def pick(pool, n, kind):
+        for x in pool:
+            k = (x["source"], x["key"])
+            if n and k not in used:
+                used.add(k)
+                plan[k] = kind
+                n -= 1
+
+    pick(priced, 2, "new")
+    pick(priced, 2, "down")    # 지난주가 더 비쌌음 → 이번 주 가격 인하
+    pick(priced, 2, "up")      # 지난주가 더 쌌음 → 이번 주 가격 인상
+    pick(in_now, 1, "back")    # 지난주 품절 → 재입고
+    pick(oos_now, 1, "oos")    # 지난주 재고 있음 → 품절
+    pick(msg_now, 1, "message")
+    out = []
+    for x in now:
+        kind = plan.get((x["source"], x["key"]))
+        if kind == "new":
+            continue
+        p = dict(x)
+        h = int(hashlib.md5(x["key"].encode()).hexdigest()[:4], 16) / 0xFFFF   # 상품마다 고정된 0~1
+        if kind in ("down", "up"):
+            pct = 0.08 + 0.12 * h   # 8~20%
+            p["price"] = round(x["price"] * (1 + pct if kind == "down" else 1 - pct), 2)
+        elif kind == "back":
+            p["in_stock"] = False
+        elif kind == "oos":
+            p["in_stock"] = True
+        elif kind == "message":
+            p["message"] = ". ".join(_phrases(x["message"])[1:])   # 첫 문장(광고 문구)이 없던 예전 문구
+        out.append(p)
+    return out
+
+
+def _vs_own(ps, own_ps):
+    """1회분 단가를 알디콤 최저 1회분과 비교한 한 줄 (둘 중 하나라도 없으면 빈 문자열)."""
+    if ps is None or not own_ps:
+        return ""
+    gap = ps - min(own_ps)
+    if abs(gap) < 0.005:
+        return f"1회분 ${ps:.2f} · 알디콤과 같아요"
+    return f"1회분 ${ps:.2f} · 알디콤보다 ${abs(gap):.2f} {'싸요' if gap < 0 else '비싸요'}"
+
+
+def weekly_changes(now, prev, limit=30):
+    """지난 묶음 대비 경쟁 상품 변화: 가격(±5% 이상) · 새 상품 · 품절 · 재입고 · 판매 문구 변경.
+    항목마다 group(threat · chance · watch)과 알디콤에게 뜻하는 한 줄(impact)을 붙임 — 수집한 숫자로만 계산."""
     if not prev:
         return None
     before = {(x["source"], x["key"]): x for x in prev}
     compared = {x["source"] for x in prev}
+    known = lambda x: x.get("perServing") if x.get("servingsSource") != "default" else None  # noqa: E731 — 회분을 모르면 1회분 비교 안 함
+    own_ps = [known(x) for x in now if x["own"] and known(x) is not None]
+    own_src = {x["source"] for x in now if x["own"]}
     out = []
     for x in now:
         if x["own"] or x["source"] not in compared:
             continue
         p = before.get((x["source"], x["key"]))
-        base = {"brand": x["brand"], "title": x["title"][:120], "source": x["sourceLabel"], "link": x.get("link") or ""}
+        ps = known(x)
+        base = {"brand": x["brand"], "title": x["title"][:120], "source": x["sourceLabel"], "link": x.get("link") or "",
+                "price": x.get("price"), "perServing": ps}
+
+        def add(kind, group, label, text, impact, weight, **extra):
+            out.append(dict(base, kind=kind, group=CHANGE_GROUP[group], label=label, text=text, impact=impact, weight=weight, **extra))
+
         if p is None:
-            out.append(dict(base, kind="new", label="새 상품", text=f"{x['title'][:70]} ({x['sourceLabel']}"
-                                                                    + (f" · ${x['price']:.2f})" if x["price"] is not None else ")"), weight=50))
+            add("new", "new", "새 상품", f"{x['title'][:70]} ({x['sourceLabel']}" + (f" · ${x['price']:.2f})" if x["price"] is not None else ")"),
+                _vs_own(ps, own_ps) or "이번 주 진열대에 처음 보여요.", 50)
             continue
         if p.get("price") and x.get("price") and abs(x["price"] - p["price"]) / p["price"] >= 0.05:
             pct = (x["price"] - p["price"]) / p["price"] * 100
-            out.append(dict(base, kind="price", label="가격 인하" if pct < 0 else "가격 인상",
-                            text=f"${p['price']:.2f} → ${x['price']:.2f} ({pct:+.0f}%) · {x['sourceLabel']}", weight=100 + abs(pct)))
+            vs = _vs_own(ps, own_ps)
+            add("price", "down" if pct < 0 else "up", "가격 인하" if pct < 0 else "가격 인상",
+                f"${p['price']:.2f} → ${x['price']:.2f} ({pct:+.0f}%) · {x['sourceLabel']}",
+                vs or ("가격 비교에서 불리해질 수 있어요." if pct < 0 else "가격 비교 메시지에 쓸 수 있어요."),
+                100 + abs(pct), prevPrice=p["price"], pct=round(pct, 1))
         if p.get("in_stock") is not False and x["in_stock"] is False:
-            out.append(dict(base, kind="oos", label="품절", text=f"{x['title'][:60]} · {x['sourceLabel']}", weight=60))
+            add("oos", "oos", "품절", f"{x['title'][:60]} · {x['sourceLabel']}",
+                f"{x['sourceLabel']}에서 이 상품을 찾던 고객을 데려올 기회예요" + (" (알디콤도 여기서 팔아요)." if x["source"] in own_src else "."), 60)
         elif p.get("in_stock") is False and x["in_stock"] is True:
-            out.append(dict(base, kind="back", label="재입고", text=f"{x['title'][:60]} · {x['sourceLabel']}", weight=40))
+            add("back", "back", "재입고", f"{x['title'][:60]} · {x['sourceLabel']}", "다시 팔기 시작했어요. 품절 동안 넘어온 고객을 지켜야 해요.", 40)
         if p.get("message") and x.get("message") and clean(p["message"], 400) != clean(x["message"], 400):
-            out.append(dict(base, kind="message", label="판매 문구 변경", text=clean(x["message"], 140), weight=70))
+            old, new = _phrases(p["message"]), _phrases(x["message"])
+            add("message", "message", "판매 문구 변경", clean(x["message"], 140), "강조하는 말이 바뀌었어요. 브랜드 카드에서 핵심 메시지를 확인하세요.", 70,
+                added=[s[:120] for s in new if s not in old][:2], removed=[s[:120] for s in old if s not in new][:2])
     out.sort(key=lambda c: -c.pop("weight"))
     return out[:limit]
 

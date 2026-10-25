@@ -135,6 +135,14 @@ def fake_net(monkeypatch):
         calls.append(("POST", url, dict(json or {})))
         if "firecrawl.dev" in url:
             assert headers["Authorization"].startswith("Bearer ")
+            page = (json or {}).get("url", "")
+            if "/social/review/more/12345" in page:  # Condition만 리뷰 1개 (Aldicom은 0개)
+                if "json" in json["formats"]:
+                    return FakeRes(200, {"success": True, "data": {"json": {"reviews": [
+                        {"rating": 5, "date": "Oct 17, 2026", "text": "Works great, no headache next morning"}]}}})
+                return FakeRes(200, {"success": True, "data": {"markdown": "# Reviews (1)\n\nKimi\nVerified Buyer\nWorks great"}})
+            if "/social/review/more/" in page:
+                return FakeRes(200, {"success": True, "data": {"markdown": "# Reviews (0)\n\nPost a review"}})
             return FakeRes(200, {"success": True, "data": {"markdown": WEEE_MD}})
         raise AssertionError(f"예상하지 못한 호출: {url}")
 
@@ -240,6 +248,32 @@ def test_rules_price_changes_and_new_entries():
     assert rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=None)) == []
 
 
+def _lined(key, line, source, in_stock=True, left=None, own=False):
+    return dict(_item(key, f"{line} 10 sticks", 20.0, source=source, own=own, in_stock=in_stock),
+                line={"id": line, "label": line}, stockLeft=left)
+
+
+def test_rules_competitor_stock_signals():
+    now = [_lined("amazon:A", "상쾌환 · 환", "amazon", in_stock=False), _lined("weee:A", "상쾌환 · 환", "weee"),     # Weee!엔 있음 → 한 채널
+           _lined("amazon:B", "컨디션 · 젤리", "amazon", in_stock=False), _lined("weee:B", "컨디션 · 젤리", "weee", in_stock=False),
+           _lined("amazon:C", "Flyby · 캡슐", "amazon", left=8), _lined("amazon:D", "Cheers · 캡슐", "amazon", left=40),
+           _lined("amazon:OWN", "알디콤 · 젤리", "amazon", left=3, own=True)]                                     # 자사는 경쟁 규칙 제외
+    acts = {a["rule"]: a for a in rules.weekly_actions(_ctx(shelf_now=now))}
+    assert set(acts) == {"comp_oos", "comp_oos_multi", "low_stock"}
+    assert acts["comp_oos"]["grade"] == "기회" and "상쾌환 · 환 — Amazon에서 품절" in acts["comp_oos"]["fact"]
+    assert "입찰" in acts["comp_oos"]["todo"] and rules.COMPLIANCE in acts["comp_oos"]["todo"]
+    assert acts["comp_oos_multi"]["grade"] == "긴급" and "Amazon · Weee!에서 모두 품절" in acts["comp_oos_multi"]["fact"]
+    assert acts["low_stock"]["grade"] == "참고" and "8개 남았어요" in acts["low_stock"]["fact"]
+    assert acts["low_stock"]["todo"].startswith("경쟁 제품 품절에 대비하세요")
+    # 지난 수집에도 품절이면 'N주째' · 지난 품절 → 이번 재고 있음 = 재입고
+    prev = [_lined("amazon:B", "컨디션 · 젤리", "amazon", in_stock=False), _lined("weee:B", "컨디션 · 젤리", "weee", in_stock=False),
+            _lined("amazon:C", "Flyby · 캡슐", "amazon", in_stock=False)]
+    acts = {a["rule"]: a for a in rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=prev))}
+    assert "계속 품절" in acts["comp_oos_multi"]["fact"] and "성과분석" in acts["comp_oos_multi"]["todo"]
+    assert acts["restock"]["grade"] == "참고" and "Flyby" in acts["restock"]["fact"] and "입찰가" in acts["restock"]["todo"]
+    assert rules.COMPLIANCE not in acts["restock"]["todo"]
+
+
 def test_comment_rules_drop_chatter_and_unknown_questions():
     from tabs.insights import classify
     noise = classify.classify_comment("anyone else extremely hungover right now?")
@@ -337,13 +371,13 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
     run = st["run"]
     assert run["status"] == "done", run["results"]
     assert set(run["results"]) == set(items)
-    assert run["usage"]["serpapi"] >= 2 + 2 and run["usage"]["firecrawl"] == 1 and run["usage"]["youtube"] == 100 + 1 + 1
+    assert run["usage"]["serpapi"] >= 2 + 2 and run["usage"]["firecrawl"] == 1 + 2 + 5 and run["usage"]["youtube"] == 100 + 1 + 1
     # 키가 결과 · 로그에 남지 않음
     logs = auth_client.get("/api/worklog?part=insights").get_json()["items"]
     dumped = json.dumps(logs, ensure_ascii=False) + json.dumps(st, ensure_ascii=False)
     assert "serp-test-key" not in dumped and "fc-test-key" not in dumped and "AIza-test-key" not in dumped
     kinds = {(i["kind"], i["action"]) for i in logs}
-    assert ("수집", "Amazon 진열대 · 리뷰 수집") in kinds and ("수집", "Weee! 진열대 수집") in kinds
+    assert ("수집", "Amazon 진열대 · 리뷰 수집") in kinds and ("수집", "Weee! 진열대 · 리뷰 수집") in kinds
     assert ("승인 · 선정", "이번 주 액션 선정 (규칙)") in kinds
     # 광고 제외 · soup 제외 · 같은 ASIN은 한 번
     amazon_calls = [c for c in fake_net if c[0] == "GET" and c[2].get("engine") == "amazon"]
@@ -364,6 +398,12 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
     assert {x["title"] for x in weee} == {"Condition Hangover Drink 100ml x 10", "Aldicom Hangover Jelly 1 pack*5 pack"}
     wo = next(x for x in weee if x["own"])
     assert wo["price"] == 12.99 and wo["in_stock"] is False
+    # Weee! 리뷰: 리뷰 페이지마다 수를 보고, 있는 상품만 JSON 추출 · 작성자 이름은 저장 안 함
+    rv = auth_client.get("/api/insights/data/reviews").get_json()
+    wr = [r for r in rv["items"] if r["source"] == "weee"]
+    assert len(wr) == 1 and wr[0]["sourceLabel"] == "Weee!" and wr[0]["rating"] == 5 and "Kimi" not in json.dumps(wr)
+    review_pages = [c[2] for c in fake_net if c[0] == "POST" and "/social/review/more/" in c[2].get("url", "")]
+    assert sorted(p["formats"][0] for p in review_pages) == ["json", "markdown", "markdown"]
     flyby = next(x for x in shelf["items"] if x["key"] == "amazon:B0COMP0001")
     assert flyby["brand"] == "Flyby" and flyby["detailed"] and flyby["in_stock"] is True
 
@@ -437,7 +477,10 @@ def test_second_week_changes_overrides_and_edits(app, auth_client, fixed_today):
     by = {a["rule"]: a for a in week["actions"]}
     assert by["price_cut"]["grade"] == "긴급" and "$30.00 → $24.00" in by["price_cut"]["fact"]
     assert by["new_entry"]["grade"] == "참고" and week["shelf"]["compare"] is True
-    assert week["shelf"]["priceChanges"] == 1 and week["shelf"]["newEntries"] == 2
+    cc = week["shelf"]["compChanges"]
+    assert cc["price"] == 1 and cc["new"] == 2 and cc["threat"] == 3 and cc["demo"] is False
+    comp = auth_client.get("/api/insights/data/competitors").get_json()
+    assert cc["total"] == len(comp["changes"])  # 주간 요약과 경쟁사 탭이 같은 숫자
     shelf = auth_client.get("/api/insights/data/shelf").get_json()
     mystery = next(x for x in shelf["items"] if x["key"] == "amazon:B0NOSERVE1")
     assert mystery["servingsSource"] == "default" and mystery["perServing"] == 9.0  # 못 읽으면 1회분으로 (확인 필요)
@@ -462,6 +505,22 @@ def test_second_week_changes_overrides_and_edits(app, auth_client, fixed_today):
     assert m["metrics"]["priceChanges"] == 1 and m["metrics"]["ownOosWeeks"] == 1
 
 
+def test_line_edit_confirm_and_weekly_shelf_fields(app, auth_client, fixed_today):
+    _seed_two_weeks(app)
+    shelf = auth_client.get("/api/insights/data/shelf").get_json()
+    patch = next(x for x in shelf["items"] if x["key"] == "amazon:B0NEW00001")
+    assert patch["line"]["confirmed"] is False and shelf["lines"] and shelf["forms"]
+    assert auth_client.put("/api/insights/lines", json={"key": "amazon:B0NEW00001", "brand": "PatchCo", "form": "other"}).status_code == 200
+    assert auth_client.put("/api/insights/lines", json={"key": "amazon:B0NEW00001", "form": "rock"}).status_code == 400
+    assert auth_client.put("/api/insights/lines", json={"key": "nope", "brand": "x"}).status_code == 404
+    patch = next(x for x in auth_client.get("/api/insights/data/shelf").get_json()["items"] if x["key"] == "amazon:B0NEW00001")
+    assert patch["line"]["label"] == "PatchCo · 기타" and patch["line"]["confirmed"] and patch["brand"] == "PatchCo"
+    assert auth_client.post("/api/insights/lines/confirm").get_json()["confirmed"] == 3
+    s = auth_client.get("/api/insights/weekly").get_json()["shelf"]
+    assert s["unconfirmed"] == 0 and s["unknownStock"] == 1 and s["lowLimit"] == 20
+    assert set(s["lastCollect"]) == set()  # 실행 기록이 없으면 빈 값
+
+
 def test_watch_toggle_marks_competitor(app, auth_client, fixed_today):
     _seed_two_weeks(app)
     assert auth_client.put("/api/insights/watch", json={"brand": "Flyby", "watch": True}).get_json()["watch"] == ["Flyby"]
@@ -474,25 +533,65 @@ def test_watch_toggle_marks_competitor(app, auth_client, fixed_today):
     assert auth_client.put("/api/insights/watch", json={"brand": ""}).status_code == 400
 
 
-# ───────── CSV 올리기 ─────────
+# ───────── 구매자 리뷰 표 · CSV 올리기 ─────────
 
-def test_weee_review_csv_upload(auth_client):
-    csv_text = "제품,브랜드,별점,날짜,제목,내용,자사\n" \
-               "Aldicom Jelly,Aldicom,2,2026-10-01,,The taste is too sweet,Y\n" \
-               "Condition Drink,Condition,5,2026-10-02,Great,Works great and easy to carry,N\n"
-    res = auth_client.post("/api/insights/reviews/upload", json={"csv": csv_text})
-    assert res.status_code == 200 and res.get_json()["added"] == 2
-    assert auth_client.post("/api/insights/reviews/upload", json={"csv": csv_text}).get_json()["added"] == 0  # 같은 리뷰는 한 번
+def test_review_table_rule_topics(app, auth_client):
+    from tabs.insights import store
+    rows = [{"source": "weee", "product_key": "weee:1", "product_title": "Aldicom Jelly", "brand": "Aldicom", "rating": 2.0,
+             "date_text": "Oct 1, 2026", "title": "", "text": "The taste is too sweet", "own": True},
+            {"source": "weee", "product_key": "weee:2", "product_title": "Condition Drink", "brand": "Condition", "rating": 5.0,
+             "date_text": "Oct 2, 2026", "title": "Great", "text": "Works great and easy to carry", "own": False}]
+    with app.app_context():
+        assert store.save_reviews(rows, "2026-W43") == 2
+        assert store.save_reviews(rows, "2026-W43") == 0  # 같은 리뷰는 한 번
     rv = auth_client.get("/api/insights/data/reviews").get_json()
     own = next(b for b in rv["table"] if b["own"])
     assert own["topics"]["맛·향"]["neg"] == 1
     cond = next(b for b in rv["table"] if b["brand"] == "Condition")
     assert cond["topics"]["효과"]["pos"] == 1 and cond["topics"]["복용 편의"]["pos"] == 1
-    bad = auth_client.post("/api/insights/reviews/upload", json={"csv": "product,rating,text\nx,9,hello\n"})
-    assert bad.status_code == 400 and "별점" in bad.get_json()["error"]
-    assert auth_client.post("/api/insights/reviews/upload", json={"csv": "a,b\n1,2\n"}).status_code == 400
-    tpl = auth_client.get("/api/insights/templates/weee-reviews.csv")
-    assert tpl.status_code == 200 and "product,brand,rating" in tpl.get_data(as_text=True)
+    # Weee! 리뷰 CSV 올리기는 없앰 (Weee! 리뷰는 진열대 수집 때 자동으로)
+    assert auth_client.post("/api/insights/reviews/upload", json={"csv": "text\nx\n"}).status_code in (404, 405)
+    assert auth_client.get("/api/insights/templates/weee-reviews.csv").status_code == 404
+
+
+def test_review_slack_share(app, auth_client, monkeypatch):
+    """미리 보기는 보내지 않음 · 키 없음/모양 틀림은 안내 · 보내면 기록 · 웹훅 주소는 응답 · 로그에 안 남음."""
+    from tabs.insights import store
+    from tabs.insights.models import Review
+    with app.app_context():
+        store.save_reviews([{"source": "amazon", "product_key": "amazon:A1", "product_title": "ALDICOM A Liquid 5-Pack", "rating": 2.0,
+                             "date_text": "Oct 1, 2026", "text": "Too pricey <b>& sweet</b>", "own": True}], "2026-W43")
+        rid = Review.query.first().id
+    sent = []
+
+    class Res:
+        status_code = 200
+    monkeypatch.setattr(http, "post", lambda url, json=None, headers=None, timeout=90: sent.append((url, json)) or Res())
+    url = f"/api/insights/reviews/{rid}/slack"
+    pv = auth_client.post(url, json={"preview": True}).get_json()
+    assert pv["ready"] is False and "*[알디콤 A · Amazon]* ★★☆☆☆ 불만" in pv["text"] and "&lt;b&gt;&amp; sweet" in pv["text"]
+    assert "대응: 대응 필요" in pv["text"] and sent == []
+    res = auth_client.post(url, json={"note": "논의 필요"})
+    assert res.status_code == 400 and "SLACK_WEBHOOK_URL" in res.get_json()["error"]
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://example.com/hook")
+    assert "모양" in auth_client.post(url, json={}).get_json()["error"] and sent == []
+    hook = "https://hooks.slack.com/services/T000/B000/secretTEST1234"
+    monkeypatch.setenv("SLACK_WEBHOOK_URL", hook)
+    res = auth_client.post(url, json={"note": "논의 필요"})
+    assert res.status_code == 200 and res.get_json()["slackBy"]
+    assert sent[0][0] == hook and "💬" in sent[0][1]["text"] and "논의 필요" in sent[0][1]["text"]
+    rv = auth_client.get("/api/insights/data/reviews").get_json()
+    assert rv["slackReady"] and rv["cs"][0]["slackBy"] and rv["items"][0]["slackAt"]
+    logs = json.dumps(auth_client.get("/api/worklog?part=insights").get_json(), ensure_ascii=False)
+    assert "리뷰 슬랙 보내기" in logs and "secretTEST1234" not in logs and "secretTEST1234" not in res.get_data(as_text=True)
+    Res.status_code = 404
+    assert "거절" in auth_client.post(url, json={}).get_json()["error"]
+
+
+def test_weee_review_count():
+    from tabs.insights.weee import review_count
+    assert review_count("# Reviews (1,506)\n\nBased on") == 1506
+    assert review_count("[Back](x)\n\nReviews (0)") == 0 and review_count("no header") is None
 
 
 def test_trends_csv_upload(auth_client):
@@ -531,7 +630,10 @@ def test_ai_rewrite_and_monthly_with_mocked_openai(app, auth_client, monkeypatch
         raise AssertionError(schema_name)
 
     monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
-    auth_client.post("/api/insights/reviews/upload", json={"csv": "product,rating,text\nX,2,too pricey for me\n"})
+    from tabs.insights import store
+    with app.app_context():
+        store.save_reviews([{"source": "weee", "product_key": "weee:X", "product_title": "X", "rating": 2.0,
+                             "text": "too pricey for me"}], week_key(service.today()))
     res = auth_client.post("/api/insights/update", json={"items": ["reviews", "actions", "monthly"]})
     assert res.status_code == 202
     run = auth_client.get("/api/insights/update/status").get_json()["run"]
@@ -545,6 +647,10 @@ def test_ai_rewrite_and_monthly_with_mocked_openai(app, auth_client, monkeypatch
     assert seen.count("weekly_actions") == 1
     m = auth_client.get("/api/insights/monthly").get_json()
     assert m["ai"] and m["summary"] == ["한 줄", "두 줄", "세 줄"] and len(m["strategy"]["personas"]) == 3
+    # 화면 'AI가 읽은 자료': 실행 때 넘긴 개수 그대로
+    src = m["sources"]
+    assert set(src) == {"shelf", "reviews", "questions", "expressions", "competitors", "trends", "lastMonth"}
+    assert src["shelf"] > 0 and src["reviews"] >= 1 and src["lastMonth"] is False
     personas = auth_client.get("/api/insights/personas").get_json()
     assert personas[0] == {"name": "파티 다음 날 직장인", "oneLine": "아침 회의가 걱정", "needs": "간편함", "message": "가볍게 챙기는 리추얼"}
     rv = auth_client.get("/api/insights/data/reviews").get_json()
@@ -585,6 +691,100 @@ def test_weee_markdown_parser():
     assert page["id"] == "67890" and page["price"] == 12.99 and page["in_stock"] is True and "refreshing" in page["message"]
 
 
+# 지금 Weee!: 카드 전체가 링크 [이미지 · 할인 · 가격 · 원가 · 단위 가격 · 상품명 · 배송](weee.com 주소)
+WEEE_CARDS = """## 'hangover(27)'
+
+[![weee_beverages_Oriental Raisin Tea Extract 10 ml*30 pack](https://img08.weeecdn.net/a.png)\\\\
+\\\\
+5% off\\\\
+\\\\
+$12.79\\\\
+\\\\
+$13.49\\\\
+\\\\
+$1.26/fl.oz\\\\
+\\\\
+Oriental Raisin Tea Extract 10 ml\\*30 pack\\\\
+\\\\
+![SNAP](https://img08.weeecdn.net/snap.png)\\\\
+\\\\
+SNAP](https://www.weee.com/en/product/Oriental-Raisin-Tea-Extract/112105?trace_id=1)
+
+Add to cart
+
+[6% off\\\\
+\\\\
+$13.99\\\\
+\\\\
+HOUSE Turmeric Hangover Granules 11 pack/ 1 box\\\\
+\\\\
+Sold out\\\\
+\\\\
+Ships from Sakura Charm](https://www.weee.com/en/product/HOUSE-Turmeric-Hangover-Granules-11-pack/2163335?trace_id=1)
+
+Notify me
+"""
+WEEE_PAGE = """[Skip to content](https://www.weee.com/en/product/Easy-Tomorrow-Jelly-Stick/2081684#main-content)
+
+$10 off on your first order
+
+![Easy Tomorrow Jelly Stick Before/After Drink, 2 Sticks 1 case](https://img08.weeecdn.net/x.png)
+
+$
+
+7
+
+99
+
+Sold out
+
+10 Sticks per Box (180g)
+
+## Details
+
+[Related](https://www.weee.com/en/product/Other/1) Sold out $3.00
+"""
+
+
+def test_weee_card_listing_and_split_price_page():
+    from tabs.insights.weee import parse_listing, parse_product_page, relevant
+    items = parse_listing(WEEE_CARDS)
+    assert [i["id"] for i in items] == ["112105", "2163335"]
+    assert items[0]["title"] == "Oriental Raisin Tea Extract 10 ml*30 pack" and items[0]["price"] == 12.79  # 할인가 (원가 · 단위 가격 아님)
+    assert items[0]["in_stock"] is True and items[0]["link"].startswith("https://www.weee.com/")
+    assert items[1]["price"] == 13.99 and items[1]["in_stock"] is False
+    page = parse_product_page(WEEE_PAGE, "https://www.sayweee.com/en/product/Easy-Tomorrow-Jelly-Stick/2081684")
+    assert page["price"] == 7.99 and page["in_stock"] is False and page["pack_text"].startswith("10 Sticks")  # '$10 off'는 가격 아님
+    assert page["title"].startswith("Easy Tomorrow Jelly Stick")
+    assert relevant("HOUSE Turmeric Hangover Granules") and relevant("Qone Jelly Zero Sugar") and not relevant("Coconut Jelly 4 oz")
+
+
+def test_pellet_form_and_product_lines():
+    from tabs.insights import lines
+    from tabs.insights.competitors import rule_form, rule_form_of
+    assert rule_form("Q.one Easy Tomorrow, Korean Herbal Pellets 10 Packs") == "pellet" and rule_form("상쾌환 20포") == "pellet"
+    assert rule_form("환불 안내") == ""  # '환불'의 환은 제형 아님
+    assert rule_form_of({"title": "Herbal Pellets 10 Packs", "message": "Do not chew"}) == "pellet"  # 상품명이 먼저
+    assert lines.known_brand("K FOOD KOREAN FOOD", "Korean Food Easy Tomorrow Fresh Drink Mix")["name"] == "상쾌환"
+    assert lines.known_brand("", "Qone Hangover Relief Jelly")["name"] == "상쾌환" and lines.known_brand("", "Flyby 30 Count") is None
+    assert lines.stock_left("Only 12 left in stock - order soon.") == 12 and lines.stock_left("In Stock") is None
+
+    def row(i, src, servings, ps, in_stock=True, left=None, form="pellet"):
+        return {"id": i, "key": f"{src}:{i}", "source": src, "title": f"상쾌환 {servings}포", "servings": servings, "servingsSource": "parsed",
+                "perServing": ps, "price": ps * servings, "in_stock": in_stock, "stockLeft": left, "own": False, "reviews": 10,
+                "line": {"id": f"상쾌환|{form}", "brand": "상쾌환", "form": form, "label": "상쾌환 · 환", "confirmed": True}}
+    rows = [row(1, "amazon", 10, 2.29), row(2, "amazon", 20, 2.20, left=13), row(3, "weee", 10, 2.5, in_stock=False),
+            row(4, "weee", 20, 2.4, in_stock=False)]
+    g = lines.build(rows)[0]
+    assert g["channels"] == ["amazon", "weee"] and g["oosChannels"] == ["weee"]          # Weee!는 두 옵션 모두 품절
+    assert [o["label"] for o in g["options"]] == ["10회분", "20회분"]                     # 용량이 달라도 한 제품
+    assert g["options"][1]["cells"]["amazon"]["state"] == "low" and g["low"][0]["left"] == 13
+    assert g["bulk"]["pct"] == -3.9 and not g["bulk"]["suspect"]
+    rows[2]["in_stock"] = True
+    g = lines.build(rows)[0]
+    assert g["oosChannels"] == [] and g["partialOos"] == 1 and g["options"][0]["cells"]["weee"]["state"] == "in"
+
+
 def test_amazon_search_parser_skips_ads():
     from tabs.insights.amazon import parse_search_item, stock_state
     item = parse_search_item({"asin": "b0comp0001", "title": " Flyby ", "price": "$29.99", "rating": "4.3", "reviews": "5,400"})
@@ -622,13 +822,31 @@ Sold by [TOKYO PLAZA](https://www.yami.com/us/en/s/tokyo-plaza/1)
 """
 
 
+def test_item_form_from_amazon_product():
+    from tabs.insights.amazon import _item_form
+    from tabs.insights.competitors import rule_form_of
+    pr = {"variants": [{"title": "Item Form", "items": [{"name": "Liquid"}, {"name": "Tablet", "selected": True}]}]}
+    assert _item_form({}, pr) == "Tablet"
+    assert _item_form({"product_details": {"item_form": "Powder"}}, {}) == "Powder"
+    assert _item_form({"item_specifications": [{"name": "Item Form", "value": "Capsule"}]}, {}) == "Capsule"
+    assert _item_form({}, {"variants": [{"title": "Size", "items": [{"name": "10 Count", "selected": True}]}]}) == ""
+    x = {"title": "Blowfish for Hangovers - Fast Hangover Relief", "message": "Item Form: Tablet / Drink plenty of water"}
+    assert rule_form_of(x) == "tablet"  # 상품명에 없으면 제품 선택 → 판매 문구('Drink')보다 앞
+    assert rule_form_of(dict(x, title="Blowfish Liquid Shot")) == "liquid"  # 상품명이 먼저
+
+
 def test_form_rules_and_yami_parser():
     from tabs.insights.competitors import rule_form
     from tabs.insights.yami import RELEVANT_RE, parse_search
     assert rule_form("Cheers Restore Hangover Liquid Shot 2oz") == "liquid"
-    assert rule_form("Hangover Gummies 30 Count") == "gummy" and rule_form("Aldicom Hangover Jelly Stick") == "gummy"
+    assert rule_form("Hangover Gummies 30 Count") == "gummy" and rule_form("Aldicom Hangover Jelly Stick") == "stick"  # 스틱 포장이면 스틱
     assert rule_form("Electrolyte Drink Mix Powder Packets") == "powder"  # 분말 음료는 분말
     assert rule_form("Flyby Recovery 30 Capsules") == "tablet" and rule_form("Hangover support") == ""
+    assert rule_form("Vitamin C Effervescent 20 Count") == "tablet" and rule_form("Fizzy Hangover Drops") == "tablet"  # 발포정
+    assert rule_form("HANGOVER CURE GINSENG AND PUERARIA 250g/10PCS") == "liquid" and rule_form("홍삼 스틱") == "stick"
+    assert rule_form("Korean Red Ginseng Capsules") == "tablet"  # 다른 제형 단어가 있으면 그쪽
+    assert rule_form("Alpitan Hangover Relief Powder 6 Sticks") == "stick" and rule_form("Hangover Relief Liquid, 5 Sticks") == "stick"
+    assert rule_form("Q.one Herbal Pellets 10 Sticks") == "pellet"  # 환이 먼저
     items = parse_search(YAMI_MD)
     assert [i["id"] for i in items] == ["1026089171", "1174080301", "3030045071"]
     assert items[0]["brand"] == "Morning Is Back" and items[0]["price"] == 18.99 and items[0]["list_price"] == 19.99
@@ -708,7 +926,7 @@ def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today
     cheers = next(c for c in d["table"] if c["brand"] == "Cheers")
     assert [ch["label"] for ch in cheers["channels"]] == ["Amazon", "Yami"]
     assert cheers["channels"][0]["minPrice"] == 15.0 and cheers["channels"][1]["sold"] == "30+ Sold"
-    assert cheers["perServing"] == 1.2 and {f["key"] for f in cheers["forms"]} == {"liquid", "gummy"}
+    assert cheers["perServing"] == 1.2 and {f["key"] for f in cheers["forms"]} == {"liquid", "stick"}  # Jelly Stick은 스틱
     fb = cheers["feedback"]
     assert fb["reviews"] == 3 and fb["praise"]["topic"] == "효과" and fb["praise"]["count"] == 2
     assert fb["complaint"]["topic"] == "가격" and fb["complaint"]["example"] == "요약 Pricey"
@@ -717,7 +935,30 @@ def test_competitor_table_facts_and_weekly_changes(app, auth_client, fixed_today
     assert ("Cheers", "price") in kinds and ("Flyby", "new") in kinds and ("Cheers", "message") in kinds
     price = next(c for c in d["changes"] if c["kind"] == "price")
     assert price["label"] == "가격 인하" and "$18.00 → $15.00" in price["text"]
+    assert price["group"] == "threat" and price["prevPrice"] == 18.0 and price["pct"] == -16.7 and price["impact"]
+    msg = next(c for c in d["changes"] if c["kind"] == "message")  # 문구 비교: 새로 생긴 말 · 사라진 말
+    assert msg["group"] == "watch" and msg["added"] == ["DHM and electrolytes in a shot"] and msg["removed"] == ["DHM shot"]
+    assert next(c for c in d["changes"] if c["kind"] == "new")["group"] == "threat"
     assert not any(c["source"] == "Yami" for c in d["changes"])  # 지난주 Yami 수집이 없으면 비교 안 함
+    assert d["changesDemo"] is False  # 실제 지난주가 있으면 예시를 쓰지 않음
+
+
+def test_competitor_changes_demo_when_no_last_week(app, auth_client, fixed_today):
+    """지난주 수집이 없으면 이번 주 실제 진열대로 만든 예시 지난주와 비교 — 화면 표시만, DB에는 안 남음."""
+    from server.extensions import db
+    from tabs.insights.models import ShelfItem
+    _seed_competitors(app)
+    with app.app_context():
+        ShelfItem.query.filter(ShelfItem.week != "2026-W43").delete()
+        db.session.commit()
+        before = ShelfItem.query.count()
+    d = auth_client.get("/api/insights/data/competitors").get_json()
+    assert d["changesDemo"] is True and d["changes"]
+    assert {c["kind"] for c in d["changes"]} <= {"new", "price", "oos", "back", "message"}
+    again = auth_client.get("/api/insights/data/competitors").get_json()
+    assert [(c["brand"], c["kind"]) for c in again["changes"]] == [(c["brand"], c["kind"]) for c in d["changes"]]  # 새로고침해도 같음
+    with app.app_context():
+        assert ShelfItem.query.count() == before  # 예시 지난주는 저장하지 않음
 
 
 def test_competitor_research_fills_from_evidence_then_web(app, auth_client, monkeypatch, fixed_today, sync_jobs):
