@@ -1740,7 +1740,6 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     </div>
   </details>`).join('')}</div>`;
     p.querySelectorAll('details[data-tpl]').forEach(d => d.addEventListener('toggle', () => TPL_OPEN.set(d.dataset.tpl, d.open)));
-    loadVoc(p);
     const cbox = p.querySelector('[data-el="contacts"]');
     p.querySelector('[data-act="contact-add"]').addEventListener('click', () => cbox.insertAdjacentHTML('beforeend', contactRowHTML({})));
     cbox.addEventListener('click', e => { const b = e.target.closest('[data-act="contact-del"]'); if (b) b.closest('.cs-contact').remove(); });
