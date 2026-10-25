@@ -80,7 +80,7 @@
 .part-compliance .cmp-panel { display: grid; gap: 14px; align-content: start; }
 .part-compliance .cmp-panel[hidden] { display: none; }
 /* 단건 심의를 뺀 탭은 흰 카드 한 장에 담음 */
-.part-compliance .cmp-panel:not([data-panel="single"]) { background: var(--cmp-card); border: 1px solid var(--cmp-rule); border-radius: 15px; padding: 22px; }
+.part-compliance .cmp-panel:not([data-panel="review"]), .part-compliance .cmp-subpanel[data-sub="batch"] { background: var(--cmp-card); border: 1px solid var(--cmp-rule); border-radius: 15px; padding: 22px; }
 
 /* 카드 · 2단 배치 (시안 .card · .workbench) */
 .part-compliance .cmp-card { background: var(--cmp-card); border: 1px solid var(--cmp-rule); border-radius: 15px; padding: 22px; display: grid; gap: 14px; align-content: start; }
@@ -392,7 +392,7 @@
   .part-compliance .cmp-kpi { padding: 17px; }
   .part-compliance .cmp-kpi-num { font-size: 25px; }
   .part-compliance .cmp-bench { grid-template-columns: minmax(0, 1fr) 280px; }
-  .part-compliance .cmp-card, .part-compliance .cmp-panel:not([data-panel="single"]) { padding: 18px; }
+  .part-compliance .cmp-card, .part-compliance .cmp-panel:not([data-panel="review"]), .part-compliance .cmp-subpanel[data-sub="batch"] { padding: 18px; }
 }
 @media (max-width: 950px) {
   .part-compliance .cmp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -406,7 +406,7 @@
   .part-compliance .cmp-agencies { grid-template-columns: 1fr; }
 }
 
-/* 단건 심의 오른쪽 'AI 검토자 페르소나' */
+/* 관리 › 'AI 검토자 페르소나' (2026-10-26 단건 심의 옆에서 옮김) */
 .part-compliance .cmp-persona textarea { width: 100%; resize: vertical; font-size: 13px; line-height: 1.6; margin-top: 4px; }
 .part-compliance .cmp-persona .cmp-actions { justify-content: flex-end; }
 
@@ -433,9 +433,6 @@
 .part-compliance .cmp-quote-ko { margin: 8px 0 6px; padding: 6px 10px; border-left: 3px solid var(--cmp-rule-strong); background: var(--cmp-card); white-space: normal; border-radius: 0 6px 6px 0; font-size: 13px; line-height: 1.6; color: var(--cmp-ink); }
 
 /* 규제 모니터링: ① 자동 수집 · ② 직접 올리기 · ③ 사람이 확인 */
-.part-compliance .cmp-mon-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin-bottom: 14px; }
-.part-compliance .cmp-mon-map > button { display: grid; text-align: left; font: inherit; color: inherit; cursor: pointer; gap: 4px; padding: 10px 12px; border: 1px solid var(--cmp-rule-strong); border-radius: 8px; background: var(--cmp-card); font-size: 13px; }
-.part-compliance .cmp-mon-map .cmp-muted { font-size: 12px; }
 .part-compliance .cmp-h-sub { font-size: 12px; font-weight: 500; margin-left: 6px; }
 .part-compliance .cmp-mon-filter { align-items: flex-end; flex-wrap: wrap; margin: 12px 0 8px; }
 .part-compliance .cmp-mon-filter .cmp-field { min-width: 130px; }
@@ -447,8 +444,7 @@
 .part-compliance .cmp-mon-guide td { font-size: 12.5px; vertical-align: top; }
 .part-compliance .cmp-mon-guide code { font-size: 11px; }
 
-.part-compliance .cmp-mon-map > button:hover { border-color: var(--cmp-link); }
-/* 규제 모니터링 세부 메뉴: 보통은 core가 왼쪽 메뉴로 옮기고 숨김. 옮기지 못했을 때만 보이는 모양 */
+/* 세부 메뉴 (문구 심의 · 규제 모니터링 · 기준·참고): 보통은 core가 왼쪽 메뉴로 옮기고 숨김. 옮기지 못했을 때만 보이는 모양 */
 .part-compliance .cmp-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .part-compliance .cmp-subtab { font: inherit; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--cmp-rule-strong); background: var(--cmp-card); color: inherit; cursor: pointer; }
 .part-compliance .cmp-subtab[aria-selected="true"] { background: var(--cmp-accent-soft); color: var(--cmp-link); font-weight: 650; }
@@ -458,3 +454,11 @@
 .part-compliance .cmp-ptag { font-size: 10.5px; padding: 2px 7px; background: var(--cmp-card); color: var(--cmp-muted); border: 1px solid var(--cmp-rule-strong); }
 .part-compliance .cmp-ptag-jelly, .part-compliance .cmp-ptag-drink, .part-compliance .cmp-ptag-sugar, .part-compliance .cmp-ptag-hangover { background: var(--cmp-accent-soft); color: var(--cmp-link); border-color: transparent; }
 .part-compliance .cmp-ptag-hangover { background: var(--cmp-REVISE-bg); color: var(--cmp-REVISE-ink); }
+
+/* 2026-10-26 탭 개편: 세부 탭 패널 · 점검 기록 KPI 필터 · 접힌 안내 */
+.part-compliance .cmp-subpanel { display: grid; gap: 14px; align-content: start; }
+.part-compliance .cmp-subpanel[hidden] { display: none; }
+.part-compliance .cmp-kpis + .cmp-card-head { margin-top: 6px; }
+.part-compliance button.cmp-kpi.is-on { border-color: var(--cmp-ink); box-shadow: 0 0 0 1px var(--cmp-ink); }
+.part-compliance .cmp-more > summary { cursor: pointer; font-size: 12.5px; color: var(--cmp-link); margin-bottom: 4px; }
+.part-compliance .cmp-side-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 4px; }

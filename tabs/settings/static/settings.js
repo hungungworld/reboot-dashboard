@@ -1,6 +1,6 @@
 /* 설정 및 브랜드 관리 (담당: 이현경) — tabs/settings/docs/README.md 기준.
    탭: 브랜드 · 제품 / 수집 설정 / 연결 / 작업 로그 / 계정 (주소 끝 #account 등으로 바로 열림)
-   - 제목 오른쪽 '변경 사항 적용' = 지금 탭에서 고친 입력 저장 (제품 상세·시즌·키·계정 관리는 창에서 바로 저장)
+   - 제목 오른쪽 '변경 사항 저장' = 수집 설정 · 계정 탭에서만 보임 (브랜드 · 제품 · 시즌 · 키 · 계정 관리는 창에서 바로 저장)
    - 팩트시트·시즌·계정은 공용 API, 수집 설정·연결은 /api/settings/…
    - 다른 파트에는 REBOOT.use('settings')로 facts · brand · products 공개 (제품별 값은 비워 둠) */
 (function (global) {
@@ -15,7 +15,7 @@
   const TABS = [['brand', '브랜드 · 제품'], ['collect', '수집 설정'], ['connections', '연결'], ['worklog', '작업 로그'], ['account', '계정']];
   const TAB_IDS = TABS.map(t => t[0]);
   const BRAND_FIELDS = ['name', 'base_company', 'market', 'founded', 'intro', 'slogan', 'colors', 'character', 'cm_song', 'category'];
-  const PRODUCT_EDIT = ['category', 'form', 'flavors', 'flavor_status', 'pack', 'direction', 'ingredients', 'allergens', 'volume',
+  const PRODUCT_EDIT = ['category', 'form', 'flavors', 'pack', 'direction', 'ingredients', 'allergens', 'volume',
     'usage', 'consumer_name', 'price', 'cost', 'evidence', 'notes'];
   const SRC_FIELDS = [['flavors', '맛'], ['ingredients', '성분'], ['allergens', '알레르기 성분'], ['volume', '용량'], ['pack', '포장'],
     ['usage', '섭취법'], ['form', '제형'], ['category', '제품 분류'], ['etc', '기타']];
@@ -70,7 +70,7 @@
 
   /* ───────── 상태 ───────── */
   const S = {
-    root: null, tab: 'brand', rendered: {}, dirty: { brand: false, collect: false, account: false },
+    root: null, tab: 'brand', rendered: {}, dirty: { collect: false, account: false },
     collect: null, collectMeta: {}, seasons: [], showPast: false,
     conns: null, setup: {}, isAdmin: !!REBOOT.user().isAdmin, gmail: null,
     wl: { kind: '', part: '', items: [], done: false, loading: false, seq: 0 },
@@ -90,6 +90,10 @@
   }
   function area(name, value, rows) {
     return `<textarea class="input" name="${name}" rows="${rows || 3}" maxlength="2000">${esc(val(value))}</textarea>`;
+  }
+  /** 켜기/끄기 토글: 체크박스를 스위치 모양으로 (.checked로 읽기) */
+  function toggle(attrs, on, label) {
+    return `<label class="set-tgl"><input type="checkbox" role="switch" ${attrs}${on ? ' checked' : ''}><span>${label}</span></label>`;
   }
   function showErr(box, msg) {
     if (!box) return toast(msg, 'error');
@@ -176,6 +180,8 @@
       b.setAttribute('aria-selected', String(on));
     });
     $$(S.root, '[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== tab; });
+    const applyBtn = $(REBOOT.page.actions(), '[data-act="set-apply"]');
+    if (applyBtn) applyBtn.hidden = !(tab in S.dirty);
     if (!S.rendered[tab]) {
       S.rendered[tab] = true;
       ({ brand: renderBrand, collect: renderCollect, connections: renderConnections, worklog: renderWorklog, account: renderAccount })[tab](panel(tab));
@@ -193,7 +199,7 @@
     const box = REBOOT.page.actions();
     if (!box) return;
     box.innerHTML = `<span class="badge orange" data-ref="set-dirty" hidden></span>` +
-      `<button type="button" class="btn lime" data-act="set-apply">${icon('check')}변경 사항 적용</button>`;
+      `<button type="button" class="btn lime" data-act="set-apply">${icon('check')}변경 사항 저장</button>`;
     box.addEventListener('click', e => {
       const b = e.target.closest('[data-act="set-apply"]');
       if (b) apply(b);
@@ -213,9 +219,9 @@
 
   async function apply(btn) {
     const tab = S.tab;
-    const fn = { brand: saveBrand, collect: saveCollect, account: saveMe }[tab];
+    const fn = { collect: saveCollect, account: saveMe }[tab];
     if (!fn) {
-      toast(tab === 'connections' ? '연결 값은 「키 입력」 창에서 바로 저장돼요.' : '작업 로그는 자동으로 기록돼요. 고치거나 지울 수 없어요.');
+      toast({ brand: '브랜드 · 제품은 「수정」 창에서 바로 저장돼요.', connections: '연결 값은 「키 입력」 창에서 바로 저장돼요.' }[tab] || '작업 로그는 자동으로 기록돼요. 고치거나 지울 수 없어요.');
       return;
     }
     if (!S.dirty[tab]) { toast('이 탭에는 저장할 변경 사항이 없어요.'); return; }
@@ -240,6 +246,7 @@
     const id = b.dataset.id;
     switch (b.dataset.act) {
       case 'product': openProduct(id); break;
+      case 'brand-edit': openBrand(); break;
       case 'list-add': addToList(b.dataset.list); break;
       case 'list-del': removeFromList(b.dataset.list, +b.dataset.i); break;
       case 'lang': setLang(b.dataset.v); break;
@@ -274,11 +281,6 @@
 
   function onInput(e) {
     const t = e.target;
-    if (t.closest('[data-form="brand"]')) {
-      setDirty('brand', true);
-      if (t.name === 'colors') drawSwatches();
-      return;
-    }
     if (t.closest('[data-form="account"]')) { setDirty('account', true); return; }
     if (t.dataset.num) {
       S.collect[t.dataset.num] = t.value;
@@ -321,37 +323,15 @@
   /* ═════════ 1. 브랜드 · 제품 ═════════ */
   function renderBrand(el) {
     el.innerHTML = `
-    <div class="workbench">
-      <div class="stack">
-        <section class="card">
-          <div class="card-head"><h2>브랜드 기본 정보</h2><span class="small muted" data-ref="brand-meta"></span></div>
-          <form class="set-form" data-form="brand" autocomplete="off"></form>
-        </section>
-        <section class="card">
-          <div class="card-head"><h2>제품 정보 시트</h2>${badge('REBOOT 4종 · 가상 출시', 'dark')}</div>
-          <div data-ref="products"></div>
-        </section>
-      </div>
-      <aside class="stack">
-        <section class="card tinted">
-          <div class="card-head"><h2>규칙</h2>${badge('설정 README 2장', 'lime')}</div>
-          <ul class="set-rules">
-            <li><b>실제와 가상을 섞지 않아요.</b> 성분 · 용량 · 맛 · 섭취법은 알디콤 기존 제품의 기사 · 공식 정보로만 채우고, 가격 · 원가만 <span class="badge purple">가상값</span>이에요.</li>
-            <li><b>가상 가격은 실제 시장을 참고해요.</b> <a class="link" href="/dashboard/insights#data/shelf">인사이트 › 진열대</a>의 1회분 단가 구간($3 미만 / $3~6 / $6 이상)을 보고 정해요.</li>
-            <li>알디콤의 <b>실제 판매가</b>는 팩트시트에 넣지 않아요. 인사이트가 Weee! · 아마존에서 모아 보여줘요.</li>
-            <li><b>내부 제품명은 광고 문구에 자동으로 쓰지 않아요.</b> "저당" 같은 이름이 효능 · 당류 주장처럼 보일 수 있어서, 소비자에게 보이는 문구는 컴플라이언스 검토를 거쳐요.</li>
-          </ul>
-        </section>
-        <section class="card">
-          <h3>근거 상태</h3>
-          <div class="set-legend">
-            <p>${badge('제품 근거 확인 필요', 'orange')} 출처가 없거나 아직 확인하지 않음</p>
-            <p>${badge('근거 확인 완료', 'green')} 항목별 출처(기사 · 공식 페이지 URL)를 확인함</p>
-            <p>${badge('맛 임시', 'blue')} 맛 구성이 확정되지 않음</p>
-          </div>
-          <p class="panel-note mt-16">출처가 하나도 없으면 '확인 완료'로 바꿀 수 없어요. 모르는 값은 비워 두세요 (지어내지 않기).</p>
-        </section>
-      </aside>
+    <div class="stack">
+      <section class="card">
+        <div class="card-head"><h2>브랜드 기본 정보</h2><div class="set-row-actions"><span class="small muted" data-ref="brand-meta"></span><button type="button" class="btn small" data-act="brand-edit">${icon('edit')}수정</button></div></div>
+        <div data-ref="brand-view"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>제품 정보 시트</h2><div class="set-row-actions"><span class="small muted" data-ref="products-sum"></span>${badge('REBOOT 4종', 'dark')}</div></div>
+        <div data-ref="products"></div>
+      </section>
     </div>`;
     fillBrand();
     renderProducts();
@@ -362,29 +342,56 @@
     try {
       const d = await api('/api/facts');
       FACTS.products = d.products || [];
-      if (!S.dirty.brand) { FACTS.brand = d.brand || {}; fillBrand(); }
+      FACTS.brand = d.brand || {};
+      fillBrand();
       renderProducts();
     } catch (e) { /* 페이지에 실린 값으로 계속 */ }
   }
 
+  /** 읽기 화면: 값이 없으면 '—' (지어내지 않기) */
   function fillBrand() {
     const el = panel('brand');
-    const form = $(el, '[data-form="brand"]');
-    if (!form) return;
+    const box = $(el, '[data-ref="brand-view"]');
+    if (!box) return;
     const b = FACTS.brand || {};
-    const f = (k, label, hint) => field(label, inp(k, b[k]), hint);
-    form.innerHTML = `
-      <div class="field-grid">${f('name', '브랜드명')}${f('market', '주요 시장')}</div>
-      <div class="field-grid">${f('base_company', '기준 기업', '실제 데이터(진열대 · 리뷰)를 모으는 기업')}${f('founded', '설립')}</div>
-      ${field('브랜드 소개', area('intro', b.intro, 3))}
-      <div class="field-grid">${f('slogan', '슬로건')}${f('category', '식품 분류')}</div>
-      ${field('브랜드 컬러', inp('colors', b.colors, 'maxlength="500"'), 'HEX 코드(예: #D7FF3F)를 적으면 아래 견본에 보여요.')}
-      <div class="set-swatches" data-ref="swatches"></div>
-      <div class="field-grid">${f('character', '캐릭터')}${f('cm_song', 'CM송')}</div>`;
-    drawSwatches();
+    const v = k => (b[k] ? esc(b[k]) : '<span class="muted">—</span>');
+    const kv = (k, label) => `<div><span>${label}</span>${v(k)}</div>`;
+    box.innerHTML = `
+      <div class="set-brand-head">
+        <strong>${v('name')}</strong>
+        ${b.slogan ? `<span class="muted">“${esc(b.slogan)}”</span>` : ''}
+        <div class="set-swatches">${swatchHtml(b.colors, true)}</div>
+      </div>
+      <p class="set-brand-intro">${v('intro')}</p>
+      <div class="set-kv3">${kv('market', '주요 시장')}${kv('base_company', '기준 기업')}${kv('category', '식품 분류')}${kv('founded', '설립')}${kv('character', '캐릭터')}${kv('cm_song', 'CM송')}</div>`;
+    paintSwatches(box);
     const meta = $(el, '[data-ref="brand-meta"]');
     if (meta) meta.textContent = b.updatedAt ? `최종 수정 ${fmt.datetime(b.updatedAt)} · ${b.updatedBy || ''}` : '';
-    setDirty('brand', false);
+  }
+
+  function openBrand() {
+    const b = FACTS.brand || {};
+    const f = (k, label, hint) => field(label, inp(k, b[k]), hint);
+    const body = `
+      <div class="part-settings set-modal">
+        <div class="note error mb-16" data-ref="err" hidden></div>
+        <div class="field-grid">${f('name', '브랜드명')}${f('market', '주요 시장')}</div>
+        <div class="field-grid">${f('base_company', '기준 기업', '실제 데이터(진열대 · 리뷰)를 모으는 기업')}${f('founded', '설립')}</div>
+        ${field('브랜드 소개', area('intro', b.intro, 3))}
+        <div class="field-grid">${f('slogan', '슬로건')}${f('category', '식품 분류')}</div>
+        ${field('브랜드 컬러', inp('colors', b.colors, 'maxlength="500"'), 'HEX 코드(예: #D7FF3F)를 적으면 아래 견본에 보여요.')}
+        <div class="set-swatches mt-8" data-ref="swatches"></div>
+        <div class="field-grid">${f('character', '캐릭터')}${f('cm_song', 'CM송')}</div>
+      </div>`;
+    formModal({
+      title: '브랜드 기본 정보 수정', body, wide: true,
+      onOpen: el => {
+        const draw = () => { const box = $(el, '[data-ref="swatches"]'); box.innerHTML = swatchHtml($(el, '[name="colors"]').value); paintSwatches(box); };
+        draw();
+        el.addEventListener('input', e => { if (e.target.name === 'colors') draw(); });
+      },
+      onSave: el => saveBrand(el)
+    });
   }
 
   function parseColors(text) {
@@ -395,22 +402,18 @@
     return out;
   }
 
-  function drawSwatches() {
-    const el = panel('brand');
-    const box = $(el, '[data-ref="swatches"]');
-    const input = $(el, '[name="colors"]');
-    if (!box || !input) return;
-    const list = parseColors(input.value);
-    box.innerHTML = list.length
-      ? list.map(c => `<div class="set-swatch"><i data-hex="${c.hex}" aria-hidden="true"></i><span>${esc(c.name || '색상')}<small>${c.hex}</small></span></div>`).join('')
-      : '<span class="small muted">HEX 코드가 없어 견본을 그리지 않았어요.</span>';
+  function swatchHtml(text, compact) {
+    const list = parseColors(text);
+    if (!list.length) return compact ? '' : '<span class="small muted">HEX 코드가 없어 견본을 그리지 않았어요.</span>';
+    return list.map(c => `<div class="set-swatch"><i data-hex="${c.hex}" aria-hidden="true"></i><span>${esc(c.name || '색상')}<small>${c.hex}</small></span></div>`).join('');
+  }
+  function paintSwatches(box) {
     $$(box, 'i[data-hex]').forEach(i => { if (/^#[0-9A-F]{6}$/.test(i.dataset.hex)) i.style.background = i.dataset.hex; });
   }
 
-  async function saveBrand() {
-    const form = $(panel('brand'), '[data-form="brand"]');
+  async function saveBrand(el) {
     const body = {};
-    BRAND_FIELDS.forEach(k => { const f = form.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
+    BRAND_FIELDS.forEach(k => { const f = el.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
     if (!body.name) throw new Error('브랜드명을 입력하세요.');
     const saved = await api('/api/facts/brand', body, { method: 'PUT' });
     FACTS.brand = saved;
@@ -422,28 +425,30 @@
     return p.evidence === '확인 완료' ? badge('근거 확인 완료', 'green') : badge('제품 근거 확인 필요', 'orange');
   }
   function money(v) {
-    return v == null || v === '' ? '<span class="muted">미정</span>' : `${esc(fmt.usd(Number(v)))} ${badge('가상값', 'purple')}`;
+    return v == null || v === '' ? '<span class="muted">미정</span>' : esc(fmt.usd(Number(v)));
   }
 
   function renderProducts() {
-    const box = $(panel('brand'), '[data-ref="products"]');
+    const el = panel('brand');
+    const box = $(el, '[data-ref="products"]');
     if (!box) return;
     const list = FACTS.products || [];
-    box.innerHTML = list.length ? list.map(p => `
-      <div class="setting-row set-product">
-        <div class="grow">
-          <strong class="set-pname">${esc(p.ko || p.name)}</strong>
-          <p>${esc(p.code || p.id)} · 내부 제품명 ${esc(p.name || '—')} · 소비자용 영문명 ${esc(p.consumer_name || '미정')}</p>
-          <div class="set-pmeta">
-            <span>${esc(p.form || '제형 미정')}</span>
-            <span>맛 ${esc(p.flavors || '미정')} ${p.flavor_status === 'confirmed' ? '' : badge('임시', 'blue')}</span>
-            <span>가격 ${money(p.price)}</span>
-            <span>원가 ${money(p.cost)}</span>
-            <span class="muted">${(p.sources || []).length ? `출처 ${(p.sources || []).length}개` : '출처 없음'}${p.updatedAt ? ` · 최종 수정 ${esc(fmt.date(p.updatedAt))}` : ''}</span>
-          </div>
-        </div>
-        <div class="set-row-actions">${evidenceBadge(p)}<button type="button" class="btn small" data-act="product" data-id="${esc(p.id)}">${icon('edit')}상세 보기/수정</button></div>
-      </div>`).join('') : ui.empty('등록된 제품이 없어요.', 'doc');
+    const sum = $(el, '[data-ref="products-sum"]');
+    if (sum) sum.textContent = list.length
+      ? `근거 확인 ${list.filter(p => p.evidence === '확인 완료').length}/${list.length}`
+      : '';
+    box.innerHTML = list.length ? `
+      <div class="table-wrap"><table class="data-table set-ptable"><thead><tr><th>제품</th><th>제형</th><th>맛</th><th>가격 ${badge('예시', 'orange')}</th><th>원가 ${badge('예시', 'orange')}</th><th>근거</th><th></th></tr></thead><tbody>
+      ${list.map(p => `<tr>
+        <td><strong>${esc(p.ko || p.name)}</strong><span class="set-sub">${esc(p.code || p.id)}</span></td>
+        <td>${esc(p.form || '미정')}</td>
+        <td>${esc(p.flavors || '미정')}</td>
+        <td>${money(p.price)}</td>
+        <td>${money(p.cost)}</td>
+        <td>${evidenceBadge(p)}</td>
+        <td><button type="button" class="btn small" data-act="product" data-id="${esc(p.id)}">${icon('edit')}수정</button></td>
+      </tr>`).join('')}
+      </tbody></table></div>` : ui.empty('등록된 제품이 없어요.', 'doc');
   }
 
   function sourceRow(s) {
@@ -462,19 +467,18 @@
     if (!p) return;
     const body = `
       <div class="part-settings set-modal">
-        <div class="flex wrap mb-16">${badge(p.code || p.id, 'dark')}${badge('내부 제품명 · ' + (p.name || '—'))}${evidenceBadge(p)}${p.flavor_status === 'confirmed' ? badge('맛 확정', 'green') : badge('맛 임시', 'blue')}</div>
+        <div class="flex wrap mb-16">${badge(p.code || p.id, 'dark')}${badge('내부 제품명 · ' + (p.name || '—'))}${evidenceBadge(p)}</div>
         <div class="note error mb-16" data-ref="err" hidden></div>
         <div class="field-grid">${field('제품 분류', inp('category', p.category))}${field('제형', inp('form', p.form))}</div>
-        <div class="field-grid">${field('맛', inp('flavors', p.flavors), '기사 · 공식 정보 기준')}${field('맛 상태', `<select class="input" name="flavor_status"><option value="provisional"${p.flavor_status !== 'confirmed' ? ' selected' : ''}>임시</option><option value="confirmed"${p.flavor_status === 'confirmed' ? ' selected' : ''}>확정</option></select>`)}</div>
-        <div class="field-grid">${field('포장', inp('pack', p.pack))}${field('용량', inp('volume', p.volume))}</div>
-        ${field('개발 방향', inp('direction', p.direction))}
+        <div class="field-grid">${field('맛', inp('flavors', p.flavors), '기사 · 공식 정보 기준')}${field('포장', inp('pack', p.pack))}</div>
+        <div class="field-grid">${field('용량', inp('volume', p.volume))}${field('개발 방향', inp('direction', p.direction))}</div>
         ${field('성분', area('ingredients', p.ingredients, 2), '모르면 비워 두세요 (출처 필수)')}
         ${field('알레르기 성분', inp('allergens', p.allergens))}
         ${field('섭취법', area('usage', p.usage, 2))}
-        <div class="field-grid">${field('소비자용 영문명', inp('consumer_name', p.consumer_name), '미정이면 "미정"')}${field('근거 상태', `<select class="input" name="evidence"><option${p.evidence !== '확인 완료' ? ' selected' : ''}>확인 필요</option><option${p.evidence === '확인 완료' ? ' selected' : ''}>확인 완료</option></select>`)}</div>
+        <div class="field-grid">${field('소비자용 영문명', inp('consumer_name', p.consumer_name), '미정이면 "미정"')}${group('근거 상태', toggle('name="evidence"', p.evidence === '확인 완료', '근거 확인 완료'), '출처가 하나도 없으면 켤 수 없어요')}</div>
         <div class="field-grid">
-          ${field('가격 (USD)', inp('price', p.price, 'type="number" min="0" step="0.01" inputmode="decimal"'), `${badge('가상값', 'purple')} 실제 판매가가 아니에요`)}
-          ${field('원가 (USD)', inp('cost', p.cost, 'type="number" min="0" step="0.01" inputmode="decimal"'), `${badge('가상값', 'purple')} 발표용 가정`)}
+          <label class="set-fld"><span class="field-label">가격 (USD) ${badge('예시', 'orange')}</span>${inp('price', p.price, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
+          <label class="set-fld"><span class="field-label">원가 (USD) ${badge('예시', 'orange')}</span>${inp('cost', p.cost, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
         </div>
         <div class="set-fld">
           <span class="field-label">출처 (항목별)</span>
@@ -485,7 +489,7 @@
         <p class="panel-note">${p.updatedAt ? `최종 수정 ${esc(fmt.datetime(p.updatedAt))} · ${esc(p.updatedBy || '')}` : ''}</p>
       </div>`;
     formModal({
-      title: `${p.ko || p.name} · 상세 보기/수정`, body, wide: true,
+      title: `${p.ko || p.name} 정보 수정`, body, wide: true,
       onOpen: el => {
         el.addEventListener('click', e => {
           const b = e.target.closest('[data-src]');
@@ -508,6 +512,7 @@
   async function saveProduct(p, el) {
     const body = {};
     PRODUCT_EDIT.forEach(k => { const f = el.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
+    body.evidence = el.querySelector('[name="evidence"]').checked ? '확인 완료' : '확인 필요';
     for (const k of ['price', 'cost']) {
       if (body[k] !== '' && !(Number(body[k]) >= 0)) throw new Error('가격 · 원가는 0 이상의 숫자(달러)로 입력하세요.');
     }
@@ -622,7 +627,7 @@
     $(el, '[data-ref="collect-side"]').innerHTML = `
       <section class="card tinted">
         <h3>다음 데이터 업데이트부터 반영</h3>
-        <p class="panel-note mt-8">수집 설정을 바꾸면 <b>다음 데이터 업데이트부터</b> 반영돼요. 이미 모은 데이터는 그대로예요. 오른쪽 위 <b>변경 사항 적용</b>을 눌러야 저장돼요.</p>
+        <p class="panel-note mt-8">수집 설정을 바꾸면 <b>다음 데이터 업데이트부터</b> 반영돼요. 이미 모은 데이터는 그대로예요. 오른쪽 위 <b>변경 사항 저장</b>을 눌러야 저장돼요.</p>
         <p class="small muted mt-8">${m.updatedAt ? `마지막 저장 ${esc(fmt.datetime(m.updatedAt))} · ${esc(m.updatedBy || '')}` : '아직 기본값을 쓰고 있어요.'}</p>
         <button type="button" class="btn small mt-16" data-act="collect-reset">${icon('refresh')}기본값으로 되돌리기</button>
       </section>
@@ -671,7 +676,7 @@
       try { const u = new URL(v); ok = u.protocol === 'https:' && /(^|\.)sayweee\.com$/i.test(u.hostname); } catch (e) { ok = false; }
       if (!ok) { toast('Weee! 주소는 https://www.sayweee.com/… 형식만 넣을 수 있어요.', 'error'); return; }
     }
-    if (items.some(x => String(x).toLowerCase() === v.toLowerCase())) { toast('이미 있어요.', 'error'); return; }
+    if (items.some(x => String(x).toLowerCase() === v.toLowerCase())) { toast('이미 넣은 값이에요.', 'error'); return; }
     if (items.length >= d.max) { toast(`${d.label}은(는) ${d.max}개까지 넣을 수 있어요.`, 'error'); return; }
     setPath(S.collect, path, items.concat([v]));
     input.value = '';
@@ -706,7 +711,7 @@
     body.innerHTML = list.length ? list.map((a, i) => `<tr>
       <td><input class="input mono set-asin${a.asin && !ASIN_RE.test(a.asin) ? ' set-invalid' : ''}" data-asin="${i}" data-k="asin" value="${esc(a.asin)}" maxlength="10" placeholder="B0ABCDEFGH" aria-label="ASIN"></td>
       <td><input class="input" data-asin="${i}" data-k="label" value="${esc(val(a.label))}" maxlength="60" placeholder="예) 알디콤 젤리" aria-label="메모"></td>
-      <td><label class="check"><input type="checkbox" data-asin="${i}" data-k="own"${a.own ? ' checked' : ''}>자사</label></td>
+      <td>${toggle(`data-asin="${i}" data-k="own" aria-label="자사 상품"`, a.own, '자사')}</td>
       <td><button type="button" class="btn small ghost" data-act="asin-del" data-i="${i}" aria-label="ASIN 지우기">${icon('trash')}</button></td>
     </tr>`).join('') : `<tr><td colspan="4" class="muted small">추적하는 ASIN이 없어요.</td></tr>`;
   }
@@ -729,7 +734,7 @@
 
   async function resetCollect() {
     if (!S.collectDefaults) return;
-    const ok = await ui.confirm('수집 설정을 기본값으로 되돌릴까요? 변경 사항 적용을 눌러야 저장돼요.', { ok: '되돌리기' });
+    const ok = await ui.confirm('수집 설정을 기본값으로 되돌릴까요? 변경 사항 저장을 눌러야 저장돼요.', { ok: '되돌리기' });
     if (!ok) return;
     S.collect = copy(S.collectDefaults);
     drawCollect();
@@ -768,7 +773,7 @@
     box.innerHTML = `
       <div class="card-head"><h2>모니터링 시즌 <span class="muted small">모니터링 ${watching}개</span></h2>
         <div class="flex wrap">
-          <label class="check"><input type="checkbox" data-act="season-past"${S.showPast ? ' checked' : ''}>지난 시즌도 보기</label>
+          ${toggle('data-act="season-past"', S.showPast, '지난 시즌도 보기')}
           <a class="btn small" href="/api/seasons/export.csv" download="reboot-settings-seasons.csv">${icon('download')}CSV 받기</a>
           <button type="button" class="btn small" data-act="season-import">${icon('upload')}CSV 가져오기</button>
           <button type="button" class="btn small lime" data-act="season-add">${icon('plus')}시즌 추가</button>
@@ -822,7 +827,7 @@
         ${field('준비 기간 (일 전)', inp('leadDays', s.leadDays, 'type="number" min="0" max="365"'))}
       </div>
       ${field('메모', area('notes', s.notes, 2))}
-      <label class="check mt-16"><input type="checkbox" name="monitor"${s.monitor ? ' checked' : ''}>모니터링 (인사이트 주간 리뷰 · 홈 다음 급등 예상)</label>
+      <div class="mt-16">${toggle('name="monitor"', s.monitor, '모니터링 (인사이트 주간 리뷰 · 홈 다음 급등 예상)')}</div>
     </div>`;
     formModal({
       title: isNew ? '시즌 추가' : `시즌 수정 · ${s.name}`, body,
@@ -944,7 +949,7 @@
     const admin = S.isAdmin;
     const actions = it => {
       const test = it.testable
-        ? `<button type="button" class="btn small" data-act="conn-test" data-name="${esc(it.name)}"${it.connected ? '' : ' disabled title="키를 먼저 넣으세요"'}>${icon('refresh')}연결 테스트</button>`
+        ? `<button type="button" class="btn small" data-act="conn-test" data-name="${esc(it.name)}"${it.connected ? '' : ' disabled title="키를 넣은 뒤 테스트할 수 있어요"'}>${icon('refresh')}연결 테스트</button>`
         : '<span class="small muted">테스트 미지원</span>';
       const key = admin ? `<button type="button" class="btn small${it.connected ? '' : ' lime'}" data-act="conn-key" data-name="${esc(it.name)}">${icon('edit')}${it.group === 'key' ? '키 입력' : '값 입력'}</button>` : '';
       return `<div class="set-row-actions">${test}${key}</div>`;
@@ -1012,7 +1017,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       <div class="note mt-16">비워 두고 저장하면 화면 입력 값을 지우고 .env 값(있으면)으로 돌아가요.${name === 'GMAIL_APP_PASSWORD' ? ' 앱 비밀번호는 띄어 써도 돼요.' : ''}</div>
     </div>`;
     const extra = it.source === 'screen' ? [{
-      label: '화면 입력 지우기', tone: 'danger', onClick: bodyEl => { saveKey(it, '', bodyEl); return false; }
+      label: '저장한 값 지우기', tone: 'danger', onClick: bodyEl => { saveKey(it, '', bodyEl); return false; }
     }] : [];
     formModal({ title: `${it.label} · ${isKey ? '키 입력' : '값 입력'}`, body, extra, onSave: el => saveKey(it, $(el, '[data-ref="val"]').value, el, true) });
   }
@@ -1120,7 +1125,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
           </div>
           <div class="flex wrap">
             <button type="button" class="btn small" data-act="wl-csv">${icon('download')}CSV 받기</button>
-            <button type="button" class="btn small" data-act="wl-xlsx">${icon('download')}Excel 받기 (구분별 시트)</button>
+            <button type="button" class="btn small" data-act="wl-xlsx" title="구분별로 시트를 나눠 받아요">${icon('download')}Excel 받기</button>
           </div>
         </div>
         <div class="table-wrap"><table class="data-table set-wl"><thead><tr><th>일시</th><th>구분</th><th>작업</th><th>상태</th><th>승인</th><th>상세</th></tr></thead>
@@ -1272,7 +1277,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
             ${field('이메일 (로그인 아이디)', `<input class="input" value="${esc(me.email || '')}" readonly>`)}
             <div class="field-grid">${field('이름', inp('name', me.name, 'maxlength="100"'))}${field('소속 · 역할', inp('title', me.title, 'maxlength="100" placeholder="예) 글로벌사업팀 · 미국 채널"'))}</div>
           </form>
-          <p class="panel-note mt-16">고친 뒤 오른쪽 위 <b>변경 사항 적용</b>을 누르세요. 상단 프로필에는 새로고침 후 보여요.</p>
+          <p class="panel-note mt-16">고친 뒤 오른쪽 위 <b>변경 사항 저장</b>을 누르세요. 상단 프로필에는 새로고침 후 보여요.</p>
         </section>
         <section class="card">
           <div class="card-head"><h2>비밀번호 변경</h2></div>
@@ -1406,8 +1411,8 @@ GOOGLE_CLIENT_SECRET=...</pre>
         ${field('이메일', '<input class="input" type="email" name="email" maxlength="255" autocomplete="off">')}
         <div class="field-grid">${field('이름', '<input class="input" name="name" maxlength="100">')}${field('소속 · 역할', '<input class="input" name="title" maxlength="100">')}</div>
         ${field('임시 비밀번호', '<input class="input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128">', '8자 이상')}
-        <label class="check mt-16"><input type="checkbox" name="isAdmin">관리자 (키 입력 · 계정 관리 가능)</label></div>`,
-      saveLabel: '만들기',
+        <div class="mt-16">${toggle('name="isAdmin"', false, '관리자 (키 입력 · 계정 관리 가능)')}</div></div>`,
+      saveLabel: '계정 만들기',
       onSave: async el => {
         const g = n => el.querySelector(`[name="${n}"]`);
         const body = { email: g('email').value.trim(), name: g('name').value.trim(), title: g('title').value.trim(),
