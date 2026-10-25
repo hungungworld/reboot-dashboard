@@ -160,3 +160,10 @@
 .part-performance .perf-insight-lines { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
 .part-performance .perf-insight-label { display: inline-block; min-width: 34px; margin-right: 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
 .part-performance .perf-insight strong { font-weight: 700; color: var(--ink); }
+
+/* 채널별 성과 표 머리글 정렬: 누를 때마다 내림차순 ↔ 오름차순 (지금 기준은 라임 세모) */
+.part-performance .perf-th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.part-performance .perf-th-sort i { font-style: normal; font-size: 9px; color: var(--muted-2); min-width: 12px; text-align: center; }
+.part-performance .perf-th-sort:hover i { color: var(--ink); }
+.part-performance th.sorted { color: var(--ink); }
+.part-performance th.sorted .perf-th-sort i { color: var(--accent); font-size: 12px; -webkit-text-stroke: .6px var(--lime-line); }

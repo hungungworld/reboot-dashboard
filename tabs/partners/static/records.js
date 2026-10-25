@@ -248,13 +248,36 @@
     { key: 'sales.units', label: '판매량', num: true }, { key: 'sales.revenue', label: '매출', num: true },
     { key: 'sales.conversion', label: '전환율', num: true }
   ];
+  // 크리에이터별 실적 정렬 (기본: 매출 많은 순)
+  function salesSort(st) { return st.salesSort || { k: 'sales.revenue', dir: -1 }; }
+  function salesTableHtml(st) {
+    const d = st.data;
+    const t = d.totals;
+    const s = salesSort(st);
+    const field = s.k.replace('sales.', '');
+    const rows = d.creators.slice().sort((a, b) => {
+      const x = a[field], y = b[field];
+      return (typeof x === 'string' ? String(x).localeCompare(String(y)) : (x || 0) - (y || 0)) * s.dir;
+    });
+    return `<table class="data-table">
+          <thead><tr>${SALES_COLS.map(c => headCell(c, c.num ? 'num' : '', s)).join('')}</tr></thead>
+          <tbody>${rows.map(c => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.code)}</code></td><td class="num">${fmt.num(c.visits)}</td><td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${usd(c.revenue)}</td><td class="num">${fmt.pct(c.conversion, 2)}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><td>합계</td><td></td><td class="num">${fmt.num(t.visits)}</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${usd(t.revenue)}</td><td class="num">${fmt.pct(t.conversion, 2)}</td></tr></tfoot>
+        </table>`;
+  }
   function savedWidths() {
     const w = store.get(K.widths, null);
     return w && typeof w === 'object' ? w : {};
   }
-  function headCell(c, cls) {
+  // sort가 있으면 머리글을 눌러 정렬 (누를 때마다 오름차순 ↔ 내림차순)
+  function headCell(c, cls, sort) {
     const w = savedWidths()[c.key];
-    return `<th${cls ? ` class="${cls}"` : ''} scope="col" data-col="${esc(c.key)}"${w ? ` style="width:${w}px;min-width:${w}px"` : ''}>${esc(c.label)}<span class="ptn-col-grip" data-grip="${esc(c.key)}" title="끌어서 너비 조절 · 더블클릭하면 원래대로" aria-hidden="true"></span></th>`;
+    const on = sort && sort.k === c.key;
+    const label = sort
+      ? `<button type="button" class="ptn-th-sort" data-sales-sort="${esc(c.key)}" title="누를 때마다 오름차순 ↔ 내림차순">${esc(c.label)}<i aria-hidden="true">${on ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</i></button>`
+      : esc(c.label);
+    const klass = [cls, on ? 'sorted' : ''].filter(Boolean).join(' ');
+    return `<th${klass ? ` class="${klass}"` : ''} scope="col" data-col="${esc(c.key)}"${on ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}${w ? ` style="width:${w}px;min-width:${w}px"` : ''}>${label}<span class="ptn-col-grip" data-grip="${esc(c.key)}" title="끌어서 너비 조절 · 더블클릭하면 원래대로" aria-hidden="true"></span></th>`;
   }
   function bindResize(host) {
     host.querySelectorAll('[data-grip]').forEach(g => {
@@ -981,15 +1004,22 @@
       </div>
       <details class="card mt-24 ptn-rec-salestable" data-ref="sales-table"${st.tableOpen === false ? '' : ' open'}>
         <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('더미 데이터', 'orange')}</summary>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr>${SALES_COLS.map(c => headCell(c, c.num ? 'num' : '')).join('')}</tr></thead>
-          <tbody>${d.creators.map(c => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.code)}</code></td><td class="num">${fmt.num(c.visits)}</td><td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${usd(c.revenue)}</td><td class="num">${fmt.pct(c.conversion, 2)}</td></tr>`).join('')}</tbody>
-          <tfoot><tr><td>합계</td><td></td><td class="num">${fmt.num(t.visits)}</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${usd(t.revenue)}</td><td class="num">${fmt.pct(t.conversion, 2)}</td></tr></tfoot>
-        </table></div>
+        <div class="table-wrap" data-ref="sales-wrap">${salesTableHtml(st)}</div>
         <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify Orders API(discount_codes) · UTM 집계로 바뀝니다.</p>
       </details>`;
     bindResize(el.querySelector('[data-ref="sales-table"]'));
     el.querySelector('[data-ref="sales-table"]').addEventListener('toggle', ev => { st.tableOpen = ev.target.open; });
+    // 머리글 정렬: 같은 칸을 다시 누르면 방향만 바뀜 (표만 다시 그림 · 차트는 그대로)
+    el.querySelector('[data-ref="sales-wrap"]').addEventListener('click', ev => {
+      const b = ev.target.closest('[data-sales-sort]');
+      if (!b) return;
+      const k = b.dataset.salesSort;
+      const s = salesSort(st);
+      st.salesSort = { k, dir: s.k === k ? -s.dir : (k === 'sales.name' || k === 'sales.code' ? 1 : -1) };
+      const wrap = el.querySelector('[data-ref="sales-wrap"]');
+      wrap.innerHTML = salesTableHtml(st);
+      bindResize(wrap);
+    });
     st.picked = (st.picked || []).filter(n => d.creators.some(c => c.name === n));
     drawCharts(st);
   }
