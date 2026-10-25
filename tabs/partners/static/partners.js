@@ -2,15 +2,13 @@
    업체 컨택 · 협업 메일  → outreach.js  REBOOT.use('partners.outreach').render(el, 'contacts' | 'mail')
    협업 이력 · 판매 실적  → records.js   REBOOT.use('partners.records').render(el, 'history' | 'sales')
    다른 파일은 탭을 바꿀 때 .part-partners 요소에 CustomEvent('ptn:go', {detail:{tab}})를 보냅니다.
-   저장 키: partners.tab.u<사용자 id> (마지막으로 본 탭) */
+   첫 화면은 항상 업체 컨택 (주소에 #mail · #history · #sales가 있으면 그 탭) */
 (function (global) {
   'use strict';
 
   const REBOOT = global.REBOOT;
   const doc = global.document;
   const { esc, icon } = REBOOT.ui;
-  const store = REBOOT.store('partners');
-  const KEY_TAB = `partners.tab.u${(REBOOT.user() || {}).id || 0}`;
   const TABS = [
     { id: 'contacts', label: '업체 컨택', file: 'partners.outreach', view: 'contacts' },
     { id: 'mail', label: '협업 메일', file: 'partners.outreach', view: 'mail' },
@@ -42,7 +40,6 @@
       const panel = old.cloneNode(false);
       panel.setAttribute('aria-labelledby', `ptn-tab-${t.id}`);
       old.replaceWith(panel);
-      if (store.get(KEY_TAB, '') !== t.id) store.set(KEY_TAB, t.id);
       if (global.history && global.history.replaceState && global.location.hash !== '#' + t.id) {
         global.history.replaceState(null, '', '#' + t.id);
       }
@@ -76,7 +73,8 @@
     // 제목 오른쪽 버튼은 두지 않음 — 업체 파일 가져오기는 업체 컨택 › 업체 목록 카드 머리와 맨 아래 가져오기 카드에서
 
     const hash = (global.location.hash || '').slice(1);
-    show(tabOf(hash) ? hash : (tabOf(store.get(KEY_TAB, '')) ? store.get(KEY_TAB, '') : 'contacts'));
+    // 메뉴로 들어오면 항상 업체 컨택부터 (주소에 #탭이 있을 때만 그 탭)
+    show(tabOf(hash) ? hash : 'contacts');
   }
 
   REBOOT.register({

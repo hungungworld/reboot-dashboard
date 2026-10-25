@@ -505,7 +505,7 @@
   }
 
   /* ───────── 한 줄 필터 바 · 정렬 머리글 · 페이지 (시장·고객 인사이트 › 경쟁사 비교와 같은 모양) ───────── */
-  const PAGE = 10, SLOTS = 5;
+  const PAGE = 5, SLOTS = 5;   // 한 화면 줄 수: 업체 목록 · 유튜브 크리에이터 모두 5
   function cfSelect(key, all, opts, cur) {
     return `<select class="ptn-cf${cur ? ' on' : ''}" data-cf="${key}" aria-label="${esc(all)}"><option value="">${esc(all)}</option>${opts.map(([v, l]) =>
       `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
