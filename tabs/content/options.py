@@ -57,24 +57,49 @@ DECISION_LABELS = {
     "composition": "구도", "mood": "분위기", "caption": "캡션", "hashtags": "해시태그", "subtitle": "자막",
     "use_character": "캐릭터 Rebu", "flavor": "맛",
     "story": "스토리", "design_note": "시안 설명", "emphasis": "강조할 내용", "content_points": "담을 내용", "hook": "멘트",
+    "slogan_choice": "쓸 슬로건",
 }
 
 # 콘텐츠별 대화 흐름 가이드 (순서를 강제하지 않는 체크리스트 · 화면 '브리프' 표 순서) — data.js flows와 같은 키
+# 비율 · 크기(ratio)는 챗봇이 채널에 맞는 추천을 보기 첫 번째로 붙여 묻는다 (2026-10-25)
 CONTENT_FLOWS = {
-    "image": ["concept", "story", "design_note", "emphasis"],
-    "cardnews": ["content_points", "concept", "emphasis", "slide_count"],
-    "shortform": ["concept", "duration", "story", "design_note", "emphasis"],
+    "image": ["concept", "story", "design_note", "emphasis", "ratio"],
+    "cardnews": ["content_points", "concept", "emphasis", "slide_count", "ratio"],
+    "shortform": ["concept", "duration", "ratio", "story", "design_note", "emphasis"],
     "crm": ["format", "tone", "cta", "target"],
 }
 # 이 채널이면 초안을 만든 뒤 캡션 · 멘트(게시글 첫 줄 훅 · 고정 댓글)를 다듬자고 제안 (흐름 질문에는 넣지 않음)
 SOCIAL_CHANNELS = ("instagram", "tiktok")
 
-# 이미지 · 카드뉴스 캠페인을 만들 때 채널 기본 비율을 '제안'으로 넣음 — 비율은 따로 묻지 않음
+# 이미지 · 카드뉴스 캠페인을 만들 때 채널 기본 비율을 '제안'으로 넣음 — 확정은 챗봇이 물어서
 RATIO_TYPES = ("image", "cardnews")
 CHANNEL_RATIOS = {
     "instagram": "4:5 세로", "tiktok": "9:16 세로", "amazon": "1:1 정사각", "weee": "1:1 정사각",
     "yamibuy": "1:1 정사각", "oliveyoung": "1:1 정사각",
 }
+# 채널별 비율 · 크기 보기 (첫 번째가 추천) — (보기 이름, 저장 값, 이유). 플랫폼 규정은 운영 전 최신 확인 대상
+CHANNEL_RATIO_OPTIONS = {
+    "instagram": [("4:5 세로 (추천)", "4:5 세로 · 1080×1350", "피드에서 화면을 가장 많이 차지해요"),
+                  ("1:1 정사각", "1:1 정사각 · 1080×1080", "그리드에서 잘리지 않는 기본 비율이에요"),
+                  ("9:16 세로", "9:16 세로 · 1080×1920 (스토리·릴스)", "스토리·릴스 전체 화면용이에요")],
+    "tiktok": [("9:16 세로 (추천)", "9:16 세로 · 1080×1920", "TikTok 전체 화면 기본 비율이에요"),
+               ("4:5 세로", "4:5 세로 · 1080×1350", "사진 모드 · 다른 채널과 같이 쓰기 좋아요"),
+               ("1:1 정사각", "1:1 정사각 · 1080×1080", "위아래 여백이 생기지만 어디든 쓰기 쉬워요")],
+    "_market": [("1:1 정사각 (추천)", "1:1 정사각 · 2000×2000", "상품 썸네일 · 상세 이미지 기본 비율이에요"),
+                ("4:5 세로", "4:5 세로 · 1600×2000", "상세페이지에서 세로로 더 크게 보여요"),
+                ("16:9 가로", "16:9 가로 · 1920×1080 (배너)", "몰 배너 · A+ 콘텐츠 가로 컷용이에요")],
+}
+SHORTFORM_RATIO_OPTIONS = [("9:16 세로 (추천)", "9:16 세로", "숏폼 전체 화면 기본 비율이에요"),
+                           ("1:1 정사각", "1:1 정사각", "피드 · 몰 상세에 같이 쓰기 좋아요"),
+                           ("16:9 가로", "16:9 가로", "유튜브 · 배너용 가로 영상이에요")]
+
+
+def ratio_options(sheet):
+    """챗봇이 비율 · 크기를 물을 때 보기 3개 (채널 추천이 첫 번째)."""
+    if sheet.get("content_type") == "shortform":
+        return SHORTFORM_RATIO_OPTIONS
+    ch = next(iter(sheet.get("channels") or []), "")
+    return CHANNEL_RATIO_OPTIONS.get(ch) or CHANNEL_RATIO_OPTIONS["_market"]
 
 
 def flow_of(sheet):
@@ -95,6 +120,8 @@ DECISION_ALIASES = {
     "mascot": "use_character", "맛": "flavor",
     "스토리": "story", "시안": "design_note", "시안설명": "design_note", "시안 설명": "design_note", "강조": "emphasis",
     "강조점": "emphasis", "담을내용": "content_points", "담을 내용": "content_points", "멘트": "hook", "훅": "hook",
+    "크기": "ratio", "사이즈": "ratio", "size": "ratio", "aspect_ratio": "ratio",
+    "슬로건선택": "slogan_choice", "쓸 슬로건": "slogan_choice", "슬로건 선택": "slogan_choice",
 }
 
 # 제품·브랜드 사실에 해당하는 키 — 대화로 바꾸지 않고 '확인 대기'로 기록 (README 3.4)
@@ -128,7 +155,7 @@ def example_suggestions(field, sheet):
     if field == "goal":
         if brand_only:
             items = [("브랜드 첫인상 알리기", "브랜드 자체를 고른 경우 이름과 분위기를 먼저 보여 주기 좋아요"),
-                     ("슬로건 'Restart Your Day' 소개", "확인된 슬로건을 그대로 쓸 수 있어요"),
+                     ("슬로건 'Restart Your Day' · 'Buy Your Tomorrow' 소개", "확인된 슬로건 두 개를 그대로 쓸 수 있어요"),
                      ("브랜드 색(검정 & 네온) 알리기", "시각 콘텐츠에서 브랜드 색을 기억하게 해요")]
         elif ct == "crm":
             items = [("재구매 유도", "이미 구매한 고객에게 다시 떠올리게 하는 메시지예요"),
@@ -137,11 +164,11 @@ def example_suggestions(field, sheet):
         elif multi:
             items = [("라인업 함께 소개", "여러 제품을 고른 경우 제품별 정보를 나눠 함께 보여 줘요"),
                      ("브랜드와 제품 연결", "Restart Your Day 메시지와 제품을 이어 줘요"),
-                     ("구매 유도", "구매처 안내까지 이어지는 구성이에요")]
+                     ("구매 유도", "Buy Your Tomorrow 슬로건과 구매처 안내로 이어져요")]
         else:
             items = [("제품 소개", "선택한 제품의 형태와 맛 후보(임시)를 보여 줘요"),
                      ("브랜드 알리기", "제품을 통해 Reboot 브랜드를 기억하게 해요"),
-                     ("구매 유도", "구매처 안내까지 이어지는 구성이에요")]
+                     ("구매 유도", "Buy Your Tomorrow 슬로건과 구매처 안내로 이어져요")]
     else:
         if ct == "image":
             items = [("검정 배경에 네온 포인트, 문구는 영어로", "브랜드 색(검정 & 네온)을 바로 보여 줘요"),

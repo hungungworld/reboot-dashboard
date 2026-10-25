@@ -1,4 +1,4 @@
-"""콘텐츠 제작용 브랜드 키트 — tabs/content/data/brand_kit.json (사용자 제공 · 2026-10-24).
+"""콘텐츠 제작용 브랜드 키트 — tabs/content/data/brand_kit.json (사용자 제공 · 2026-10-24 · 슬로건 2개 2026-10-25).
 
 공용 팩트시트(server/catalog)는 다른 탭도 함께 쓰므로 고치지 않고, 콘텐츠 제작 때만 이 파일의 값을 위에 덮어씁니다.
 제품마다 따로 덮어쓰며 한 제품의 값(가격 · ZERO SUGAR 등)을 다른 제품이나 브랜드 전체로 옮기지 않습니다.
@@ -11,12 +11,18 @@ from pathlib import Path
 from server.catalog import service as catalog
 
 KIT_FILE = Path(__file__).resolve().parent / "data" / "brand_kit.json"
-BRAND_KEYS = ("name", "slogan", "colors", "character", "cm_song", "category", "intro", "market", "company", "key_ingredient")
+BRAND_KEYS = ("name", "slogan", "slogans", "colors", "character", "cm_song", "category", "intro", "market", "company",
+              "key_ingredient")
 
 
 @lru_cache(maxsize=1)
 def load():
     return json.loads(KIT_FILE.read_text(encoding="utf-8"))
+
+
+def slogans():
+    """공식 슬로건 (원문 표기 그대로) — 첫 번째가 기본."""
+    return tuple(load()["brand"]["slogans"])
 
 
 def product_facts(product_ids=None):

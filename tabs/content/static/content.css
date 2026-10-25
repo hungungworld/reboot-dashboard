@@ -377,7 +377,10 @@
 .part-content .cnt-folder-head .link { margin-left: auto; font-size: 11px; }
 .part-content .cnt-campaign-card .poster, .part-content .cnt-cover { aspect-ratio: 1.35; }
 .part-content .cnt-cover { border-radius: 10px; overflow: hidden; background: var(--night); }
-.part-content .cnt-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.part-content .cnt-cover img, .part-content .cnt-cover video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.part-content .cnt-cover-video { position: relative; }
+.part-content .cnt-cover-video video { pointer-events: none; }
+.part-content .cnt-cover-play { position: absolute; left: 8px; bottom: 8px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: var(--night); background: var(--lime); }
 .part-content .cnt-poster strong { font-size: 28px; }
 .part-content .cnt-poster.t-cardnews { background: #ebebf0; }
 .part-content .cnt-poster.t-shortform { background: #d9e7ee; }
@@ -419,5 +422,9 @@
 .part-content .cnt-rebu { width: 44px; height: 44px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--line-2);
   background-color: var(--soft-2); background-size: cover; background-position: center; background-repeat: no-repeat; }
 .part-content .cnt-refs { margin-top: 8px; }
+.part-content .cnt-social { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; }
+.part-content .cnt-social-caps { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 8px; }
+.part-content .cnt-social-caps p { margin: 2px 0 0; white-space: pre-wrap; }
+.part-content .cnt-social-tags { margin-top: 8px; gap: 8px; font-size: 13px; color: var(--lime); }
 .part-content .cnt-ref-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .part-content .cnt-ref-thumbs img { width: 64px; height: 40px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line-2); display: block; }

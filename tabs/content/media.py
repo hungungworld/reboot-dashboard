@@ -26,7 +26,7 @@ from server import jobs, worklog
 from server.core.ai import AIError
 from server.extensions import db
 from server.models import utcnow
-from . import assets, higgsfield, prompts, providers, repository, review, schemas
+from . import assets, brandkit, higgsfield, prompts, providers, repository, review, schemas
 from .models import ContentCampaign, ContentJob, ContentVersion
 
 FILE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{5,80}\.(png|jpg|webp|mp4)$")
@@ -49,7 +49,22 @@ VIDEO_REF_TEXT = ("Keep the products and the mascot exactly as they appear in th
                   "proportions and printed labels/logo. Ignore measurement lines and captions in the reference images. "
                   "No on-screen text, subtitles, captions, logos or watermarks. No dialogue or voice-over.")
 VIDEO_NO_TEXT = "No on-screen text, subtitles, captions, logos or watermarks. Generic unbranded packaging only. No dialogue."
-SLOGAN = "Restart Your Day"
+SLOGANS = brandkit.slogans()  # Restart Your Day · Buy Your Tomorrow (원문 표기 그대로)
+SLOGAN = SLOGANS[0]           # 고른 슬로건이 없을 때 기본
+
+
+def official_slogan(text):
+    """'RESTART YOUR DAY!' · 'buy your tomorrow' → 원문 표기 슬로건 (공식 슬로건이 아니면 None)."""
+    key = re.sub(r"[^a-z]", "", str(text or "").lower())
+    return next((s for s in SLOGANS if re.sub(r"[^a-z]", "", s.lower()) == key), None) if key else None
+
+
+def chosen_slogans(decisions):
+    """decisions.slogan_choice → 그릴 슬로건 목록 ('둘 다'면 두 개, 없거나 모르면 기본 하나)."""
+    v = re.sub(r"[^a-z가-힣]", "", str(((decisions or {}).get("slogan_choice") or {}).get("value") or "").lower())
+    if "둘" in v or "both" in v or all(re.sub(r"[^a-z]", "", s.lower()) in v for s in SLOGANS):
+        return list(SLOGANS)
+    return [s for s in SLOGANS if re.sub(r"[^a-z]", "", s.lower()) in v][:1] or [SLOGAN]
 
 
 class Canceled(Exception):
@@ -139,6 +154,70 @@ def _bake_text(lines):
             "Do not add any other words, numbers or watermarks.")
 
 
+# ───────── 캡션 · 해시태그 추천 (이미지·영상 생성 직후 자동 · 2026-10-25) ─────────
+# 이미지는 완성된 이미지를 대화 AI가 직접 보고, 영상은 파일을 볼 수 없어 영상 장면 설명(프롬프트)으로 추천.
+# 실패해도 결과물은 그대로 저장하고 '추천 못 함'만 표시 (텍스트 AI 호출 1번 · 이미지·영상 재생성 없음).
+
+CAPTION_COUNT = 3
+HASHTAG_MAX = 10
+
+
+def _social_input(snap, basis, texts, video_plan):
+    dec = snap.get("decisions") or {}
+    ch = next(iter((snap.get("sheet") or {}).get("channels") or []), "")
+    return {"basis": basis, "sheet": snap.get("labels"),
+            "decisions": {k: (v or {}).get("value") for k, v in dec.items()},
+            "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
+            "channel": ch, "channel_profile": prompts.CHANNEL_PROFILES.get(ch), "language": prompts.language_of(dec),
+            "image_text": [t["text"] for t in texts or []], "copy_draft": snap.get("copy_draft"),
+            "video_plan": video_plan or None}
+
+
+def clean_social(raw, snap, basis):
+    raw = raw if isinstance(raw, dict) else {}
+    caps = []
+    for c in raw.get("captions") or []:
+        text = str((c or {}).get("text") or "").strip()[:1500] if isinstance(c, dict) else ""
+        if text:
+            caps.append({"angle": str(c.get("angle") or "").strip()[:40], "text": text})
+        if len(caps) >= CAPTION_COUNT:
+            break
+    tags = []
+    for t in raw.get("hashtags") or []:
+        word = re.sub(r"[^\w]", "", str(t or ""))[:40]  # '#'·공백·기호 제거 (한글·영문·숫자·_만)
+        if word and word.lower() not in [x[1:].lower() for x in tags]:
+            tags.append("#" + word)
+        if len(tags) >= HASHTAG_MAX:
+            break
+    text = "\n\n".join(c["text"] for c in caps) + ("\n" + " ".join(tags) if tags else "")
+    return {"status": "done" if caps else "failed", "basis": basis, "captions": caps, "hashtags": tags,
+            "note": str(raw.get("note_ko") or "").strip()[:300] if caps else "AI가 캡션을 주지 않았어요.",
+            "model": providers.text_model(),
+            "review": review.keyword_check(text, "copy", snap.get("sheet") or {}, snap.get("facts") or {}) if caps else None}
+
+
+def suggest_social(snap, *, basis, image=None, texts=(), video_plan=""):
+    """완성된 이미지(image=(bytes, mime) · 직접 봄) 또는 영상(video_plan 글) → 캡션 3안 + 해시태그. 예외 없이 상태를 돌려줌."""
+    empty = {"basis": basis, "captions": [], "hashtags": [], "review": None}
+    if not providers.ready():
+        return dict(empty, status="skipped", note="OpenAI 키가 없어 캡션·해시태그를 추천하지 못했어요.")
+    user = prompts.dumps(_social_input(snap, basis, texts, video_plan))
+    action = ("이미지" if basis == "image" else "영상") + " 캡션·해시태그 추천"
+    try:
+        if image is not None:
+            raw = providers.call_json_images(prompts.SOCIAL_V1, user, [image], schema=schemas.SOCIAL, name="content_caption",
+                                             action=action, max_tokens=1200, timeout=90)
+        else:
+            raw = providers.call_json(prompts.SOCIAL_V1, user, schema=schemas.SOCIAL, name="content_caption",
+                                      action=action, max_tokens=1200, timeout=90)
+    except AIError as e:
+        return dict(empty, status="failed", note=f"캡션·해시태그를 추천하지 못했어요: {e}")
+    except Exception:  # 결과물 저장을 막지 않음 — 원문은 서버 로그에만
+        current_app.logger.exception("콘텐츠 캡션 추천 실패")
+        return dict(empty, status="failed", note="캡션·해시태그 추천 중 알 수 없는 오류가 났어요.")
+    return clean_social(raw, snap, basis)
+
+
 # ───────── 실행 (뒤에서) ─────────
 
 def _fallback_plan(snap, job):
@@ -164,7 +243,7 @@ def _fallback_plan(snap, job):
     copy = snap.get("copy_draft")
     if copy:
         bits.append(f"Leave clear space for the copy of this draft (Korean): {copy['body'][:300]}")
-    layers = [{"role": "slogan", "text": SLOGAN}]
+    layers = [{"role": "slogan", "text": s} for s in chosen_slogans(snap.get("decisions"))]
     if dec.get("headline"):
         layers.insert(0, {"role": "headline", "text": dec["headline"][:120]})
     include = assets.character_choice(snap.get("decisions")) == "사용"
@@ -198,8 +277,8 @@ def _plan(snap, job, base):
             continue
         role = str(t.get("role") or "text")[:20]
         text = str(t.get("text") or "").strip()[:160]
-        if role == "slogan" or re.fullmatch(r"restart\s*your\s*day[.!]?", text, re.I):
-            role, text = "slogan", SLOGAN  # 슬로건은 원문 그대로
+        if role == "slogan" or official_slogan(text):  # 슬로건은 원문 그대로 (모르는 문구면 고른 슬로건)
+            role, text = "slogan", official_slogan(text) or chosen_slogans(snap.get("decisions"))[0]
         if text:
             layers.append({"role": role, "text": text})
     return {"prompt_en": str(out.get("prompt_en") or "").strip()[:2500] or _fallback_plan(snap, job)["prompt_en"],
@@ -224,8 +303,9 @@ def _references(snap, job, plan, include_char, has_base):
     said = assets.flavors_in(snap.get("request"), job.instructions,
                              *((dec.get(k) or {}).get("value") for k in ("flavor", "featured_product", "concept")))
     pids = (snap.get("sheet") or {}).get("product_ids") or []
+    cap = assets.HIGGSFIELD_MAX_REFS if _provider(job) == "higgsfield" else assets.MAX_REFS
     return assets.pick_refs(pids, flavors=said or plan.get("flavors") or [], character=include_char,
-                            limit=assets.MAX_REFS - (1 if has_base else 0))
+                            limit=cap - (1 if has_base else 0))
 
 
 def _ref_lines(refs, facts, first_index):
@@ -304,7 +384,8 @@ def run_image_job(job_id):
         include_char = _include_character(snap, plan)
         refs = _references(snap, job, plan, include_char, has_base)
         mode = _text_mode(snap)
-        texts = (plan["text_layers"] or [{"role": "slogan", "text": SLOGAN}]) if mode == "bake" else []
+        texts = (plan["text_layers"] or [{"role": "slogan", "text": s} for s in chosen_slogans(snap.get("decisions"))]
+                 if mode == "bake" else [])
         if refs:
             prompt = (plan["prompt_en"] + ("\n\nImage 1 is the base image to edit. " if has_base else "\n\n")
                       + _ref_lines(refs, snap.get("facts") or {}, 2 if has_base else 1) + "\n" + REF_TEXT
@@ -345,6 +426,7 @@ def run_image_job(job_id):
     name = _save_png(png, job.campaign_id, job.id, ext)
     if not name:
         return _fail(job, "이미지는 생성됐지만 파일을 저장하지 못했습니다 (서버 저장 공간 확인).")
+    social = suggest_social(snap, basis="image", image=(png, MIMES[ext]), texts=texts)  # AI 호출 중 DB에 쓰지 않음
 
     c = db.session.get(ContentCampaign, job.campaign_id)
     if c is None:  # 작업 중 캠페인이 지워짐
@@ -388,7 +470,7 @@ def run_image_job(job_id):
         body=plan["notes_ko"] or "", image_file=name, parent_id=base.id if edit else None, source="ai",
         approach="; ".join(plan["change"])[:300], note=" · ".join(note_bits)[:500],
         facts_version=(snap.get("facts") or {}).get("facts_version") or "", created_by=job.created_by, message_id=job.message_id)
-    v.snapshot = dict(snap.get("snapshot") or {}, image=image_meta, model=job.model)
+    v.snapshot = dict(snap.get("snapshot") or {}, image=image_meta, social=social, model=job.model)
     v.snapshot_hash = snap.get("snapshot_hash") or ""
     v.review = {"keyword": review.keyword_check(layers_text, "copy", snap.get("sheet") or {}, snap.get("facts") or {}),
                 "imageScope": IMAGE_SCOPE}
@@ -571,6 +653,8 @@ def run_video_job(job_id):
     name = _save_png(data, job.campaign_id, job.id, ".mp4")
     if not name:
         return _fail(job, "영상은 생성됐지만 파일을 저장하지 못했습니다 (서버 저장 공간 확인).")
+    social = suggest_social(snap, basis="video_plan",
+                            video_plan="\n".join(x for x in (plan["notes_ko"], plan["prompt_en"]) if x))
     c = db.session.get(ContentCampaign, job.campaign_id)
     if c is None:  # 작업 중 캠페인이 지워짐
         (upload_dir() / name).unlink(missing_ok=True)
@@ -599,7 +683,7 @@ def run_video_job(job_id):
         parent_id=base.id if prev else None,
         source="ai", approach="", note=" · ".join(note_bits)[:500],
         facts_version=(snap.get("facts") or {}).get("facts_version") or "", created_by=job.created_by, message_id=job.message_id)
-    v.snapshot = dict(snap.get("snapshot") or {}, video=video_meta, model=model_path)
+    v.snapshot = dict(snap.get("snapshot") or {}, video=video_meta, social=social, model=model_path)
     v.snapshot_hash = snap.get("snapshot_hash") or ""
     v.review = {"videoScope": "영상 속 장면·제품 모양은 자동 검사하지 않음 — 게시 전 사람이 확인"}
     db.session.add(v)
@@ -648,7 +732,7 @@ def clean_layers(raw):
         if not isinstance(t, dict):
             continue
         role = t.get("role") if t.get("role") in LAYER_ROLES else "text"
-        text = SLOGAN if role == "slogan" else str(t.get("text") or "").strip()[:160]
+        text = (official_slogan(t.get("text")) or SLOGAN) if role == "slogan" else str(t.get("text") or "").strip()[:160]
         if not text:
             continue
         out.append({"role": role, "text": text, "x": _num(t.get("x"), 0, 1, .06), "y": _num(t.get("y"), 0, 1, .06),

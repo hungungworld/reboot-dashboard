@@ -500,7 +500,8 @@ def version_dict(v, cur_core=None, final_id=None, selected_id=None):
         "title": v.title, "body": v.body, "imageUrl": file_url(v.image_file) if v.kind != "video" else None,
         "videoUrl": file_url(v.image_file) if v.kind == "video" else None, "video": snap.get("video"), "parentId": v.parent_id, "source": v.source,
         "approach": v.approach, "note": v.note, "factsVersion": v.facts_version, "review": v.review, "claims": v.claims,
-        "needsCheck": v.needs_check, "image": snap.get("image"), "settings": snap.get("settings"), "model": snap.get("model"),
+        "needsCheck": v.needs_check, "image": snap.get("image"), "social": snap.get("social"),
+        "settings": snap.get("settings"), "model": snap.get("model"),
         "createdAt": iso(v.created_at), "createdBy": v.created_by, "isFinal": v.id == final_id,
         "isSelected": v.id == selected_id, "stale": bool(stale), "staleFields": stale,
     }
