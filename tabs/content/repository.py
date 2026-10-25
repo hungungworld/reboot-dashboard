@@ -52,8 +52,9 @@ class FactChange(Exception):
 # ───────── 기준 데이터 ─────────
 
 def products_index():
-    """{제품 ID: 팩트시트 dict} — 표준 순서."""
-    return {p["id"]: p for p in catalog.get_products() if p.get("id")}
+    """{제품 ID: 팩트시트 dict} — 표준 순서. 한글 이름(ko)은 브랜드 키트 값으로 덮어씀 (공용 팩트시트는 그대로)."""
+    kit = brandkit.load()["products"]
+    return {p["id"]: dict(p, ko=(kit.get(p["id"]) or {}).get("ko") or p.get("ko")) for p in catalog.get_products() if p.get("id")}
 
 
 def clip_text(value, n):

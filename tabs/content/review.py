@@ -26,7 +26,7 @@ BALANCE_RE = re.compile(r"\bbalance\b", re.I)
 
 BRAND_FACTS = {"name", "slogan", "slogans", "colors", "character", "cm_song", "category", "intro", "market", "company", "key_ingredient"}
 PRODUCT_FACTS = {"internal_name": "internal_name", "name": "internal_name", "consumer_name": "consumer_name", "form": "form",
-                 "flavors": "flavors", "shapes": "shapes", "pack": "pack", "price": "price", "volume": "volume",
+                 "flavors": "flavors", "shapes": "shapes", "pack": "pack", "pack_count": "pack_count", "price": "price", "volume": "volume",
                  "bottle": "bottle", "ingredients": "ingredients", "zero_sugar": "zero_sugar",
                  "development_direction": "development_direction", "direction": "development_direction"}
 CONSUMER_KINDS = ("copy", "cardnews", "script", "desc", "crm")
@@ -64,16 +64,17 @@ def fact_value(facts, entity_id, fact_id):
 
 
 def _num_key(term):
-    return re.sub(r"\s+", "", term.lower()).replace(".00", "")
+    return re.sub(r"\s+", "", term.lower()).rstrip(".,").replace(".00", "")
 
 
 def known_numbers(facts):
-    """브랜드 키트에 있는 가격·용량 — 카피에 써도 '팩트시트에 없는 값' 경고를 띄우지 않음."""
+    """브랜드 키트에 있는 가격(1개당 가격 포함)·용량 — 카피에 써도 '팩트시트에 없는 값' 경고를 띄우지 않음."""
     out = set()
     for p in facts.get("products") or []:
         for pr in p.get("price") or []:
-            if isinstance(pr, dict) and pr.get("usd") is not None:
-                out.add(_num_key(f"${pr['usd']}"))
+            for k in ("usd", "per_unit_usd"):
+                if isinstance(pr, dict) and pr.get(k) is not None:
+                    out.add(_num_key(f"${pr[k]:.2f}"))
         if p.get("volume"):
             out.add(_num_key(str(p["volume"])))
     return out
