@@ -498,10 +498,11 @@
 .part-insights .ins-view-bar .seg button { font-size: 12px; padding: 7px 14px; }
 .part-insights .ins-view-bar .seg .n { opacity: .55; margin-left: 2px; }
 .part-insights .ins-view-bar + .card { margin-top: 10px; }
+/* 진열대 카드 글꼴: 이름 · 가격 500 (가격은 크기로 강조) · 색은 ink-2 (700 · ink는 눈이 아파 2026-10-25 낮춤) */
 .part-insights .ins-shelf { margin-top: 20px; }
 .part-insights .ins-shelf:first-child { margin-top: 0; }
 .part-insights .ins-shelf-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-.part-insights .ins-shelf-head b { font-size: 14px; color: var(--ink); }
+.part-insights .ins-shelf-head b { font-size: 14px; font-weight: 600; color: var(--ink-2); }
 .part-insights .ins-shelf-row { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 .part-insights .ins-shelf-empty { padding: 14px 0; }
 /* 카드 한 장 = 제품 하나: 제형 · 상태 / 브랜드 / 1회분 가격 / 판매처 */
@@ -516,19 +517,19 @@
 .part-insights .ins-pc.own .ins-pc-ico .dot { fill: var(--lime-ink); }
 .part-insights .ins-pc.oos .ins-pc-ico { stroke: var(--muted); }
 .part-insights .ins-pc.oos .ins-pc-ico .dot { fill: var(--muted); }
-.part-insights .ins-pc-flag { margin-left: auto; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; white-space: nowrap; background: var(--gray-bg); color: var(--gray); }
+.part-insights .ins-pc-flag { margin-left: auto; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 600; white-space: nowrap; background: var(--gray-bg); color: var(--gray); }
 .part-insights .ins-pc-flag.own { background: var(--lime); color: var(--lime-ink); }
 .part-insights .ins-pc-flag.oos, .part-insights .ins-pc-flag.cut { background: var(--red-bg); color: var(--red); }
 .part-insights .ins-pc-flag.low, .part-insights .ins-pc-flag.up { background: var(--orange-bg); color: var(--orange); }
-.part-insights .ins-pc-name { margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.part-insights .ins-pc-price { font-size: 18px; font-weight: 700; color: var(--ink); letter-spacing: -.4px; font-variant-numeric: tabular-nums; }
+.part-insights .ins-pc-name { margin-top: 4px; font-size: 13px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-insights .ins-pc-price { font-size: 17px; font-weight: 500; color: var(--ink-2); letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
 .part-insights .ins-pc-price small { font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
 .part-insights .ins-pc-src { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .part-insights .ins-pc.own { background: var(--lime-soft); border: 2px solid var(--lime-line, var(--lime)); }
 .part-insights .ins-pc.watched { border-color: var(--orange); }
 .part-insights .ins-pc.oos { background: transparent; border: 1.5px dashed var(--red); }
 .part-insights .ins-pc.oos .ins-pc-name, .part-insights .ins-pc.oos .ins-pc-price { color: var(--muted); text-decoration: line-through; }
-.part-insights .ins-pc-more { flex: 0 0 88px; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-2); background: transparent; cursor: pointer;
+.part-insights .ins-pc-more { flex: 0 0 88px; font: inherit; font-size: 12px; font-weight: 500; color: var(--ink-2); background: transparent; cursor: pointer;
   border: 1px dashed var(--line-2); border-radius: 12px; }
 .part-insights .ins-pc-more:hover { background: var(--soft-2); }
 .part-insights .ins-lg.low { background: var(--orange); opacity: .8; border-radius: 2px; }
