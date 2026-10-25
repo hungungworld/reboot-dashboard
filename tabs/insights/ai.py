@@ -6,6 +6,7 @@
 """
 import hashlib
 import json
+from pathlib import Path
 
 from server.core.ai import AIError, openai_json, openai_model, openai_ready
 from server.extensions import db
@@ -133,23 +134,44 @@ def translate_review(text):
 
 
 COMMENT_TOPICS = [k for k, _l, _w in QUESTION_TOPICS] + ["none"]
+# reason을 먼저 쓰게 함 (판단 근거 → 답 순서, CoT)
 COMMENT_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],
     "properties": {"items": {"type": "array", "items": {
-        "type": "object", "additionalProperties": False, "required": ["id", "relevant", "question", "topic"],
-        "properties": {"id": {"type": "string"}, "relevant": {"type": "boolean"}, "question": {"type": "boolean"},
-                       "topic": {"type": "string", "enum": COMMENT_TOPICS}}}}},
+        "type": "object", "additionalProperties": False, "required": ["id", "reason", "relevant", "question", "topic"],
+        "properties": {"id": {"type": "string"}, "reason": {"type": "string"}, "relevant": {"type": "boolean"},
+                       "question": {"type": "boolean"}, "topic": {"type": "string", "enum": COMMENT_TOPICS}}}}},
 }
+COMMENT_EXAMPLES = Path(__file__).parent / "data" / "comment_examples.json"
 
 
-def classify_comments(rows):
-    """rows: [{id, text}] → {id: {relevant, question, topic}}."""
+def comment_examples():
+    """사람이 정답을 붙인 댓글 100건 (use=example 24건은 퓨샷 예시, use=test는 정확도 검증용)."""
+    return json.loads(COMMENT_EXAMPLES.read_text(encoding="utf-8"))["items"]
+
+
+def _few_shot_text():
+    lines = []
+    for x in comment_examples():
+        if x["use"] != "example":
+            continue
+        ans = {"reason": x["reason"], "relevant": x["relevant"], "question": x["question"], "topic": x["topic"]}
+        lines.append(f"- {json.dumps(x['text'], ensure_ascii=False)} → {json.dumps(ans, ensure_ascii=False)}")
+    return "\n".join(lines)
+
+
+def classify_comments(rows, few_shot=True):
+    """rows: [{id, text}] → {id: {reason, relevant, question, topic}}. few_shot=False는 정확도 검증의 비교용."""
     topics = ", ".join(f"{k}={label}" for k, label, _w in QUESTION_TOPICS)
     system = ("유튜브 댓글이 숙취해소 제품 · 해결책과 관련 있는지(relevant), 제품을 사기 전 궁금증을 묻는 질문인지(question) 판단하고 "
               f"질문이면 주제(topic)를 골라: {topics}. 어느 주제에도 맞지 않으면 question=false, topic=none. "
-              "숙취 공감 · 한탄 · 농담('anyone else hungover?' 등), 유튜버 칭찬 · 잡담 · 광고는 relevant=false.")
+              "숙취 공감 · 한탄 · 농담('anyone else hungover?' 등), 유튜버 칭찬 · 잡담 · 광고는 relevant=false. "
+              "relevant=false면 question=false, topic=none. "
+              "각 댓글마다 먼저 reason에 판단 근거를 한국어 한 문장(20자 안팎)으로 쓰고, 그 근거에 맞게 나머지 칸을 채워.")
+    if few_shot:
+        system += "\n\n사람이 정답을 붙인 예시 (댓글 → 답):\n" + _few_shot_text()
     out = openai_json(system, {"comments": rows}, schema=COMMENT_SCHEMA, schema_name="voc", part=PART,
-                      action="VOC(유튜브 댓글) 분류", max_tokens=4000)
+                      action="VOC(유튜브 댓글) 분류" + ("" if few_shot else " · 예시 없이 (정확도 검증)"), max_tokens=8000)
     return {str(i["id"]): i for i in out.get("items") or []}
 
 

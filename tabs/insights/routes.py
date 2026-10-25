@@ -43,7 +43,7 @@ from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
 from . import ai as insights_ai
-from . import competitors, lines, reports, service, slack, store, trends, update
+from . import accuracy, competitors, lines, reports, service, slack, store, trends, update
 from .http import CollectError
 from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
@@ -90,6 +90,8 @@ def data_tab(tab):
         return jsonify(service.audience_view(_month_arg()))
     if tab == "trends":
         return jsonify(service.trends_view())
+    if tab == "accuracy":
+        return jsonify(accuracy.view())
     raise ApiError("없는 데이터 탭입니다.", 404)
 
 

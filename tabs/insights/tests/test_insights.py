@@ -1198,3 +1198,87 @@ def test_channel_reviews_collect_cs_and_translate(app, auth_client, monkeypatch,
         assert res.status_code == 200 and res.get_json()["textKo"].startswith("상자가")
     assert seen == ["review_ko"]
     assert auth_client.post("/api/insights/reviews/999999/translate", json={}).status_code == 404
+
+
+# ───────── 정확도 검증 · 퓨샷 ─────────
+
+def test_comment_examples_are_consistent():
+    """정답 100건: 예시 24건(근거 포함) · 채점 76건, 겹치지 않음 · 관련 없으면 질문 아님 · 주제는 질문일 때만."""
+    from tabs.insights import ai as insights_ai, classify
+    items = insights_ai.comment_examples()
+    assert len(items) == 100 and len({x["no"] for x in items}) == 100
+    ex = [x for x in items if x["use"] == "example"]
+    assert len(ex) == 24 and all(x["reason"] for x in ex)
+    assert {x["use"] for x in items} == {"example", "test"}
+    for x in items:
+        assert x["topic"] in set(classify.QUESTION_LABEL) | {"none"}, x["no"]
+        assert not x["question"] or x["relevant"], x["no"]
+        assert (x["topic"] != "none") == x["question"], x["no"]
+        assert "@" not in x["text"] and "http" not in x["text"], x["no"]
+
+
+def test_classify_comments_few_shot_prompt(monkeypatch):
+    from tabs.insights import ai as insights_ai
+    seen = []
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        seen.append((system, schema, kw["action"]))
+        return {"items": [{"id": c["id"], "reason": "근거", "relevant": True, "question": False, "topic": "none"}
+                          for c in user["comments"]]}
+
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    out = insights_ai.classify_comments([{"id": "c1", "text": "Where can I buy it?"}])
+    insights_ai.classify_comments([{"id": "c1", "text": "Where can I buy it?"}], few_shot=False)
+    assert out["c1"]["reason"] == "근거"
+    (few, schema, action), (zero, _, zero_action) = seen
+    sample = next(x for x in insights_ai.comment_examples() if x["use"] == "example")
+    assert json.dumps(sample["text"], ensure_ascii=False) in few and sample["reason"] in few
+    assert few.count("\n- ") == 24 and "예시" not in zero and "reason" in zero
+    assert "예시 없이" in zero_action and "예시 없이" not in action
+    props = schema["properties"]["items"]["items"]
+    assert list(props["properties"])[:2] == ["id", "reason"] and "reason" in props["required"]  # 근거 먼저 (CoT)
+    test_text = next(x["text"] for x in insights_ai.comment_examples() if x["use"] == "test")
+    assert json.dumps(test_text, ensure_ascii=False) not in few  # 채점용은 예시에 없음
+
+
+def test_accuracy_rule_only_then_ai(app, auth_client, monkeypatch, sync_jobs):
+    from tabs.insights import accuracy, ai as insights_ai
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    d = auth_client.get("/api/insights/data/accuracy").get_json()
+    assert d["saved"] is None and len(d["examples"]) == 24 and d["testCounts"]["total"] == 76
+    plan = {i["id"]: i for i in auth_client.get("/api/insights/update/plan").get_json()["items"]}
+    assert plan["accuracy"]["manual"] and plan["accuracy"]["ready"] and plan["accuracy"]["cost"] == {"openai": 0}
+    # AI 키 없음 → 규칙만
+    assert auth_client.post("/api/insights/update", json={"items": ["accuracy"]}).status_code == 202
+    run = auth_client.get("/api/insights/update/status").get_json()["run"]
+    assert run["status"] == "done" and "규칙만" in run["results"]["accuracy"]["message"]
+    s = auth_client.get("/api/insights/data/accuracy").get_json()["saved"]
+    assert set(s["methods"]) == {"rule"} and s["winner"] == "rule" and s["tests"] == 76
+    rule = s["methods"]["rule"]
+    assert rule["n"] == 76 and 0 <= rule["exact"] <= rule["relevant"] <= 100
+    assert all(w["text"] and "gold" in w and "pred" in w for w in rule["wrong"])
+
+    # AI 키 있음 → 예시 포함은 정답 그대로, 예시 없이는 모두 '관련 없음'이라고 답하는 가짜 AI
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
+    gold = {str(x["no"]): x for x in insights_ai.comment_examples()}
+    calls = []
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        few = "예시" in system
+        calls.append(few)
+        return {"items": [dict(id=c["id"], reason="", **({k: gold[c["id"]][k] for k in ("relevant", "question", "topic")} if few
+                                                         else {"relevant": False, "question": False, "topic": "none"}))
+                          for c in user["comments"]]}
+
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    plan = {i["id"]: i for i in auth_client.get("/api/insights/update/plan").get_json()["items"]}
+    assert plan["accuracy"]["cost"] == {"openai": 4}
+    auth_client.post("/api/insights/update", json={"items": ["accuracy"]})
+    s = auth_client.get("/api/insights/data/accuracy").get_json()["saved"]
+    assert calls == [False, False, True, True]  # 40건씩 2번 × 2방식
+    assert s["winner"] == "few" and s["methods"]["few"]["exact"] == 100.0 and s["methods"]["few"]["wrong"] == []
+    zero = s["methods"]["zero"]
+    assert zero["relevant"] == round(26 * 100 / 76, 1)  # 정답이 '관련 없음'인 26건만 맞음
+    with app.app_context():
+        assert accuracy.score([{"no": 1, "relevant": True, "question": True, "topic": "buy"}],
+                              [{"relevant": True, "question": False, "topic": "none"}])["exact"] == 0.0
