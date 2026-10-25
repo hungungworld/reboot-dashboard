@@ -356,7 +356,11 @@
 .part-insights .ins-chg-t::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .part-insights .ins-chg-t b { font-size: 12px; font-weight: 650; color: var(--c); }
 .part-insights .ins-chg-tile strong { grid-area: n; font-size: 22px; font-weight: 700; line-height: 1; color: var(--c); }
-.part-insights .ins-chg-tile small { grid-area: s; padding-left: 13px; /* 점(7px) + 간격(6px) — '위협' 글자와 시작을 맞춤 */ font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-insights .ins-chg-tile small { grid-area: s; display: grid; gap: 2px; min-width: 0; padding-left: 13px; /* 점(7px) + 간격(6px) — '위협' 글자와 시작을 맞춤 */ font-size: 11px; color: var(--text); }
+.part-insights .ins-chg-tile small span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-insights .ins-chg-tile small em { font-style: normal; font-weight: 600; color: var(--c); }
+.part-insights .ins-chg-t { font-weight: 600; color: var(--text); }
+.part-insights .ins-chg-do { margin-left: 6px; padding: 1px 6px; border-radius: 5px; background: var(--soft-2); font-weight: 500; color: var(--text); }
 .part-insights .ins-chg-h.threat { background: var(--red-bg); color: var(--red); }
 .part-insights .ins-chg-h.chance { background: var(--green-bg); color: var(--green); }
 .part-insights .ins-chg-h.watch { background: var(--purple-bg); color: var(--purple); }

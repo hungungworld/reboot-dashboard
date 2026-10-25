@@ -1824,7 +1824,7 @@
 
   /* ═════════ 시장 (진열대 + 경쟁사) ═════════
      질문 카드 · 숫자 4칸 → 보기 [변화 | 가격 위치 | 브랜드 비교]
-     - 변화: 경쟁사 이번 주 변화 + 곧 품절 (관찰 칸)
+     - 변화: 경쟁사 이번 주 변화 + 곧 품절 (기회 칸)
      - 가격 위치: 가격대별 선반 + 1회분 단가 분포 (카드를 누르면 그 브랜드 줄로)
      - 브랜드 비교: 브랜드 한 줄(경쟁사 표 + 대체재 + 진열대에만 있는 브랜드) → ▸로 판매처별 상품을 제형별로 펼침,
        브랜드 이름 = 브랜드 카드. 상품은 진열대 묶음(lines)의 브랜드 · 제형을 따름 */
@@ -2176,8 +2176,14 @@
       <td class="num">${c.youtube == null ? '—' : fmt.num(c.youtube)}</td></tr>`;
   }
 
-  // 이번 주 변화: REBOOT 입장(위협 · 기회 · 관찰)으로 나눈 카드 — '누가 움직였고 우리한테 무슨 뜻인지' (곧 품절은 관찰)
-  const CHG_GROUPS = [['threat', '위협', '우리 고객을 뺏을 수 있어요'], ['chance', '기회', '빈자리가 생겼어요'], ['watch', '관찰', '눈여겨볼 움직임이에요']];
+  // 이번 주 변화: REBOOT 입장(위협 · 기회 · 관찰)으로 나눈 카드 — 칸마다 마케터가 할 일 (곧 품절은 기회)
+  const CHG_GROUPS = [['threat', '위협', '맞대응 검토'], ['chance', '기회', '공략하기'], ['watch', '관찰', '지켜보기']];
+  // 변화 종류(label) → 이번 주 할 일
+  const CHG_TODO = {
+    '새 상품': '상세페이지 차별점 점검', '가격 인하': '가격·프로모션 비교', '재입고': '재구매 혜택 점검',
+    '품절': '그 키워드 광고 늘리기', '곧 품절': '즉시 출고 소재 준비', '가격 인상': '가격 우위 메시지 쓰기',
+    '판매 문구 변경': '우리 카피와 비교',
+  };
   const CHG_FIRST = 3;
   function chgMain(x) {
     if (x.kind === 'price') return `<s>${esc(money(x.prevPrice))}</s><b>${esc(money(x.price))}</b><em class="${x.pct < 0 ? 'down' : 'up'}">${x.pct < 0 ? '▼' : '▲'} ${Math.abs(Math.round(x.pct))}%</em>`;
@@ -2189,7 +2195,7 @@
   function chgCard(x) {
     const sub = x.kind === 'price' || x.kind === 'message' ? '' : `<small class="ins-chg-title" title="${esc(x.title)}">${esc(x.title)}</small>`;
     return `<article class="ins-chg-card ${esc(x.group)}">
-      <div class="between"><span class="ins-chg-kind">${esc(x.label)}</span>${extLink(x.link, '보기')}</div>
+      <div class="between"><span class="ins-chg-kind">${esc(x.label)}${CHG_TODO[x.label] ? `<span class="ins-chg-do">${esc(CHG_TODO[x.label])}</span>` : ''}</span>${extLink(x.link, '보기')}</div>
       <div class="ins-chg-brand"><b>${esc(x.brand || '브랜드 모름')}</b><span class="muted"> · ${esc(x.source)}</span></div>
       <div class="ins-chg-main${x.kind === 'message' ? ' msg' : ''}">${chgMain(x)}</div>${sub}
       ${x.impact ? `<p class="ins-chg-impact">→ ${esc(rb(x.impact))}</p>` : ''}
@@ -2205,7 +2211,8 @@
       const kinds = {};
       its.forEach(x => { kinds[x.label] = (kinds[x.label] || 0) + 1; });
       return `<button type="button" class="ins-chg-tile ${g}${S.chg === g ? ' on' : ''}" data-act="chg-group" data-g="${g}" aria-pressed="${S.chg === g}"${its.length ? '' : ' disabled'}>
-        <span class="ins-chg-t"><b>${esc(name)}</b>${esc(desc)}</span><strong>${its.length}</strong><small>${esc(Object.entries(kinds).map(([k, n]) => `${k} ${n}`).join(' · ') || '없음')}</small></button>`;
+        <span class="ins-chg-t"><b>${esc(name)}</b>${esc(desc)}</span><strong>${its.length}</strong><small>${Object.entries(kinds).map(([k, n]) =>
+          `<span>${esc(`${k} ${n}`)}${CHG_TODO[k] ? `<em> → ${esc(CHG_TODO[k])}</em>` : ''}</span>`).join('') || '<span>없음</span>'}</small></button>`;
     }).join('');
     const groups = S.chg === 'all' ? CHG_GROUPS : CHG_GROUPS.filter(g => g[0] === S.chg);
     const cols = groups.map(([g, name]) => {
