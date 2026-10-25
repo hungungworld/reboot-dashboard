@@ -1285,3 +1285,73 @@ def test_accuracy_rule_only_then_ai(app, auth_client, monkeypatch, sync_jobs):
     with app.app_context():
         assert accuracy.score([{"no": 1, "relevant": True, "question": True, "topic": "buy"}],
                               [{"relevant": True, "question": False, "topic": "none"}])["exact"] == 0.0
+
+
+# ───────── 콘텐츠 브리프 (brief.py) ─────────
+
+def _seed_brief(app):
+    from tabs.insights import store
+    from tabs.insights.models import Comment
+    from server.extensions import db
+    with app.app_context():
+        store.save_reviews([{"source": "oliveyoung", "product_key": "oy:1", "product_title": "REBOOT jelly", "own": True,
+                             "rating": 5.0, "text": f"The taste is great, peach flavor #{i}"} for i in range(6)], "2026-W43")
+        for i, topic in enumerate(["when"] * 6 + ["safety"] * 6 + ["works"] * 6 + ["buy"] * 2):
+            db.session.add(Comment(id=f"c{i}", video_id="v1", month="2026-10", text=f"question {i}?", likes=i,
+                                   relevant=True, is_question=True, topic=topic))
+        db.session.commit()
+
+
+def test_content_brief_empty(auth_client, fixed_today):
+    assert auth_client.get("/api/insights/brief").get_json() is None
+    v = auth_client.get("/api/insights/brief/draft").get_json()
+    assert v["month"] == "2026-10" and v["draft"] is None and v["published"] is None
+    res = auth_client.put("/api/insights/brief/draft", json={"themes": [], "approve": True})
+    assert res.status_code == 400
+    assert auth_client.get("/api/insights/brief/draft?month=2026-13").status_code == 400
+
+
+def test_content_brief_rules_check_and_approve(app, auth_client, monkeypatch, fixed_today):
+    """규칙이 주제를 고르고(효능 · 안전 · 5건 미만은 뺌), 검사에 걸리면 승인 불가, 승인본만 공개, 다음 초안은 승인 문장을 이음."""
+    from tabs.insights import ai as insights_ai
+    _seed_brief(app)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
+    seen = []
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        assert schema_name == "content_brief"
+        seen.append([t["id"] for t in user["themes"]])
+        return {"items": [{"id": t["id"], "angle": f"{t['theme']} 각도", "say": "모임 전후 루틴", "avoid": ["단정"]}
+                          for t in user["themes"]] + [{"id": "nope", "angle": "x", "say": "y", "avoid": []}]}
+
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    d = auth_client.post("/api/insights/brief/draft", json={}).get_json()["draft"]
+    ids = [t["id"] for t in d["themes"]]
+    assert set(ids) == {"timing", "taste"}            # 안전 · 효과 질문은 빼고, 구매처 2건은 5건 미만
+    assert d["dropped"] == [{"theme": "구매처", "reason": "근거 2건 (5건 미만)"}]
+    assert {x["theme"] for x in d["excluded"]} >= {"효능", "안전 · 부작용"}
+    taste = next(t for t in d["themes"] if t["id"] == "taste")
+    assert taste["evidence"] == "자사 리뷰 칭찬 6 · 불만 0" and taste["confidence"] == "중간"
+    assert all(t["use"] and t["by"] == "AI" and t["check"]["verdict"] == "PASS" for t in d["themes"])
+    assert auth_client.get("/api/insights/brief").get_json() is None          # 승인 전에는 공개 안 됨
+
+    # '숙취'를 넣으면 컴플라이언스 BLOCK → 승인 막힘 (고친 문장은 남음)
+    bad = [{"id": "timing", "angle": "숙취 없는 아침", "say": "모임 전후", "avoid": [], "use": True},
+           {"id": "taste", "angle": "맛 기대 맞추기", "say": "먹는 방법 팁", "avoid": ["맛있다 단정"], "use": True}]
+    res = auth_client.put("/api/insights/brief/draft", json={"themes": bad, "approve": True})
+    assert res.status_code == 400 and "복용 시점" in res.get_json()["error"]
+    kept = auth_client.get("/api/insights/brief/draft").get_json()["draft"]
+    assert next(t for t in kept["themes"] if t["id"] == "timing")["check"]["verdict"] == "BLOCK"
+    bad[0]["angle"] = "언제 먹는지 한눈에"
+    v = auth_client.put("/api/insights/brief/draft", json={"themes": bad, "approve": True}).get_json()
+    assert v["draft"]["status"] == "approved" and v["published"]["themes"] == 2
+
+    pub = auth_client.get("/api/insights/brief").get_json()
+    assert pub["month"] == "2026-10" and pub["approvedBy"]
+    assert set(pub["themes"][0]) == {"theme", "evidence", "confidence", "angle", "say", "avoid"}   # 예시 · 검사 기록은 안 넘김
+    assert pub["avoid"] and "참고용" in pub["basis"]
+
+    # 다시 만들면 승인한 주제는 그 문장을 잇고, AI는 부르지 않음
+    again = auth_client.post("/api/insights/brief/draft", json={}).get_json()["draft"]
+    assert len(seen) == 1 and all(t["carried"] for t in again["themes"])
+    assert next(t for t in again["themes"] if t["id"] == "timing")["angle"] == "언제 먹는지 한눈에"
