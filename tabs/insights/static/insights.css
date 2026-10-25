@@ -48,7 +48,13 @@
 .part-insights .ins-steps dt { color: var(--muted); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
 .part-insights .ins-steps > div.todo dt { color: var(--lime-ink); }
 .part-insights .ins-steps dd { margin: 0; color: var(--ink); }
-.part-insights .ins-action-rule { margin: 10px 0 0; font-size: 11px; color: var(--muted-2); }
+.part-insights .ins-action-rule { margin: 10px 0 0; font-size: 12px; color: var(--muted-2); }
+/* 참고 액션: 접은 상자 안에 한 줄씩 */
+.part-insights .ins-ref { border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px; background: var(--surface); }
+.part-insights .ins-ref > summary { font-size: 13px; }
+.part-insights .ins-ref-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink); }
+.part-insights .ins-ref-row:first-of-type { margin-top: 10px; }
+.part-insights .ins-ref-row .link { flex: none; }
 .part-insights .ins-facts a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .part-insights .ins-facts a .icon { width: 11px; height: 11px; }
 .part-insights .ins-signal { padding: 12px 0; border-bottom: 1px solid var(--line-3); }
