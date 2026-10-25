@@ -1,7 +1,8 @@
 /* 콘텐츠 제작 파트 (담당: 나원) — tabs/content/docs/README.md · 챗봇_구성_설명서.md
    탭 두 개: AI와 함께 제작 (5항목 시트 → 대화 → 초안·이미지 → 버전·최종본) · 내 캠페인 (목록·검색·복원)
    상태 원본은 서버(DB)입니다. 화면은 서버가 돌려준 캠페인 상태를 그대로 그리고, "반영"은 서버 저장 뒤에만 표시합니다.
-   다른 파트에는 REBOOT.use('content').campaigns()만 공개합니다. */
+   다른 파트에는 REBOOT.use('content').campaigns()만 공개합니다.
+   인사이트에서는 personas · contentBrief(사람이 승인한 고객 브리프)를 읽기만 합니다 → 입력창 칩 '타깃 참고' · '고객 브리프'. */
 (function (global) {
   'use strict';
 
@@ -31,6 +32,7 @@
     sheetBox: null,          // 열린 '기본 정보 시트 수정' 팝업의 시트 칸
     pollTimer: null, searchTimer: null,
     personas: null,
+    brief: null,             // 인사이트 콘텐츠 브리프 승인본 (사람이 승인한 것만 · 없으면 null)
     apiCheck: null, apiChecking: false,   // 연결 테스트 결과
     ivBusy: false, ivDraft: '',          // 인터뷰: 보내는 중 · 직접 입력 칸
     imgDraft: '',                        // 이미지 AI 수정 입력 칸
@@ -150,6 +152,7 @@
     loadAssets();
     loadList();
     loadPersonas();
+    loadBrief();
     if (hash.campaign) openCampaign(hash.campaign, { silent: true });
   }
 
@@ -252,6 +255,16 @@
       S.personas = Array.isArray(list) ? list.filter(p => p && p.name).slice(0, 6) : null;
       if (S.camp) renderQuick();
     } catch (e) { S.personas = null; }
+  }
+
+  async function loadBrief() {
+    try {
+      const api = REBOOT.use('insights');
+      if (!api || typeof api.contentBrief !== 'function') return;
+      const b = await Promise.resolve(api.contentBrief());
+      S.brief = b && Array.isArray(b.themes) && b.themes.length ? b : null;
+      if (S.camp) renderQuick();
+    } catch (e) { S.brief = null; }
   }
 
   function upcomingSeasons() {
@@ -1046,7 +1059,8 @@
     const ct = S.camp ? S.camp.sheet.content_type : '';
     const set = ct === 'image' ? DATA.quick.image : DATA.quick.text;
     const persona = S.personas && S.personas.length ? `<button type="button" class="chip" data-act="persona">${icon('users')}타깃 참고</button>` : '';
-    return `<div class="chips">${set.map((q, i) => `<button type="button" class="chip" data-act="quick" data-i="${i}">${esc(q.label)}</button>`).join('')}${persona}</div>`;
+    const brief = S.brief ? `<button type="button" class="chip" data-act="brief">${icon('doc')}고객 브리프</button>` : '';
+    return `<div class="chips">${set.map((q, i) => `<button type="button" class="chip" data-act="quick" data-i="${i}">${esc(q.label)}</button>`).join('')}${persona}${brief}</div>`;
   }
   function renderQuick() { const el = ref('quick'); if (el) el.innerHTML = quickHtml(); }
 
@@ -2175,6 +2189,38 @@
     });
   }
 
+  // 고객 브리프 (인사이트 파트 · 사람이 승인한 요약만). 원본 리뷰는 오지 않음. 고르면 입력창에 넣음 (자동 전송 안 함)
+  function briefModal() {
+    const b = S.brief;
+    if (!b) return;
+    const list = b.themes;
+    modal({
+      title: `고객 브리프 (인사이트 파트 · ${esc(b.month)})`,
+      body: `<p>리뷰 · 유튜브 질문을 주제로 묶어 사람이 승인한 요약이에요. 참고용이고, 만든 문구는 컴플라이언스 검토를 거쳐요. 고르면 입력창에 넣어 드려요 (자동 전송 안 함).</p>
+        <div class="cnt-persona-list">${list.map((t, i) => `<button type="button" class="choice" data-brief="${i}"><span><b>${esc(t.theme)}</b> ${badge(`신뢰도 ${t.confidence}`, t.confidence === '높음' ? 'green' : 'blue')}
+          <br><small>각도: ${esc(t.angle)}</small><br><small>말할 방향: ${esc(t.say)}</small>
+          ${t.avoid && t.avoid.length ? `<br><small class="muted">피할 말: ${esc(t.avoid.join(' · '))}</small>` : ''}
+          <br><small class="muted">근거: ${esc(t.evidence)}</small></span></button>`).join('')}</div>
+        <p class="small muted">모든 주제에서 피할 말: ${esc((b.avoid || []).join(' · '))}</p>`,
+      actions: [{ label: '닫기', value: null }],
+      onOpen: el => {
+        el.addEventListener('click', e => {
+          const btn = e.target.closest('[data-brief]');
+          if (!btn) return;
+          const t = list[+btn.dataset.brief];
+          const input = ref('input');
+          if (input && t) {
+            const avoid = [].concat(t.avoid || [], b.avoid || []);
+            input.value = `고객 브리프 '${t.theme}' 방향으로 만들어 줘. 각도: ${t.angle} / 말할 방향: ${t.say}${avoid.length ? ` / 피할 말: ${avoid.join(', ')}` : ''}`;
+          }
+          const close = el.closest('.modal-backdrop') && el.closest('.modal-backdrop').querySelector('[data-modal-close]');
+          if (close) close.click();
+          if (input) input.focus();
+        });
+      }
+    });
+  }
+
   /* ───────── 시트 AI 추천 (모달 · 고를 때만 적용) ───────── */
 
   function basisKey(s) {
@@ -2387,6 +2433,7 @@
           break;
         }
         case 'persona': personaModal(); break;
+        case 'brief': briefModal(); break;
         case 'answer': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = ''; inp.placeholder = b.dataset.q; inp.focus(); } break; }
         case 'pick-candidate': pickCandidate(b); break;
         case 'add-decision': if (S.camp) addDecisionModal(); break;
