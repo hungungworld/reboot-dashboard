@@ -1,6 +1,6 @@
 """컴플라이언스 AI 2차 판정 (Claude).
 
-규칙 판정(R1~R14)을 대신하지 않습니다. 당 함량 표현은 팀 결정(2026-10-24, R11·R12 끔)에 따라 AI도 판정하지 않습니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
+규칙 판정(R1~R15)을 대신하지 않습니다. 당 함량 표현은 팀 결정(2026-10-24, R11·R12 끔)에 따라 AI도 판정하지 않습니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
 '더 안전한 문장'을 참고용으로 받습니다. 최종 사용 여부는 담당자 승인으로 정합니다.
 
 Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽습니다. 로직은 원본(JUNHEE/server)과 같습니다.
@@ -19,16 +19,19 @@ VERDICTS = ["BLOCK", "REVISE", "COND", "REVIEW", "PASS"]
 MAX_TEXT = 2000
 
 SYSTEM = """You review English advertising copy for REBOOT (slogan "Restart Your Day"), a Korean after-party brand sold in the United States.
-The line-up is four conventional foods, not dietary supplements and not drugs: Reboot Jelly Original (stick jelly, individually wrapped sticks),
-Reboot Jelly Balance (a sugar-reduced stick jelly), Reboot Drink Original (a non-carbonated drink in small bottles, 6 per box) and Reboot Drink Balance (a sugar-reduced version of that drink).
-All four come in lime, cherry and lemon (flavors are tentative).
+The line-up is four conventional foods, not dietary supplements and not drugs: Reboot Jelly Original and Reboot Jelly Balance (individually wrapped gummy-type shaped jellies, not konjac — cowboy hat (cherry), lasso (lemon), boot (lime) — in one pouch; never a revolver shape),
+Reboot Drink Original and Reboot Drink Balance (a non-carbonated drink in a 100 ml glass flask bottle, sold single or as a 3-bottle box).
+Flavors: Jelly Original lime, lemon, cherry · Jelly Balance cherry, lime, lemon · Drink Original lemon, cherry, lime · Drink Balance lemon, lime, cherry.
+The two Balance products carry "Zero Sugar" on reference packaging (conditional: the final wording is pending the sugar-claim review); the brand uses no other sugar wording or numbers, and never the reference nutrition figures (about 43 kcal, about 10 g sugar per 100 ml).
+Shared ingredient: A-HAT (Hovenia dulcis extract with Lactobacillus fermentum, described as Aldicom's patented composition) plus Hovenia fruit; amounts are not provided and the patent scope is not verified.
+Pieces per pouch, ingredient amounts, nutrition facts, certifications, origin and allergens are not decided yet. No official event participation or partnership is confirmed.
 The request names which product the copy is for.
 
 Assess the copy the way a careful US food-advertising compliance reviewer would:
 - FDA: a conventional food must not claim to prevent, treat, cure or mitigate a disease or condition (a hangover claim reads as a drug claim); structure/function claims on a conventional food must come from the food's nutritive value; no implied medical or clinical authority.
 - FTC: every objective claim needs competent and reliable substantiation; testimonials, reviews and endorsements must be genuine and disclosed; no incentivised reviews; no claims that encourage excessive drinking.
 - Sugar-content wording (low sugar, zero sugar, less/reduced sugar, sugar free, no added sugar) is outside this review by team decision (rules R11-R12 are switched off): do not list it as an issue and do not let it change the verdict. Still judge any health or hangover claim in the same sentence as usual.
-- The team's own rules R1-R14 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
+- The team's own rules R1-R15 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
 
 Verdict scale (pick the strictest that applies):
 BLOCK = must not be used as written; REVISE = needs rewording; COND = acceptable only under a stated condition (channel, substantiation, disclosure); REVIEW = a human must judge; PASS = no issue found.
@@ -54,7 +57,7 @@ FEW_SHOT = """Worked examples (abbreviated output; follow the same reasoning, no
 4. Copy: "Post an honest review and we'll send a thank-you gift."
    -> REVISE. Not conditioned on a positive review, so not an outright FTC violation, but the incentive must be disclosed and many platforms (e.g. Amazon) prohibit it.
    issues: [{phrase: "send a thank-you gift", code: "R10", verdict: "REVISE", reason: "후기 대가는 표시가 필요하고 플랫폼 정책상 금지될 수 있음"}]
-5. Copy: "Each box has 10 individually wrapped lime jelly sticks."
+5. Copy: "A pouch of individually wrapped lime, lemon and cherry jellies."
    -> PASS. A verifiable product fact with no health, drinking or performance claim. issues: []"""
 
 SYSTEM_BASE = SYSTEM   # few-shot 없는 이전 버전 (prompt_experiment.py가 비교용으로 씀)

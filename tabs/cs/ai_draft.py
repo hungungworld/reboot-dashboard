@@ -26,7 +26,40 @@ RULES = """Hard rules (they override the persona):
 4. Health or side-effect inquiries (type C1, C2): first ask them to stop using the product and to contact a doctor (or emergency services if severe); do not give medical advice or say the product is safe for them.
 5. Do not offer discounts, free products or refunds in exchange for reviews or ratings.
 6. Keep the greeting with the customer's name and keep the sign-off of the current draft (brand name) unchanged.
-7. Be warm, polite and concise (about 80-180 words). Apologise once when appropriate, state the next step and when they will hear back (use a placeholder if the timing is unknown)."""
+7. Be warm, polite and concise (about 80-180 words). Apologise once when appropriate, state the next step and when they will hear back (use a placeholder if the timing is unknown).
+8. Do not repeat banned words even to deny them ("not FDA approved", "does not prevent hangovers" still fail the compliance re-check); say what the product is instead ("Reboot is a food, not a medicine").
+9. Never state nutrition numbers (calories, grams of sugar), pieces per pouch, ingredient amounts or patent claims, never describe a revolver or gun shape, and never imply an official event partnership. Use a placeholder if the customer asks."""
+
+# few-shot 예시 (2026-10-25 · 브랜드 가이드 v1.1 기준): 규칙만으로는 어떻게 써야 하는지 보여 주기 어려운 3가지
+# ① 부작용(C1) ② 'FDA 승인? 숙취?' 질문(C2) — 금지어를 부정문으로도 쓰지 않음 ③ 미정 정보(C6) — 봉지당 개수·열량은 [확인 필요]
+# 시연용 테스트 메일 6통·더미 문의 12건과 겹치지 않는 문장으로 씀 (시연이 예시를 외운 결과가 되지 않게 · 테스트로 확인)
+# 예시 답장은 CS 재점검(server_review)에서 PASS여야 함 (tabs/cs/tests/test_compliance_cs_api.py)
+FEW_SHOT_EXAMPLES = [
+    {"type": "C1",
+     "customer": "My son ate two of your jellies and now he has stomach cramps and a rash on his neck. What should we do?",
+     "reply": "Hi Jordan,\n\nThank you for letting us know, and I'm so sorry your son isn't feeling well. Please have him stop eating the jellies "
+              "and contact his doctor right away. If the symptoms get worse, please call emergency services.\n\n"
+              "When you can, please reply with the lot number printed on the pouch and where you bought it. Our quality team will "
+              "review this and get back to you within [확인 필요: 회신 기한].\n\nBest regards,\nReboot Customer Care",
+     "why": "Stop using + doctor first; no medical advice; asks for lot number; never says the product is safe."},
+    {"type": "C2",
+     "customer": "Is your drink approved by the government? Will it make me feel better the morning after a big night out?",
+     "reply": "Hi Priya,\n\nThanks for your question. Reboot Drink is a food, not a medicine, so we don't make any health or effect claims "
+              "about it. It's a non-carbonated drink in a 100 ml glass bottle, available in lemon, cherry and lime.\n\n"
+              "If you have a health condition or take medication, please check with your doctor before trying a new food or drink.\n\n"
+              "Best regards,\nReboot Customer Care",
+     "why": "Answers by saying what the product is; does not repeat the customer's claim words, even to deny them."},
+    {"type": "C6",
+     "customer": "How many jellies come in one pouch, and how many calories are in each one?",
+     "reply": "Hi Marcus,\n\nThanks for reaching out. Each pouch of Reboot Jelly Original holds individually wrapped jellies in lime, "
+              "lemon and cherry, shaped like a cowboy boot, a lasso and a cowboy hat. The number of jellies per pouch is "
+              "[확인 필요: 봉지당 개수], and the nutrition details are [확인 필요: 영양 정보 (라벨 확정 후)].\n\n"
+              "We'll follow up as soon as we can confirm them.\n\nBest regards,\nReboot Customer Care",
+     "why": "Uses only confirmed facts; undecided facts stay as placeholders, never guessed numbers."},
+]
+FEW_SHOT = "Examples of good replies (style and safety only; never copy their facts, names or wording into a reply):\n\n" + "\n\n".join(
+    f"Example {n} (type {e['type']})\nCustomer: {e['customer']}\nGood reply:\n{e['reply']}\nWhy: {e['why']}"
+    for n, e in enumerate(FEW_SHOT_EXAMPLES, 1))
 
 SCHEMA = {
     "type": "object",
@@ -94,6 +127,7 @@ def draft(persona, inquiry, current, facts=None, banned=None):
         {"type": "text", "text": "You write customer-service reply drafts for REBOOT as this persona (written in Korean):\n" + persona_text},
         {"type": "text", "text": RULES + "\n\nReturn `draft` (the full English email) and `notes_ko`: 1-4 short Korean notes for the human approver "
                                          "(what you changed, which placeholders remain, anything to check)."},
+        {"type": "text", "text": FEW_SHOT},
     ]
     client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=120.0)
     try:

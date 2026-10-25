@@ -136,6 +136,29 @@ def test_translation_cache_reuses_results(app, monkeypatch):
         assert translate.to_english("가")["cached"] is True and len(calls) == 3
 
 
+def test_translation_survives_cache_save_failure(app, monkeypatch):
+    """캐시 파일 저장이 실패해도(Windows 파일 잠금 등) 번역 결과는 정상 반환 · 메모리에는 남아 다시 부르지 않음."""
+    from tabs.compliance import translate
+    calls = []
+
+    def fake_call(system, content, schema, what):
+        calls.append(content)
+        lines = [json.loads(l) for l in content.split("\n")[1:]]
+        return {"items": [{"i": x["i"], "text": "EN:" + x["ko"], "note_ko": ""} for x in lines]}, "claude-test"
+
+    def locked(self, target):
+        raise PermissionError("[WinError 5] 액세스가 거부되었습니다")
+
+    monkeypatch.setattr(translate, "_call", fake_call)
+    monkeypatch.setattr(translate, "available", lambda: True)
+    monkeypatch.setattr(translate.time, "sleep", lambda s: None)
+    monkeypatch.setattr(Path, "replace", locked)
+    with app.app_context():
+        out = translate.to_english_batch(["라", "마"])
+        assert [x["text"] for x in out["items"]] == ["EN:라", "EN:마"]
+        assert translate.to_english_batch(["라"])["cached"] == 1 and len(calls) == 1
+
+
 def test_only_fda_urls_are_kept_or_fetched(app):
     """업로드 파일 속 임의 주소로 서버가 내부망을 읽지 않게 (SSRF 방지)."""
     ok = "https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/a-612345-10012026"
