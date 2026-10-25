@@ -10,6 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 
 RANK = {"PASS": 0, "COND": 1, "REVIEW": 2, "REVISE": 3, "BLOCK": 4}
+LIGHT_RANK = {"": 0, "green": 1, "yellow": 2, "red": 3}   # 법적 신호 (2026-10-25 · 브라우저 LIGHT_RANK와 같음)
 RULES_FILE = Path(__file__).parent / "server_rules.json"
 
 
@@ -35,10 +36,25 @@ def _mask(rule, src):
     return src
 
 
-def review(text, channel="cs"):
-    """{verdict, codes, hits}. 브라우저 review(text, {channel})와 같은 판정 (일반식품 · 제품 미지정)."""
+def products():
+    return json.loads(RULES_FILE.read_text(encoding="utf-8")).get("products", [])
+
+
+def review(text, channel="cs", product=""):
+    """{verdict, legal, codes, hits}. 브라우저 review(text, {channel, product})와 같은 판정 (일반식품).
+    product: 제품 id면 그 제품 기준(byProduct · 예: Original에 Zero Sugar → BLOCK) · "all"이면 4종 중 가장 엄격 (2026-10-25)"""
+    if product == "all":
+        res = [review(text, channel, p) for p in products()] or [review(text, channel)]
+        worst = max(res, key=lambda r: RANK[r["verdict"]])
+        codes = list(dict.fromkeys(c for r in res for c in r["codes"]))
+        hits = {}
+        for r in res:
+            for c, h in r["hits"].items():
+                hits.setdefault(c, h)
+        legal = max((r["legal"] for r in res), key=lambda x: LIGHT_RANK[x])
+        return {"verdict": worst["verdict"], "legal": legal, "codes": codes, "hits": hits}
     src = str(text or "").replace("*", " ")
-    verdict, codes, hits = "PASS", [], {}
+    verdict, legal, codes, hits = "PASS", "", [], {}
     for r in _rules():
         text = _mask(r, src)
         found = [m.group(0).strip() for rx in r["_re"] for m in rx.finditer(text)]
@@ -48,12 +64,23 @@ def review(text, channel="cs"):
         if not found and not compensated and not incentive:
             continue
         v = r["byChannel"].get(channel, r["verdict"])
+        if product and product in r.get("byProduct", {}):
+            v = r["byProduct"][product]
         if incentive and RANK.get(r.get("incentiveVerdict"), -1) > RANK[v]:
             v = r["incentiveVerdict"]
         if compensated:
             v = "BLOCK"
+        if v == "PASS":   # 이 제품에서는 괜찮은 표현 (예: Balance의 Zero Sugar · 브라우저와 같음)
+            continue
+        light = r.get("legal") or "yellow"
+        if product and product in r.get("legalByProduct", {}):
+            light = r["legalByProduct"][product]
+        if compensated and r.get("compensatedLegal"):
+            light = r["compensatedLegal"]
+        if LIGHT_RANK[light] > LIGHT_RANK[legal]:
+            legal = light
         codes.append(r["code"])
         hits[r["code"]] = found[:5] or ["(보상 조건 문구)" if compensated else "(후기 대가 문구)"]
         if RANK[v] > RANK[verdict]:
             verdict = v
-    return {"verdict": verdict, "codes": codes, "hits": hits}
+    return {"verdict": verdict, "legal": legal, "codes": codes, "hits": hits}

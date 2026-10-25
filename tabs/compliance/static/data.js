@@ -13,7 +13,7 @@
     pickChannels: ['b2c', 'b2b'],
 
     channels: {
-      b2c: 'B2C 광고·SNS·아마존 (Meta·Google·TikTok·Amazon 공통 기준)',
+      b2c: 'B2C 광고·SNS·아마존·올리브영 (Meta·Google·TikTok·Amazon·Olive Young US 공통 기준)',
       amazon: '아마존 상세페이지',
       cs: 'CS 답변',
       b2b: 'B2B 바이어 자료'
@@ -22,18 +22,29 @@
     // terms: 영어 표현 (대소문자·하이픈·띄어쓰기·복수형 차이를 함께 잡음)
     // ko: 한국어 표현 (포함 여부로 판정)
     // basis: official 공식 근거 · platform 광고 플랫폼 정책(Meta·Google 등) · internal 내부 정책 · context 문맥 검토
+    // legal: 법적 신호 (2026-10-25 · 판정과 별도) red 법 위반 — 근거 자료가 있어도 못 씀 · yellow 법무 확인 — 근거·조건·문맥에 따라 쓸 수 있음 · green 팀·플랫폼 기준 — 법 위반은 아님
+    //   legalNote 왜 그 신호인지 · legalByProduct 제품별 신호 · compensatedLegal 좋은 후기 조건 보상일 때 신호
     // law: 근거 조문 { agency, cite, note } — 화면 규칙 표 '근거 조문' 칸과 자세히 창에 표시
     // patterns: 단어 목록(terms)으로 못 잡는 문장 모양 (정규식 · 대소문자 무시)
     rules: [
       {
         code: 'R1', name: '질병·치료 클레임', verdict: 'BLOCK', basis: ['official', 'context'],
+        legal: 'red', legalNote: '일반식품에 질병 예방·치료 주장 = 미승인 의약품 (FD&C §201(g)). 근거 자료가 있어도 식품 광고에는 쓸 수 없음',
         terms: ['cure', 'prevent', 'prevention', 'relief', 'relieve', 'remedy', 'detox', 'detoxify', 'toxin', 'heal',
-          'alcohol withdrawal', 'withdrawal syndrome', 'intoxication', "alcohol's negative effects", 'negative effects of alcohol'],
-        ko: ['치료', '예방', '완화', '해독', '금단'],
+          'alcohol withdrawal', 'withdrawal syndrome', 'intoxication', "alcohol's negative effects", 'negative effects of alcohol',
+          'inflammation', 'anti-inflammatory'],   // 2026-10-25 경쟁 구미(건강기능식품) 효능 문구에서 놓친 것
+        ko: ['치료', '예방', '완화', '해독', '금단', '염증'],
         // 2026-10-24 (GPT 검토 ⑦): 금지 단어 없이 증상·혈중 알코올을 없앤다는 문장 · 술 깨게 한다는 문장
         patterns: [
-          "\\b(?:eliminat|reduc|stop|eas|eras|banish|fight|beat|cure|treat|lower|decreas|block|neutraliz)\\w*\\s+(?:the\\s+|your\\s+)?(?:nausea|headaches?|vomiting|dizziness|blood[\\s-]*alcohol|BAC|alcohol\\s+absorption|alcohol\\s+levels?|acetaldehyde|toxins?)\\b",
-          "\\bsobers?\\s+(?:you\\s+)?up\\b"
+          "\\b(?:eliminat|reduc|stop|eas|eras|banish|fight|beat|cure|treat|lower|decreas|block|neutraliz)\\w*\\s+(?:the\\s+|your\\s+)?(?:morning\\s+|next[\\s-]*day\\s+)?(?:nause?a|nausia|headaches?|vomiting|dizziness|bloating|blood[\\s-]*alcohol|BAC|alcohol\\s+absorption|alcohol\\s+levels?|acetaldehyde|toxins?)\\b",
+          "\\bsobers?\\s+(?:you\\s+)?up\\b",
+          // 2026-10-25 브랜드 가이드 v1.1 '피할 표현': 많이 마셔도 해결해 준다 = 음주 뒤 증상을 책임진다는 암시
+          "\\b(?:drink\\w*\\s+as\\s+much\\s+as\\s+you\\s+(?:want|like)|no\\s+matter\\s+how\\s+much\\s+you\\s+drink|however\\s+much\\s+you\\s+drink)[^.!?]{0,60}\\b(?:covered|got\\s+(?:you|your\\s+back)|fine|okay|solved?|fix\\w*|handle\\w*|take\\s+care)",
+          "(?:많이|얼마나|실컷|마음껏)\\s*마셔도[^.!?]{0,30}(?:해결|책임|걱정\\s*없|괜찮|끄떡없)",
+          // 2026-10-25 원료 문구: '술 마신 뒤 도와준다' · 'after-party care' = 음주 뒤 상태를 고친다는 암시
+          "\\b(?:help|helps|helping|support|supports|aid|aids|care|ease|eases)\\b[^.!?]{0,30}\\b(?:after|following)\\s+(?:drinking|a\\s+night\\s+out|a\\s+big\\s+night|alcohol|a\\s+party|partying)\\b",
+          "\\bafter[\\s-]*(?:party|drinking)\\s+care\\b",
+          "(?:음주|술자리|술\\s*마신)\\s*(?:후|뒤|다음)[^.!?]{0,15}(?:케어|관리|도움|챙겨)"
         ],
         // 질병 예방이 아닌 '보관·안전' 문맥의 prevent는 R1에서 뺌 (GPT 검토 ⑧)
         allow: ["\\bprevent(?:s|ed|ing)?\\s+(?:spoilage|melting|leaks?|leaking|freezing|sticking|clumping|damage|mold|contamination|choking)\\b"],
@@ -46,6 +57,7 @@
       },
       {
         code: 'R2', name: "'hangover' 직접 언급", verdict: 'BLOCK', basis: ['official', 'internal'],
+        legal: 'red', legalNote: "숙취 제품 광고에 'hangover'를 쓰면 숙취 예방·완화 용도로 읽힘 (2020 경고장 · 21 CFR 201.128 의도된 용도) → 법무 검토로도 풀기 어려움",
         terms: ['hangover', 'hang-over', 'morning after', 'hungover'],
         ko: ['숙취'],
         reason: "FDA 경고장은 숙취 예방·완화 주장을 의약품 표현으로 봄. 단순 언급까지 막는 것은 팀 기준. 'the morning after'는 미국에서 숙취를 뜻하는 관용 표현(피임약 'morning-after pill'도 연상)이라 같이 막음",
@@ -57,6 +69,7 @@
       },
       {
         code: 'R3', name: '안전성 보장·간 보호', verdict: 'BLOCK', basis: ['official', 'context'],
+        legal: 'red', legalNote: "간 손상 예방 = 질병 예방 주장 (FD&C §201(g)) · '부작용 없음·100% 안전'은 실증할 수 없는 보장",
         terms: ['protect your liver', 'protects your liver', 'protect the liver', 'protects the liver', 'liver protection', 'liver damage', 'liver detox',
           'no side effects', 'side-effect free', 'completely safe', '100% safe'],
         ko: ['간 보호', '간을 보호', '간을 지켜', '간 지킴', '간 해독', '간 손상', '부작용 없'],
@@ -69,8 +82,10 @@
       },
       {
         code: 'R4', name: '알코올 홍조·ALDH2', verdict: 'BLOCK', basis: ['official', 'platform', 'internal'],
+        legal: 'red', legalNote: '홍조·ALDH2를 줄인다는 주장 = 체질·질환 완화(의약품 표현) · 인종 체질 암시는 Meta 정책 위반',
         terms: ['asian glow', 'alcohol flush', 'drinking flush', 'face flush', 'flush reaction', 'flushing', 'ALDH2', 'red face'],
         ko: ['홍조', '얼굴 빨개'],
+        patterns: ["\\b(?:alcohol|drinking)\\W{1,3}flush"],   // 'Alcohol "Flush"'처럼 따옴표가 끼어도 (2026-10-25)
         reason: '홍조·ALDH2 결핍을 줄이거나 고친다는 주장은 체질·질환을 완화한다는 의약품 표현. 단순 언급까지 막는 것은 팀 기준',
         alt: '판매 문구에서 제외',
         law: [
@@ -81,8 +96,11 @@
       },
       {
         code: 'R5', name: '효과 보장·과장', verdict: 'REVISE', basis: ['official', 'context'],
-        terms: ['guarantee', 'clinically proven', 'proven to', '100%', 'works every time', 'instant results', 'miracle'],
-        ko: ['효과 보장', '확실한 효과', '기적'],
+        legal: 'yellow', legalNote: '사람 대상 시험 같은 과학적 근거가 있으면 쓸 수 있음 (FTC 실증) → 근거 자료와 함께 법무 확인',
+        terms: ['guarantee', 'clinically proven', 'proven to', '100%', 'works every time', 'instant results', 'miracle',
+          'No.1', 'No. 1', '#1', 'number one',   // 최상급 표현도 근거 필요 (2026-10-25)
+          'works fast', 'fast-acting', 'acts fast', 'works quickly'],
+        ko: ['효과 보장', '확실한 효과', '기적', '1위', '넘버원', '빠른 효과', '즉효'],
         reason: '효과 보장·과장은 FTC가 과학적 근거를 요구. 100% juice처럼 효과 주장이 아니면 문맥 검토',
         alt: '용량·포장·맛 같은 검증 가능한 사실',
         law: [
@@ -92,8 +110,10 @@
       },
       {
         code: 'R6', name: '음주 조장', verdict: 'REVISE', basis: ['platform', 'internal'],
-        terms: ['drink all night', 'party harder', 'drink more', 'keep drinking', 'drink without worry', 'outdrink'],
-        ko: ['더 마셔', '밤새 마셔', '마음껏 마셔'],
+        legal: 'green', legalNote: '식품 광고의 음주 조장을 직접 금지하는 FDA·FTC 조항은 없음 → 플랫폼 정책·팀 기준 (법무 검토 불필요 · 광고 거절 위험)',
+        terms: ['drink all night', 'party harder', 'drink more', 'keep drinking', 'drink without worry', 'outdrink',
+          'as much as you want', 'no matter how much you drink'],
+        ko: ['더 마셔', '밤새 마셔', '마음껏 마셔', '많이 마셔도', '실컷 마셔'],
         reason: '음주를 부추기는 표현 (팀 기준 · 브랜드·플랫폼 리스크)',
         alt: '음주량·음주 지속을 언급하지 않음',
         law: [
@@ -106,20 +126,44 @@
       },
       {
         code: 'R7', name: '의약품 오인', verdict: 'REVISE', basis: ['official', 'context'],
-        terms: ['hangover pill', 'pill', 'tablet', 'capsule', 'doctor-formulated', 'pharmacist-formulated', "nature's aspirin", 'aspirin', 'medicine', 'prescription'],
+        legal: 'yellow', legalNote: "약처럼 보이는 표현은 '의도된 용도'를 판단하는 요소 → 문맥에 따라 갈리므로 법무 확인",
+        terms: ['hangover pill', 'pill', 'tablet', 'capsule', 'doctor-formulated', 'pharmacist-formulated', "nature's aspirin", 'aspirin', 'medicine', 'prescription',
+          'trusted by pharmacists', 'pharmacist recommended', 'recommended by pharmacists'],   // 약사 권위 (2026-10-25 · 테스트 문구에서 PASS였음)
         ko: ['숙취약', '의약품', '알약', '처방'],
+        // 약이 '아니라'고 밝히는 문장은 R7에서 뺌 (2026-10-25 · CS 답장 "Reboot is a food, not a medicine."이 REVISE였음)
+        allow: ["\\bnot\\s+(?:a\\s+)?medicine\\b", "의약품이\\s*아(?:니|닙)"],
         reason: '약처럼 보이는 명칭·표현은 제품의 의도된 용도를 판단하는 요소가 될 수 있음',
-        alt: 'jelly stick, shot 등 식품 포맷 명칭',
+        alt: 'jelly, drink 등 식품 포맷 명칭',
         law: [
           { agency: 'FDA', cite: '21 CFR 201.128 (의도된 용도)', note: '라벨·광고·판매자 발언으로 의도된 용도를 판단 · 단어 하나로 확정하지 않음 (문맥)' }
         ]
       },
       {
         code: 'R8', name: '구조·기능 클레임', verdict: 'REVISE', basis: ['official', 'internal'],
+        legal: 'yellow', legalNote: '영양적 가치에서 나온 구조·기능 표현은 일반식품도 가능 → 영양 근거 자료와 함께 법무 확인',
         terms: ['supports liver health', 'liver health', 'liver function', 'alcohol metabolism', 'metabolize alcohol', 'metabolizes alcohol',
           'process alcohol', 'processes alcohol', 'break down alcohol', 'breaks down alcohol', 'supports healthy', 'boosts immunity',
-          'these statements have not been evaluated by the food and drug administration'],
-        ko: ['간 건강', '간 기능', '알코올 대사', '알코올 분해', '알코올을 분해', '면역력 강화'],
+          'these statements have not been evaluated by the food and drug administration',
+          // 2026-10-25 브랜드 가이드 v1.1: 피로·회복·몸 상태 리셋 · 장 건강 (리셋·리부트는 태도의 은유로만)
+          'fatigue', 'recovery', 'recover', 'recharge your body', 'recharge your energy', 'restore your energy', 'boost your energy',
+          'gut health', 'digestive health',
+          // 2026-10-25 경쟁 구미 효능 문구: 아세트알데히드 처리 · GABA · 붓기 · 술 마시기 전용
+          'acetaldehyde', 'GABA', 'brain fog', 'bloating', 'pre-alcohol', 'pre-drinking', 'pre-drink',
+          'liver support', 'liver care', 'support your liver', 'supports your liver', 'support the liver', 'supports the liver',
+          'liver'],   // 검토 반영 (2026-10-25): 'Good for your liver' · 'keeps your liver happy'처럼 일반어로 간을 말해도 구조·기능 암시
+        ko: ['간 건강', '간 기능', '알코올 대사', '알코올 분해', '알코올을 분해', '면역력 강화',
+          '피로', '회복', '컨디션 리셋', '컨디션 완벽', '몸을 리셋', '몸 리셋', '장 건강', '원기',
+          '간에 좋', '간을 위한', '간 케어', '음주 전', '음주 후', '음주 전후', '술 마시기 전', '술 마신 후', '술 마신 뒤'],
+        patterns: ["\\breset\\w*\\s+(?:your\\s+|the\\s+)?(?:body|system|liver|stomach|gut|condition)\\b", "\\b(?:condition|body|system)\\s+reset\\b",
+          // 2026-10-25: '다음 날 가뿐' 류 = 몸 상태가 좋아진다는 암시 (음주와 직접 이어지면 R1)
+          "\\b(?:feel|feels|felt|feeling|wake\\s+up|woke\\s+up|waking\\s+up)\\s+(?:feeling\\s+)?(?:fresh|great|fine|good|clear[\\s-]*headed|light)\\s+(?:the\\s+)?next\\s+(?:day|morning)\\b",
+          "\\b(?:wake|waking|woke)\\s+up\\s+(?:feeling\\s+)?(?:fresh|clear[\\s-]*headed|good\\s+as\\s+new)\\b",
+          // 'Wake up to a fresh, clear morning tomorrow' (2026-10-25 · 담당 시험 문장이 PASS였음)
+          "\\b(?:wake|waking|woke)\\s+up\\s+to\\s+(?:a\\s+|an\\s+)?(?:fresh|clear|bright|better|easy)[^.!?]{0,25}\\bmorning\\b",
+          "\\b(?:fresh|clear)[^.!?]{0,15}\\bmorning\\s+(?:tomorrow|after)\\b",
+          // 검토 반영 (2026-10-25): 음주 전후에 먹으라는 시점 안내 = 숙취 대비 용도 암시 ('Take before drinking' · 'after drinking')
+          "\\b(?:before|after|following|while)\\s+(?:drinking|you\\s+drink|alcohol)\\b",
+          "다음\\s*날[^.!?]{0,15}(?:가뿐|개운|상쾌|멀쩡|거뜬|쌩쌩)", "(?:가뿐|개운|멀쩡|거뜬|쌩쌩)한\\s*(?:다음\\s*날|아침)"],
         reason: '일반식품도 영양적 가치에 기반한 구조·기능 표현은 가능함. 근거 자료 확보 전까지 팀은 보수적으로 수정 처리 (보충제용 면책문구는 일반식품에 맞지 않음)',
         alt: '삭제 또는 영양 성분 사실만 (영양 근거가 있으면 규제 담당 검토 후 허용 여부 결정)',
         byCategory: { SUPPLEMENT: 'COND' },
@@ -131,7 +175,9 @@
       },
       {
         code: 'R9', name: '인체적용시험 인용', verdict: 'REVISE', basis: ['official', 'internal'],
-        terms: ['clinically tested', 'clinically studied', 'clinically shown', 'clinical study', 'clinical studies', 'clinical trial', 'human study', 'human trial', 'research shows', 'studies show'],
+        legal: 'yellow', legalNote: '말한 수준의 시험 근거가 있으면 가능 (FTC) → 시험 보고서와 함께 법무 확인 · B2C에서 삭제하는 것은 팀 기준',
+        terms: ['clinically tested', 'clinically studied', 'clinically shown', 'clinical study', 'clinical studies', 'clinical trial', 'human study', 'human trial', 'research shows', 'studies show',
+          'science-backed', 'backed by science', 'scientifically formulated', 'scientifically proven'],
         ko: ['임상', '인체적용시험', '인체 적용 시험'],
         reason: '임상·시험 인용은 FTC 실증 대상. B2C에서 삭제하는 것은 팀 기준',
         alt: 'B2C에서는 삭제, B2B 자료에서만 (근거 문서와 함께)',
@@ -143,6 +189,7 @@
       },
       {
         code: 'R10', name: '후기·리뷰', verdict: 'REVIEW', basis: ['official', 'platform', 'internal'],
+        legal: 'yellow', legalNote: '대가 관계 표시 등 조건을 지키면 후기를 쓸 수 있음 → 법무 확인 · 좋은 후기를 조건으로 한 보상은 16 CFR 465 위반(🔴)', compensatedLegal: 'red',
         terms: ['testimonial', '5-star', 'five-star', 'customer review', 'rated #1', 'top-rated'],
         ko: ['후기', '리뷰', '별점'],
         // 1인칭 사용 경험 문장 = 후기 (경고장은 후기 문구도 의도된 용도의 증거로 인용)
@@ -182,32 +229,44 @@
           '(리뷰|후기)[^.!?]{0,20}(쿠폰|적립|증정|할인|환불)[^.!?]{0,15}(않|없|안 )'
         ]
       },
-      // R11·R12: 저당 젤리·저당 음료 출시에 맞춘 당 함량 표시 규칙 (2026-10-23 초안)
-      // off: true → 판정에 쓰지 않음. 2026-10-23 담당(소준희) 결정: 당류 함량 표시는 점검하지 않음 (정할 것 #2).
-      // FDA 기준 자체는 그대로이므로 규칙 내용은 지우지 않고 남겨 둠 → 다시 쓰려면 off를 지움
+      // R11·R12: 당류 표시 규칙. 2026-10-23에는 제품 사실이 정해지지 않아 꺼 두었다가(off),
+      // 2026-10-25 브랜드 가이드 v1.1(Balance만 'Zero Sugar' · 조건부 · '저당'과 섞지 않음)이 나와 다시 켬 (담당 결정)
       {
-        code: 'R11', name: "정의 없는 당 표시 ('low sugar')", verdict: 'BLOCK', basis: ['official'], off: true,
-        terms: ['low sugar', 'low in sugar', 'lite sugar', 'light in sugar'],
-        ko: ['저당', '당이 낮은', '당 함량이 낮은'],
-        reason: "미국 FDA는 'low sugar'를 영양소 함량 강조 표시로 정의하지 않아 쓸 수 없음 (21 CFR 101.60(c)). 저당 제품이라도 영문 판매 문구에 'low sugar'를 쓰면 안 됨",
-        alt: '당 함량 수치로 표시: "[N] g of sugar per stick/bottle" · 저감률은 R12 기준 충족 시',
-        law: [{ agency: 'FDA', cite: '21 CFR 101.60(c)', note: "당류 함량 강조 표시 기준 · 'low sugar'는 정의된 표시가 아님" }]
+        code: 'R11', name: "가이드에 없는 당 표시 ('low sugar'·저당·reduced sugar)", verdict: 'BLOCK', basis: ['official', 'internal'],
+        legal: 'red', legalNote: "'low sugar'는 FDA 정의가 없는 표시이고 reduced·no added sugar는 비교·조건이 필요 (21 CFR 101.60(c)) · 가이드상 쓰지 않는 표현",
+        terms: ['low sugar', 'low in sugar', 'lite sugar', 'light in sugar', 'reduced sugar', 'less sugar', 'lower sugar', 'sugar-reduced',
+          'no added sugar', 'no sugar added', 'without added sugar'],
+        ko: ['저당', '당이 낮은', '당 함량이 낮은', '당류 저감', '당을 줄인', '당 줄인', '설탕 무첨가', '무가당'],
+        reason: "미국 FDA는 'low sugar'를 정의하지 않아 쓸 수 없고, reduced·less sugar는 기준 제품보다 25% 이상 적다는 비교·수치가, no added sugar는 별도 조건이 필요함 (21 CFR 101.60(c)). 브랜드 가이드 v1.1은 Balance에 'Zero Sugar'만 쓰고 '저당'과 섞어 쓰지 않음 → 이 표현들은 사용 불가",
+        alt: 'Balance 제품이면 "Zero Sugar"만 (조건부 · R12) · Original은 당 표현 없이 맛·포장 사실',
+        law: [
+          { agency: 'FDA', cite: '21 CFR 101.60(c)', note: "'low sugar'는 정의된 표시가 아님 · reduced/less sugar 25% 이상 저감 + 비교 대상 표시 · no added sugar 조건" },
+          { agency: '팀', cite: '브랜드 가이드 v1.1 9장·13장', note: "'저당'과 '제로슈가'를 섞어 쓰지 않음 · ZERO SUGAR는 Balance 두 제품만" }
+        ]
       },
       {
-        code: 'R12', name: '당 함량 강조 표시', verdict: 'COND', basis: ['official', 'context'], off: true,
-        terms: ['reduced sugar', 'less sugar', 'lower sugar', 'sugar free', 'zero sugar', 'no sugar', 'sugarless', 'no added sugar', 'without added sugar', 'sugar-reduced'],
-        ko: ['무설탕', '설탕 무첨가', '당류 저감', '당을 줄인', '제로 슈거', '당 줄인'],
-        reason: "reduced·less sugar는 기준 제품보다 당류 25% 이상 적고 비교 대상·수치를 함께 표시해야 함. sugar free는 1회 제공량당 0.5 g 미만, no added sugar는 별도 조건 (21 CFR 101.60(c)). 기준 충족을 확인한 저당 제품만 조건부, 일반 제품은 사용 불가",
-        alt: '"25% less sugar than our original jelly ([N] g vs [N] g per stick)" — 수치 확인 후 · 확인 전에는 당 함량 수치만',
-        byProduct: { jelly: 'BLOCK', drink: 'BLOCK' },
-        law: [{ agency: 'FDA', cite: '21 CFR 101.60(c)', note: 'sugar free 0.5 g 미만 · reduced/less sugar 25% 이상 저감 + 비교 대상 표시' }]
+        code: 'R12', name: "'Zero Sugar' 표시 (Balance만)", verdict: 'COND', basis: ['official', 'internal'],
+        legal: 'yellow', legalNote: 'Balance는 당 0.5 g 미만 + 저칼로리가 아니면 그 사실 표시 조건으로 가능 → 영양성분 시험 확인 · 당이 있는 Original·브랜드 전체에 쓰면 거짓 표시(🔴)', legalByProduct: { jelly: 'red', drink: 'red' },
+        terms: ['zero sugar', 'sugar free', 'no sugar', 'sugarless'],
+        ko: ['제로 슈거', '제로슈거', '제로 슈가', '제로슈가', '무설탕'],
+        allow: ["\\bno\\s+sugar\\s+alcohols?\\b"],   // '당알코올 없음'은 당 함량 주장이 아님
+        reason: "'Zero Sugar'(= sugar free)는 1회 제공량당 당류 0.5 g 미만이어야 하고, 저칼로리가 아니면 'Not a low calorie food' 같은 문구를 함께 표시해야 함 (21 CFR 101.60(c)(1)). Balance 두 제품만 · 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 → Balance는 사용 가능(PASS · 칼로리 값이 미정이라 저칼로리가 확인되기 전까지 'Not a low calorie food' 함께 표시), Original·브랜드 전체에는 사용 불가, 제품을 모르면 확인(COND). 표기는 'Zero Sugar'로 통일",
+        alt: 'Balance 제품 문구에서만 "Zero Sugar" (출시 전 영양성분 시험으로 당 0.5 g 미만 확인) · 수치(당 0 g·칼로리)는 쓰지 않음',
+        byProduct: { jelly: 'BLOCK', drink: 'BLOCK', 'jelly-ls': 'PASS', 'drink-ls': 'PASS' },   // 2026-10-25 담당 결정: Balance는 PASS
+        law: [
+          { agency: 'FDA', cite: '21 CFR 101.60(c)(1)', note: 'sugar free(= zero sugar) 1회 제공량당 0.5 g 미만 · 저칼로리 아니면 그 사실을 함께 표시' },
+          { agency: '팀', cite: '브랜드 가이드 v1.1 13장 02', note: 'ZERO SUGAR는 Balance 두 제품군만 · 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 (시험 성적서 보관)' }
+        ]
       },
       // R13: 성분을 내세우는 표현 (2026-10-24 추가). 함량을 표시하지 않기로 했으므로 성분 강조 문구는 사람이 한 번 봄
       {
         code: 'R13', name: '성분 강조·숙취 연상 성분', verdict: 'REVIEW', basis: ['official', 'context'],
-        terms: ['packed with', 'loaded with', 'rich in', 'high in', 'excellent source of', 'full of', 'powered by', 'dihydromyricetin', 'DHM'],
-        ko: ['듬뿍', '가득', '고함량', '풍부한'],
-        reason: "성분을 내세우면 미국에서 그 성분의 함량(%) 표시를 요구받을 수 있음. 'rich in·high in'은 영양소가 1일 기준치 20% 이상일 때만 쓰는 정해진 표현이라 헛개 같은 원료에는 쓸 수 없음. DHM은 2020 숙취 경고장이 숙취 예방 성분으로 인용한 이름",
+        legal: 'yellow', legalNote: "'rich in·high in'은 1일 기준치 20% 이상일 때만, 성분 강조는 함량(%) 표시 조건 (21 CFR 101.54·102.5) → 함량 자료와 함께 법무 확인",
+        terms: ['packed with', 'loaded with', 'rich in', 'high in', 'excellent source of', 'full of', 'powered by', 'dihydromyricetin', 'DHM',
+          // 2026-10-25 브랜드 가이드 v1.1: 공통 원료 A-HAT = 헛개 추출물 + 유산균(Lactobacillus fermentum) · 함량 미제공
+          'probiotic', 'probiotics', 'lactobacillus', 'live cultures', 'A-HAT'],
+        ko: ['듬뿍', '가득', '고함량', '풍부한', '유산균', '프로바이오틱'],
+        reason: "성분을 내세우면 미국에서 그 성분의 함량(%) 표시를 요구받을 수 있음. 'rich in·high in'은 영양소가 1일 기준치 20% 이상일 때만 쓰는 정해진 표현이라 헛개 같은 원료에는 쓸 수 없음. DHM은 2020 숙취 경고장이 숙취 예방 성분으로 인용한 이름. 유산균(프로바이오틱)은 '장 건강' 같은 효과로 읽히기 쉽고 함량(균 수) 자료가 없음 (브랜드 가이드 v1.1: A-HAT 함량 미제공)",
         alt: '"Contains Hovenia dulcis fruit extract."처럼 들어 있다는 사실만 · 함량을 내세우려면 함량 자료와 % 표시 준비',
         law: [
           { agency: 'FDA', cite: '21 CFR 102.5(b)', note: '성분 비율이 가격·소비자 선택에 영향을 주거나 실제보다 많이 든 것처럼 보이게 하면 제품명에 그 성분의 %를 넣어야 함' },
@@ -219,6 +278,7 @@
       // R14: 정부 승인·인증 주장 (2026-10-24 · GPT 검토 ⑦ 'FDA approved jelly'가 PASS였음)
       {
         code: 'R14', name: '정부 승인·인증 주장', verdict: 'BLOCK', basis: ['official'],
+        legal: 'red', legalNote: "FDA는 일반식품을 시판 전에 승인하지 않음 → 'FDA 승인·인증'은 사실이 아닌 표시 (FD&C §403(a)(1))",
         terms: ['FDA approved', 'FDA certified', 'FDA cleared', 'FDA endorsed', 'government approved'],
         ko: ['FDA 승인', 'FDA 인증', 'FDA 허가', 'FDA 공인'],
         patterns: ["\\b(?:approved|certified|cleared|endorsed|recommended)\\s+by\\s+(?:the\\s+)?(?:FDA|U\\.?S\\.?\\s+government|USDA|FTC)\\b"],
@@ -227,6 +287,29 @@
         law: [
           { agency: 'FDA', cite: 'FD&C Act §403(a)(1) · 21 U.S.C. 343(a)(1)', note: '라벨링이 거짓이거나 오해를 주면 부정표시(misbranded) 식품' },
           { agency: 'FTC', cite: 'FTC Act §5 · §12 (15 U.S.C. 45, 52)', note: '정부 승인처럼 보이게 하는 거짓·기만 광고 금지' }
+        ]
+      },
+      // R15: 브랜드 가이드 v1.1(2026-10) 사용 제한 — 미확정 정보·제품으로 소개하지 않는 것·행사 공식 참여 암시 (2026-10-25)
+      {
+        code: 'R15', name: '미확정 정보·공식 제휴 암시', verdict: 'REVIEW', basis: ['internal', 'official'],
+        legal: 'yellow', legalNote: '특허·인증(organic·gluten-free)·공식 제휴·영양 수치는 사실이면 쓸 수 있음 → 증빙(특허 번호·인증서·계약서·영양성분표)과 함께 확인',
+        terms: ['revolver', 'pistol', 'gun-shaped', 'official partner', 'official sponsor', 'official drink', 'official jelly', 'official snack',
+          'patented', 'patent', 'Coachella',
+          // 인증·시험 표시: 가이드상 인증 미정 → 사실(인증서·시험 성적)이 있을 때만 (2026-10-25)
+          'gluten-free', 'gluten free', 'non-GMO', 'GMO-free', 'organic', 'all natural', '100% natural', 'lab tested', 'third-party tested', '3rd party lab tested', 'kosher', 'halal'],
+        ko: ['리볼버', '권총', '공식 후원', '공식 파트너', '공식 음료', '공식 젤리', '특허', '코첼라', '글루텐 프리', '유기농', '무농약', '할랄'],
+        patterns: [
+          "\\b\\d+(?:\\.\\d+)?\\s*(?:kcal|calories|cals?)\\b",
+          "\\b\\d+(?:\\.\\d+)?\\s*(?:g|grams?|mg)\\s+(?:of\\s+)?(?:sugars?|carbs?|carbohydrates?|protein|fat|sodium|caffeine)\\b",
+          "\\b(?!10\\b)\\d+\\s+(?:jellies|pieces|pcs)\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:pouch|bag)\\b",   // 봉지당 10개는 확정 (2026-10-25 제품 최종 정보)
+          "\\d+(?:\\.\\d+)?\\s*(?:kcal|칼로리)", "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g"
+        ],
+        reason: '브랜드 가이드 v1.1 사용 제한: 참고 이미지의 영양 수치(Original 약 43 kcal · 당 약 10 g/100 ml)와 원료 함량·특허 범위는 확정되지 않았고, 리볼버 모양은 제품 구성으로 소개하지 않으며, 행사(코첼라 등) 공식 참여·제휴는 확정된 경우에만 씀 → 사람이 사실 여부 확인',
+        alt: '확정된 사실만: 맛 Lime·Lemon·Cherry · 젤리 모양 카우보이 모자·올가미·부츠 · 100 ml 비탄산 음료(낱개·3병 박스) · 개별 포장 젤리 한 봉지',
+        law: [
+          { agency: '팀', cite: '브랜드 가이드 v1.1 (2026-10) · 13장 모든 채널에서 지킬 기준', note: '참고 이미지 영양 수치 사용 금지 · 미정 정보(입수·함량·영양·효능)를 채우지 않음 · 리볼버 모양 제외 · 행사 공식 참여처럼 표현하지 않음' },
+          { agency: 'FTC', cite: 'FTC Act §5 (15 U.S.C. 45)', note: '행사 공식 후원·제휴처럼 보이게 하거나 사실과 다른 특허 주장은 기만 광고' },
+          { agency: 'FDA', cite: '21 CFR 101.9 · 101.13', note: '열량·당류 등 수치는 확정 영양성분표와 같아야 하고, 광고에 쓰면 영양소 함량 표시 규칙 대상' }
         ]
       }
     ],
@@ -237,14 +320,15 @@
     aiPersona: '미국 식품 광고 심의 패널. ① FDA·FTC 규제와 2020년 숙취 제품 경고장에 정통한 광고 규제 전문가 ② 숙취해소 식품의 성분·효능 표현 한계를 아는 제품 전문가 ③ 미국 20~30대 음주 문화와 SNS·아마존 반응을 아는 문화 전문가 ④ 미국 광고 카피 전문가. 미국 소비자가 읽는 뜻대로 보수적으로 판정하고, 브랜드 톤을 살린 안전한 대안을 낸다.',
 
     // 판매 제품 4종 (2026-10-23 팀 표 기준). 맛은 임시, 내부 제품명은 미정.
-    // sugarReduced: 기본 제품 대비 당류 저감 목표 (R12가 켜져 있을 때 당 강조 표시가 '조건부'까지 가능, 일반 제품은 BLOCK)
-    // 2026-10-23 팀 제품표 기준 (내부 제품명 · 맛은 임시 · 4종 모두 라임·체리·레몬)
+    // zeroSugar: 'Zero Sugar' 표기 제품 (Balance 2종 · 브랜드 가이드 v1.1: 조건부 — 당 표현 검토 후 출시 문구 확정) · 다른 당 표현·수치는 쓰지 않음
+    // 2026-10-25 브랜드 키트 기준으로 형태·맛·구성 수정 (예전: 스틱 젤리 · 6병 · 4종 같은 맛 임시)
     brand: { name: 'REBOOT', slogan: 'Restart Your Day', character: '리부 (Rebu)', cmSong: '니온 앤 리부', colors: '검정 & 네온' },
     products: [
-      { id: 'jelly', ko: '젤리', name: 'Reboot Jelly Original', form: '스틱 젤리', flavors: '라임·체리·레몬 (임시)', pack: '개별 포장 스틱 한 팩', sugarReduced: false },
-      { id: 'jelly-ls', ko: '저당 젤리', name: 'Reboot Jelly Balance', form: '스틱 젤리', flavors: '라임·체리·레몬 (임시)', pack: '개별 포장 스틱 한 팩', sugarReduced: true },
-      { id: 'drink', ko: '음료', name: 'Reboot Drink Original', form: '비탄산 음료', flavors: '라임·체리·레몬 (임시)', pack: '6병/박스 · 소형 병', sugarReduced: false },
-      { id: 'drink-ls', ko: '저당 음료', name: 'Reboot Drink Balance', form: '비탄산 음료', flavors: '라임·체리·레몬 (임시)', pack: '6병/박스 · 소형 병', sugarReduced: true }
+      // 브랜드 키트(tabs/content/data/brand_kit.json · 2026-10-24) 기준 · id는 다른 파트가 쓰므로 그대로
+      { id: 'jelly', ko: 'Original 젤리', name: 'Reboot Jelly Original', form: '개별 포장 모양 젤리 (카우보이 부츠·모자·올가미)', flavors: '라임·레몬·체리', pack: '한 봉지 (10개)', zeroSugar: false },
+      { id: 'jelly-ls', ko: 'Balance 젤리', name: 'Reboot Jelly Balance', form: '개별 포장 모양 젤리 (카우보이 부츠·모자·올가미)', flavors: '체리·라임·레몬', pack: '한 봉지 (10개)', zeroSugar: true },
+      { id: 'drink', ko: 'Original 음료', name: 'Reboot Drink Original', form: '비탄산 음료 · 100 ml 플라스크형 유리병', flavors: '레몬·체리·라임', pack: '1병 · 3병 박스', zeroSugar: false },
+      { id: 'drink-ls', ko: 'Balance 음료', name: 'Reboot Drink Balance', form: '비탄산 음료 · 100 ml 플라스크형 유리병', flavors: '레몬·라임·체리', pack: '1병 · 3병 박스', zeroSugar: true }
     ],
 
     // FDA 숙취 제품 경고장 원문 인용 문구 — 원문 그대로(대괄호·말줄임·굽은 따옴표 포함).
@@ -350,24 +434,35 @@
     ],
 
     // 모두 PASS여야 하는 문구
-    // 시연본 안전 문구 8개 이관 (2026-10-23). 'Low sugar. Pocket-sized. Made in Korea.'는
-    // 당 함량 규칙(R11·R12)을 끈 뒤(정할 것 #2 결정) PASS라 다시 넣음
+    // 시연본 안전 문구 이관 (2026-10-23) · 2026-10-25 브랜드 키트(10-24) 기준으로 제품 사실 수정:
+    // 젤리는 개별 포장 모양 젤리(봉지) · 음료는 100 ml 플라스크형 유리병(1병·3병 박스) · 당 표현은 'Zero Sugar'(Balance)만 →
+    // 'low sugar'·스틱·10개입·6병 문장은 뺐고, 한국 판매·인기 사실이 없는 문장(미국 전용 라인)은 삭제
     safePhrases: [
-      { text: 'Low sugar. Pocket-sized. Made in Korea.', kind: '시연본 안전 문구' },
+      { text: 'Pocket-sized.', kind: '시연본 안전 문구' },
       { text: 'Contains Hovenia dulcis extract.', kind: '오탐 확인' },
       { text: 'Before the first toast.', kind: '오탐 확인' },
       { text: 'Best served chilled.', kind: '오탐 확인' },
-      { text: '10 sticks per box.', kind: '오탐 확인' },
+      { text: 'Individually wrapped jellies.', kind: '오탐 확인' },
       { text: 'Restart Your Day.', kind: '브랜드 슬로건' },
-      { text: 'Lime, cherry and lemon jelly sticks.', kind: '제품 사실' },
-      { text: 'Non-carbonated lime, cherry and lemon drinks, 6 small bottles per box.', kind: '제품 사실' },
-      { text: "Korea's favorite after-party ritual.", kind: '안전 문구' },
-      { text: 'A grab-and-go jelly stick with a bright citrus flavor.', kind: '안전 문구' },
-      { text: 'Before the first toast, raise a different kind of glass.', kind: '안전 문구' },
-      { text: 'Own your morning.', kind: '안전 문구' },
-      { text: 'Loved in Korea, now in the U.S.', kind: '안전 문구' },
-      { text: '10 sticks per box, individually wrapped.', kind: '안전 문구' },
-      { text: 'Enjoy responsibly.', kind: '안전 문구' }
+      { text: 'Lime, lemon and cherry jellies.', kind: '제품 사실' },
+      { text: 'Non-carbonated drinks in 100 ml glass flask bottles, single or 3-bottle box.', kind: '제품 사실' },
+      { text: 'A grab-and-go jelly with a bright citrus flavor.', kind: '안전 문구' },
+      { text: 'Individually wrapped. Just tear and enjoy.', kind: '안전 문구' },
+      { text: 'Enjoy responsibly.', kind: '안전 문구' },
+      // 브랜드 가이드 v1.1 (2026-10) 10장 '바로 쓰는 브랜드 소개' · 9장 권장 표현
+      { text: 'Meet Reboot. Drinks and individually wrapped jellies with bold color, playful Western details, and three flavors to explore.', kind: '브랜드 가이드 문구' },
+      { text: 'Pick your flavor. Meet your Reboot.', kind: '브랜드 가이드 문구' },
+      { text: 'Explore Drinks / Explore Jellies / Meet Rebu', kind: '브랜드 가이드 문구' },
+      { text: '오늘의 다음 장면을, 나답게.', kind: '브랜드 가이드 문구' },
+      { text: '세 가지 맛. 오늘은 어떤 맛?', kind: '브랜드 가이드 문구' },
+      { text: '모자 챙겼어. 이제 네 차례야!', kind: '브랜드 가이드 문구' }
+    ],
+
+    // 규칙은 PASS지만 사람이 한 번 봐야 하는 문구 (2026-10-25 · 안전 문구에서 분리)
+    // 규칙 검증에서 'PASS인지'만 확인하고, 화면에는 안전 문구와 따로 보여 줌
+    humanReviewPhrases: [
+      { text: 'Before the first toast, raise a different kind of glass.', kind: '규칙 PASS · 사람 검토', note: '다음 날 회복·음주 직전 시점 암시 가능' },
+      { text: 'Own your morning.', kind: '규칙 PASS · 사람 검토', note: '다음 날 회복·음주 직전 시점 암시 가능' }
     ],
 
     // 판정 엔진 자체 점검용 예문 — FDA 경고장 원문이 아니라 팀이 만든 문장입니다.
@@ -377,22 +472,65 @@
       { text: 'Say goodbye to Asian glow.', expect: 'BLOCK' },
       { text: 'Guaranteed results every morning.', expect: 'REVISE' },
       { text: 'Drink all night, feel fine.', expect: 'REVISE' },
-      { text: 'Doctor-formulated jelly stick.', expect: 'REVISE' },
+      { text: 'Doctor-formulated jelly.', expect: 'REVISE' },
       { text: 'Supports liver health.', expect: 'REVISE' },
       { text: 'Supports liver health.', expect: 'COND', category: 'SUPPLEMENT' },
       { text: 'Clinically tested formula.', expect: 'REVISE' },
       { text: 'Clinically tested formula.', expect: 'REVIEW', channel: 'b2b' },
       { text: 'Read our 5-star testimonials.', expect: 'REVIEW' },
       { text: 'Get a free box for a 5-star review!', expect: 'BLOCK' },
-      { text: 'Mango flavor jelly stick, 10 sticks per box.', expect: 'PASS' },
+      { text: 'Lime flavor jelly shaped like a cowboy boot, in a 3-bottle box with our drinks.', expect: 'PASS' },
       { text: '숙취 해소에 좋은 젤리', expect: 'BLOCK' },
-      // 당 함량 규칙(R11·R12)은 꺼져 있으므로 당류 표시만 있는 문장은 PASS
-      { text: 'Low sugar lemon-lime jelly.', expect: 'PASS', product: 'jelly-ls' },
-      { text: 'Reduced sugar lemon-lime drink.', expect: 'PASS', product: 'drink-ls' },
-      { text: 'Reduced sugar lemon-lime drink.', expect: 'PASS', product: 'drink' },
-      { text: 'Sugar-free jelly sticks.', expect: 'PASS', product: 'jelly' },
-      { text: 'Zero sugar, less sugar, low sugar.', expect: 'PASS', product: 'drink-ls' },
-      { text: '저당 젤리로 가볍게', expect: 'PASS', product: 'jelly-ls' }
+      // 당류 규칙 R11·R12 (2026-10-25 다시 켬 · 브랜드 가이드 v1.1): Balance만 'Zero Sugar' 조건부, 나머지 당 표현은 사용 불가
+      { text: 'Low sugar lemon-lime jelly.', expect: 'BLOCK', product: 'jelly-ls' },
+      { text: 'Reduced sugar lemon-lime drink.', expect: 'BLOCK', product: 'drink-ls' },
+      { text: 'Reduced sugar lemon-lime drink.', expect: 'BLOCK', product: 'drink' },
+      { text: 'Sugar-free jellies.', expect: 'BLOCK', product: 'jelly' },
+      { text: 'Zero sugar, less sugar, low sugar.', expect: 'BLOCK', product: 'drink-ls' },
+      { text: '저당 젤리로 가볍게', expect: 'BLOCK', product: 'jelly-ls' },
+      { text: 'Zero Sugar cherry, lime and lemon jellies.', expect: 'PASS', product: 'jelly-ls' },
+      { text: 'Zero Sugar cherry, lime and lemon jellies.', expect: 'BLOCK', product: 'jelly' },
+      { text: 'Sweetened with allulose and stevia, no sugar alcohols.', expect: 'PASS', product: 'drink-ls' },
+      { text: 'Wake up to a fresh, clear morning tomorrow.', expect: 'REVISE' },
+      // 브랜드 가이드 v1.1 9장 '피할 표현' (2026-10-25 · 전에는 '피로와 숙취…'만 잡히고 나머지 3개는 PASS였음)
+      { text: '컨디션 완벽 리셋.', expect: 'REVISE' },
+      { text: '맛마다 다른 회복 효과.', expect: 'REVISE' },
+      { text: '피로와 숙취를 한 병으로 해결.', expect: 'BLOCK' },
+      { text: '많이 마셔도 리부가 해결해 줄게!', expect: 'BLOCK' },
+      { text: 'Drink as much as you want, Rebu has you covered!', expect: 'BLOCK' },
+      // 브랜드 가이드 13장 사용 제한 (R15 · 사람이 사실 확인)
+      { text: 'Only 43 kcal and 10g sugar per bottle.', expect: 'REVIEW' },
+      { text: 'Our revolver-shaped jelly.', expect: 'REVIEW' },
+      { text: 'Official partner of Coachella.', expect: 'REVIEW' },
+      // 원료 표 (2026-10-25): 확정 원료가 '들어 있다'는 사실은 PASS · 강조·효과·미확정·금지 성분은 계속 걸림
+      { text: 'Contains Hovenia dulcis fruit extract and Lactobacillus fermentum.', expect: 'PASS' },
+      { text: 'Made with A-HAT.', expect: 'PASS' },
+      { text: '헛개나무 열매와 유산균을 담은 A-HAT', expect: 'PASS' },
+      { text: '원재료: 헛개나무 열매 추출물, 유산균', expect: 'PASS' },
+      { text: 'Packed with A-HAT.', expect: 'REVIEW' },
+      { text: '헛개를 듬뿍 담은 젤리', expect: 'REVIEW' },
+      { text: 'Made with A-HAT to support liver health.', expect: 'REVISE' },
+      { text: 'Contains turmeric and ginger.', expect: 'REVIEW' },
+      { text: 'Made with milk thistle.', expect: 'REVIEW' },
+      { text: 'Hovenia dulcis has been used for centuries to help after drinking.', expect: 'BLOCK' },
+      { text: "Korea's No.1 ingredient for after-party care.", expect: 'BLOCK' },
+      { text: 'A-HAT 특허 성분으로 다음 날도 가뿐하게', expect: 'REVISE' },
+      // 경쟁 구미(미국 건강기능식품) 효능 문구 (2026-10-25 · 전에는 아래 PASS였음)
+      { text: 'Supports Processing of Acetaldehyde', expect: 'REVISE' },
+      { text: 'Reduces Alcohol "Flush"', expect: 'BLOCK' },
+      { text: 'Supports GABA Rebound', expect: 'REVISE' },
+      { text: 'Reduces Morning Nausia', expect: 'BLOCK' },
+      { text: 'Reduces Bloating & Inflammation', expect: 'BLOCK' },
+      { text: 'Pre-Alcohol Gummies', expect: 'REVISE' },
+      { text: 'Science-Backed Formula', expect: 'REVISE' },
+      { text: 'Gluten Free · Non GMO', expect: 'REVIEW' },
+      { text: 'Science-backed liver support.', expect: 'REVISE' },
+      // 파트 검토(2026-10-25)에서 CS 서버 검사를 통과하던 문장
+      { text: 'Good for your liver.', expect: 'REVISE' },
+      { text: 'Reboot keeps your liver happy.', expect: 'REVISE' },
+      { text: 'Take before drinking.', expect: 'REVISE' },
+      { text: 'Used in Korea for centuries after drinking.', expect: 'REVISE' },
+      { text: 'Reboot Jelly Original is Zero Sugar.', expect: 'BLOCK', product: 'jelly' }
     ],
 
     // 처음 보는 문장 시험 (2026-10-24) — 규칙을 만들 때 쓰지 않은 문장으로 '진짜 실력'을 잼.
@@ -430,18 +568,19 @@
       { text: '별점 5점 리뷰 남기시면 전액 환불해 드려요', expect: 'BLOCK', src: 'new', note: '좋은 후기를 조건으로 한 보상' }
     ],
 
-    // 일괄 심의 시연용 더미 문구 20개 (2026-10-24 · 팀이 지어낸 아마존·SNS 광고 문장, 실제 광고 아님)
+    // 일괄 심의 시연용 더미 문구 30개 (2026-10-24 · 2026-10-25 30개로 · 팀이 지어낸 아마존·SNS 광고 문장, 실제 광고 아님)
+    // 판정별 6개씩: BLOCK 6 · REVISE 6 · COND 6 · REVIEW 6 · PASS 6
+    // category: 'SUPPLEMENT' = 건강기능식품 기준 비교 (우리 제품은 일반식품 · 같은 문장이 건강기능식품이라면 '조건부'가 되는 예) · 없으면 일반식품
     // ko: 마케터가 쓰는 한국어 문구 (화면 더미는 이걸 올림 → 서버 Claude가 영어로 번역 → 영어·한국어 둘 다 점검)
     // channel·product: 줄마다 다른 채널·제품 ('all' = 전체) · copy: 예시 영어 번역 (번역을 못 할 때 · 규칙 확인용)
     // expect: copy(영어)를 그 줄의 채널·제품으로 점검했을 때의 예상 판정
     batchSample: [
-      { ko: '리부트 젤리 오리지널: 라임·체리·레몬 맛 젤리 스틱 10개입', channel: 'amazon', product: 'jelly', copy: 'Reboot Jelly Original: lime, cherry and lemon jelly sticks, 10 per box.', expect: 'PASS', note: '제품 사실' },
-      { ko: '가방에 쏙 넣어 다니는 개별 포장 젤리 스틱', channel: 'b2c', product: 'jelly', copy: 'Individually wrapped jelly sticks you can toss in your bag.', expect: 'PASS', note: '포장 사실' },
-      { ko: '메이드 인 코리아. 밤을 즐기는 사람들이 사랑하는 맛', channel: 'b2c', product: 'all', copy: 'Made in Korea. Loved by night owls everywhere.', expect: 'PASS', note: '원산지·분위기' },
+      { ko: '리부트 젤리 오리지널: 라임·레몬·체리 맛 모양 젤리를 하나씩 포장한 한 봉지', channel: 'amazon', product: 'jelly', copy: 'Reboot Jelly Original: lime, lemon and cherry shaped jellies, individually wrapped, in one pouch.', expect: 'PASS', note: '제품 사실' },
+      { ko: '가방에 쏙 넣어 다니는 개별 포장 젤리', channel: 'b2c', product: 'jelly', copy: 'Individually wrapped jellies you can toss in your bag.', expect: 'PASS', note: '포장 사실' },
       { ko: '헛개나무 열매 추출물 함유', channel: 'amazon', product: 'all', copy: 'Contains Hovenia dulcis fruit extract.', expect: 'PASS', note: '성분 사실만' },
-      { ko: '상큼한 시트러스 젤리 스틱으로 Restart Your Day', channel: 'b2c', product: 'jelly-ls', copy: 'Restart Your Day with a bright citrus jelly stick.', expect: 'PASS', note: '슬로건' },
+      { ko: '상큼한 시트러스 젤리로 Restart Your Day', channel: 'b2c', product: 'jelly-ls', copy: 'Restart Your Day with a bright citrus jelly.', expect: 'PASS', note: '슬로건' },
       { ko: '리부트 드링크 밸런스: 작은 병에 담은 비탄산 레몬 음료', channel: 'amazon', product: 'drink-ls', copy: 'Reboot Drink Balance: a non-carbonated lemon drink in a small bottle.', expect: 'PASS', note: '제품 사실' },
-      { ko: '젤리 스틱 하나로 숙취와 작별하세요', channel: 'all', product: 'all', copy: 'Say goodbye to hangovers with one jelly stick.', expect: 'BLOCK', note: 'R2 숙취' },
+      { ko: '젤리 하나로 숙취와 작별하세요', channel: 'all', product: 'all', copy: 'Say goodbye to hangovers with one jelly.', expect: 'BLOCK', note: 'R2 숙취' },
       { ko: '파티 전에 간을 보호하세요', channel: 'b2c', product: 'jelly', copy: 'Protects your liver before the party.', expect: 'BLOCK', note: 'R3 간 보호' },
       { ko: '헛개나무, 한국 전통 숙취 해소제', channel: 'amazon', product: 'all', copy: "Hovenia dulcis, Korea's traditional hangover cure.", expect: 'BLOCK', note: 'R1 치료 · R2' },
       { ko: '술자리 홍조는 이제 그만', channel: 'b2c', product: 'drink', copy: 'No more Asian glow at the bar.', expect: 'BLOCK', note: 'R4 홍조' },
@@ -449,12 +588,23 @@
       { ko: '임상으로 연구한 한국 포뮬러', channel: 'b2b', product: 'all', copy: 'Clinically studied Korean formula.', expect: 'REVIEW', note: 'R9 임상 · B2B 자료라 검토 필요 (B2C면 수정 필요)' },
       { ko: '매번 효과 보장', channel: 'amazon', product: 'jelly', copy: 'Guaranteed to work every time.', expect: 'REVISE', note: 'R5 효과 보장' },
       { ko: '밤새 마셔도 아침엔 거뜬하게', channel: 'b2c', product: 'drink', copy: 'Drink all night, wake up ready.', expect: 'REVISE', note: 'R6 음주 조장' },
-      { ko: '의사가 처방하듯 만든 파티용 젤리 스틱', channel: 'b2c', product: 'jelly', copy: 'Doctor-formulated jelly stick for party lovers.', expect: 'REVISE', note: 'R7 의약품 오인' },
+      { ko: '의사가 처방하듯 만든 파티용 젤리', channel: 'b2c', product: 'jelly', copy: 'Doctor-formulated jelly for party lovers.', expect: 'REVISE', note: 'R7 의약품 오인' },
       { ko: '몸이 알코올 분해를 더 빨리 하도록 도와줘요', channel: 'all', product: 'all', copy: 'Helps your body process alcohol faster.', expect: 'REVISE', note: 'R8 알코올 분해' },
       { ko: '헛개나무 추출물 듬뿍', channel: 'amazon', product: 'jelly-ls', copy: 'Packed with Hovenia dulcis extract.', expect: 'REVIEW', note: 'R13 성분 강조' },
       { ko: '한국산 DHM 파워', channel: 'b2c', product: 'all', copy: 'Powered by DHM from Korea.', expect: 'REVIEW', note: 'R13 숙취 연상 성분' },
       { ko: '고객들이 계속 별점 5개 후기를 남기는 이유', channel: 'cs', product: 'all', copy: 'See why our customers keep leaving 5-star reviews.', expect: 'REVIEW', note: 'R10 후기' },
-      { ko: '생일 저녁 먹고 나서 먹어 봤는데 다음 날 아침 정말 개운했어요', channel: 'b2c', product: 'drink-ls', copy: 'I tried it after my birthday dinner and felt great the next morning.', expect: 'REVIEW', note: 'R10 1인칭 후기' }
+      { ko: '생일 파티에서 먹어 봤는데 친구들이 다들 맛있대요 (구매 후기)', channel: 'b2c', product: 'drink-ls', copy: 'I tried it at my birthday party and everyone loved the flavors.', expect: 'REVIEW', note: "R10 1인칭 후기 (2026-10-25: '다음 날 아침 개운'은 R8 암시라 문장 교체)" },
+      { ko: 'FDA 승인 받은 파티 젤리', channel: 'b2c', product: 'jelly', copy: 'FDA approved jelly for your night out.', expect: 'BLOCK', note: 'R14 정부 승인 주장' },
+      { ko: '후기를 남기면 감사 선물을 증정해요', channel: 'amazon', product: 'all', copy: 'Leave a review and get a thank-you gift.', expect: 'REVISE', note: 'R10 조건 없는 후기 보상 · 대가 표시 필요' },
+      { ko: '파티용 알약 대신 젤리', channel: 'b2c', product: 'jelly', copy: 'Your party pill, now in a jelly.', expect: 'REVISE', note: 'R7 의약품 오인' },
+      { ko: '리부트 드링크 오리지널: 100ml 유리병에 담은 비탄산 음료, 레몬·체리·라임 맛', channel: 'amazon', product: 'drink', copy: 'Reboot Drink Original: a non-carbonated drink in a 100 ml glass bottle, in lemon, cherry and lime.', expect: 'PASS', note: '제품 사실 (브랜드 키트)' },
+      { ko: '임상 시험한 원료, 바이어용 자료 제공', channel: 'b2b', product: 'all', copy: 'Clinically tested ingredients, data available for buyers.', expect: 'REVIEW', note: 'R9 임상 · B2B 자료라 검토 필요' },
+      { ko: '간 건강을 돕는 헛개나무', channel: 'amazon', product: 'jelly-ls', category: 'SUPPLEMENT', copy: 'Supports liver health with Hovenia dulcis.', expect: 'COND', note: 'R8 구조·기능 · 건강기능식품 기준 비교 (일반식품이면 수정 필요)' },
+      { ko: '정상적인 알코올 대사를 도와요', channel: 'b2c', product: 'drink', category: 'SUPPLEMENT', copy: 'Supports normal alcohol metabolism.', expect: 'COND', note: 'R8 구조·기능 · 건강기능식품 기준 비교' },
+      { ko: '간 기능을 위한 데일리 루틴', channel: 'b2c', product: 'drink-ls', category: 'SUPPLEMENT', copy: 'A daily routine for healthy liver function.', expect: 'COND', note: 'R8 구조·기능 · 건강기능식품 기준 비교' },
+      { ko: '젤리 하나로 면역력 강화', channel: 'b2c', product: 'jelly', category: 'SUPPLEMENT', copy: 'Boosts immunity with every jelly.', expect: 'COND', note: 'R8 구조·기능 · 건강기능식품 기준 비교' },
+      { ko: '아침까지 간 건강을 챙겨요', channel: 'amazon', product: 'drink', category: 'SUPPLEMENT', copy: 'Supports liver health through the morning.', expect: 'COND', note: 'R8 구조·기능 · 건강기능식품 기준 비교' },
+      { ko: '알코올 분해를 도와요', channel: 'b2c', product: 'jelly', category: 'SUPPLEMENT', copy: 'Helps break down alcohol.', expect: 'COND', note: 'R8 구조·기능 · 건강기능식품 기준 비교 (일반식품이면 수정 필요)' }
     ],
 
     // 한국 표현 → 미국 대안 20쌍 (R1~R12 기준). reviewer·reviewedAt은 규제 담당 검토 후 기록합니다.
@@ -467,23 +617,23 @@
       { ko: '숙취 해소', us: 'After-Party · Reset · Refresh', code: 'R2', reviewer: '', reviewedAt: '', note: "'Morning-After'는 미국에서 숙취·사후 피임약을 떠올려 쓰지 않음 (2026-10-24)" },
       { ko: '숙취 예방', us: 'Before the first toast.', code: 'R1', reviewer: '', reviewedAt: '', note: '예방·치료 효과 대신 섭취 시점만 말함' },
       { ko: '숙취 없는 아침', us: 'Start your morning fresh.', code: 'R2', reviewer: '', reviewedAt: '', note: '음주 이미지·해시태그와 함께 쓰지 않음 (AI 2차 판정 REVIEW 사례)' },
-      { ko: '숙취해소제 · 숙취약', us: 'Korean after-party jelly stick', code: 'R7', reviewer: '', reviewedAt: '', note: '약이 아닌 식품 포맷 명칭' },
+      { ko: '숙취해소제 · 숙취약', us: 'Korean after-party jelly', code: 'R7', reviewer: '', reviewedAt: '', note: '약이 아닌 식품 포맷 명칭' },
       { ko: '음주 전 섭취', us: "Korea's pre-toast ritual", code: '—', reviewer: '', reviewedAt: '', note: '정할 것 #1 (before drinking 차단 여부)' },
       { ko: '해독 · 디톡스', us: 'Light, fresh-tasting jelly', code: 'R1', reviewer: '', reviewedAt: '' },
       { ko: '피로 회복', us: 'A refreshing treat for your morning routine', code: 'R1', reviewer: '', reviewedAt: '', note: '몸 상태 개선 대신 맛·습관' },
       { ko: '간 보호', us: '삭제 · 라벨 확인 + 전문가 상담 안내', code: 'R3', reviewer: '', reviewedAt: '' },
       { ko: '부작용 없음 · 100% 안전', us: '삭제 · 알레르기 성분과 섭취 방법을 라벨대로 안내', code: 'R3', reviewer: '', reviewedAt: '' },
       { ko: '얼굴 빨개짐(홍조) 개선', us: '판매 문구에서 제외', code: 'R4', reviewer: '', reviewedAt: '' },
-      { ko: '효과 100% 보장', us: '10 sticks per box, individually wrapped.', code: 'R5', reviewer: '', reviewedAt: '', note: '효과 대신 검증 가능한 사실' },
-      { ko: '즉각적인 효과', us: 'Ready to go: just tear and squeeze.', code: 'R5', reviewer: '', reviewedAt: '', note: '빠른 효과 대신 간편한 포맷' },
-      { ko: '기적의 젤리', us: 'Our signature Korean jelly stick', code: 'R5', reviewer: '', reviewedAt: '' },
+      { ko: '효과 100% 보장', us: 'Individually wrapped. Just tear and enjoy.', code: 'R5', reviewer: '', reviewedAt: '', note: '효과 대신 검증 가능한 사실' },
+      { ko: '즉각적인 효과', us: 'Ready to go: just tear and enjoy.', code: 'R5', reviewer: '', reviewedAt: '', note: '빠른 효과 대신 간편한 포맷' },
+      { ko: '기적의 젤리', us: 'Our signature Korean jelly', code: 'R5', reviewer: '', reviewedAt: '' },
       { ko: '마음껏 마셔도 OK', us: 'Part of the Korean after-party tradition', code: 'R6', reviewer: '', reviewedAt: '', note: '음주량·지속 언급 없이 문화로' },
       { ko: '의사가 개발한', us: 'Crafted in Korea', code: 'R7', reviewer: '', reviewedAt: '', note: '전문가 권위 대신 원산지 (사실 확인 후)' },
       { ko: '알코올 분해', us: 'Contains Hovenia dulcis extract.', code: 'R8', reviewer: '', reviewedAt: '', note: '기능 대신 성분 사실만' },
       { ko: '간 건강에 좋은', us: 'Made with Hovenia dulcis (oriental raisin tree) extract', code: 'R8', reviewer: '', reviewedAt: '' },
       { ko: '임상으로 입증', us: 'B2C에서는 삭제 · B2B 자료에서만 근거 문서와 함께', code: 'R9', reviewer: '', reviewedAt: '' },
       { ko: '리뷰 쓰면 증정', us: 'Tell us what you think.', code: 'R10', reviewer: '', reviewedAt: '', note: '후기에 대가를 걸지 않음 · 대가가 있으면 관계 표시' },
-      { ko: '저당 (저당 젤리·저당 음료)', us: 'Contains [확인 필요: 당 함량] g of sugar per stick.', code: 'R11', reviewer: '', reviewedAt: '', note: "미국에는 'low sugar' 정의 없음 → 수치로 표시 · 음료는 per bottle · 25% 이상 저감 확인 시 R12 비교 표시 가능" }
+      { ko: 'Zero Sugar (Balance 2종)', us: 'Zero Sugar', code: 'R12', expect: 'COND', reviewer: '', reviewedAt: '', note: 'Jelly·Drink Balance에만 · Original과 브랜드 전체에는 당 표현 없음 · 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 · Balance 제품 기준 PASS · "저당"과 섞어 쓰지 않음 · 라벨·광고 전 21 CFR 101.60 사람 확인' }
     ],
 
     // '기관 안내' 탭: 미국 규제 기관 4곳을 쉬운 말로 요약 (2026-10-23 작성 · 참고용, 공식 사이트로 확인)
@@ -500,12 +650,11 @@
         forUs: [
           '"숙취 예방·해소"처럼 몸의 문제를 고친다는 표현을 쓰면 식품이 아니라 승인받지 않은 의약품으로 볼 수 있습니다 (2020년 숙취 제품 경고장 7건).',
           '영어 라벨(영양성분표·성분·알레르기)과 당 함량 표시 규칙을 지켜야 합니다. 미국에는 "Low sugar" 표시 기준이 없습니다.',
-          '젤리는 질식 위험 젤리 단속(수입 경보 33-15) 대상이 될 수 있습니다.',
-          '수출 전에 식품시설 등록, 선적할 때마다 사전 수입 신고(Prior Notice)가 필요합니다.',
+          '수출 전에 식품시설 등록, 선적할 때마다 사전 수입 신고(Prior Notice)가 필요합니다. 금액과 상관없이 모든 식품이 대상입니다 (FDA 규제 품목 소액 면세 폐지 2025-07-09).',
           '심각한 부작용이 생기면 Reportable Food Registry 보고 대상인지 판단해야 합니다 (CS → 부작용 접수).'
         ],
         risk: '경고장 · 통관 보류·수입 거부 · 리콜',
-        bad: 'Prevents hangovers.', good: 'A Korean after-party ritual in a jelly stick.',
+        bad: 'Prevents hangovers.', good: 'Part of the Korean after-party tradition.',
         rules: 'R1 · R2 · R3 · R4 · R7 · R8',
         goto: [['rules', '관련 규칙 보기'], ['monitor', 'openFDA 리콜 조회']],
         url: 'https://www.fda.gov/'
@@ -524,9 +673,9 @@
           '"별 5개 리뷰를 쓰면 할인"처럼 좋은 후기를 조건으로 보상하는 이벤트는 하면 안 됩니다.'
         ],
         risk: '시정 명령 · 민사 제재금 · 소비자 환불 명령',
-        bad: 'Get a free box for a 5-star review!', good: 'Mango flavor jelly stick, 10 sticks per box.',
+        bad: 'Get a free box for a 5-star review!', good: 'Cherry, lemon and lime jellies, individually wrapped.',
         rules: 'R5 · R9 · R10',
-        goto: [['rules', '관련 규칙 보기'], ['single', '문구 점검하기']],
+        goto: [['rules', '관련 규칙 보기'], ['single', '단건 심의로 가기']],
         url: 'https://www.ftc.gov/'
       },
       {
@@ -538,7 +687,7 @@
           'FDA 같은 다른 기관의 수입 요건도 국경에서 함께 확인합니다.'
         ],
         forUs: [
-          '젤리 스틱의 HS 코드는 고르는 것이 아니라 제품의 실제 형태·성분으로 정해집니다 (예상 2106.90.99 · README 7장).',
+          '젤리의 HS 코드는 고르는 것이 아니라 제품의 실제 형태·성분으로 정해집니다 (예상 2106.90.99 · README 7장).',
           '잘못된 코드로 신고하면 벌금이나 추가 관세를 낼 수 있습니다.',
           '애매하면 사전 품목분류 결정(binding ruling)을 받아 두고, 비슷한 결정은 CBP CROSS에서 검색합니다.',
           '수입품에는 원산지 표시(Made in Korea)가 필요합니다.'
@@ -607,6 +756,20 @@
         ],
         risk: '상품 비활성화 · 판매 계정 경고', rules: 'R1 · R2 · R3 · R13',
         url: 'https://sellercentral.amazon.com/help/hub/reference/external/G200164330'
+      },
+      // 2026-10-25 추가: Olive Young Global은 2026-05-29부터 미국 배송 중단 → 미국 판매는 별도 법인 Olive Young US
+      // (us.oliveyoung.com · LA 매장 Pasadena·Century City, 영양제·간식 코너 있음). 입점 요구 서류는 공개되지 않아 알디콤 입점 담당에게 받아야 함
+      {
+        code: 'Olive Young', ko: '올리브영 US (온라인 · LA 매장)', icon: '🫒',
+        oneLine: '미국 판매는 Olive Young US(us.oliveyoung.com)와 캘리포니아 매장입니다. Global 사이트는 2026-05-29부터 미국으로 배송하지 않습니다.',
+        forUs: [
+          "상품명·상세 문구도 같은 기준입니다. Global에 올라간 'Hangover Helper'·'Hangover Cure Stick' 같은 이름은 우리 규칙에서 상품명 자체가 BLOCK(R1·R2)이라, 같은 이름으로 US에 올리면 안 됩니다.",
+          '올리브영은 별점과 상관없이 후기에 포인트를 줍니다(텍스트·사진 후기 적립). 이건 플랫폼 제도라 괜찮지만, 브랜드가 따로 "좋은 후기 쓰면 선물"을 붙이면 R10 위반입니다.',
+          '매장이 캘리포니아에 있어 Prop 65(납 등 경고 문구) 대상이 될 수 있습니다. 2026년에도 수입 간식 판매점까지 함께 통지받은 사례가 많습니다 (규제 모니터링 바로가기에서 확인).',
+          '입점 서류(식품시설 등록 · 영문 라벨 · 제조물 책임보험 증명 등)는 공개 자료가 없습니다 → 알디콤 입점 담당에게 받아 확인.'
+        ],
+        risk: '상품 등록 거절 · 판매 중단 · 매장(캘리포니아) Prop 65 통지', rules: 'R1 · R2 · R10 · R15',
+        url: 'https://us.oliveyoung.com/'
       }
     ],
 
@@ -623,19 +786,23 @@
         gives: '목록 · 거부 사유 뜻(FDA 공식 코드표로 풀어 씀) → 라벨·통관 준비 참고' },
       { id: 'openfda-food-recalls', range: '최근 1년 · 검색어 3개 × 30건 → 최대 40건', agency: 'FDA', name: '식품 리콜', via: 'openFDA API (FDA 공개 데이터 · food/enforcement)', modes: ['auto'],
         key: '없음 (막히면 OPENFDA_API_KEY)',
-        gets: '젤리·곤약·숙취 + 한국산 음료 + 헛개 관련 식품 리콜 (제품 · 회사 · 리콜 등급 · 사유)',
+        gets: '젤리(구미)·숙취 + 한국산 음료 + 헛개 관련 식품 리콜 (제품 · 회사 · 리콜 등급 · 사유)',
         gives: '목록 · 한글 요약 → 비슷한 제품이 왜 리콜됐는지 참고' },
       { id: 'regulations-gov', range: '최근 1년 · 최대 30건 (FDA는 식품·표시 관련 제목만)', agency: 'FDA·FTC', name: '규칙 · 규칙안', via: 'Regulations.gov API', modes: ['auto'],
         key: 'REGULATIONS_GOV_API_KEY',
         gets: 'FDA(식품·표시·광고 관련)와 FTC가 낸 규칙·규칙안 (의견 접수 마감일)',
-        gives: '목록 · 한글 요약 → 규칙 R1~R14를 고칠지 검토' },
+        gives: '목록 · 한글 요약 → 규칙 R1~R15를 고칠지 검토' },
       { id: 'federal-register', range: '최근 1년 · 기관별 40건 중 최대 30건 (FDA는 식품 관련 제목만)', agency: 'FDA·FTC', name: '관보 공고', via: 'Federal Register API', modes: ['auto'],
         key: '없음',
         gets: 'FTC 전체 공고 + FDA 식품 관련 공고 (제목 · 요약 · 종류)',
         gives: '목록 · 한글 요약 → 단속·지침 변화 확인' },
+      { id: 'fda-gras', range: '원료 표의 원료별 최대 6건 (통과한 통지 먼저) · FDA 목록은 주 1회 새로 받음', agency: 'FDA', name: 'GRAS 통지 (원료 근거)', via: 'FDA GRAS Notices 공개 데이터베이스 · 데이터 내려받기 (2026-10-25)', modes: ['auto'],
+        key: '없음',
+        gets: '원료 이름·별칭이 들어간 GRAS 통지 (GRN 번호 · 물질 · 신청 회사 · FDA 답변 · 종결일 · 용도)',
+        gives: '규칙·검증 › 원료 표의 "FDA GRAS 통지" 칸 · 통지가 없어도 자체 GRAS일 수 있어 "0건 = 사용 불가"는 아님 (회사 근거 문서로 확인)' },
       { id: 'cbp-cross', range: '기간 제한 없음 · 검색어 6개 × 최신 10건 → 최대 30건', agency: 'CBP', name: '품목분류 결정', via: 'CBP CROSS API', modes: ['auto'],
         key: '없음',
-        gets: '젤리(HS 2106.90 · 곤약) · 음료(HS 2202.10 · 2202.99 후보) · 헛개 관련 품목분류 결정 (HTS 코드)',
+        gets: '젤리(HS 2106.90 · 구미) · 음료(HS 2202.10 · 2202.99 후보) · 헛개 관련 품목분류 결정 (HTS 코드)',
         gives: '목록 → HS 코드·관세 판단 참고 (최종은 관세사 확인)' },
       { id: 'courtlistener', range: '검색어 3개 × 15건 (2·3번째는 최근 1년) · 관련성은 사람이 확인', agency: '법원', name: '허위광고 판결', via: 'CourtListener API', modes: ['auto'],
         key: 'COURTLISTENER_TOKEN',
@@ -669,8 +836,9 @@
         what: '제품 칸에 jelly · gummy · candy · drink로 검색 → 비슷한 제품이 경고 문구 없이 통지받은 사례' },
       { name: 'FTC 보도자료', url: 'https://www.ftc.gov/news-events/news/press-releases', why: 'FTC RSS가 서버 요청을 막음 (FTC 공고는 Federal Register로 자동 수집 중)',
         what: '건강 광고·후기·인플루언서 단속 소식' },
-      { name: 'FDA 수입 경보 33-15 (젤리)', url: 'https://www.accessdata.fda.gov/cms_ia/importalert_105.html', why: '수입 경보 페이지는 자동 수집 대상 아님',
-        what: '질식 위험 젤리(곤약 등) 수입 경보 대상 회사·제품 변경' }
+      // 2026-10-25: 수입 경보 33-15(곤약 젤리) 바로가기는 뺌 — 우리 젤리는 곤약이 아닌 구미형 (담당 확인)
+      { name: 'Olive Young US 리뷰 적립·회원 정책', url: 'https://us.oliveyoung.com/terms/oy-members-policy', why: '약관 변경 알림·피드 없음 (월 1회 확인)',
+        what: '올리브영 US 후기 적립(별점과 상관없이 포인트) · 회원 혜택 조건 변경 → 우리가 후기 이벤트를 따로 붙여도 되는지 (R10)' }
     ],
 
     // 수출 단계별로 어느 기관이 관련되는지
@@ -691,6 +859,82 @@
       { term: 'KORUS', desc: '한미 자유무역협정(FTA). 조건을 충족하는 한국산 제품은 일반 관세를 면제받을 수 있습니다.' },
       { term: 'Section 301', desc: '미국 무역법 301조. USTR이 상대국 무역 관행을 이유로 추가 관세 등을 매길 수 있는 근거 조항입니다.' },
       { term: 'Federal Register', desc: '미국 정부의 관보. FDA·FTC·CBP·USTR의 새 규칙과 공고가 여기에 실립니다.' }
+    ],
+
+    // 원료 표 (2026-10-25) — 단건·일괄 심의가 원료 문장을 판정하는 기준. 원료가 확정되면 status만 'confirmed'로 바꾸고
+    // `node tabs/compliance/tools/export_server_rules.js`로 서버 규칙을 다시 만듭니다 (CS 재점검도 같은 기준).
+    //   confirmed 확정: 원료 이름·들어 있다는 사실 문장은 PASS. 강조(packed with·듬뿍)·효과·특허 표현은 계속 점검
+    //   candidate 후보: 아직 확정 아님 → 이름이 나오면 R15 '미확정 정보' 검토 필요
+    //   avoid 금지: 넣지 않기로 한 성분 → R13 '숙취 연상 성분' 검토 필요
+    // en·ko: 문구에서 찾을 이름 (영어는 하이픈·띄어쓰기·복수형 차이를 함께 잡음 · 한국어는 포함 여부)
+    ingredients: [
+      { id: 'hovenia', status: 'confirmed', jelly: 'cond', drink: 'cond', name: '헛개나무 열매 · 추출물 (Hovenia dulcis)',
+        en: ['Hovenia dulcis fruit extract', 'Hovenia dulcis extract', 'Hovenia dulcis fruit', 'Hovenia dulcis', 'Hovenia fruit extract', 'Hovenia extract', 'raisin tree fruit', 'raisin tree extract', 'Japanese raisin tree', 'oriental raisin tree'],
+        ko: ['헛개나무 열매 추출물', '헛개나무열매 추출물', '헛개나무 열매', '헛개나무열매', '헛개나무 추출물', '헛개 추출물', '헛개나무', '헛개'],
+        source: '브랜드 가이드 v1.1 12장 공통 원료 · 함량 미제공', note: '미국 일반식품 원료 근거(GRAS) 확인 필요 — 알디콤', gras: 'FDA 공개 통지 0건 · 알디콤 근거 문서 확인 불가 (2026-10-25 · 출시 전 확인 필요)' },
+      { id: 'l-fermentum', status: 'confirmed', jelly: 'cond', drink: 'cond', name: '유산균 Lactobacillus fermentum',
+        en: ['Lactobacillus fermentum', 'Limosilactobacillus fermentum', 'L. fermentum'], ko: ['락토바실러스 퍼멘텀', '유산균'],
+        source: '브랜드 가이드 v1.1 12장 (A-HAT 구성)', note: "균주명·근거 확인 필요 · 산성 음료에서는 살아남기 어려움(열처리균 여부 확인) · 'probiotic' 같은 기능 범주어는 계속 검토", gras: '통지된 균주: LfQi6 (GRN 988) · CECT5716 (GRN 531) — 우리 균주 미확인 (2026-10-25)' },
+      { id: 'a-hat', status: 'confirmed', jelly: 'cond', drink: 'cond', name: 'A-HAT (알디콤 조성물)', en: ['A-HAT'], ko: ['A-HAT'],
+        source: '브랜드 가이드 v1.1 12장 (헛개 추출물 + L. fermentum)', note: "성분표에는 실제 원료 이름으로 적음 · 'patented'(특허)는 R15 검토 (특허 범위 미검증)", gras: '헛개 추출물(공개 GRAS 통지 0건)과 L. fermentum(균주 미확인)으로 구성 → 두 원료 근거가 확인돼야 사용 (2026-10-25 검토 반영)' },
+      // 후보: 같은 종류 제품에 흔한 원료 (확정 아님)
+      { id: 'turmeric', status: 'candidate', jelly: 'ok', name: '강황·울금 (커큐민)', en: ['turmeric', 'curcumin'], ko: ['강황', '울금', '커큐민'], note: '향신료는 GRAS · 젤리 노랑(레몬) 색을 내는 용도는 가능 · 고농도 추출물을 기능 원료로 쓰면 따로 확인', cfr: '21 CFR 182.10 (향신료) · 73.600 (색소)' },
+      { id: 'ginger', status: 'candidate', jelly: 'cond', drink: 'ok', name: '생강', en: ['ginger'], ko: ['생강'], note: 'GRAS 향신료', cfr: '21 CFR 182.10 · 182.20 (향신료·정유 GRAS)' },
+      { id: 'jujube', status: 'candidate', name: '대추', en: ['jujube'], ko: ['대추'], note: '과일 식품' },
+      { id: 'goji', status: 'candidate', name: '구기자', en: ['goji berry', 'goji', 'wolfberry'], ko: ['구기자'], note: '과일 식품' },
+      { id: 'licorice', status: 'candidate', drink: 'cond', name: '감초', en: ['licorice', 'liquorice'], ko: ['감초'], note: 'GRAS · 글리시리진 양 제한 (음료에 쓸 때 양 확인)', cfr: '21 CFR 184.1408 (감초 GRAS · 양 제한)' },
+      { id: 'pear', status: 'candidate', name: '배즙', en: ['pear juice', 'Korean pear'], ko: ['배즙'], note: '일반 과즙' },
+      { id: 'maesil', status: 'candidate', name: '매실', en: ['green plum', 'maesil'], ko: ['매실'], note: '일반 과일' },
+      { id: 'ginseng', status: 'candidate', name: '홍삼·인삼', en: ['red ginseng', 'ginseng'], ko: ['홍삼', '인삼'], note: '양·근거 확인' },
+      { id: 'green-tea', status: 'candidate', name: '녹차 추출물', en: ['green tea extract'], ko: ['녹차 추출물', '녹차추출물'], note: '고농도 카테킨은 간 관련 안전 이슈 · 양 주의' },
+      { id: 'kudzu', status: 'candidate', name: '칡(갈근) 추출물', en: ['kudzu', 'pueraria'], ko: ['칡', '갈근'], note: '추출물은 근거 확인 필요' },
+      { id: 'alder', status: 'candidate', name: '오리나무 추출물', en: ['alder'], ko: ['오리나무'], note: '미국 식품 원료 근거가 거의 없음 → 피하는 쪽 권장' },
+      { id: 'taurine', status: 'candidate', jelly: 'cond', drink: 'cond', name: '타우린', en: ['taurine'], ko: ['타우린'], note: '미국 음료에 흔함 · 효능 표현 금지' },
+      { id: 'vitamins', status: 'candidate', jelly: 'cond', drink: 'cond', name: '비타민 C·B군', en: ['vitamin C', 'vitamin B6', 'vitamin B12', 'B vitamins'], ko: ['비타민 C', '비타민C', '비타민 B', '비타민B'], note: '함량 강조는 영양소 표시 규칙(R13)' },
+      { id: 'electrolytes', status: 'candidate', name: '전해질 (나트륨·칼륨)', en: ['electrolytes'], ko: ['전해질'], note: '일반 성분' },
+      // 2026-10-25 기본 원료 (배합안 · 심의 규칙과 무관 → status 'base') — FDA GRAS 통지·규정 확인용으로 표에 둠
+      { id: 'allulose', status: 'base', jelly: 'ok', drink: 'ok', name: '알룰로스 (D-psicose)', en: ['allulose', 'D-psicose'], ko: ['알룰로스'], note: 'FDA 지침상 총당류·첨가당에 넣지 않음 (0.4 kcal/g) · Balance 당 0.5 g 미만 설계' },
+      { id: 'stevia', status: 'base', jelly: 'ok', drink: 'ok', name: '스테비아 (Reb M)', en: ['stevia', 'rebaudioside M'], ko: ['스테비아'], note: '고순도 스테비올 배당체' },
+      { id: 'monk-fruit', status: 'base', jelly: 'ok', drink: 'ok', name: '나한과 (monk fruit)', en: ['monk fruit', 'luo han guo'], ko: ['나한과'], note: '감미료 대안' },
+      { id: 'soluble-fiber', status: 'base', jelly: 'ok', name: '수용성 옥수수 섬유 (resistant dextrin)', en: ['soluble corn fiber', 'resistant dextrin'], ko: ['수용성 식이섬유'], note: '구미 식감·몸체 · 섬유 강조 문구는 쓰지 않음 (R13)' },
+      { id: 'pectin', status: 'base', jelly: 'ok', name: '펙틴', en: ['pectin'], ko: ['펙틴'], cfr: '21 CFR 184.1588 (GRAS)', note: '구미 겔화제 · 곤약 대신' },
+      { id: 'sucralose', status: 'base', jelly: 'ok', drink: 'ok', name: '수크랄로스', en: ['sucralose'], ko: ['수크랄로스'], cfr: '21 CFR 172.831 (승인 감미료 · GRAS 통지 대상 아님)', note: '감미료 대안' },
+      { id: 'spirulina', status: 'base', jelly: 'ok', name: '스피루리나 추출물 (색소)', en: ['spirulina extract'], ko: ['스피루리나'], cfr: '21 CFR 73.530 (색소 · 사탕 등 허용)', note: '라임 연두색 (강황과 섞음)' },
+      // 2026-10-25 음료 검토 (참고: 국내 헛개 음료 100 mL 원재료) — drink: ok 바로 사용 가능 · cond 조건부 · no 쓰지 않음
+      { id: 'citrus-peel', status: 'candidate', drink: 'ok', name: '귤껍질 (진피)', en: ['citrus peel', 'tangerine peel', 'orange peel'], ko: ['귤껍질', '진피'], note: '식품 원료' },
+      { id: 'rice-germ', status: 'candidate', drink: 'cond', name: '미배아발효추출물 (미강·쌀눈·대두펩타이드)', en: ['rice germ extract', 'rice bran extract', 'fermented rice germ'], ko: ['미배아', '미강', '쌀눈'], note: '발효 추출물 GRAS 근거 확인 · 대두 포함 → 라벨에 "Contains: Soy" 의무' },
+      { id: 'dl-alanine', status: 'candidate', drink: 'cond', name: 'DL-알라닌', en: ['DL-alanine', 'alanine'], ko: ['알라닌'], note: '미국은 쓸 수 있는 용도가 제한된 첨가물 → 용도·양 확인' },
+      { id: 'atractylodes', status: 'avoid', jelly: 'no', drink: 'no', name: '창출 (모창출 뿌리줄기)', en: ['atractylodes'], ko: ['창출'], note: '한약재 · 미국 일반식품 원료 근거 거의 없음' },
+      { id: 'astragalus', status: 'avoid', jelly: 'no', drink: 'no', name: '황기 추출물', en: ['astragalus'], ko: ['황기'], note: '미국에서는 건강기능식품 원료 · 일반식품 근거 없음' },
+      // 2026-10-25 구미 검토 (참고: 미국 '술 마시기 전' 구미 = 건강기능식품 라벨) — jelly: ok · cond · no
+      { id: 'zinc', status: 'candidate', jelly: 'cond', name: '아연 (Zinc citrate)', en: ['zinc'], ko: ['아연'], note: '영양 강화 정책(21 CFR 104.20)상 사탕·간식에 넣는 것은 적절하지 않다고 봄 · %DV 표시 의무' },
+      { id: 'magnesium', status: 'candidate', jelly: 'cond', drink: 'cond', name: '마그네슘 (구연산·산화마그네슘)', en: ['magnesium'], ko: ['마그네슘'], note: 'GRAS지만 영양 강화 정책·%DV 표시 문제는 아연과 같음' },
+      // 2026-10-25 젤리 검토 (참고: 미국 스틱 젤리 = 건강기능식품 라벨)에서 나온 금지 — 제품과 상관없이 일반식품에 쓰지 않음
+      { id: 'konjac', status: 'avoid', jelly: 'no', drink: 'no', name: '곤약', en: ['konjac', 'glucomannan'], ko: ['곤약', '글루코만난'], note: '우리 젤리는 곤약이 아닌 구미형 · 곤약 젤리는 FDA 수입 경보 33-15 대상' },
+      { id: 'folic-acid', status: 'avoid', jelly: 'no', drink: 'no', name: '엽산 (Folic acid)', en: ['folic acid'], ko: ['엽산'], note: '일반식품에 넣을 수 있는 식품이 정해져 있음 (21 CFR 172.345) · 젤리·음료는 해당 없음', cfr: '21 CFR 172.345 (넣을 수 있는 식품이 정해져 있음)' },
+      { id: 'artichoke', status: 'avoid', jelly: 'no', drink: 'no', name: '아티초크 잎 추출물', en: ['artichoke extract', 'artichoke leaf'], ko: ['아티초크'], note: '건강기능식품용 식물 원료 · 간 건강 이미지' },
+      // 금지: 넣지 않기로 한 성분
+      { id: 'dhm', status: 'avoid', jelly: 'no', drink: 'no', name: 'DHM (디하이드로미리세틴)', en: ['dihydromyricetin', 'DHM'], ko: ['디하이드로미리세틴'], note: '2020 FDA 숙취 경고장이 숙취 예방 성분 광고로 인용' },
+      { id: 'nac', status: 'avoid', jelly: 'no', drink: 'no', name: 'NAC (N-아세틸시스테인)', en: ['N-acetylcysteine', 'N-acetyl cysteine', 'NAC'], ko: ['N-아세틸시스테인', '아세틸시스테인'], note: 'FDA는 의약품 성분으로 봄 → 일반식품에 넣을 수 없음' },
+      { id: 'milk-thistle', status: 'avoid', jelly: 'no', drink: 'no', name: '밀크시슬 (실리마린)', en: ['milk thistle', 'silymarin'], ko: ['밀크시슬', '실리마린'], note: '간 보호 이미지 · 일반식품 근거 필요' },
+      { id: 'glutathione', status: 'avoid', jelly: 'no', drink: 'no', name: '글루타치온', en: ['glutathione'], ko: ['글루타치온'], note: '미국 일반식품 근거가 약함' }
     ]
   };
+
+  // 원료 표 → 규칙 연결 (2026-10-25). 브라우저 판정·서버 재검사(export_server_rules.js)가 같은 결과를 쓰도록 여기서 규칙을 만듦
+  //   확정: 이름만 나오면 걸리지 않음 (R13의 'A-HAT'·'lactobacillus'·'유산균'처럼 확정 원료 이름에 든 일반 용어도 뺌)
+  //         강조(packed with·듬뿍)·효과(간 건강·다음 날 가뿐)·특허(R15)는 다른 규칙이 계속 잡음
+  //   후보 → R15 검토 필요 · 금지 → R13 검토 필요
+  (function wireIngredients(C) {
+    const pick = st => C.ingredients.filter(x => x.status === st);
+    const flat = (list, k) => [].concat(...list.map(x => x[k] || []));
+    const r13 = C.rules.find(r => r.code === 'R13');
+    const r15 = C.rules.find(r => r.code === 'R15');
+    const okNames = flat(pick('confirmed'), 'en').concat(flat(pick('confirmed'), 'ko')).map(n => n.toLowerCase());
+    const covered = t => okNames.some(n => n.includes(t.toLowerCase()));
+    r13.terms = r13.terms.filter(t => !covered(t)).concat(flat(pick('avoid'), 'en'));
+    r13.ko = r13.ko.filter(t => !covered(t)).concat(flat(pick('avoid'), 'ko'));
+    r15.terms = r15.terms.concat(flat(pick('candidate'), 'en'));
+    r15.ko = r15.ko.concat(flat(pick('candidate'), 'ko'));
+  })(NS.compliance);
 })(typeof window !== 'undefined' ? window : globalThis);

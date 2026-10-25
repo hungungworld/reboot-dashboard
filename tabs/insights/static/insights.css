@@ -48,7 +48,13 @@
 .part-insights .ins-steps dt { color: var(--muted); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
 .part-insights .ins-steps > div.todo dt { color: var(--lime-ink); }
 .part-insights .ins-steps dd { margin: 0; color: var(--ink); }
-.part-insights .ins-action-rule { margin: 10px 0 0; font-size: 11px; color: var(--muted-2); }
+.part-insights .ins-action-rule { margin: 10px 0 0; font-size: 12px; color: var(--muted-2); }
+/* 참고 액션: 접은 상자 안에 한 줄씩 */
+.part-insights .ins-ref { border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px; background: var(--surface); }
+.part-insights .ins-ref > summary { font-size: 13px; }
+.part-insights .ins-ref-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink); }
+.part-insights .ins-ref-row:first-of-type { margin-top: 10px; }
+.part-insights .ins-ref-row .link { flex: none; }
 .part-insights .ins-facts a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .part-insights .ins-facts a .icon { width: 11px; height: 11px; }
 .part-insights .ins-signal { padding: 12px 0; border-bottom: 1px solid var(--line-3); }
@@ -650,3 +656,49 @@
 .part-insights .ins-sum-go { position: absolute; top: 12px; right: 12px; color: var(--muted); }
 .part-insights .ins-sum-go .icon { width: 14px; height: 14px; }
 @media (max-width: 640px) { .part-insights .ins-sum { grid-template-columns: 1fr; } }
+
+/* ───── 시장 (진열대 + 경쟁사, 2026-10-25) ───── */
+/* 숫자 4칸: 누르면 그 보기로 */
+.part-insights .ins-stat-go { font: inherit; text-align: left; color: inherit; cursor: pointer; border: 1px solid var(--line); transition: border-color .15s; }
+.part-insights .ins-stat-go:hover { border-color: var(--line-2); }
+.part-insights .ins-stat-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.part-insights .ins-stat.lime { background: var(--lime); color: var(--lime-ink); }
+.part-insights .ins-stat-of { font-size: 13px; font-weight: 500; color: var(--muted); }
+/* 브랜드 비교 표 */
+.part-insights .ins-brands { font-size: 13px; }
+.part-insights .ins-brands td { vertical-align: top; }
+.part-insights .ins-brands .ins-br-sub > td { white-space: normal; }
+.part-insights .ins-br-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.part-insights .ins-tg { flex: none; width: 24px; height: 24px; display: inline-grid; place-items: center; border: 1px solid var(--line-2); border-radius: 6px;
+  background: var(--surface); color: var(--ink-2); font-size: 12px; cursor: pointer; }
+.part-insights .ins-tg:hover { background: var(--soft); }
+.part-insights .ins-tg.none { border: 0; background: none; cursor: default; }
+.part-insights .ins-bn { border: 0; background: none; padding: 0; font: inherit; font-weight: 650; color: var(--ink); cursor: pointer; text-align: left;
+  text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.part-insights .ins-bn:hover { text-decoration-color: var(--ink); }
+.part-insights .ins-fms { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 5px 0 0 30px; }
+.part-insights .ins-fm { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
+.part-insights .ins-ps { display: block; white-space: nowrap; }
+.part-insights .ins-ps small { color: var(--muted); font-size: 12px; }
+.part-insights .ins-fix { margin-left: 4px; border: 0; border-radius: 5px; padding: 1px 6px; font: inherit; font-size: 12px; font-weight: 600;
+  background: var(--orange-bg); color: var(--orange); cursor: pointer; white-space: nowrap; }
+.part-insights .ins-br.open td { border-bottom-color: transparent; }
+.part-insights .ins-br-sub > td { background: var(--soft-2); padding: 6px 14px 12px 44px; }
+.part-insights .ins-fh { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+.part-insights .ins-fh b { color: var(--ink); }
+.part-insights .ins-items { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
+.part-insights .ins-items th { text-align: left; font-weight: 600; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.part-insights .ins-items td { padding: 6px; border-bottom: 1px solid var(--line-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-insights .ins-items th:first-child { width: 36%; }
+.part-insights .ins-items .num { text-align: right; }
+.part-insights .ins-item-name { border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; text-align: left; }
+.part-insights .ins-item-name:hover { text-decoration: underline; }
+.part-insights .ins-br.ins-flash td { background: var(--lime-bg, var(--soft)); transition: background .4s; }
+/* 휴대폰: 표 안의 표는 가로로 밀어서 봄 (칸이 깨지지 않게) */
+@media (max-width: 767px) {
+  .part-insights .ins-br-sub > td { padding-left: 14px; }
+  .part-insights .ins-items { min-width: 560px; }
+}
+.part-insights .ins-stat-go span, .part-insights .ins-stat-go small { font-size: 12px; }
+.part-insights .ins-stat.lime b, .part-insights .ins-stat.lime small, .part-insights .ins-stat.lime span { color: var(--lime-ink); }

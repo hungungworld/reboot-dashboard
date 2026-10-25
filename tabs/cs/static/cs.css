@@ -421,3 +421,14 @@
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"] { grid-column: 1 / -1; justify-self: end; margin-top: -6px; }
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"]:empty { display: none; }
 @media (max-width: 720px) { .part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: 1fr; } }
+
+/* 보내기 탭 · 보낸 답장 펼치기 (2026-10-25) */
+.part-cs .cs-out-row { cursor: pointer; }
+.part-cs .cs-out-row:hover td, .part-cs .cs-out-row.is-open td { background: var(--cs-soft); }
+.part-cs .cs-out-row.is-open td { border-bottom: 0; }
+.part-cs .cs-out-detail > td { background: var(--cs-soft); padding: 4px 12px 16px; }
+.part-cs .cs-sent-detail { display: grid; gap: 10px; }
+.part-cs .cs-sent-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 16px; margin: 0; font-size: 12.5px; }
+.part-cs .cs-sent-meta dt { color: var(--cs-muted); font-weight: 600; font-size: 11.5px; }
+.part-cs .cs-sent-meta dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.part-cs .cs-sent-detail .cs-mail-out { margin-left: 0; }

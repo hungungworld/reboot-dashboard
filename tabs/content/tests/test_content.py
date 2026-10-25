@@ -421,7 +421,7 @@ def test_chat_explicit_creation_makes_three_versions_with_review(auth_client, ai
     assert vs[0]["review"]["keyword"]["status"] == "clear"
     assert vs[1]["review"]["keyword"]["status"] != "error" and "재작성" in vs[1]["note"]
     assert any(i["code"] == "claims" for i in vs[2]["review"]["keyword"]["items"])  # 고르지 않은 제품 근거
-    assert all(v["factsVersion"].startswith("user-2026-10-23") and not v["stale"] for v in vs)
+    assert all(v["factsVersion"].startswith("final-2026-10-25") and not v["stale"] for v in vs)
     reminder = ai.calls[1]["user"]
     assert "근거 리마인더" in reminder and "Restart Your Day" in ai.calls[1]["system"]
     assert out["reply"]["payload"]["action"]["versionLabels"] == ["A안 (v1)", "B안 (v2)", "C안 (v3)"]
@@ -709,7 +709,7 @@ def test_manual_version_final_and_export(auth_client):
     names = z.namelist()
     assert {"00_README.txt", "campaign.md", "facts.json", "versions.json", "settings.json"} <= set(names)
     every = "\n".join(z.read(n).decode("utf-8") for n in names)
-    assert "승인본이 아닙니다" in every and "user-2026-10-23" in every and "최종본으로 지정됨 (승인 아님)" in every
+    assert "승인본이 아닙니다" in every and "final-2026-10-25" in every and "최종본으로 지정됨 (승인 아님)" in every
     assert '"zero_sugar": true' in every and "+kit-2026-10-25" in every  # 브랜드 키트 값 (Balance = Zero Sugar)
     assert "sk-" not in every and "OPENAI_API_KEY" not in every and "password" not in every.lower()
     one = auth_client.get(f"/api/content/campaigns/{cid}/export?version={v['id']}")
@@ -952,7 +952,7 @@ def test_image_editor_upload_makes_child_version(auth_client, ai, sync_jobs, mon
 def test_brand_kit_overlays_facts_per_product(auth_client):
     camp = create(auth_client, brand_focus=False, product_ids=["jelly_balance", "drink_original"])
     f = camp["facts"]
-    assert f["facts_version"].startswith("user-2026-10-23") and f["facts_version"].endswith("+kit-2026-10-25.2")
+    assert f["facts_version"].startswith("final-2026-10-25") and f["facts_version"].endswith("+kit-2026-10-25.2")
     assert f["brand"]["slogans"] == ["Restart Your Day", "Buy Your Tomorrow"] and f["brand"]["slogan"] == "Restart Your Day"
     assert f["brand"]["character"].startswith("Rebu") and "A-HAT" in f["brand"]["key_ingredient"]
     jb, do = (next(p for p in f["products"] if p["entity_id"] == pid) for pid in ("jelly_balance", "drink_original"))

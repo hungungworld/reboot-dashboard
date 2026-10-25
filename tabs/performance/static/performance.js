@@ -346,9 +346,22 @@
     else { renderReview(); renderAi(); }
   }
 
+  // 잘한 점 · 개선할 점: AI가 "- " 줄로 주면 핵심 요약 목록(굵게 포함), 아니면(숫자 기준 · 예전 결과) 문단 그대로
+  function reviewLines(text) {
+    return String(text || '').split('\n').map(l => l.trim()).filter(l => /^[-•]\s+/.test(l)).map(l => l.replace(/^[-•]\s+/, ''));
+  }
   function reviewCard(title, text, ai) {
     const tag = ai ? `<span class="flex">${badge('AI', 'purple')}<span class="small muted">참고용</span></span>` : badge('숫자 기준');
-    return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2>${tag}</div><p class="perf-review-text">${esc(text || '—')}</p></section>`;
+    const lines = reviewLines(text);
+    const body = lines.length
+      ? `<ul class="perf-insight-lines perf-review-lines">${lines.map(l => `<li>${boldHtml(l)}</li>`).join('')}</ul>`
+      : `<p class="perf-review-text">${esc(text || '—')}</p>`;
+    return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2>${tag}</div>${body}</section>`;
+  }
+  // 보고서(A4)용: 굵게 표시 기호는 빼고 줄은 그대로
+  function reviewPlain(text) {
+    const lines = reviewLines(text);
+    return lines.length ? `<ul>${lines.map(l => `<li>${esc(l.replace(/\*\*/g, ''))}</li>`).join('')}</ul>` : `<p>${esc(text)}</p>`;
   }
   function renderReview() {
     const box = ref('review');
@@ -456,7 +469,14 @@
     const cash = n => (usd ? money(n) : fmt.krw(n));
     const best = s.best && s.best.channel, worst = s.worst && s.worst.channel;
     const head = ['채널', '광고비', '노출수', '클릭수', 'CTR', '전환수', 'CVR', 'CPA', '매출', 'ROAS', '순수익'];
-    const rows = s.channels.map(c => {
+    // 머리글 정렬 (화면만 · 보고서는 원래 순서): 누를 때마다 내림차순 ↔ 오름차순
+    const sort = !forReport && S.sort;
+    const list = sort ? s.channels.slice().sort((a, b) => {
+      const x = a[sort.k], y = b[sort.k];
+      if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1;   // 값 없는 채널은 늘 아래
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sort.dir;
+    }) : s.channels;
+    const rows = list.map(c => {
       const sel = !forReport && S.selected.has(c.channel);
       const tags = (c.channel === best ? badge('ROAS 최고', 'green') : '') + (c.channel === worst ? badge('ROAS 최저', 'orange') : '');
       return `<tr${forReport ? '' : ` class="clickable${sel ? ' selected' : ''}" data-ch="${esc(c.channel)}" tabindex="0" aria-selected="${sel}"`}>
@@ -479,10 +499,16 @@
     return `<table class="data-table"><caption class="sr-only">채널별 성과 (${esc(M.fmtPeriod(s.start, s.end))})</caption>
       <thead><tr>${head.map((h, i) => {
         const tip = !forReport && HEAD_TIPS[h];
-        return `<th${i ? ' class="num"' : ''} scope="col">${tip ? `<span class="perf-tip" tabindex="0" data-tip="${esc(tip)}">${h}</span>` : h}</th>`;
+        if (forReport) return `<th${i ? ' class="num"' : ''} scope="col">${h}</th>`;
+        const k = SORT_KEYS[h], on = sort && sort.k === k;
+        const label = tip ? `<span class="perf-tip" data-tip="${esc(tip)}">${h}</span>` : h;
+        return `<th class="${i ? 'num' : ''}${on ? ' sorted' : ''}" scope="col"${on ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>
+          <button type="button" class="perf-th-sort" data-act="sort-col" data-k="${k}" title="누를 때마다 내림차순 ↔ 오름차순">${label}<i aria-hidden="true">${on ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</i></button></th>`;
       }).join('')}</tr></thead>
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>`;
   }
+  const SORT_KEYS = { 채널: 'channel', 광고비: 'spend', 노출수: 'impressions', 클릭수: 'clicks', CTR: 'ctr', 전환수: 'conversions',
+    CVR: 'cvr', CPA: 'cpa', 매출: 'revenue', ROAS: 'roas', 순수익: 'profit' };
   // 채널별 성과 표 머리글에 마우스를 올리면 보이는 설명
   const HEAD_TIPS = {
     광고비: '이 기간에 광고에 쓴 돈',
@@ -706,8 +732,8 @@
     const num = M.insights(S.sum);
     const tag = ai ? `${badge('AI', 'purple')}<span class="tiny muted">참고용</span>` : badge('숫자 기준');
     const an = (ai && ai.analysis) || {};
-    rev.innerHTML = `<div class="perf-report-box"><h3>잘한 점 ${an.good ? tag : badge('숫자 기준')}</h3><p>${esc(an.good || num.good)}</p></div>
-      <div class="perf-report-box"><h3>개선할 점 ${an.improve ? tag : badge('숫자 기준')}</h3><p>${esc(an.improve || num.improve)}</p></div>`;
+    rev.innerHTML = `<div class="perf-report-box"><h3>잘한 점 ${an.good ? tag : badge('숫자 기준')}</h3>${reviewPlain(an.good || num.good)}</div>
+      <div class="perf-report-box"><h3>개선할 점 ${an.improve ? tag : badge('숫자 기준')}</h3>${reviewPlain(an.improve || num.improve)}</div>`;
     if (ai) {
       const b = ai.budget || { items: [] };
       box.innerHTML = `${ai.overview ? `<p>${esc(ai.overview)}</p>` : ''}
@@ -842,6 +868,12 @@
       }
       else if (a === 'ai-again') scheduleAdvice(true);
       else if (a === 'insight-again') scheduleInsight(true);
+      else if (a === 'sort-col') {
+        // 같은 칸을 다시 누르면 방향만 바뀜 · 다른 칸은 채널 이름은 가나다순, 숫자는 큰 값부터
+        const k = act.dataset.k;
+        S.sort = S.sort && S.sort.k === k ? { k, dir: -S.sort.dir } : { k, dir: k === 'channel' ? 1 : -1 };
+        renderTable();
+      }
       else if (a === 'reset') resetToSample();
       else if (a === 'print') global.print();
       return;

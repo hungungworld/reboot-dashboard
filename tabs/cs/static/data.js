@@ -11,24 +11,28 @@
   NS.cs = {
     version: '2026-10-23',
 
-    // 판매 제품 4종 (2026-10-23 팀 표 기준). 답변 템플릿의 {product}·{flavor}·{pack}을 채웁니다.
-    // en은 2026-10-23 팀 제품표의 내부 제품명. flavorsFinal이 false면 맛이 [확인 필요]로 남아 최종 승인이 막힙니다 (맛은 임시).
+    // 판매 제품 4종 — 브랜드 키트(tabs/content/data/brand_kit.json · 2026-10-24) 기준. 답변 템플릿의 {product}·{flavor}·{pack}을 채웁니다.
+    // 맛은 확정(flavorsFinal: true) · "Zero Sugar"는 Balance 2종에만(zeroSugar) · 봉지 안 개수·함량·인증·원산지·알레르기는 미정 → 답장에서 [확인 필요]
+    // 2026-10-25 브랜드 가이드 v1.1: 젤리는 구미형(곤약 아님) · 맛별 모양 체리=카우보이 모자 · 레몬=올가미 · 라임=부츠 (리볼버 모양은 소개 안 함)
+    // ZERO SUGAR: 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 → zeroSugarFinal true (Balance 문의에 'Zero Sugar'라고 답함)
+    // 젤리는 봉지당 10개 (제품 최종 정보) · 함량·인증·원산지·알레르기·영양 수치는 미정 → 답장에서 [확인 필요]
     brand: { name: 'REBOOT', slogan: 'Restart Your Day' },
+    zeroSugarFinal: true,
     products: [
-      { id: 'jelly', ko: '젤리', en: 'Reboot Jelly Original', form: 'stick jelly', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
-        pack: 'individually wrapped sticks in one pack', unit: 'stick', sugarReduced: false },
-      { id: 'jelly-ls', ko: '저당 젤리', en: 'Reboot Jelly Balance', form: 'stick jelly', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
-        pack: 'individually wrapped sticks in one pack', unit: 'stick', sugarReduced: true },
-      { id: 'drink', ko: '음료', en: 'Reboot Drink Original', form: 'non-carbonated drink', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
-        pack: '6 small bottles per box', unit: 'bottle', sugarReduced: false },
-      { id: 'drink-ls', ko: '저당 음료', en: 'Reboot Drink Balance', form: 'non-carbonated drink', flavors: ['lime', 'cherry', 'lemon'], flavorsFinal: false,
-        pack: '6 small bottles per box', unit: 'bottle', sugarReduced: true }
+      { id: 'jelly', ko: 'Original 젤리', en: 'Reboot Jelly Original', form: 'individually wrapped gummy-type shaped jelly (cherry = cowboy hat, lemon = lasso, lime = cowboy boot)', flavors: ['lime', 'lemon', 'cherry'], flavorsFinal: true,
+        pack: 'one pouch of 10 individually wrapped jellies', unit: 'jelly', zeroSugar: false },
+      { id: 'jelly-ls', ko: 'Balance 젤리', en: 'Reboot Jelly Balance', form: 'individually wrapped gummy-type shaped jelly (cherry = cowboy hat, lemon = lasso, lime = cowboy boot)', flavors: ['cherry', 'lime', 'lemon'], flavorsFinal: true,
+        pack: 'one pouch of 10 individually wrapped jellies', unit: 'jelly', zeroSugar: true },
+      { id: 'drink', ko: 'Original 음료', en: 'Reboot Drink Original', form: 'non-carbonated drink', flavors: ['lemon', 'cherry', 'lime'], flavorsFinal: true,
+        pack: 'single 100 ml bottle or 3-bottle box', unit: 'bottle', zeroSugar: false },
+      { id: 'drink-ls', ko: 'Balance 음료', en: 'Reboot Drink Balance', form: 'non-carbonated drink', flavors: ['lemon', 'lime', 'cherry'], flavorsFinal: true,
+        pack: 'single 100 ml bottle or 3-bottle box', unit: 'bottle', zeroSugar: true }
     ],
     // 문의 본문으로 제품 추정 (순서대로 검사, 못 찾으면 '' → 담당자가 선택)
     productHints: [
       // 2026-10-24 (GPT 검토 ㉚): 정식 제품명(Drink Balance 등)·한국어 '저당 음료'를 먼저 봄 · 저당 제품을 일반 제품으로 잘못 추정하던 문제
-      { id: 'drink-ls', re: 'drink[ -]*balance|(reduced|less|low|lower)[ -]*sugar[^.!?]{0,40}(drink|bottle|beverage)|(drink|bottle|beverage)[^.!?]{0,40}(reduced|less|low|lower)[ -]*sugar|저당 ?음료|음료[^.!?]{0,10}저당' },
-      { id: 'jelly-ls', re: 'jelly[ -]*balance|(reduced|less|low|lower)[ -]*sugar[^.!?]{0,40}(jelly|stick)|(jelly|stick)[^.!?]{0,40}(reduced|less|low|lower)[ -]*sugar|저당 ?젤리|젤리[^.!?]{0,10}저당' },
+      { id: 'drink-ls', re: 'drink[ -]*balance|zero[ -]*sugar[^.!?]{0,40}(drink|bottle|beverage)|(drink|bottle|beverage)[^.!?]{0,40}zero[ -]*sugar|(reduced|less|low|lower)[ -]*sugar[^.!?]{0,40}(drink|bottle|beverage)|(drink|bottle|beverage)[^.!?]{0,40}(reduced|less|low|lower)[ -]*sugar|저당 ?음료|음료[^.!?]{0,10}저당' },
+      { id: 'jelly-ls', re: 'jelly[ -]*balance|zero[ -]*sugar[^.!?]{0,40}(jelly|jellies|stick|pouch)|(jelly|jellies|stick|pouch)[^.!?]{0,40}zero[ -]*sugar|(reduced|less|low|lower)[ -]*sugar[^.!?]{0,40}(jelly|stick)|(jelly|stick)[^.!?]{0,40}(reduced|less|low|lower)[ -]*sugar|저당 ?젤리|젤리[^.!?]{0,10}저당' },
       { id: 'drink', re: 'drink[ -]*original|(^|[^a-z])(drinks?|bottles?|beverages?|caps?)([^a-z]|$)|음료|병' },
       { id: 'jelly', re: 'jelly[ -]*original|(^|[^a-z])(jelly|jellies|sticks?)([^a-z]|$)|젤리|스틱' }
     ],
@@ -38,7 +42,7 @@
     persona: {
       name: 'Hana',
       title: 'REBOOT 고객경험 매니저 · 마케팅·CS·언어 전문가',
-      text: "REBOOT 고객경험 매니저 '하나(Hana)'. 미국 식품 마케팅·CS 10년 경력, 한·영 원어민급. 젤리·음료 4종(저당 포함)의 맛·성분·섭취법·보관·알레르기와 주문·배송·환불 정책을 꿰고 있다. 첫 문장에서 고객 이름을 부르며 불편에 공감하고, 따뜻한 미국식 비즈니스 영어로 정중히 답한다. 사과는 진심으로 한 번, 다음 할 일과 회신 시점을 약속한다. 모르는 사실은 지어내지 않고 [확인 필요]로 남긴다. 숙취 해소·예방·치료 같은 효능 주장은 절대 쓰지 않고, 건강·부작용 문의에는 섭취 중단과 의료 상담 안내를 먼저 한다."
+      text: "REBOOT 고객경험 매니저 '하나(Hana)'. 미국 식품 마케팅·CS 10년 경력, 한·영 원어민급. 젤리·음료 4종(Original·Balance)의 맛·성분·섭취법·보관·알레르기와 주문·배송·환불 정책을 꿰고 있다. 첫 문장에서 고객 이름을 부르며 불편에 공감하고, 따뜻한 미국식 비즈니스 영어로 정중히 답한다. 사과는 진심으로 한 번, 다음 할 일과 회신 시점을 약속한다. 모르는 사실은 지어내지 않고 [확인 필요]로 남긴다. 숙취 해소·예방·치료 같은 효능 주장은 절대 쓰지 않고, 건강·부작용 문의에는 섭취 중단과 의료 상담 안내를 먼저 한다."
     },
 
     // ownerRequired: 지정 담당의 추가 검토 체크 전에는 최종 승인 불가 (즉시 에스컬레이션·담당자 필수 유형)
@@ -223,22 +227,22 @@
       { key: 'pricing', label: '현재 가격·프로모션', where: 'C7 가격·프로모션', placeholder: 'e.g. Reboot Jelly Original is $16 per pack. There is no promotion running right now.', long: true },
       { key: 'flavor', label: '맛 (4종 공통)', where: 'C6 제품 정보', placeholder: 'e.g. lime, cherry and lemon' },
       { key: 'ingredients', label: '성분 (4종 공통일 때만 · 제품을 모르는 문의에는 쓰지 않음)', where: 'C2 건강·복용 · C6 제품 정보', placeholder: 'e.g. the full ingredient list printed on the package', long: true },
-      { key: 'allergens', label: '알레르기 성분 (4종 공통일 때만 · 제품을 모르는 문의에는 쓰지 않음)', where: 'C2 건강·복용 · C6 제품 정보', placeholder: 'e.g. none of the major food allergens' }
+      { key: 'allergens', label: '알레르기 성분 (4종 공통일 때만 · 제품을 모르는 문의에는 쓰지 않음)', where: 'C2 건강·복용 · C6 제품 정보', placeholder: 'e.g. Please see the allergen statement on the package.' }
     ],
 
     // 시연·테스트용 가짜 문의. 이름은 지어낸 흔한 미국식 이름이고 주소는 예시용 도메인(example.com)이라 실제 고객 정보가 아닙니다.
     // legacy: 예전 id(TEST-NN) — 이미 저장된 더미 문의를 새 이름으로 바꿀 때 씀 (cs.js load). expect는 분류 테스트용.
     dummyInquiries: [
       { id: 'CS-24101', legacy: 'TEST-01', expect: 'C1', hoursAgo: 0.4, name: 'Lauren Mitchell', from: 'lauren.mitchell@example.com', orderNo: 'RB-241001',
-        subject: 'Itchy spots after the jelly stick', body: 'I had one stick last night and this morning I have red, itchy spots on my arms. Is this an allergic reaction?' },
+        subject: 'Itchy spots after the jelly', body: 'I had one jelly last night and this morning I have red, itchy spots on my arms. Is this an allergic reaction?' },
       { id: 'CS-24102', legacy: 'TEST-02', expect: 'C1', hoursAgo: 2, name: 'Kevin Park', from: 'kevin.park@example.com', orderNo: 'RB-241002',
-        subject: 'Went to the ER', body: 'My partner felt dizzy and threw up after having two sticks, so we went to the emergency room. What is in this product?' },
+        subject: 'Went to the ER', body: 'My partner felt dizzy and threw up after having two jellies, so we went to the emergency room. What is in this product?' },
       { id: 'CS-24103', legacy: 'TEST-03', expect: 'C2', hoursAgo: 3, name: 'Megan Foster', from: 'megan.foster@example.com', orderNo: '',
         subject: 'Question before buying', body: "I'm 5 months pregnant. Is it okay to have these?" },
       { id: 'CS-24104', legacy: 'TEST-04', expect: 'C3', hoursAgo: 20, name: 'Tyler Brooks', from: 'tyler.brooks@example.com', orderNo: 'RB-241004',
         subject: 'Refund request', body: "I'd like to send back my unopened box and get a refund." },
       { id: 'CS-24105', legacy: 'TEST-05', expect: 'C4', hoursAgo: 30, name: 'Rachel Simmons', from: 'rachel.simmons@example.com', orderNo: 'RB-241005',
-        subject: 'Box arrived leaking', body: 'Two of the sticks were leaking and the box was damaged.' },
+        subject: 'Box arrived leaking', body: 'Two of the bottles were leaking and the box was damaged.' },
       { id: 'CS-24106', legacy: 'TEST-06', expect: 'C5', hoursAgo: 5, name: 'Brandon Hughes', from: 'brandon.hughes@example.com', orderNo: 'RB-241006',
         tracking: 'RBX-48210-US', eta: 'Oct 27',
         subject: 'Where is my order?', body: "I ordered last week and still haven't received it." },

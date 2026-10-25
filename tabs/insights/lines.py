@@ -10,7 +10,7 @@ import re
 
 from server.config import ROOT
 from server.models import iso, utcnow
-from .competitors import FORM_LABEL, form_of, stored_positions
+from .competitors import FORM_LABEL, form_of, rule_form, stored_positions
 from .models import kv_get, kv_set
 from .rules import LOW_STOCK
 
@@ -63,12 +63,18 @@ def line_label(brand, form):
     return f"{brand} · {FORM_SHORT.get(form, form)}"
 
 
+# 상품명에 대놓고 쓴 제형은 브랜드 사전의 제형 제한보다 먼저 (예: 'Easy Tomorrow Jelly Stick' → 스틱)
+# 음료 · 분말 단어는 빼요: 'After Drink' · 'Drink Mix'처럼 먹는 때나 이름에 섞여 나와서 제형으로 믿기 어려워요
+NAME_FORMS = ("pellet", "tablet", "stick", "gummy")
+
+
 def auto_line(x, stored=None):
     """진열대 한 줄 → (브랜드, 제형) 자동 판정."""
     b = known_brand(x.get("brand"), x.get("title"))
     form = form_of(x, stored)
     if b:
-        if b["forms"] and form not in b["forms"]:
+        named = rule_form(x.get("title", "")) in NAME_FORMS
+        if b["forms"] and form not in b["forms"] and not named:
             form = b["default"] or form
         return b["name"], form
     return x.get("brand") or "브랜드 모름", form

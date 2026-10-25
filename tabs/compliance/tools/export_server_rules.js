@@ -45,19 +45,30 @@ function build() {
   const rules = C.rules.filter(r => !r.off).map(r => ({
     code: r.code, name: r.name, verdict: r.verdict,
     byChannel: r.byChannel || {},
+    byProduct: r.byProduct || {},   // 제품별 판정 (예: Original에 Zero Sugar → BLOCK · 2026-10-25)
     regex: r.terms.map(termPattern).concat(r.patterns || []),
     ko: r.ko || [],
     compensated: r.compensated || [],
     incentive: r.incentive || [],
     incentiveVerdict: r.incentiveVerdict || '',
-    allow: r.allow || []
+    allow: r.allow || [],
+    legal: r.legal || 'yellow',   // 법적 신호 (2026-10-25 · 검토 요청 Slack 알림에 표시)
+    legalByProduct: r.legalByProduct || {},
+    compensatedLegal: r.compensatedLegal || ''
   }));
   const texts = [...new Set([].concat(
-    C.warningQuotes.map(q => q.text), C.safePhrases.map(p => p.text), (C.selfTest || []).map(t => t.text),
+    C.warningQuotes.map(q => q.text), C.safePhrases.map(p => p.text), (C.humanReviewPhrases || []).map(p => p.text), (C.selfTest || []).map(t => t.text),
     (C.evalSet || []).map(t => t.text),
     (C.mappings || []).map(m => m.us), EXTRA))].filter(Boolean);
   const golden = texts.map(t => [t, api.review(t, { channel: 'cs' }).verdict]);
-  return { version: C.version, channel: 'cs', rules, golden };
+  // 제품을 정해 판정한 golden (서버도 제품별로 같은 판정인지 · 2026-10-25)
+  const products = (C.products || []).map(p => p.id);
+  const goldenProduct = [].concat(...['Zero Sugar lime jellies.', 'Low sugar jelly.', 'Contains Hovenia dulcis fruit extract.', 'Good for your liver.']
+    .map(t => products.concat(['all']).map(p => [t, p, api.review(t, { channel: 'cs', product: p }).verdict])));
+  // 법적 신호도 서버 = 브라우저 (2026-10-25): [문장, 제품('' = 미지정), 신호]
+  const goldenLegal = texts.map(t => [t, '', api.review(t, { channel: 'cs' }).legal])
+    .concat(goldenProduct.map(([t, p]) => [t, p, api.review(t, { channel: 'cs', product: p }).legal]));
+  return { version: C.version, channel: 'cs', products, rules, golden, goldenLegal, goldenProduct };
 }
 
 if (require.main === module) {

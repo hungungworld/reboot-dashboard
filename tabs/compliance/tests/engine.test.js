@@ -37,7 +37,7 @@ check('경고장 원문 87개 중 PASS 0개', () => {
 });
 
 check('안전 문구는 모두 PASS', () => {
-  const bad = C.safePhrases.filter(p => verdict(p.text, { channel: 'b2c' }) !== 'PASS').map(p => p.text);
+  const bad = C.safePhrases.concat(C.humanReviewPhrases || []).filter(p => verdict(p.text, { channel: 'b2c' }) !== 'PASS').map(p => p.text);
   assert.deepStrictEqual(bad, [], `잘못 걸린 안전 문구: ${bad.join(' | ')}`);
 });
 
@@ -46,16 +46,45 @@ check('자체 점검 예문은 예상 판정대로', () => {
   assert.deepStrictEqual(bad, [], bad.join(' | '));
 });
 
-check('일괄 심의 더미 20개는 예상 판정대로 (예시 영어 · 줄마다 채널·제품)', () => {
-  assert.strictEqual(C.batchSample.length, 20);
-  const bad = C.batchSample.filter(x => verdict(x.copy, { channel: x.channel, product: x.product }) !== x.expect)
-    .map(x => `${x.copy} → ${verdict(x.copy, x)} (예상 ${x.expect})`);
+check('원료 표: 확정 원료 사실 문장은 PASS · 후보·금지는 REVIEW · 후보를 확정으로 바꾸면 PASS', () => {
+  const fs = require('fs');
+  const vm = require('vm');
+  const sentence = x => `Contains ${x.en[0]}.`;
+  const wrong = C.ingredients.filter(x => verdict(sentence(x)) !== (x.status === 'confirmed' || x.status === 'base' ? 'PASS' : 'REVIEW')).map(x => `${x.id}(${x.status}) → ${verdict(sentence(x))}`);
+  assert.deepStrictEqual(wrong, [], wrong.join(' | '));
+  // data.js에서 status 한 줄만 바꿔 다시 불러오면 판정이 바뀌는지 (원료 확정 시나리오)
+  const box = { api: {} };
+  box.window = box;
+  box.REBOOT = { store: () => ({ get: () => null, set() {}, remove() {}, keys: () => [] }), register() {},
+    expose: (id, o) => { if (id === 'compliance') Object.assign(box.api, o); }, use: () => ({}), user: () => ({}), ui: {} };
+  vm.createContext(box);
+  const src = fs.readFileSync(here('../static/data.js'), 'utf8').replace("{ id: 'turmeric', status: 'candidate'", "{ id: 'turmeric', status: 'confirmed'");
+  vm.runInContext(src, box);
+  vm.runInContext(fs.readFileSync(here('../static/compliance.js'), 'utf8'), box);
+  assert.strictEqual(box.api.review('Contains turmeric.', {}).verdict, 'PASS');
+  assert.strictEqual(box.api.review('Packed with turmeric.', {}).verdict, 'REVIEW');
+  assert.strictEqual(box.api.review('Turmeric supports liver health.', {}).verdict, 'REVISE');
+});
+
+check('일괄 심의 더미 30개는 예상 판정대로 · 판정별 6개씩 (예시 영어 · 줄마다 채널·제품·기준)', () => {
+  assert.strictEqual(C.batchSample.length, 30);
+  const opts = x => ({ channel: x.channel, product: x.product, category: x.category || 'FOOD' });
+  const bad = C.batchSample.filter(x => verdict(x.copy, opts(x)) !== x.expect)
+    .map(x => `${x.copy} → ${verdict(x.copy, opts(x))} (예상 ${x.expect})`);
   assert.deepStrictEqual(bad, [], bad.join(' | '));
+  // 한국어 원문 판정과 합쳐도(더 엄격한 쪽) 예상과 같아야 함 → AI 번역이 달라도 결과가 흔들리지 않게
+  const R = { PASS: 0, COND: 1, REVIEW: 2, REVISE: 3, BLOCK: 4 };
+  const mixed = C.batchSample.filter(x => { const a = verdict(x.copy, opts(x)), k = verdict(x.ko, opts(x)); return (R[k] > R[a] ? k : a) !== x.expect; })
+    .map(x => x.ko);
+  assert.deepStrictEqual(mixed, [], `한국어와 합치면 달라지는 줄: ${mixed.join(' | ')}`);
+  const count = {};
+  C.batchSample.forEach(x => { count[x.expect] = (count[x.expect] || 0) + 1; });
+  assert.deepStrictEqual(count, { PASS: 6, BLOCK: 6, REVIEW: 6, REVISE: 6, COND: 6 });
   assert.ok(C.batchSample.every(x => /[가-힣]/.test(x.ko)), '더미 문구는 한국어(ko)가 있어야 함');
 });
 
 check('표현 매핑의 영어 대안은 PASS', () => {
-  const bad = C.mappings.filter(m => /^[A-Za-z]/.test(m.us) && verdict(m.us, { channel: 'b2c' }) !== 'PASS').map(m => m.us);
+  const bad = C.mappings.filter(m => /^[A-Za-z]/.test(m.us) && verdict(m.us, { channel: 'b2c' }) !== (m.expect || 'PASS')).map(m => m.us);   // Zero Sugar는 조건부(COND)
   assert.deepStrictEqual(bad, [], bad.join(' | '));
 });
 
@@ -88,12 +117,34 @@ check('규제 모니터링 제품군 태그 (젤리·음료·당·숙취)', () =
   assert.ok(new RegExp(C.monitorTagSkip, 'i').test('Food Additives Permitted in Feed and Drinking Water of Animals'), '동물 사료 공고는 태그 제외');
 });
 
-check('당 함량 표현은 판정하지 않지만 미검토로 알려 줌 (PASS와 구분)', () => {
-  const r = api.review('Low sugar jelly. Sugar free too.', { channel: 'b2c' });
-  assert.strictEqual(r.verdict, 'PASS');
-  assert.deepStrictEqual(r.unchecked.map(x => x.code).sort(), ['R11', 'R12']);
-  assert.deepStrictEqual(api.review('Tastes like lime.', { channel: 'b2c' }).unchecked, []);
-  assert.strictEqual(api.review('Low sugar jelly.', { channel: 'all', product: 'all' }).unchecked.length, 1);
+check('당류 규칙 R11·R12 (2026-10-25 다시 켬 · Balance Zero Sugar PASS)', () => {
+  assert.strictEqual(verdict('Low sugar jelly.'), 'BLOCK');                                 // R11 · 가이드에 없는 당 표현
+  assert.strictEqual(verdict('저당 음료'), 'BLOCK');
+  assert.strictEqual(verdict('Zero Sugar lime jellies.', { product: 'jelly-ls' }), 'PASS');  // R12 · Balance는 사용 가능 (2026-10-25 담당 결정)
+  assert.strictEqual(verdict('Zero Sugar lime jellies.'), 'COND');                           // 제품을 모르면 확인
+  assert.strictEqual(verdict('Zero Sugar lime jellies.', { product: 'jelly' }), 'BLOCK');    // Original은 사용 불가
+  assert.strictEqual(verdict('Zero Sugar lime jellies.', { channel: 'all', product: 'all' }), 'BLOCK');   // 브랜드 전체 = 가장 엄격
+  assert.strictEqual(verdict('No sugar alcohols.', { product: 'drink-ls' }), 'PASS');        // 당알코올 없음은 당 함량 주장이 아님
+  assert.deepStrictEqual(api.review('Low sugar jelly. Sugar free too.', { channel: 'b2c' }).unchecked, []);   // 꺼 둔 규칙 없음
+});
+
+check('법적 신호 (2026-10-25): 규칙마다 신호 · 법으로 막히는 표현 🔴 · 회색지대 🟡 · 팀·플랫폼 기준 🟢 · 판정과 별도', () => {
+  const legal = (text, opts) => api.review(text, opts || {}).legal;
+  const missing = C.rules.filter(r => !['red', 'yellow', 'green'].includes(r.legal) || !r.legalNote).map(r => r.code);
+  assert.deepStrictEqual(missing, [], `신호·설명이 없는 규칙: ${missing.join(', ')}`);
+  assert.strictEqual(legal('Prevents hangovers.'), 'red');                          // R1·R2 질병·숙취 주장
+  assert.strictEqual(legal('FDA approved jelly.'), 'red');                          // R14
+  assert.strictEqual(legal('Clinically proven formula.'), 'yellow');                // R5 근거가 있으면 가능
+  assert.strictEqual(legal('Drink all night with Reboot.'), 'green');               // R6 플랫폼·팀 기준
+  assert.strictEqual(legal('Read our customer reviews.'), 'yellow');                 // R10 후기
+  assert.strictEqual(legal('We give a free sample if you leave a 5-star review.'), 'red');   // 좋은 후기 조건 보상 (16 CFR 465)
+  assert.strictEqual(legal('Zero Sugar lime jellies.'), 'yellow');                  // 제품 미지정
+  assert.strictEqual(legal('Zero Sugar lime jellies.', { product: 'jelly' }), 'red');      // Original에 Zero Sugar = 거짓 표시
+  assert.strictEqual(legal('Zero Sugar lime jellies.', { product: 'all' }), 'red');        // 브랜드 전체 = 가장 높은 신호
+  assert.strictEqual(legal('Drink all night. Clinically proven.'), 'yellow');       // 여러 규칙 → 가장 높은 신호
+  assert.strictEqual(legal('Lime, lemon and cherry jellies.'), '');                 // PASS는 신호 없음
+  const r = api.review('Drink all night. Prevents hangovers.');
+  assert.deepStrictEqual(r.findings.map(f => [f.code, f.legal]), [['R1', 'red'], ['R2', 'red'], ['R6', 'green']]);
 });
 
 check('처음 보는 문장 시험: GPT가 찾은 문장은 모두 맞고, 새 문장 점수는 떨어지지 않음', () => {

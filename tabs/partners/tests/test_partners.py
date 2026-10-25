@@ -144,18 +144,23 @@ def test_requires_login(client):
 
 
 def test_status_and_config(auth_client, monkeypatch):
-    for name in ("REGULATION_DB_URL", "PRODUCT_DESC"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("PRODUCT_DESC", raising=False)
     st = auth_client.get("/api/partners/status").get_json()
-    assert set(st) == {"regulationDb", "openai", "model", "smtp", "sender"}
-    assert (st["regulationDb"], st["openai"], st["smtp"], st["sender"]) == (False, False, False, "")
-    monkeypatch.setenv("REGULATION_DB_URL", "postgresql://example.invalid/regulation")
-    assert auth_client.get("/api/partners/status").get_json()["regulationDb"] is True
+    assert set(st) == {"regulationDb", "regulation", "openai", "model", "smtp", "sender"}
+    assert (st["openai"], st["smtp"], st["sender"]) == (False, False, "")
+    # 규제 DB = 컴플라이언스 파트의 규칙 DB를 실제로 읽은 결과
+    reg = st["regulation"]
+    assert st["regulationDb"] is True and reg["source"] == "compliance" and reg["ruleCount"] > 0 and reg["rulesVersion"]
+    from tabs.compliance import server_review
+    monkeypatch.setattr(server_review, "RULES_FILE", ROOT / "tabs" / "partners" / "no-such-rules.json")
+    off = auth_client.get("/api/partners/status").get_json()
+    assert off["regulationDb"] is False and off["regulation"]["error"]
     cfg = auth_client.get("/api/partners/config").get_json()
     assert [len(cfg["subcategories"][t]) for t in ("케이터링", "인플루언서")] == [7, 7]
     assert [len(cfg["guidePurposes"][t]) for t in ("케이터링", "인플루언서")] == [6, 6]
     assert all("{partner}" in p and "{ideal}" in p and "{product}" in p for p in cfg["prompts"].values())
-    assert len(cfg["guideSections"]) == 8 and "hangover" not in cfg["productDesc"].lower()
+    desc = cfg["productDesc"].lower().replace("-", " ")
+    assert len(cfg["guideSections"]) == 8 and "hangover" not in desc and "morning after" not in desc   # 컴플라이언스 R2 금지어
 
 
 def test_partner_page_loads_scripts_in_order(auth_client):
@@ -717,3 +722,18 @@ def test_guide_prompt_fixed_summary_and_no_age_key_message():
     assert f"> {prompts.GUIDE_SUMMARY}" in system and "{summary}" not in system
     assert "never copy the format notes" in system and "must not include an adults-21+" in system
     assert "hangover" not in prompts.GUIDE_SUMMARY.lower() and "숙취" not in prompts.GUIDE_SUMMARY
+
+
+def test_export_csv_roundtrip(auth_client):
+    """업체 목록 CSV 내보내기 → 그대로 다시 가져오면 같은 목록 (가짜 데이터)."""
+    import_both(auth_client)
+    before = {c["name"]: c for c in auth_client.get("/api/partners/contacts").get_json()["items"]}
+    for name in ("catering.csv", "influencer.csv"):
+        res = auth_client.get(f"/api/partners/export/{name}")
+        assert res.status_code == 200 and "attachment" in res.headers["Content-Disposition"]
+        assert upload(auth_client, file=(name, res.get_data())).status_code == 200
+    after = {c["name"]: c for c in auth_client.get("/api/partners/contacts").get_json()["items"]}
+    assert set(after) == set(before)
+    for n, c in before.items():
+        assert (after[n]["email"], after[n]["type"], after[n]["category"]) == (c["email"], c["type"], c["category"])
+    assert auth_client.get("/api/partners/export/other.csv").status_code == 404

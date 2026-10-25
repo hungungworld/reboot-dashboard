@@ -142,6 +142,9 @@ def test_server_review_matches_browser_engine():
     data = json.loads(server_review.RULES_FILE.read_text(encoding="utf-8"))
     bad = [(t, v, server_review.review(t)["verdict"]) for t, v in data["golden"] if server_review.review(t)["verdict"] != v]
     assert len(data["golden"]) > 100 and bad == []
+    # 법적 신호도 같음 (2026-10-25 · 검토 요청 Slack 알림에 표시)
+    bad = [(t, p, v) for t, p, v in data["goldenLegal"] if server_review.review(t, "cs", p)["legal"] != v]
+    assert {v for _, _, v in data["goldenLegal"]} == {"", "green", "yellow", "red"} and bad == []
 
 
 def test_send_lock_blocks_double_and_uncertain_send(auth_client, monkeypatch):
@@ -237,3 +240,43 @@ def test_gmail_html_only_body_query_and_disconnect(app, monkeypatch):
         assert gmail.ready() is True
         gmail.disconnect()
         assert gmail.ready() is False and gmail._load_credentials() is None
+
+
+def test_ai_draft_few_shot_passes_recheck_and_avoids_demo_mails():
+    """CS 답장 few-shot (2026-10-25): 예시 답장은 CS 재점검 PASS · 시연 더미 문의와 문장이 겹치지 않음 · 시스템 프롬프트에 들어감."""
+    import re
+    from pathlib import Path
+    from tabs.compliance import server_review
+    from tabs.cs import ai_draft
+    assert ai_draft.FEW_SHOT.startswith("Examples of good replies")
+    assert len(ai_draft.FEW_SHOT_EXAMPLES) >= 3
+    assert [e["type"] for e in ai_draft.FEW_SHOT_EXAMPLES if server_review.review(e["reply"])["verdict"] != "PASS"] == []
+    src = (Path(__file__).parent.parent / "static" / "data.js").read_text(encoding="utf-8")
+    block = src[src.index("dummyInquiries: ["):]
+    dummy = re.findall(r"body: '([^']+)'", block) + re.findall(r'body: "([^"]+)"', block)
+    assert len(dummy) >= 10
+    shots = " ".join(e["customer"] + " " + e["reply"] for e in ai_draft.FEW_SHOT_EXAMPLES)
+    assert [d for d in dummy if d[:40] in shots] == []
+
+
+def test_server_review_is_product_aware():
+    """서버 재검사가 제품을 구분 (파트 검토 2026-10-25): Original에 Zero Sugar → BLOCK · Balance → PASS ·
+    제품을 모르면 4종 중 가장 엄격 · 제품별 golden도 브라우저 판정과 같음."""
+    import json
+    from tabs.compliance import server_review
+    t = "Reboot Jelly Original is Zero Sugar."
+    assert server_review.review(t, "cs", "jelly")["verdict"] == "BLOCK"
+    assert server_review.review(t, "cs", "jelly-ls")["verdict"] == "PASS"
+    assert server_review.review(t, "cs", "all")["verdict"] == "BLOCK"
+    data = json.loads(server_review.RULES_FILE.read_text(encoding="utf-8"))
+    bad = [(s, p, v) for s, p, v in data["goldenProduct"] if server_review.review(s, "cs", p)["verdict"] != v]
+    assert data["products"] == ["jelly", "jelly-ls", "drink", "drink-ls"] and bad == []
+
+
+def test_cs_approve_blocks_zero_sugar_for_original_product(auth_client):
+    """CS 승인: 문의 제품이 Original이면 'Zero Sugar' 답장은 서버에서 거절 · 제품을 안 보내면 가장 엄격하게."""
+    body = "Hi Sam,\nOur Reboot Jelly is Zero Sugar.\nBest regards,\nReboot Customer Care"
+    base = {"message_id": "zs123abc", "body": body, "approver": "소준희"}
+    assert auth_client.post("/api/cs/approve", json={**base, "product": "jelly"}).status_code == 400
+    assert auth_client.post("/api/cs/approve", json=base).status_code == 400
+    assert auth_client.post("/api/cs/approve", json={**base, "product": "jelly-ls"}).status_code == 200

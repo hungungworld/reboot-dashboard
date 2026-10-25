@@ -70,8 +70,8 @@
     const p = inq ? productInfo(inq.product) : null;
     const out = { brand: (DATA.brand || {}).name || null };
     if (inq) {
-      out.product = !p ? '[확인 필요: 문의한 제품 (젤리·저당 젤리·음료·저당 음료)]'
-        : p.en || `[확인 필요: ${p.ko} 영문 제품명 (저당 표기는 컴플라이언스 R11·R12 확인)]`;
+      out.product = !p ? '[확인 필요: 문의한 제품 (Original·Balance 젤리 / Original·Balance 음료)]'
+        : p.en || `[확인 필요: ${p.ko} 영문 제품명 (당류 표기는 컴플라이언스 R11·R12 확인)]`;
       out.flavor = !p ? null : p.flavorsFinal ? p.flavors.join(', ') : `[확인 필요: ${p.ko} 맛 확정 (임시: ${p.flavors.join(', ')})]`;
       out.pack = p ? p.pack : null;
       out.unit = p ? p.unit : null;
@@ -141,8 +141,9 @@
     ta.scrollTop = Math.max(0, lineNo * lh - ta.clientHeight / 3);
   }
 
-  function recheck(text) {
-    try { return REBOOT.use('compliance').review(text, { channel: 'cs' }); } catch (e) { return null; }
+  // 문의 제품 기준으로 점검 (모르면 4종 중 가장 엄격 · 서버 재검사와 같은 기준 · 2026-10-25)
+  function recheck(text, product) {
+    try { return REBOOT.use('compliance').review(text, { channel: 'cs', product: product || 'all' }); } catch (e) { return null; }
   }
 
   /** 최종 승인 전에 모두 통과해야 하는 조건 */
@@ -354,7 +355,8 @@
         current: inq.draft, banned,
         facts: Object.assign({}, facts(inq), {
           inquiry_product: inq.product ? productKo(inq.product) : 'unknown — ask the customer which product if it matters',
-          line_up: PRODUCTS.map(p => `${p.ko} (${p.form}; flavors ${p.flavorsFinal ? '' : 'tentative '}${p.flavors.join('/')}; ${p.pack}${p.sugarReduced ? '; sugar-reduced recipe — do not say "low sugar"; no sugar claims until verified' : ''})`).join(' | '),
+          line_up: PRODUCTS.map(p => `${p.ko} (${p.form}; flavors ${p.flavorsFinal ? '' : 'tentative '}${p.flavors.join('/')}; ${p.pack}${!p.zeroSugar ? '; no sugar claims' : DATA.zeroSugarFinal ? '; Zero Sugar — use only the words "Zero Sugar" for this product; no other sugar claims or numbers'
+            : '; Zero Sugar wording not final yet (brand guide v1.1) — do not state any sugar fact; if asked, write "[확인 필요: Balance 당 표현 확정]"'})`).join(' | '),
           slogan: (DATA.brand || {}).slogan || ''
         })
       });
@@ -729,7 +731,7 @@
         `<option value="${x.code}"${x.code === inq.type ? ' selected' : ''}>${x.code} ${esc(x.name)}</option>`).join('')}</select></label>
     <label class="cs-field"><span>제품${inq.product ? '' : ' <b class="cs-req">(미확인)</b>'}</span>
       <select class="cs-input" data-el="product" ${locked ? 'disabled' : ''}><option value="">제품 미확인</option>${PRODUCTS.map(x =>
-        `<option value="${x.id}"${x.id === inq.product ? ' selected' : ''}>${esc(x.ko)} · ${esc(x.form === 'stick jelly' ? '스틱 젤리' : '비탄산 음료')}</option>`).join('')}</select></label>
+        `<option value="${x.id}"${x.id === inq.product ? ' selected' : ''}>${esc(x.ko)} · ${esc(x.id.startsWith('jelly') ? '모양 젤리' : '비탄산 음료')}</option>`).join('')}</select></label>
     <div class="cs-actions">
       <button type="button" class="cs-btn" data-act="regen" ${locked ? 'disabled' : ''}>템플릿으로 초안 다시 만들기</button>
       ${t.code === 'C1' ? '<button type="button" class="cs-btn" data-act="to-adverse">부작용 접수 열기</button>' : ''}
@@ -801,7 +803,7 @@
     const box = ui.root.querySelector('[data-el="detail"]');
     const inq = load().find(x => x.id === ui.selected);
     if (!inq) return;
-    const r = recheck(inq.draft);
+    const r = recheck(inq.draft, inq.product);
     const g = gates(inq, r);
     const todos = pendingTodos(inq.draft);
 
@@ -958,7 +960,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         renderList(ui);
       } else if (act === 'approve') {
         const cur = load().find(x => x.id === id);
-        const r = recheck(cur.draft);
+        const r = recheck(cur.draft, cur.product);
         if (!gates(cur, r).every(x => x.ok) || !ui.approver.trim()) { renderCheck(ui); return; }
         const done = account => {
           patch(id, inq => {
@@ -972,7 +974,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         // Gmail 문의는 서버에도 승인 기록 (보내기 때 본문 지문을 대조) · 더미 문의는 화면에만
         if (!cur.gmailId) return done('');
         btn.disabled = true;
-        api('/api/cs/approve', { message_id: cur.gmailId, body: cur.draft, approver: ui.approver.trim(), verdict: r.verdict })
+        api('/api/cs/approve', { message_id: cur.gmailId, body: cur.draft, approver: ui.approver.trim(), verdict: r.verdict, product: cur.product || '' })
           .then(res => done(res.account))
           .catch(e => { toast(`승인 실패: ${e.message}`); btn.disabled = false; });
       } else if (act === 'copy') {
@@ -1086,7 +1088,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       const inq = load().find(x => x.id === id);
       if (!inq) return { subject: head, body: '' };
       const t = TYPES[inq.type];
-      const r = recheck(inq.draft);
+      const r = recheck(inq.draft, inq.product);
       const todos = pendingTodos(inq.draft);
       const adv = loadAdverse().find(x => x.linkedInquiry === inq.id);
       add(`${SHARE_KIND[kind]} 드립니다.`);
@@ -1335,7 +1337,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
     const t = TYPES[i.type];
     const reply = i.status === '발송 완료' || i.sentAt
       ? `<div class="cs-mail cs-mail-out"><div class="cs-mail-head">📤 <b>보낸 답장</b> · ${fmt(i.sentAt)}${i.sentTo ? ` → ${esc(i.sentTo)}` : ''}${i.sentMode === 'demo' ? ' <span class="cs-chip cs-chip-dim">시연 표시 · 실제로 보내지 않음</span>' : ''}
-          ${i.approval && i.approval.by ? `<span class="cs-muted">승인 ${esc(i.approval.by)}</span>` : ''}</div><pre class="cs-mail-body">${esc(i.draft)}</pre></div>`
+          ${i.approval && i.approval.by ? `<span class="cs-muted">승인 ${esc(i.approval.by)}</span>` : ''}</div><pre class="cs-mail-body">${esc(i.sentBody || i.draft)}</pre></div>`
       : i.status === '승인'
         ? `<div class="cs-mail cs-mail-draft"><div class="cs-mail-head">✅ <b>승인됨 · 아직 안 보냄</b> <span class="cs-muted">보내기 탭에서 보냄</span></div><pre class="cs-mail-body">${esc(i.draft)}</pre></div>`
         : `<details class="cs-mail cs-mail-draft"><summary class="cs-mail-head">✏️ <b>답장 아직 안 보냄</b> · ${esc(i.status)} <span class="cs-muted">초안 보기</span></summary><pre class="cs-mail-body">${esc(i.draft)}</pre></details>`;
@@ -1356,7 +1358,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
      보내기 전에 한 번 더: 승인 상태 · 지금 초안의 재검사(BLOCK이면 막음) · [확인 필요] 없음. 서버도 같은 조건으로 거절 */
 
   function sendCheck(inq) {
-    const r = recheck(inq.draft);
+    const r = recheck(inq.draft, inq.product);
     if (inq.status !== '승인' || !inq.approval) return { ok: false, why: '최종 승인 전입니다.' };
     if (!r) return { ok: false, why: '컴플라이언스 재검사를 할 수 없습니다 (새로고침).' };
     if (r.verdict === 'BLOCK') return { ok: false, why: '재검사 결과가 BLOCK입니다. 문의함에서 초안을 고치세요.' };
@@ -1391,7 +1393,30 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
 </article>`;
   }
 
+  /** 보낸 답장 펼침 내용: 실제로 보낸 본문(sentBody) · 받는 사람 · 시각 · 방식 · 승인 정보 · 원래 문의 */
+  function sentDetailHTML(i) {
+    const body = i.sentBody || i.draft || '';
+    const a = i.approval || {};
+    const row = (k, v) => (v ? `<div><dt>${k}</dt><dd>${v}</dd></div>` : '');
+    return `<div class="cs-sent-detail">
+  <dl class="cs-sent-meta">
+    ${row('보낸 시각', i.sentAt ? esc(fmt(i.sentAt)) : '')}
+    ${row('받는 사람', esc(i.sentTo || i.from || ''))}
+    ${row('방식', i.sentMode === 'gmail' ? 'Gmail로 실제 발송' : i.sentMode === 'demo' ? '시연 표시 · 실제로 보내지 않음' : '')}
+    ${row('Gmail 메시지 번호', i.sentId ? `<code>${esc(i.sentId)}</code>` : '')}
+    ${row('승인', a.by ? `${esc(a.by)}${a.at ? ` · ${esc(fmt(a.at))}` : ''}${a.verdict ? ` · 재검사 ${esc(a.verdict)}` : ''}` : '')}
+    ${row('승인 의견', a.comment ? esc(a.comment) : '')}
+    ${row('문의', `${TYPES[i.type] ? `${esc(i.type)} ${esc(TYPES[i.type].name)} · ` : ''}${esc(i.subject || '')}`)}
+  </dl>
+  <div class="cs-mail cs-mail-out"><div class="cs-mail-head">📤 <b>보낸 답장 본문</b>${i.sentBody ? '' : ' <span class="cs-chip cs-chip-dim">보낼 때 기록이 없던 예전 건 · 지금 초안을 보여 줌</span>'}</div>
+    <pre class="cs-mail-body">${esc(body)}</pre></div>
+  ${trBlock(body, '보낸 답장 한글 번역')}
+  <div class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="open">문의 열기</button></div>
+</div>`;
+  }
+
   function renderOutbox(ui, p) {
+    if (!ui.outboxOpen) ui.outboxOpen = new Set();   // 펼친 보낸 답장 (다시 그려도 유지)
     const all = load();
     const ready = all.filter(i => i.status === '승인').sort((a, b) => (a.approval && a.approval.at || 0) - (b.approval && b.approval.at || 0));
     const sent = all.filter(i => i.status === '발송 완료' || (i.status === '종결' && i.sentAt)).sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0)).slice(0, 30);
@@ -1402,17 +1427,34 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
   ${ready.length ? ready.map(i => outboxCardHTML(ui, i)).join('') : '<p class="cs-muted">최종 승인된 답장이 없습니다. 문의함에서 초안을 확인하고 ④ 최종 승인을 하면 여기에 나타납니다.</p>'}
   <div class="cs-card-head cs-out-sent-head"><h3>보낸 답장 <span class="cs-chip">${sent.length}건</span></h3></div>
   ${sent.length ? `<div class="cs-table-wrap"><table class="cs-table">
-    <thead><tr><th>보낸 시각</th><th>고객</th><th>받는 사람</th><th>제목</th><th>상태</th><th></th></tr></thead>
-    <tbody>${sent.map(i => `<tr data-id="${esc(i.id)}"><td class="cs-nowrap">${i.sentAt ? fmt(i.sentAt) : '—'}</td><td>${esc(i.name)}</td>
+    <thead><tr><th></th><th>보낸 시각</th><th>고객</th><th>받는 사람</th><th>제목</th><th>상태</th><th></th></tr></thead>
+    <tbody>${sent.map(i => { const open = ui.outboxOpen.has(i.id); return `<tr class="cs-out-row${open ? ' is-open' : ''}" data-id="${esc(i.id)}" title="눌러서 보낸 답장 내용 보기">
+      <td class="cs-nowrap"><button type="button" class="cs-btn cs-btn-sm cs-out-toggle" data-act="toggle-sent" aria-expanded="${open}">${open ? '▾ 접기' : '▸ 내용'}</button></td>
+      <td class="cs-nowrap">${i.sentAt ? fmt(i.sentAt) : '—'}</td><td>${esc(i.name)}</td>
       <td>${esc(i.sentTo || i.from)}</td><td>${esc(i.subject)}</td><td>${esc(i.status)}${i.sentMode === 'demo' ? ' (시연)' : ''}</td>
-      <td>${i.status === '발송 완료' ? '<button type="button" class="cs-btn cs-btn-sm" data-act="close">종결</button>' : ''}</td></tr>`).join('')}</tbody>
-  </table></div>` : '<p class="cs-muted">아직 보낸 답장이 없습니다.</p>'}
+      <td>${i.status === '발송 완료' ? '<button type="button" class="cs-btn cs-btn-sm" data-act="close">종결</button>' : ''}</td></tr>
+    <tr class="cs-out-detail" data-id="${esc(i.id)}"${open ? '' : ' hidden'}><td colspan="7">${sentDetailHTML(i)}</td></tr>`; }).join('')}</tbody>
+  </table></div>
+  <p class="cs-muted">줄을 누르면 실제로 보낸 답장 본문과 받는 사람 · 보낸 시각 · 승인 정보를 볼 수 있습니다.</p>` : '<p class="cs-muted">아직 보낸 답장이 없습니다.</p>'}
 </div>`;
     const focus = ui.outboxFocus && p.querySelector(`.cs-out[data-id="${CSS.escape(ui.outboxFocus)}"]`);
     if (focus) focus.scrollIntoView({ block: 'center' });
     ui.outboxFocus = null;
 
     p.onclick = async e => {
+      // 보낸 답장 줄(또는 ▸ 내용 버튼)을 누르면 내용 펼치기 · 접기
+      const row = e.target.closest('tr.cs-out-row');
+      const tog = e.target.closest('[data-act="toggle-sent"]');
+      if (tog || (row && !e.target.closest('button, a'))) {
+        const rid = (tog ? tog.closest('tr') : row).dataset.id;
+        if (ui.outboxOpen.has(rid)) ui.outboxOpen.delete(rid); else ui.outboxOpen.add(rid);
+        const open = ui.outboxOpen.has(rid);
+        const r = p.querySelector(`tr.cs-out-row[data-id="${CSS.escape(rid)}"]`);
+        const d = p.querySelector(`tr.cs-out-detail[data-id="${CSS.escape(rid)}"]`);
+        if (r) { r.classList.toggle('is-open', open); const b = r.querySelector('.cs-out-toggle'); b.textContent = open ? '▾ 접기' : '▸ 내용'; b.setAttribute('aria-expanded', String(open)); }
+        if (d) d.hidden = !open;
+        return;
+      }
       const btn = e.target.closest('[data-act]');
       if (!btn || btn.disabled || btn.dataset.act === 'translate') return;
       const id = btn.closest('[data-id]') && btn.closest('[data-id]').dataset.id;
@@ -1430,7 +1472,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
       const c = sendCheck(inq);
       if (!c.ok) { toast(c.why); return redraw(); }
       if (act === 'mark-sent') {
-        patch(id, x => { x.status = '발송 완료'; x.sentAt = Date.now(); x.sentMode = 'demo'; logTo(x, '보낸 것으로 표시 (시연)'); });
+        patch(id, x => { x.status = '발송 완료'; x.sentAt = Date.now(); x.sentMode = 'demo'; x.sentBody = x.draft; logTo(x, '보낸 것으로 표시 (시연)'); });
         toast('보낸 것으로 표시했습니다 (더미 문의 · 실제로 보내지 않음).');
         return redraw();
       }
@@ -1445,8 +1487,8 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
         if (act === 'send') {
           const pv = await api('/api/cs/gmail/preview', { message_id: inq.gmailId });
           if (!global.confirm(`이 답장을 바로 보냅니다. 보낸 메일은 되돌릴 수 없습니다.\n\n받는 사람: ${pv.to}\n제목: ${pv.subject}\n승인: ${inq.approval.by} · 재검사 ${c.r.verdict}\n\n보낼까요?`)) { btn.disabled = false; return; }
-          const res = await api('/api/cs/gmail/send', { message_id: inq.gmailId, body: inq.draft });
-          patch(id, x => { x.status = '발송 완료'; x.sentAt = Date.now(); x.sentId = res.sent_id; x.sentTo = res.to; x.sentMode = 'gmail'; logTo(x, `Gmail로 보냄 → ${res.to}`); });
+          const res = await api('/api/cs/gmail/send', { message_id: inq.gmailId, body: inq.draft, product: inq.product || '' });
+          patch(id, x => { x.status = '발송 완료'; x.sentAt = Date.now(); x.sentId = res.sent_id; x.sentTo = res.to; x.sentMode = 'gmail'; x.sentBody = inq.draft; logTo(x, `Gmail로 보냄 → ${res.to}`); });
           toast(`보냈습니다 → ${res.to}`);
           return redraw();
         }

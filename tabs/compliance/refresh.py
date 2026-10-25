@@ -8,11 +8,11 @@ Flask 통합: 저장 위치는 DATA_DIR/parts_override/compliance/monitor-data.j
   python -m tabs.compliance.refresh --dry    저장하지 않고 개수만 출력
 
 출처
-- openFDA 식품 리콜 (food/enforcement): 젤리·곤약·숙취 · 한국산 음료 · 헛개. 키 없이 먼저 부르고 실패하면 OPENFDA_API_KEY로 다시
+- openFDA 식품 리콜 (food/enforcement): 젤리(구미)·숙취 · 한국산 음료 · 헛개. 키 없이 먼저 부르고 실패하면 OPENFDA_API_KEY로 다시
 - Regulations.gov: FDA·FTC 규칙·규칙안 (FDA는 식품·표시·광고 관련 제목만)
 - CourtListener: 숙취 제품·건강식품 허위광고 판결 (관련성 낮은 결과가 섞일 수 있음 → 참고용)
 - FDA 수입 거부: Data Dashboard API (FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY) · 한국산 식품만
-- CBP CROSS: 품목분류 결정 검색 API (키 없음) · 젤리·2106.90·곤약 · 음료 2202.10·2202.99 · 헛개
+- CBP CROSS: 품목분류 결정 검색 API (키 없음) · 젤리·2106.90 · 음료 2202.10·2202.99 · 헛개
 - Federal Register: FTC 전체 + FDA 식품 관련 공고 (키 없음). FTC 보도자료 RSS는 봇 차단이라 대신 씀
 - 자동으로 못 읽는 곳 (2026-10-24 확인): NAD(화면을 자바스크립트로 그림 · 피드 없음) · Prop 65(OEHHA 봇 차단) → 화면의 바로가기 버튼
 - FDA 경고장: warning_letters.py (Data Dashboard API · fda.gov XLSX · 사람이 올린 XLSX·본문). fda.gov는 자동 요청을
@@ -69,9 +69,9 @@ def _iso(d8):
     return f"{d8[:4]}-{d8[4:6]}-{d8[6:8]}" if re.fullmatch(r"\d{8}", d8 or "") else (d8 or "")
 
 
-# 우리 제품군 전체 (2026-10-24): 젤리 · 음료(한국산으로 좁힘 — 음료만으로는 수백 건) · 숙취 연상 성분(헛개)
+# 우리 제품군 전체 (2026-10-24): 젤리 · 곤약은 뺌 (2026-10-25 · 우리 젤리는 곤약이 아닌 구미형) · 음료(한국산으로 좁힘 — 음료만으로는 수백 건) · 숙취 연상 성분(헛개)
 RECALL_SEARCHES = (
-    "product_description:(jelly OR konjac OR hangover OR gummy)",
+    "product_description:(jelly OR gummy OR gummies OR hangover)",
     "product_description:(drink OR beverage) AND product_description:(korea OR korean)",
     'product_description:(hovenia OR "raisin tree")',
 )
@@ -151,7 +151,7 @@ def courtlistener():
     queries = [
         ('"hangover" AND ("false advertising" OR "Lanham Act" OR misbranded OR "unfair competition")', None),
         ('("dietary supplement" OR "functional beverage") AND ("false advertising" OR misbranded)', _lookback().strftime("%m/%d/%Y")),
-        # 저당 제품 표시 (2026-10-24 · 저당 젤리·저당 음료)
+        # 당 표시 관련 허위광고 판결 (2026-10-24 · Balance 제품의 'Zero Sugar' 표기 참고)
         ('("low sugar" OR "sugar free" OR "no sugar added") AND ("false advertising" OR misleading OR misbranded)', _lookback().strftime("%m/%d/%Y")),
     ]
     seen, items = set(), []
@@ -178,9 +178,9 @@ def courtlistener():
     return items
 
 
-CROSS_FOOD = re.compile(r"jelly|konjac|gumm|confection|candy|beverage|drink|food preparation|dietary supplement|hangover|hovenia|raisin tree", re.I)
-# 젤리(2106.90 · 곤약) + 비탄산 음료 HS 후보(2202.10 · 2202.99 — 실제 코드는 관세사 확인) + 헛개 (2026-10-24 제품군 전체)
-CROSS_TERMS = ("jelly", "2106.90", "konjac", "2202.10", "2202.99", "hovenia")
+CROSS_FOOD = re.compile(r"jelly|gumm|confection|candy|beverage|drink|food preparation|dietary supplement|hangover|hovenia|raisin tree", re.I)
+# 젤리(2106.90 · 구미형) + 비탄산 음료 HS 후보(2202.10 · 2202.99 — 실제 코드는 관세사 확인) + 헛개 (2026-10-24 제품군 전체)
+CROSS_TERMS = ("jelly", "gummy", "2106.90", "2202.10", "2202.99", "hovenia")
 CROSS_HTS = re.compile(r"\b(1704|2106|2202|2009)\.")   # 설탕 과자 · 기타 조제 식료품 · 음료 · 주스
 
 
@@ -315,6 +315,125 @@ def fda_warning_letters(bodies=False):
     return warning_letters.collect(bodies=bodies)
 
 
+# ───────── FDA GRAS 통지 목록 (2026-10-25) ─────────
+# 공개 데이터베이스(키 없음)의 '데이터 내려받기' 파일 하나 · 확장자는 xls지만 내용은 CSV (cp1252)
+# 하루 1회 작업이 불러도 실제로 내려받는 것은 주 1회 (DATA_DIR/compliance/gras-cache.json)
+# 원료 표(static/data.js ingredients)의 id → (화면 이름, FDA 목록 Substance에서 찾을 말 · 소문자)
+# 이 목록과 data.js 원료 id가 맞는지는 tests/test_compliance_letters.py가 확인
+GRAS_URL = "https://www.hfpappexternal.fda.gov/scripts/fdcc/cfc/XMLService.cfm?method=downloadxls&set=GRASNotices"
+GRAS_PAGE = "https://www.hfpappexternal.fda.gov/scripts/fdcc/index.cfm?set=GRASNotices&id={}"
+GRAS_EVERY = timedelta(days=7)
+GRAS_PER_INGREDIENT = 6
+GRAS_TERMS = {
+    "hovenia": ("헛개", ("hovenia", "raisin tree")),
+    "l-fermentum": ("L. fermentum", ("fermentum",)),
+    "turmeric": ("강황", ("turmeric", "curcumin")),
+    "ginger": ("생강", ("ginger", "zingiber")),
+    "jujube": ("대추", ("jujube", "ziziphus")),
+    "goji": ("구기자", ("goji", "wolfberry", "lycium")),
+    "licorice": ("감초", ("licorice", "glycyrrhiz")),
+    "pear": ("배즙", ("pear juice", "pyrus")),
+    "maesil": ("매실", ("prunus mume", "maesil")),
+    "ginseng": ("홍삼·인삼", ("ginseng", "panax")),
+    "green-tea": ("녹차 추출물", ("green tea", "camellia sinensis", "epigallocatechin")),
+    "kudzu": ("칡", ("kudzu", "pueraria")),
+    "alder": ("오리나무", ("alnus",)),
+    "taurine": ("타우린", ("taurine",)),
+    "citrus-peel": ("귤껍질", ("citrus peel", "orange peel", "tangerine")),
+    "rice-germ": ("미배아·미강", ("rice germ", "rice bran")),
+    "dl-alanine": ("DL-알라닌", ("alanine",)),
+    "atractylodes": ("창출", ("atractylodes",)),
+    "astragalus": ("황기", ("astragalus",)),
+    "dhm": ("DHM", ("dihydromyricetin",)),
+    "nac": ("NAC", ("acetylcysteine", "acetyl cysteine")),
+    "milk-thistle": ("밀크시슬", ("milk thistle", "silymarin", "silybum")),
+    "glutathione": ("글루타치온", ("glutathione",)),
+    "konjac": ("곤약", ("konjac", "glucomannan")),
+    "folic-acid": ("엽산", ("folic acid",)),
+    "artichoke": ("아티초크", ("artichoke", "cynara")),
+    "allulose": ("알룰로스", ("psicose", "allulose")),
+    "stevia": ("스테비아", ("rebaudioside", "stevia", "steviol")),
+    "monk-fruit": ("나한과", ("luo han", "siraitia", "monk fruit", "mogroside")),
+    "soluble-fiber": ("수용성 옥수수 섬유", ("resistant dextrin", "soluble corn fiber", "resistant maltodextrin")),
+    "pectin": ("펙틴", ("pectin",)),
+    "spirulina": ("스피루리나", ("spirulina", "arthrospira")),
+    "sucralose": ("수크랄로스", ("sucralose",)),
+}
+GRAS_LETTER_KO = (("fda has no questions", "FDA 질문 없음 (통과)"), ("ceased to evaluate", "신청자 요청으로 검토 중단"),
+                  ("does not provide a basis", "GRAS 근거 부족으로 판단"))
+
+
+def _gras_cache_path():
+    return Path(current_app.config["DATA_DIR"]) / "compliance" / "gras-cache.json"
+
+
+def _parse_gras(raw):
+    """FDA 내려받기 파일 → [{grn, substance, use, notifier, closed, letter}]. 앞의 설명 줄은 건너뜀."""
+    import csv
+    import io
+    text = raw.decode("cp1252", errors="replace").lstrip("﻿")
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.startswith("GRAS Notice (GRN) No.")), None)
+    if start is None:
+        raise ValueError("FDA GRAS 파일 형식이 바뀌었습니다 (머리글 줄 없음)")
+    rows = []
+    for x in csv.DictReader(io.StringIO("\n".join(lines[start:]))):
+        grn = re.sub(r"\D", "", x.get("GRAS Notice (GRN) No.") or "")
+        if not grn:
+            continue
+        m = re.fullmatch(r"(\d{2})/(\d{2})/(\d{4})", (x.get("Date of closure") or "").strip())
+        rows.append({"grn": grn, "substance": (x.get("Substance") or "").strip(), "use": (x.get("Intended Use") or "").strip(),
+                     "notifier": (x.get("Notifier") or "").strip(), "closed": f"{m[3]}-{m[1]}-{m[2]}" if m else "",
+                     "letter": (x.get("FDA's Letter") or "").strip()})
+    return rows
+
+
+def _gras_rows():
+    """주 1회만 새로 받음 · 실패하면 지난번 받은 목록을 씀 (없으면 예외)."""
+    path = _gras_cache_path()
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+    fetched = cache.get("fetchedAt") or ""
+    fresh = fetched and datetime.now(timezone.utc) - datetime.fromisoformat(fetched.replace("Z", "+00:00")) < GRAS_EVERY
+    if fresh and cache.get("rows"):
+        return cache["rows"], fetched, ""
+    try:
+        req = urllib.request.Request(GRAS_URL, headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=90) as r:
+            rows = _parse_gras(r.read())
+    except Exception as e:
+        if cache.get("rows"):   # 받기 실패 → 지난번 목록 (화면에 받은 날짜가 보임)
+            return cache["rows"], fetched, f"FDA GRAS 목록 새로 받기 실패 ({type(e).__name__}) · {fetched[:10]}에 받은 목록 사용"
+        raise
+    fetched = _now_iso()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"fetchedAt": fetched, "rows": rows}, ensure_ascii=False), encoding="utf-8")
+    return rows, fetched, ""
+
+
+def fda_gras_notices():
+    """원료 표의 원료별 FDA GRAS 통지 (통과한 통지 먼저 · 원료마다 최대 6건) + 원료별 건수(counts).
+    통지가 없어도 자체 GRAS일 수 있으므로 '0건 = 사용 불가'가 아님 (화면에서 안내)."""
+    rows, fetched, warn = _gras_rows()
+    items, counts = [], {}
+    for ing, (label, terms) in GRAS_TERMS.items():
+        hit = [r for r in rows if any(t in r["substance"].lower() for t in terms)]
+        ok = [r for r in hit if r["letter"].lower().startswith("fda has no questions")]
+        counts[ing] = {"label": label, "total": len(hit), "ok": len(ok)}
+        hit = sorted(ok, key=lambda r: r["closed"], reverse=True) + sorted([r for r in hit if r not in ok], key=lambda r: r["closed"], reverse=True)
+        for r in hit[:GRAS_PER_INGREDIENT]:
+            letter = next((ko for en, ko in GRAS_LETTER_KO if en in r["letter"].lower()), r["letter"][:80])
+            items.append({"id": f"gras-{ing}-{r['grn']}", "date": r["closed"], "title": f"GRN {r['grn']} · {r['substance']}"[:240],
+                          "firm": r["notifier"][:160], "url": GRAS_PAGE.format(r["grn"]),
+                          "summary": f"{label} · {letter} · 용도: {r['use']}"[:600],
+                          "ingredient": ing, "grn": r["grn"], "ok": r in ok})
+    note = "원료별 FDA GRAS 통지 (통과/전체): " + " · ".join(f'{c["label"]} {c["ok"]}/{c["total"]}' for c in counts.values())
+    note += f" · FDA 목록 받은 날 {fetched[:10]} (주 1회)"
+    return items, [warn] if warn else [], note, {"counts": counts, "fetchedAt": fetched, "noKo": True}
+
+
 SOURCES = [
     ("fda-warning-letters", "FDA 경고장 (식품 분야 전체 · 🍺 표시만 숙취·음주 관련)", fda_warning_letters),
     ("openfda-food-recalls", "openFDA 식품 리콜 (젤리·음료·헛개)", openfda_recalls),
@@ -323,6 +442,7 @@ SOURCES = [
     ("fda-import-refusals", "FDA 수입 거부 (한국산 식품)", fda_import_refusals),
     ("cbp-cross", "CBP CROSS 품목분류 결정 (젤리·음료·헛개)", cbp_rulings),
     ("federal-register", "Federal Register FTC·FDA 공고", federal_register),
+    ("fda-gras", "FDA GRAS 통지 (원료 표의 원료별 · 주 1회)", fda_gras_notices),
 ]
 
 
@@ -336,17 +456,18 @@ def collect(bodies=False):
     for sid, label, fn in SOURCES:
         try:
             items = fn(bodies=bodies) if fn is fda_warning_letters else fn()
-            note = ""
-            if isinstance(items, tuple):   # (항목, 실패[, 참고 안내]) — 일부 경로만 실패해도 항목은 저장
-                items, warns, note = (items + ("",))[:3]
+            note, extra = "", None
+            if isinstance(items, tuple):   # (항목, 실패[, 참고 안내[, 출처에 덧붙일 값]]) — 일부 경로만 실패해도 항목은 저장
+                items, warns, note, extra = (items + ("", None))[:4]
                 errors.extend({"id": sid, "label": label, "error": w} for w in warns)
-            sources.append({"id": sid, "label": label, "items": items, "updatedAt": now, **({"note": note} if note else {})})
+            sources.append({"id": sid, "label": label, "items": items, "updatedAt": now, **({"note": note} if note else {}), **(extra or {})})
         except Exception as e:  # 한 출처가 실패해도 나머지는 저장
             msg = f"{type(e).__name__}: {getattr(e, 'code', '') or str(e)[:120]}"
             errors.append({"id": sid, "label": label, "error": msg})
             old = prev.get(sid) or {}
             sources.append({"id": sid, "label": label, "items": old.get("items") or [], "stale": True,
-                            "updatedAt": old.get("updatedAt") or "", **({"note": old["note"]} if old.get("note") else {})})
+                            "updatedAt": old.get("updatedAt") or "", **({"note": old["note"]} if old.get("note") else {}),
+                            **{k: old[k] for k in ("counts", "fetchedAt", "noKo") if k in old}})
     # 제목·요약 한글 (참고용). 실패해도 영어 원문은 그대로 저장
     try:
         from . import ko_summary

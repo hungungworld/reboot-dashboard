@@ -1,4 +1,4 @@
-/* 인플루언서 · 파트너 — 협업 이력(3-4) · 협업 보드 · 크리에이터별 판매 실적(3-5, 🧪 더미)
+/* 인플루언서 · 파트너 — 협업 이력(3-4) · 협업 보드 · 크리에이터별 판매 실적(3-5, 더미)
    대표 파일(partners.js)이 REBOOT.use('partners.records').render(el, 'history' | 'sales')로 부릅니다.
    저장 키(REBOOT.store('partners')): records.columns.u<id> · records.filters.u<id> · records.sales.u<id> (사용자별),
    records.awaiting (팀 공용 — 메뉴 배지 '회신 대기' 숫자 캐시)
@@ -143,19 +143,19 @@
         <div class="flex wrap">
           <label class="ptn-rec-sel"><span class="sr-only">업체</span><select class="input" data-ref="partner" aria-label="업체로 거르기"></select></label>
           <div class="chips" data-ref="kinds" role="group" aria-label="출처"></div>
-          <button type="button" class="btn small dark" data-rec-act="check"${smtp ? '' : ' disabled'}>📥 답장 확인 (Gmail)</button>
+          <button type="button" class="btn small dark" data-rec-act="check"${smtp ? '' : ' disabled'}>답장 확인 (Gmail)</button>
         </div>
         <div class="flex wrap">
           <div class="seg" role="group" aria-label="보기">
             <button type="button" data-rec-view="table" aria-pressed="${st.f.view !== 'board'}">이력 표</button>
             <button type="button" data-rec-view="board" aria-pressed="${st.f.view === 'board'}">협업 보드</button>
           </div>
-          <button type="button" class="btn small ghost" data-rec-act="columns">⚙️ 표시 항목</button>
-          <button type="button" class="btn small soft" data-rec-act="add" aria-expanded="false">➕ 수기 기록 추가</button>
-          <button type="button" class="btn small danger" data-rec-act="delete" disabled>🗑️ 선택 삭제</button>
+          <button type="button" class="btn small ghost" data-rec-act="columns">표시 항목</button>
+          <button type="button" class="btn small soft" data-rec-act="add" aria-expanded="false">수기 기록 추가</button>
+          <button type="button" class="btn small danger" data-rec-act="delete" disabled>선택 삭제</button>
         </div>
       </div>
-      ${smtp ? '' : `<p class="note mb-16">📥 답장 확인은 Gmail(앱 비밀번호)이 연결되면 쓸 수 있습니다 — ${settingsLink}. 그 전에는 편집 창에서 상태를 직접 바꿀 수 있습니다.</p>`}
+      ${smtp ? '' : `<p class="note mb-16">답장 확인은 Gmail(앱 비밀번호)이 연결되면 쓸 수 있습니다 — ${settingsLink}. 그 전에는 편집 창에서 상태를 직접 바꿀 수 있습니다.</p>`}
       <div data-ref="addbox"></div>
       <div data-ref="body"></div>`;
     wireHistory(st);
@@ -200,7 +200,7 @@
     return Array.from(map.values()).map(recs => {
       recs.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
       const latest = recs[0];
-      // 최근 기록 이후에 온 회신이 있으면(아직 답하지 않은 회신) 상태(메일)에 🟢 회신 받음을 계속 보여 줌
+      // 최근 기록 이후에 온 회신이 있으면(아직 답하지 않은 회신) 상태(메일)에 회신 받음을 계속 보여 줌
       const replied = recs.filter(x => x.mailStatus === '회신 받음' && x.reply)
         .sort((a, b) => String(b.reply.at || '').localeCompare(String(a.reply.at || '')))[0];
       const open = replied && replied !== latest && String(replied.reply.at || '') > String(latest.at || '') ? replied : null;
@@ -231,9 +231,9 @@
     host.innerHTML = `<section class="card flush ptn-rec-tablecard">
       <div class="table-wrap"><table class="data-table ptn-rec-table">
         <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-ref="all" aria-label="보이는 기록 모두 선택"></th>${cols.map(c => headCell(c)).join('')}<th class="ptn-rec-edit" scope="col">편집</th></tr></thead>
-        <tbody>${list.length ? groups.map(g => row(g, cols, st)).join('') : `<tr><td colspan="${cols.length + 2}">${ui.empty('기록이 없습니다. 협업 메일을 보내거나 ➕ 수기 기록 추가로 남기세요.', 'clock')}</td></tr>`}</tbody>
+        <tbody>${list.length ? groups.map(g => row(g, cols, st)).join('') : `<tr><td colspan="${cols.length + 2}">${ui.empty('기록이 없습니다. 협업 메일을 보내거나 수기 기록 추가로 남기세요.', 'clock')}</td></tr>`}</tbody>
       </table></div>
-      <p class="panel-note ptn-rec-foot">업체 ${fmt.num(groups.length)}곳 · 기록 ${fmt.num(list.length)}건 · 같은 업체는 한 줄에 최근 상태로 보이고, 업체 이름을 누르면 주고받은 메일 전체가 열립니다 · 표는 읽기 전용이며 수정은 ✏️ 편집에서 합니다. 🟢 회신 받음을 누르면 회신 창이 열립니다.</p>
+      <p class="panel-note ptn-rec-foot">업체 ${fmt.num(groups.length)}곳 · 기록 ${fmt.num(list.length)}건 · 같은 업체는 한 줄에 최근 상태로 보이고, 업체 이름을 누르면 주고받은 메일 전체가 열립니다 · 표는 읽기 전용이며 수정은 편집에서 합니다. 회신 받음을 누르면 회신 창이 열립니다.</p>
     </section>`;
     updateDeleteBtn(st);
     bindResize(host);
@@ -248,13 +248,36 @@
     { key: 'sales.units', label: '판매량', num: true }, { key: 'sales.revenue', label: '매출', num: true },
     { key: 'sales.conversion', label: '전환율', num: true }
   ];
+  // 크리에이터별 실적 정렬 (기본: 매출 많은 순)
+  function salesSort(st) { return st.salesSort || { k: 'sales.revenue', dir: -1 }; }
+  function salesTableHtml(st) {
+    const d = st.data;
+    const t = d.totals;
+    const s = salesSort(st);
+    const field = s.k.replace('sales.', '');
+    const rows = d.creators.slice().sort((a, b) => {
+      const x = a[field], y = b[field];
+      return (typeof x === 'string' ? String(x).localeCompare(String(y)) : (x || 0) - (y || 0)) * s.dir;
+    });
+    return `<table class="data-table">
+          <thead><tr>${SALES_COLS.map(c => headCell(c, c.num ? 'num' : '', s)).join('')}</tr></thead>
+          <tbody>${rows.map(c => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.code)}</code></td><td class="num">${fmt.num(c.visits)}</td><td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${usd(c.revenue)}</td><td class="num">${fmt.pct(c.conversion, 2)}</td></tr>`).join('')}</tbody>
+          <tfoot><tr><td>합계</td><td></td><td class="num">${fmt.num(t.visits)}</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${usd(t.revenue)}</td><td class="num">${fmt.pct(t.conversion, 2)}</td></tr></tfoot>
+        </table>`;
+  }
   function savedWidths() {
     const w = store.get(K.widths, null);
     return w && typeof w === 'object' ? w : {};
   }
-  function headCell(c, cls) {
+  // sort가 있으면 머리글을 눌러 정렬 (누를 때마다 오름차순 ↔ 내림차순)
+  function headCell(c, cls, sort) {
     const w = savedWidths()[c.key];
-    return `<th${cls ? ` class="${cls}"` : ''} scope="col" data-col="${esc(c.key)}"${w ? ` style="width:${w}px;min-width:${w}px"` : ''}>${esc(c.label)}<span class="ptn-col-grip" data-grip="${esc(c.key)}" title="끌어서 너비 조절 · 더블클릭하면 원래대로" aria-hidden="true"></span></th>`;
+    const on = sort && sort.k === c.key;
+    const label = sort
+      ? `<button type="button" class="ptn-th-sort" data-sales-sort="${esc(c.key)}" title="누를 때마다 오름차순 ↔ 내림차순">${esc(c.label)}<i aria-hidden="true">${on ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</i></button>`
+      : esc(c.label);
+    const klass = [cls, on ? 'sorted' : ''].filter(Boolean).join(' ');
+    return `<th${klass ? ` class="${klass}"` : ''} scope="col" data-col="${esc(c.key)}"${on ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}${w ? ` style="width:${w}px;min-width:${w}px"` : ''}>${label}<span class="ptn-col-grip" data-grip="${esc(c.key)}" title="끌어서 너비 조절 · 더블클릭하면 원래대로" aria-hidden="true"></span></th>`;
   }
   function bindResize(host) {
     host.querySelectorAll('[data-grip]').forEach(g => {
@@ -296,7 +319,7 @@
     return `<tr data-hid="${h.id}"${on ? ' class="selected"' : ''}>
       <td class="ptn-rec-chk"><input type="checkbox" data-rec-sel="${g.ids.join(',')}"${on ? ' checked' : ''} aria-label="${esc(h.partnerName)} 기록 ${g.ids.length}건 선택"></td>
       ${cols.map(c => cell(h, c.key, g)).join('')}
-      <td class="ptn-rec-edit"><button type="button" class="btn small ghost" data-rec-edit="${h.id}" aria-label="${esc(h.partnerName)} 기록 편집">✏️ 편집</button></td>
+      <td class="ptn-rec-edit"><button type="button" class="btn small ghost" data-rec-edit="${h.id}" aria-label="${esc(h.partnerName)} 기록 편집">편집</button></td>
     </tr>`;
   }
 
@@ -324,7 +347,7 @@
     const btn = st.el.querySelector('[data-rec-act="delete"]');
     if (btn) {
       btn.disabled = !st.sel.size;
-      btn.textContent = st.sel.size ? `🗑️ 선택 삭제 (${st.sel.size})` : '🗑️ 선택 삭제';
+      btn.textContent = st.sel.size ? `선택 삭제 (${st.sel.size})` : '선택 삭제';
     }
     const all = st.el.querySelector('[data-ref="all"]');
     if (all) {
@@ -404,7 +427,7 @@
     });
   }
 
-  /* 📥 협업 이력을 열 때 자동 답장 확인 — 5분에 한 번 (조용히: 갱신이 있을 때만 알림) */
+  /* 협업 이력을 열 때 자동 답장 확인 — 5분에 한 번 (조용히: 갱신이 있을 때만 알림) */
   const AUTO_CHECK_MS = 5 * 60 * 1000;
   let lastAutoCheck = 0;
   async function autoCheckReplies(st) {
@@ -425,7 +448,7 @@
     }
   }
 
-  /* 📥 답장 확인 (Gmail IMAP) */
+  /* 답장 확인 (Gmail IMAP) */
   async function checkReplies(st, btn) {
     ui.busy(btn, true);
     try {
@@ -439,39 +462,37 @@
     }
   }
 
-  /* ✏️ 편집 */
+  /* 편집 */
   async function editRecord(st, h) {
     if (!h) return;
     const body = doc.createElement('div');
     body.className = 'part-partners ptn-rec-form';
     body.innerHTML = `
       ${h.kind === '샘플' ? '<p class="note warn">예시(샘플) 기록입니다. 실제 업체 기록이 아닙니다.</p>' : ''}
-      <div class="field-grid">
-        <label class="field"><span>활동</span><input class="input" data-e="activity" value="${esc(h.activity)}" maxlength="40" list="ptn-rec-acts"></label>
+      <div class="field-grid ptn-rec-grid">
+        <label class="field"><span>활동</span><select class="input" data-e="activity">
+          ${Array.from(new Set(['메일 발송', '답장 발송'].concat(R.activities, h.activity ? [h.activity] : []))).map(a => `<option value="${esc(a)}"${a === h.activity ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
         <label class="field"><span>담당자</span><input class="input" data-e="owner" value="${esc(h.owner)}" maxlength="60"></label>
         <label class="field"><span>상태(메일)</span><select class="input" data-e="mail_status">
-          <option value="">— 메일 기록 아님</option>
-          ${R.mailStatus.map(m => `<option value="${esc(m.v)}"${m.v === h.mailStatus ? ' selected' : ''}>${m.emoji} ${esc(m.v)}</option>`).join('')}</select>
-          <small>🟡 회신 대기로 두면 📥 답장 확인 대상이 됩니다.</small></label>
+          <option value="">메일 기록 아님</option>
+          ${R.mailStatus.map(m => `<option value="${esc(m.v)}"${m.v === h.mailStatus ? ' selected' : ''}>${esc(m.v)}</option>`).join('')}</select></label>
         <label class="field"><span>진행 상태</span><select class="input" data-e="progress">
-          ${R.progress.map(p => `<option value="${esc(p.v)}"${p.v === h.progress ? ' selected' : ''}>${p.emoji} ${esc(p.v)}</option>`).join('')}</select></label>
+          ${R.progress.map(p => `<option value="${esc(p.v)}"${p.v === h.progress ? ' selected' : ''}>${esc(p.v)}</option>`).join('')}</select></label>
       </div>
+      <p class="small muted ptn-rec-hint">상태(메일)를 회신 대기로 두면 답장 확인 대상이 됩니다.</p>
       <label class="field"><span>일시</span><input class="input" type="datetime-local" data-e="at" value="${esc(toLocalInput(h.at))}"></label>
-      <label class="field"><span>메모</span><textarea class="input" rows="4" data-e="memo">${esc(h.memo)}</textarea></label>
-      ${isMail(h) ? `<label class="field"><span>제목</span><input class="input" data-e="subject" value="${esc(h.subject)}" maxlength="300"></label>
-        <label class="field"><span>본문</span><textarea class="input" rows="8" data-e="body">${esc(h.body)}</textarea></label>` : ''}
-      <datalist id="ptn-rec-acts">${['메일 발송', '답장 발송'].concat(R.activities).map(a => `<option value="${esc(a)}">`).join('')}</datalist>`;
+      <label class="field"><span>메모 · 비고</span><textarea class="input" rows="5" data-e="memo">${esc(h.memo)}</textarea></label>`;
     let patch = null;
     const v = await ui.modal({
-      title: `✏️ 기록 편집 — ${h.partnerName || ''}`, body, wide: true,
+      title: `기록 편집 — ${h.partnerName || ''}`, body, wide: true,
       actions: [{ label: '취소', value: false }, {
         label: '저장', value: 'save', tone: 'lime',
         onClick: b => {
           const val = name => { const x = b.querySelector(`[data-e="${name}"]`); return x ? x.value : undefined; };
           patch = {};
-          ['activity', 'owner', 'mail_status', 'progress', 'memo', 'subject', 'body'].forEach(k => {
+          ['activity', 'owner', 'mail_status', 'progress', 'memo'].forEach(k => {
             const now = val(k);
-            const old = { activity: h.activity, owner: h.owner, mail_status: h.mailStatus, progress: h.progress, memo: h.memo, subject: h.subject, body: h.body }[k];
+            const old = { activity: h.activity, owner: h.owner, mail_status: h.mailStatus, progress: h.progress, memo: h.memo }[k];
             if (now !== undefined && now !== (old || '')) patch[k] = now;
           });
           const at = val('at');
@@ -491,7 +512,7 @@
     }
   }
 
-  /* ➕ 수기 기록 추가 */
+  /* 수기 기록 추가 */
   async function toggleAdd(st, btn, open) {
     const box = st.el.querySelector('[data-ref="addbox"]');
     const show = open === undefined ? !box.innerHTML : open;
@@ -502,7 +523,7 @@
     }
     const pre = st.f.partner && !st.f.partner.startsWith('name:') ? st.f.partner : '';
     box.innerHTML = `<section class="card ptn-rec-add mb-16">
-      <div class="card-head"><h2>➕ 수기 기록 추가</h2>${badge('수기', 'green')}</div>
+      <div class="card-head"><h2>수기 기록 추가</h2>${badge('수기', 'green')}</div>
       <div class="field-grid three">
         <label class="field"><span>업체</span><select class="input" data-add="partner">
           <option value="">직접 입력</option>
@@ -541,7 +562,7 @@
     }
   }
 
-  /* 🗑️ 선택 삭제 */
+  /* 선택 삭제 */
   async function deleteSelected(st) {
     const ids = Array.from(st.sel);
     if (!ids.length) return;
@@ -558,7 +579,7 @@
     }
   }
 
-  /* ⚙️ 표시 항목 · 순서 (내 화면에만 적용) */
+  /* 표시 항목 · 순서 (내 화면에만 적용) */
   async function columnsModal(st) {
     const cols = columnConfig();
     const body = doc.createElement('div');
@@ -589,7 +610,7 @@
       if (c) cols[Number(c.dataset.col)].on = c.checked;
     });
     const v = await ui.modal({
-      title: '⚙️ 표시 항목 · 순서', body,
+      title: '표시 항목 · 순서', body,
       actions: [{ label: '↺ 초기화', value: 'reset' }, { label: '취소', value: false }, {
         label: '저장', value: 'save', tone: 'lime',
         onClick: () => {
@@ -603,7 +624,7 @@
     if (v && st.el.isConnected) paintBody(st);
   }
 
-  /* 🟢 회신 받음 클릭 → 작은 미리보기 (보낸 사람 · 제목 · 앞부분) → '답장 내용 전체 보기'로 회신 창 */
+  /* 회신 받음 클릭 → 작은 미리보기 (보낸 사람 · 제목 · 앞부분) → '답장 내용 전체 보기'로 회신 창 */
   let popClose = null;
   function replyPopover(st, anchor, h) {
     if (popClose) popClose();
@@ -620,7 +641,7 @@
       <p class="small"><b>${esc(r.subject || '(제목 없음)')}</b></p>
       <p class="small ptn-rec-pop-text">${esc(text.slice(0, 240) || '(본문 없음)')}${text.length > 240 ? '…' : ''}</p>
       <div class="flex wrap mt-8">
-        <button type="button" class="btn small dark" data-pop="open">📨 답장 내용 전체 보기</button>
+        <button type="button" class="btn small dark" data-pop="open">답장 내용 전체 보기</button>
         <button type="button" class="btn small ghost" data-pop="close">닫기</button>
       </div>`;
     doc.body.appendChild(pop);
@@ -667,17 +688,17 @@
       <p class="small muted mb-16">${esc(h.partnerType || '')}${h.partnerId ? ' · ' + esc(h.partnerId) : ''} · 보냄 ${fmt.num(list.filter(m => m.dir === 'out').length)}통 · 받음 ${fmt.num(list.filter(m => m.dir === 'in').length)}통 · 오래된 순</p>
       <ol class="ptn-thread">${list.map((m, i) => `
         <li class="ptn-thread-item ${m.dir}">
-          <div class="between"><span><b>${m.dir === 'in' ? '📥 받음' : '📤 보냄'}</b> · ${esc(m.label)}${m.dir === 'out' && m.status ? ' ' + mailBadge(m.status) : ''}${m.estimated ? ' ' + badge('추정 매칭', 'orange') : ''}</span>
+          <div class="between"><span><b>${m.dir === 'in' ? '받음' : '보냄'}</b> · ${esc(m.label)}${m.dir === 'out' && m.status ? ' ' + mailBadge(m.status) : ''}${m.estimated ? ' ' + badge('추정 매칭', 'orange') : ''}</span>
             <span class="small muted nowrap">${esc(fmt.datetime(m.at))}</span></div>
           <p class="small muted">${m.dir === 'in' ? 'From ' + esc(m.who || '') : esc(m.who || '') + (m.to ? ' → ' + esc(m.to) : '')}</p>
           <details${i === list.length - 1 ? ' open' : ''}><summary class="small"><b>${esc(m.subject || '(제목 없음)')}</b></summary>
             <pre class="ptn-rec-pre">${esc(m.body || '(본문 없음)')}</pre></details>
           ${m.error ? `<span class="ptn-rec-err">${esc(m.error)}</span>` : ''}
         </li>`).join('')}</ol>` : ui.empty('주고받은 메일이 없습니다. (수기 기록만 있음)', 'mail');
-    ui.modal({ title: `✉️ ${h.partnerName || ''} — 메일 히스토리`, body, wide: true, actions: [{ label: '닫기', value: false }] });
+    ui.modal({ title: `${h.partnerName || ''} — 메일 히스토리`, body, wide: true, actions: [{ label: '닫기', value: false }] });
   }
 
-  /* 🟢 회신 창: AI 요약 · AI 답장 초안 · 같은 대화로 답장 발송 */
+  /* 회신 창: AI 요약 · AI 답장 초안 · 같은 대화로 답장 발송 */
   async function openReplyPanel(st, h, opts = {}) {
     if (!h || !h.reply) return;
     const r = h.reply;
@@ -699,14 +720,14 @@
         </div>
         <div>
           <label class="field"><span>답장에 담을 내용 (한국어)</span><textarea class="input" rows="4" data-r="points" placeholder="예: 11월 15일 이벤트에 샘플 제공 가능, 수량과 조건은 다음 주에 안내"></textarea></label>
-          <div class="flex wrap mt-8"><button type="button" class="btn soft small" data-r-act="draft"${s.openai ? '' : ' disabled'}>🤖 AI 답장 초안</button><span data-ref="draft-badge"></span></div>
+          <div class="flex wrap mt-8"><button type="button" class="btn soft small" data-r-act="draft"${s.openai ? '' : ' disabled'}>AI 답장 초안</button><span data-ref="draft-badge"></span></div>
           <label class="field"><span>제목</span><input class="input" data-r="subject" value="${esc(reSubject)}" maxlength="300"></label>
           <label class="field"><span>본문 (영어)</span><textarea class="input" rows="9" data-r="body"></textarea></label>
           <label class="field"><span>담당자</span><input class="input" data-r="owner" value="${esc(myName)}" maxlength="60"></label>
           <label class="check mt-8"><input type="checkbox" data-r="confirm"${s.smtp ? '' : ' disabled'}> 내용을 확인했고 같은 Gmail 대화로 보냅니다.</label>
           <div class="flex wrap mt-16">
-            <button type="button" class="btn dark" data-r-act="send" disabled>📨 답장 발송</button>
-            <button type="button" class="btn ghost" data-r-act="detail">✉️ 메일 화면에서 자세히 쓰기</button>
+            <button type="button" class="btn dark" data-r-act="send" disabled>답장 발송</button>
+            <button type="button" class="btn ghost" data-r-act="detail">메일 화면에서 자세히 쓰기</button>
           </div>
           <p class="hint" data-ref="rhint">${s.smtp ? '' : `Gmail이 연결되지 않았습니다 — ${settingsLink}`}</p>
         </div>
@@ -772,7 +793,7 @@
         sync();
       }
     });
-    const done = ui.modal({ title: `🟢 회신 — ${h.partnerName || ''}`, body, wide: true, actions: [{ label: '닫기', value: false }] });
+    const done = ui.modal({ title: `회신 — ${h.partnerName || ''}`, body, wide: true, actions: [{ label: '닫기', value: false }] });
     if (s.openai) loadSummary(body, h, false);
     await done;
     if (changed && st.el.isConnected) reload(st);
@@ -785,7 +806,7 @@
     try {
       const out = await REBOOT.api(`/api/partners/history/${h.id}/reply-summary`, { force: !!force });
       const sm = out.summary || {};
-      box.innerHTML = `<div class="between"><strong class="small">🤖 AI 요약</strong>${badge('AI · 참고용', 'purple')}</div>
+      box.innerHTML = `<div class="between"><strong class="small">AI 요약</strong>${badge('AI · 참고용', 'purple')}</div>
         <dl class="ptn-rec-dl">
           <dt>핵심</dt><dd>${esc(sm.core)}</dd><dt>요청사항</dt><dd>${esc(sm.requests)}</dd>
           <dt>분위기</dt><dd>${esc(sm.mood)}</dd><dt>다음 액션</dt><dd>${esc(sm.next_action)}</dd>
@@ -822,7 +843,7 @@
         ${items.map(miniCard).join('') || '<p class="ptn-rec-colempty">없음</p>'}
       </section>`;
     }).join('')}</div>
-    <p class="panel-note mt-8">업체마다 가장 최근 기록의 진행 상태입니다. 진행 상태는 협업 이력의 ✏️ 편집 · 수기 기록으로 바꿉니다. 카드를 누르면 그 업체로 이동합니다.</p>`;
+    <p class="panel-note mt-8">업체마다 가장 최근 기록의 진행 상태입니다. 진행 상태는 협업 이력의 편집 · 수기 기록으로 바꿉니다. 카드를 누르면 그 업체로 이동합니다.</p>`;
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
@@ -840,7 +861,7 @@
     </button>`;
   }
 
-  /* ═════════ 3-5 크리에이터별 판매 실적 (🧪 더미) ═════════ */
+  /* ═════════ 3-5 크리에이터별 판매 실적 (더미) ═════════ */
 
   const usd = n => fmt.usd(n);
   const usdCompact = n => {
@@ -892,7 +913,7 @@
     const st = { el, data: null, pref: getSalesPref(), picked: [] };
     el.innerHTML = `
       <div class="filters ptn-rec-salesbar">
-        <div class="flex wrap">${badge('🧪 더미 데이터', 'orange')}<span class="panel-note">Shopify 할인코드 주문 · UTM 방문 연동 전 가상값입니다 (환불 주문 제외).</span></div>
+        <div class="flex wrap">${badge('더미 데이터', 'orange')}<span class="panel-note">Shopify 할인코드 주문 · UTM 방문 연동 전 가상값입니다 (환불 주문 제외).</span></div>
         <div class="flex wrap">
           <div class="period" role="group" aria-label="조회 기간">${R.salesPresets.map(n => `<button type="button" data-days="${n}">최근 ${n}일</button>`).join('')}</div>
           <input type="date" class="input ptn-rec-date" data-ref="start" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input ptn-rec-date" data-ref="end" aria-label="종료일">
@@ -982,16 +1003,23 @@
           </details></section>
       </div>
       <details class="card mt-24 ptn-rec-salestable" data-ref="sales-table"${st.tableOpen === false ? '' : ' open'}>
-        <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('🧪 더미 데이터', 'orange')}</summary>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr>${SALES_COLS.map(c => headCell(c, c.num ? 'num' : '')).join('')}</tr></thead>
-          <tbody>${d.creators.map(c => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.code)}</code></td><td class="num">${fmt.num(c.visits)}</td><td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${usd(c.revenue)}</td><td class="num">${fmt.pct(c.conversion, 2)}</td></tr>`).join('')}</tbody>
-          <tfoot><tr><td>합계</td><td></td><td class="num">${fmt.num(t.visits)}</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${usd(t.revenue)}</td><td class="num">${fmt.pct(t.conversion, 2)}</td></tr></tfoot>
-        </table></div>
+        <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('더미 데이터', 'orange')}</summary>
+        <div class="table-wrap" data-ref="sales-wrap">${salesTableHtml(st)}</div>
         <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify Orders API(discount_codes) · UTM 집계로 바뀝니다.</p>
       </details>`;
     bindResize(el.querySelector('[data-ref="sales-table"]'));
     el.querySelector('[data-ref="sales-table"]').addEventListener('toggle', ev => { st.tableOpen = ev.target.open; });
+    // 머리글 정렬: 같은 칸을 다시 누르면 방향만 바뀜 (표만 다시 그림 · 차트는 그대로)
+    el.querySelector('[data-ref="sales-wrap"]').addEventListener('click', ev => {
+      const b = ev.target.closest('[data-sales-sort]');
+      if (!b) return;
+      const k = b.dataset.salesSort;
+      const s = salesSort(st);
+      st.salesSort = { k, dir: s.k === k ? -s.dir : (k === 'sales.name' || k === 'sales.code' ? 1 : -1) };
+      const wrap = el.querySelector('[data-ref="sales-wrap"]');
+      wrap.innerHTML = salesTableHtml(st);
+      bindResize(wrap);
+    });
     st.picked = (st.picked || []).filter(n => d.creators.some(c => c.name === n));
     drawCharts(st);
   }
