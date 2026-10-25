@@ -482,7 +482,7 @@
     if (Array.isArray(v)) {
       return v.map(x => {
         if (x && typeof x === 'object') {
-          if ('line' in x && 'oos' in x) return esc(`${x.line} — ${x.oos.join(' · ')} 품절 (판매 채널: ${x.channels.join(' · ')})${x.again ? ' · 지난 수집부터 계속' : ''}`);
+          if ('line' in x && 'oos' in x) return esc(`${x.line} — ${x.oos.join(' · ')} 품절 (판매 채널: ${x.channels.join(' · ')})${x.again ? ' · 지난주에 이어 계속' : ''}`);
           // 상품 이름은 판매처 상품 페이지로 (link 있을 때)
           const u = safeUrl(x.link);
           const name = u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(x.title)} ${icon('up')}</a>` : esc(x.title);
