@@ -1,7 +1,7 @@
 """파트너 파트 AI 프롬프트 (OpenAI · server.core.ai.openai_json).
 
 - MAIL_RULES        협업 메일 공통 규칙 (화면에서 바꿀 수 없음): 150–200단어 · 섹션 이름 미출력 · 의학 주장·과음 조장 금지 · 모든 항목 반영
-- DEFAULT_PROMPTS   구분별 생성 프롬프트 기본값 (화면 ⚙️ 생성 프롬프트에서 고치고 ↺로 되돌림). 자리표시자 {product} {ideal} {partner}
+- DEFAULT_PROMPTS   구분별 생성 프롬프트 기본값 (화면 생성 프롬프트에서 고치고 ↺로 되돌림). 자리표시자 {product} {ideal} {partner}
 - GUIDE_PURPOSES    협업 가이드 목적 선택지 (유형별 6개) — 여기서 고칩니다
 - GUIDE_SECTIONS    협업 가이드 고정 구성
 - GUIDE_SUMMARY     협업 가이드 1번 '한 줄 요약' 고정 문장 (질병·효능 주장 없이 — README §12)

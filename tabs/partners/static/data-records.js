@@ -8,21 +8,21 @@
   P.records = {
     // 진행 상태(협업 단계) — 편집 창·수기 입력으로만 바꿈 (메일 발송 시 '컨택 중', 회신에 답장하면 '협의 중')
     progress: [
-      { v: '컨택 중', emoji: '⚪', tone: '' },
-      { v: '협의 중', emoji: '🟡', tone: 'orange' },
-      { v: '협업 중', emoji: '🔵', tone: 'blue' },
-      { v: '마케팅 진행 중', emoji: '🟣', tone: 'purple' },
-      { v: '협업 완료', emoji: '🟢', tone: 'green' },
-      { v: '보류', emoji: '🟤', tone: '' },
-      { v: '협업 중단', emoji: '⚫', tone: 'dark' }
+      { v: '컨택 중', emoji: '', tone: '' },
+      { v: '협의 중', emoji: '', tone: 'orange' },
+      { v: '협업 중', emoji: '', tone: 'blue' },
+      { v: '마케팅 진행 중', emoji: '', tone: 'purple' },
+      { v: '협업 완료', emoji: '', tone: 'green' },
+      { v: '보류', emoji: '', tone: '' },
+      { v: '협업 중단', emoji: '', tone: 'dark' }
     ],
-    // 상태(메일) — 발송 · 📥 답장 확인으로 자동 갱신. '회신 대기'는 편집 창에서 직접 지정
+    // 상태(메일) — 발송 · 답장 확인으로 자동 갱신. '회신 대기'는 편집 창에서 직접 지정
     mailStatus: [
-      { v: '발송 성공', emoji: '🔵', tone: 'blue' },
-      { v: '발송 실패', emoji: '🔴', tone: 'red' },
-      { v: '반송', emoji: '🟠', tone: 'orange' },
-      { v: '회신 받음', emoji: '🟢', tone: 'green' },
-      { v: '회신 대기', emoji: '🟡', tone: 'lime' }
+      { v: '발송 성공', emoji: '', tone: 'blue' },
+      { v: '발송 실패', emoji: '', tone: 'red' },
+      { v: '반송', emoji: '', tone: 'orange' },
+      { v: '회신 받음', emoji: '', tone: 'green' },
+      { v: '회신 대기', emoji: '', tone: 'lime' }
     ],
     kinds: [
       { v: '자동', tone: 'blue', help: '메일 발송 · 답장 확인으로 저장된 기록' },
@@ -31,7 +31,7 @@
     ],
     activities: ['전화', '미팅', '가이드 전달', '메모', '기타'],   // 수기 기록 활동 유형
 
-    // 이력 표 항목 (⚙️ 표시 항목 · 순서의 기본값)
+    // 이력 표 항목 (표시 항목 · 순서의 기본값)
     columns: [
       { key: 'at', label: '일시' },
       { key: 'partner', label: '업체' },
@@ -48,15 +48,15 @@
 
     // 협업 보드 열 (업체별 가장 최근 기록의 진행 상태)
     board: [
-      { title: '⚪ 컨택 중', match: ['컨택 중'] },
-      { title: '🟡 협의 중', match: ['협의 중'] },
-      { title: '🔵 협업 중', match: ['협업 중'] },
-      { title: '🟣 마케팅 진행 중', match: ['마케팅 진행 중'] },
-      { title: '🟢 협업 완료', match: ['협업 완료'] },
-      { title: '🟤 보류 · ⚫ 중단', match: ['보류', '협업 중단'] }
+      { title: '컨택 중', match: ['컨택 중'] },
+      { title: '협의 중', match: ['협의 중'] },
+      { title: '협업 중', match: ['협업 중'] },
+      { title: '마케팅 진행 중', match: ['마케팅 진행 중'] },
+      { title: '협업 완료', match: ['협업 완료'] },
+      { title: '보류 · 중단', match: ['보류', '협업 중단'] }
     ],
 
-    // 판매 실적 (🧪 더미) — 조회 기간 버튼
+    // 판매 실적 (더미) — 조회 기간 버튼
     salesPresets: [7, 14, 30, 60]
   };
 })(typeof window !== 'undefined' ? window : globalThis);

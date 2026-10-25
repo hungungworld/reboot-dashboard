@@ -144,13 +144,17 @@ def test_requires_login(client):
 
 
 def test_status_and_config(auth_client, monkeypatch):
-    for name in ("REGULATION_DB_URL", "PRODUCT_DESC"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("PRODUCT_DESC", raising=False)
     st = auth_client.get("/api/partners/status").get_json()
-    assert set(st) == {"regulationDb", "openai", "model", "smtp", "sender"}
-    assert (st["regulationDb"], st["openai"], st["smtp"], st["sender"]) == (False, False, False, "")
-    monkeypatch.setenv("REGULATION_DB_URL", "postgresql://example.invalid/regulation")
-    assert auth_client.get("/api/partners/status").get_json()["regulationDb"] is True
+    assert set(st) == {"regulationDb", "regulation", "openai", "model", "smtp", "sender"}
+    assert (st["openai"], st["smtp"], st["sender"]) == (False, False, "")
+    # 규제 DB = 컴플라이언스 파트의 규칙 DB를 실제로 읽은 결과
+    reg = st["regulation"]
+    assert st["regulationDb"] is True and reg["source"] == "compliance" and reg["ruleCount"] > 0 and reg["rulesVersion"]
+    from tabs.compliance import server_review
+    monkeypatch.setattr(server_review, "RULES_FILE", ROOT / "tabs" / "partners" / "no-such-rules.json")
+    off = auth_client.get("/api/partners/status").get_json()
+    assert off["regulationDb"] is False and off["regulation"]["error"]
     cfg = auth_client.get("/api/partners/config").get_json()
     assert [len(cfg["subcategories"][t]) for t in ("케이터링", "인플루언서")] == [7, 7]
     assert [len(cfg["guidePurposes"][t]) for t in ("케이터링", "인플루언서")] == [6, 6]

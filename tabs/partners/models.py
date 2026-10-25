@@ -76,7 +76,7 @@ class PartnerHistory(db.Model):
     attachments = db.Column(db.Text, nullable=False, default="[]")        # 첨부파일 이름 (JSON)
     error = db.Column(db.String(500), nullable=False, default="")
     reply_of = db.Column(db.Integer, nullable=True)                       # 답장이면 원래 이력 id
-    # 상대방 회신 (📥 답장 확인)
+    # 상대방 회신 (답장 확인)
     reply_from = db.Column(db.String(300), nullable=False, default="")
     reply_subject = db.Column(db.String(300), nullable=False, default="")
     reply_body = db.Column(db.Text, nullable=False, default="")
@@ -129,6 +129,7 @@ class PartnerYoutubeCreator(db.Model):
     handle = db.Column(db.String(100), nullable=False, default="")  # @이름
     country = db.Column(db.String(10), nullable=False, default="")
     thumb = db.Column(db.String(500), nullable=False, default="")   # 프로필 사진 주소 (유튜브 이미지 서버, 파일은 저장 안 함)
+    target = db.Column(db.String(4), nullable=False, default="")    # US 미국 · EN 영미권 · EST 미국 타겟 추정
     subscribers = db.Column(db.Integer, nullable=True)              # 비공개면 None
     avg_views = db.Column(db.Integer, nullable=True)                # 최근 영상 10개 평균
     video_count = db.Column(db.Integer, nullable=True)
@@ -152,7 +153,7 @@ class PartnerYoutubeCreator(db.Model):
 
     def to_dict(self):
         return {"id": self.id, "title": self.title, "handle": self.handle, "country": self.country, "url": self.url,
-                "thumb": self.thumb,
+                "thumb": self.thumb, "target": self.target,
                 "subscribers": self.subscribers, "avgViews": self.avg_views, "videos": self.video_count,
                 "totalViews": self.total_views, "email": self.email, "emailAt": iso(self.email_at),
                 "keywords": self.keyword_list(), "statsAt": iso(self.stats_at), "createdAt": iso(self.created_at)}
