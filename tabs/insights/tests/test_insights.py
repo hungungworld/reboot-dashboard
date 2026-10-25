@@ -768,6 +768,9 @@ def test_pellet_form_and_product_lines():
     assert lines.known_brand("K FOOD KOREAN FOOD", "Korean Food Easy Tomorrow Fresh Drink Mix")["name"] == "상쾌환"
     assert lines.known_brand("", "Qone Hangover Relief Jelly")["name"] == "상쾌환" and lines.known_brand("", "Flyby 30 Count") is None
     assert lines.stock_left("Only 12 left in stock - order soon.") == 12 and lines.stock_left("In Stock") is None
+    # 상품명에 쓴 제형(스틱)이 브랜드 사전의 제형 제한(환 · 젤리)보다 먼저 · 'After Drink'는 제형으로 안 믿음
+    assert lines.auto_line({"key": "w:1", "brand": "", "title": "Easy Tomorrow Jelly Stick Before/After Drink, 10 Sticks"}) == ("상쾌환", "stick")
+    assert lines.auto_line({"key": "y:1", "brand": "", "title": "Q.one Anti-Alcohol & Hangover Relief - Fresh Before & After Drink"}) == ("상쾌환", "pellet")
 
     def row(i, src, servings, ps, in_stock=True, left=None, form="pellet"):
         return {"id": i, "key": f"{src}:{i}", "source": src, "title": f"상쾌환 {servings}포", "servings": servings, "servingsSource": "parsed",
