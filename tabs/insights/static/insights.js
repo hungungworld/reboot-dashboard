@@ -229,6 +229,7 @@
     root.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.fold) S.open[d.dataset.fold] = d.open; }, true);
     global.addEventListener('hashchange', route);
     global.addEventListener('resize', fitSwarm);
+    global.addEventListener('resize', () => { if (pfRender) pfRender(); });
     route();
     loadWeekly();
     checkRun(true);
@@ -357,6 +358,7 @@
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'tbl-page': S.tbl.page = Number(d.p) || 1; drawShelfTable(); break;
       case 'pf-tier': S.pf = d.k; drawSub('price'); break;
+      case 'sw-zoom': if (S.swarm) zoomSwarm(d.z === 'fit' ? 1 : d.z === 'in' ? S.swarm.zoom * 1.5 : S.swarm.zoom / 1.5); break;
       case 'brand-go': openBrand(d.brand); break;
       case 'mk-toggle': S.mk.open[d.brand] = !S.mk.open[d.brand]; drawBrandTable(); break;
       case 'mk-items': S.mk.items[d.k] = !S.mk.items[d.k]; drawBrandTable(); break;
@@ -958,7 +960,7 @@
       accuracy: () => accuracyHtml(D.accuracy), news: () => newsHtml(D.news)
     }[sub]();
     if (sub === 'news') drawNewsList();
-    if (sub === 'price') { fitSwarm(); initPantryFlow(); }
+    if (sub === 'price') { fitSwarm(); initSwarm(); initPantryFlow(); }
     if (sub === 'brands') focusBrand();
     if (sub === 'changes' && S.focusChg) {
       S.focusChg = false;
@@ -1015,25 +1017,118 @@
   // 첫 화면에 $0~SWARM_FULL이 꽉 차게 — 상자 폭을 재서 $1 폭(px)을 정하고(fitSwarm), 더 비싼 상품은 가로 스크롤로 봐요
   const SWARM_PX = 64, SWARM_FULL = 8, SWARM_PL = 28;
   function shelfStrip(priced) {
-    S.swarm = { priced, px: SWARM_PX };
+    S.swarm = { priced, px: SWARM_PX, zoom: 1 };
     S.swarmInfo = Object.fromEntries(priced.map(x => [x.id, x]));   // 말풍선(swarmTip)용
     // 말풍선은 스크롤 상자 밖(ins-sw-wrap)에 두어 상자 가장자리에서 잘리지 않게
-    return `<div class="ins-sw-wrap"><div class="ins-sw-scroll" data-ref="swarm">${swarmSvg(priced, SWARM_PX)}</div><div class="ins-sw-tip" role="tooltip" hidden></div></div>
+    return `<div class="ins-sw-wrap"><div class="ins-sw-zoom" role="group" aria-label="차트 확대">
+        <button type="button" data-act="sw-zoom" data-z="out" aria-label="축소">−</button><span data-ref="sw-z" aria-live="polite">1×</span>
+        <button type="button" data-act="sw-zoom" data-z="in" aria-label="확대">+</button><button type="button" data-act="sw-zoom" data-z="fit">전체</button></div>
+      <div class="ins-sw-scroll" data-ref="swarm">${swarmSvg(priced, SWARM_PX)}</div><div class="ins-sw-tip" role="tooltip" hidden></div></div>
       <div class="ins-sw-key small">
         <div class="ins-sw-key-g"><span class="ins-sw-key-h">색상</span><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg own"></i>자사</span>
           <span><i class="ins-lg watched"></i>주시</span><span><i class="ins-lg oos"></i>품절</span><span title="중앙값"><i class="ins-lg med"></i>보통 가격</span></div>
         <div class="ins-sw-key-g"><span class="ins-sw-key-h">크기</span><span class="ins-sw-key-size" aria-hidden="true"><i></i><i></i><i></i></span><span>리뷰 많을수록 크게</span></div>
-        <div class="ins-sw-key-g"><span class="ins-sw-key-h">사용법</span><span>점에 올리면 미리보기, 누르면 상세</span></div>
+        <div class="ins-sw-key-g"><span class="ins-sw-key-h">사용법</span><span>끌어서 이동 · Ctrl+휠이나 두 손가락으로 확대 · 빈 곳 두 번 누르면 2배 · 점에 올리면(터치는 한 번) 미리보기, 누르면 상세</span></div>
       </div>`;
   }
   // 화면에 붙은 뒤 상자 폭에 맞춰 다시 그림 (창 크기가 바뀔 때도)
-  function fitSwarm() {
+  // 확대(zoom)는 1~8배: 상자 폭에 맞춘 $1 폭 × zoom. anchorX(화면 x)에 있던 가격이 그 자리에 남게 스크롤을 맞춤
+  const SWARM_ZMAX = 8;
+  function fitSwarm(anchorX) {
     const box = $(panel(S.tab), '[data-ref="swarm"]');
     if (!box || !box.clientWidth || !S.swarm) return;
-    const px = Math.max(40, (box.clientWidth - SWARM_PL - 18) / SWARM_FULL);
+    const px = Math.max(40, (box.clientWidth - SWARM_PL - 18) / SWARM_FULL) * (S.swarm.zoom || 1);
     if (Math.abs(px - S.swarm.px) < 1) return;
+    const r = box.getBoundingClientRect(), ax = (anchorX == null ? r.left + r.width / 2 : anchorX) - r.left;
+    const v = (box.scrollLeft + ax - SWARM_PL) / S.swarm.px;
     S.swarm.px = px;
     box.innerHTML = swarmSvg(S.swarm.priced, px);
+    box.scrollLeft = SWARM_PL + v * px - ax;
+    const wrap = box.parentNode, z = $(wrap, '[data-ref="sw-z"]'), tip = $(wrap, '.ins-sw-tip');
+    if (z) z.textContent = `${Math.round(S.swarm.zoom * 10) / 10}×`;
+    if (tip) tip.hidden = true;
+  }
+  function zoomSwarm(z, anchorX) {
+    if (!S.swarm) return;
+    S.swarm.zoom = Math.max(1, Math.min(SWARM_ZMAX, z));
+    fitSwarm(anchorX);
+  }
+  // 차트 손 조작: 마우스 끌기(+관성) · Ctrl+휠/트랙패드 벌리기 확대 · 두 손가락 벌리기 · 빈 곳 두 번 누르기 · 터치는 점 한 번 = 미리보기
+  // 세로 휠은 막지 않음(페이지 스크롤), 한 손가락 끌기는 브라우저 기본 가로 스크롤
+  function initSwarm() {
+    const box = $(panel(S.tab), '[data-ref="swarm"]');
+    if (!box || box._sw) return;
+    box._sw = true;
+    let drag = null, dragged = false, raf = 0, ptype = 'mouse', pinch = null, wheelZ = null;
+    box.addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const base = wheelZ != null ? wheelZ : S.swarm.zoom;
+      wheelZ = Math.max(1, Math.min(SWARM_ZMAX, base * Math.exp(-e.deltaY * 0.01)));
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; zoomSwarm(wheelZ, e.clientX); wheelZ = null; });
+    }, { passive: false });
+    box.addEventListener('pointerdown', e => {
+      ptype = e.pointerType;
+      if (e.pointerType !== 'mouse' || e.button) return;
+      cancelAnimationFrame(raf); raf = 0;
+      drag = { x: e.clientX, s: box.scrollLeft, lx: e.clientX, lt: performance.now(), v: 0, id: e.pointerId };
+      dragged = false;
+    });
+    box.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (!dragged && Math.abs(dx) > 4) { dragged = true; box.classList.add('drag'); box.setPointerCapture(drag.id); }
+      if (!dragged) return;
+      box.scrollLeft = drag.s - dx;
+      const now = performance.now(), dt = now - drag.lt;
+      if (dt > 0) drag.v = 0.8 * drag.v + 0.2 * ((e.clientX - drag.lx) / dt);
+      drag.lx = e.clientX; drag.lt = now;
+    });
+    const end = () => {
+      if (!drag) return;
+      box.classList.remove('drag');
+      let v = performance.now() - drag.lt > 80 ? 0 : drag.v, prev = performance.now();
+      drag = null;
+      if (!dragged || Math.abs(v) < 0.05) return;
+      const step = now => {
+        const dt = Math.min(32, now - prev); prev = now;
+        box.scrollLeft -= v * dt;
+        v *= Math.pow(0.94, dt / 16);
+        raf = Math.abs(v) > 0.02 && box.isConnected ? requestAnimationFrame(step) : 0;
+      };
+      raf = requestAnimationFrame(step);
+    };
+    box.addEventListener('pointerup', end);
+    box.addEventListener('pointercancel', end);
+    // 끈 뒤의 클릭은 상세 창을 열지 않음 · 터치는 처음 누른 점은 미리보기만 (root 클릭 처리보다 먼저)
+    box.addEventListener('click', e => {
+      const dot = e.target.closest('.ins-dot[data-tip]');
+      if (dragged) { dragged = false; e.stopPropagation(); e.preventDefault(); return; }
+      if (!dot || ptype === 'mouse') return;
+      if (S.swarmTapped !== dot.dataset.tip) {
+        S.swarmTapped = dot.dataset.tip;
+        e.stopPropagation(); e.preventDefault();
+        swarmTip({ target: dot });
+      }
+    }, true);
+    box.addEventListener('dblclick', e => {
+      if (e.target.closest('.ins-dot')) return;
+      zoomSwarm(S.swarm.zoom >= SWARM_ZMAX ? 1 : S.swarm.zoom * 2, e.clientX);
+    });
+    // 두 손가락 벌리기 (터치): 두 손가락 사이 가운데를 기준으로
+    const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    box.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) pinch = { d: dist(e.touches), z: S.swarm.zoom };
+    }, { passive: true });
+    box.addEventListener('touchmove', e => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      const mid = (e.touches[0].clientX + e.touches[1].clientX) / 2, z = pinch.z * dist(e.touches) / pinch.d;
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; zoomSwarm(z, mid); });
+    }, { passive: false });
+    box.addEventListener('touchend', e => { if (e.touches.length < 2) pinch = null; });
   }
   function swarmSvg(priced, px) {
     const PL = SWARM_PL, PR = 44, head = 44, gapY = 14, maxOff = 72;
@@ -1189,25 +1284,33 @@
 
   /* 선반 보기 (커버플로우, 2026-10-26): 1회분 싼 순서로 한 줄 · 처음엔 REBOOT가 가운데 · 가격대 버튼으로 거름
      같은 제품(라인)은 판매처가 여러 곳이어도 한 번만 (가장 싼 쪽) */
-  const PANTRY_SHELVES = [['low', '저렴한 편', '1회분 $3 미만'], ['mid', '보통', '1회분 $3~6'], ['high', '비싼 편', '1회분 $6 이상']];
+  const PANTRY_SHELVES = [['low', '저렴한 편', '1회분 $3 미만', '$3 미만'], ['mid', '보통', '1회분 $3~6', '$3–6'], ['high', '비싼 편', '1회분 $6 이상', '$6 이상']];
   // 제형 선 아이콘 (24 × 24, 글자색을 따라감) — 분말은 가루 더미
   const FORM_ICON = {
-    liquid: '<path d="M10 2h4v3h-4z"/><path d="M10 5c-2 1.5-3 3.5-3 6v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-9c0-2.5-1-4.5-3-6"/><path d="M7 13h10"/>',
+    // 액상 · 분말 · 젤리: 사용자가 준 200칸 그림을 24칸 틀에 맞춤 (scale .12, 선 굵기 비율 그대로)
+    liquid: '<g transform="scale(.12)"><rect x="66" y="14" width="68" height="40" rx="10" stroke-width="7.5"/><path d="M76 54v12c0 8-24 16-24 34v76c0 7 5 12 12 12h72c7 0 12-5 12-12V100c0-18-24-26-24-34V54" stroke-width="7.5"/><path d="M52 118h96M52 160h96" stroke-width="6.5"/><path d="M106 124L89 143h12l-6 15 17-20h-12z" stroke-width="5.5"/></g>',
     tablet: '<rect x="2.5" y="8.5" width="19" height="7" rx="3.5" transform="rotate(-45 12 12)"/><path d="M9.5 9.5l5 5"/>',
     pellet: '<circle cx="8" cy="15.5" r="3.5"/><circle cx="16" cy="15.5" r="3.5"/><circle cx="12" cy="8" r="3.5"/>',
-    powder: '<path d="M3 20h18"/><path d="M5 20c.8-4.5 3.6-7.5 7-7.5s6.2 3 7 7.5"/><circle class="dot" cx="8" cy="9" r="1"/><circle class="dot" cx="12" cy="6" r="1"/><circle class="dot" cx="16" cy="9" r="1"/><circle class="dot" cx="10" cy="3.5" r=".8"/><circle class="dot" cx="14.5" cy="3.5" r=".8"/>',
+    powder: '<g transform="scale(.12)"><path d="M26 160C30 150 62 124 98 122c38 0 68 24 76 36 4 8-6 14-74 14-66 0-78-4-74-12z" stroke-width="7.5"/><circle class="dot" cx="52" cy="160" r="3"/><circle class="dot" cx="66" cy="152" r="3.2"/><circle class="dot" cx="80" cy="160" r="3"/><circle class="dot" cx="94" cy="150" r="3.4"/><circle class="dot" cx="108" cy="160" r="3"/><circle class="dot" cx="122" cy="151" r="3.2"/><circle class="dot" cx="136" cy="160" r="3"/><circle class="dot" cx="150" cy="153" r="3"/><circle class="dot" cx="160" cy="162" r="2.6"/><circle class="dot" cx="40" cy="164" r="2.4"/><circle class="dot" cx="74" cy="140" r="3"/><circle class="dot" cx="88" cy="134" r="2.6"/><circle class="dot" cx="102" cy="138" r="3.2"/><circle class="dot" cx="116" cy="140" r="2.8"/><circle class="dot" cx="130" cy="140" r="3"/><circle class="dot" cx="144" cy="146" r="2.6"/><circle class="dot" cx="60" cy="142" r="2.4"/><circle class="dot" cx="96" cy="164" r="2.4"/><circle class="dot" cx="124" cy="166" r="2.4"/><circle class="dot" cx="110" cy="128" r="2.4"/><circle class="dot" cx="86" cy="112" r="3.4"/><circle class="dot" cx="118" cy="108" r="3.8"/><circle class="dot" cx="100" cy="96" r="3"/><circle class="dot" cx="134" cy="96" r="2.6"/><circle class="dot" cx="76" cy="96" r="2.4"/><circle class="dot" cx="112" cy="84" r="3.6"/><circle class="dot" cx="90" cy="80" r="2.2"/><circle class="dot" cx="128" cy="78" r="2.4"/><circle class="dot" cx="104" cy="66" r="2.2"/><circle class="dot" cx="144" cy="108" r="2"/><circle class="dot" cx="68" cy="112" r="2"/><circle class="dot" cx="120" cy="60" r="1.8"/><circle class="dot" cx="96" cy="50" r="2"/><circle class="dot" cx="138" cy="62" r="1.6"/><circle class="dot" cx="82" cy="64" r="1.6"/><circle class="dot" cx="110" cy="42" r="1.6"/><circle class="dot" cx="150" cy="88" r="1.6"/></g>',
     stick: '<rect x="9" y="2" width="6" height="20" rx="1.5"/><path d="M9 6.5h6"/><path d="M11 2v4.5"/>',
-    gummy: '<path d="M5 19c-.5-4 0-8 1.5-11 1-2 2.5-3 5.5-3s4.5 1 5.5 3c1.5 3 2 7 1.5 11z"/><path d="M9 19c-.5-4-.3-8.5 1-12.5M15 19c.5-4 .3-8.5-1-12.5M12 19V5"/><path d="M3.5 19h17"/>',
+    gummy: '<g transform="scale(.12)"><path d="M58 68C58 55 142 55 142 68l14 68c2 12-14 20-30 14-12 8-40 8-52 0-16 6-32-2-30-14z" stroke-width="7.5"/><path d="M58 68c14 8 32 8 42 2 10 6 28 6 42-2" stroke-width="6.5"/><path d="M76 74l-2 76M124 74l2 76" stroke-width="6"/></g>',
     other: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
   };
   const formIcon = f => `<svg class="ins-pc-ico" viewBox="0 0 24 24" aria-hidden="true">${FORM_ICON[f] || FORM_ICON.other}</svg>`;
-  const FORM_KO = { liquid: '음료', powder: '분말', stick: '스틱', gummy: '젤리', pellet: '환', tablet: '캡슐 · 정제', other: '기타' };
+  // 제형 이름 · 늘 이 순서로 보여 줌 (lines.py FORM_SHORT와 같은 이름) — 한 제형 안의 다른 이름은 '/', 서로 다른 제형은 ' · '
+  const FORM_KO = { liquid: '액상', powder: '분말', stick: '스틱', gummy: '젤리/구미', pellet: '환', tablet: '캡슐/정제', other: '기타' };
+  const FORM_ORDER = Object.keys(FORM_KO);
+  const formRank = f => { const i = FORM_ORDER.indexOf(f); return i < 0 ? FORM_ORDER.length : i; };
+
+  // 1회분 비교에 넣어도 되는 상품: 회분을 못 읽어 1개 = 1회로 놓은 것(default)은 뺌 (브랜드 비교 competitors.py와 같은 기준)
+  // 예) 'Hovenia Drink Extract 870 g' $87.99 → 1회분 $87.99로 보이던 문제
+  const knownPs = x => x.perServing != null && x.servingsSource !== 'default';
 
   function pantryLines(d) {
     const by = {};
     d.items.forEach(x => { const id = (x.line && x.line.id) || x.key; (by[id] = by[id] || []).push(x); });
     return Object.values(by).map(its => {
-      const priced = its.filter(x => x.perServing != null);
+      const priced = its.filter(knownPs);
       const rep = priced.length ? priced.reduce((a, b) => (b.perServing < a.perServing ? b : a)) : its[0];
       const states = its.map(x => stockState(x, d.lowStock));
       const state = states.every(s => s === 'oos') ? 'oos' : states.includes('low') ? 'low' : states.includes('in') ? 'in' : 'unknown';
@@ -1217,40 +1320,42 @@
     });
   }
 
-  function pantryItem(p, i) {
+  // 타일 한 장 = 제품 하나: 제형 아이콘 + 상태 배지만 (Cover Flow의 앨범 아트처럼). 글자 정보는 data-*에 담아 가운데 아래 캡션이 읽음
+  function pantryTile(p) {
     const x = p.rep;
-    const flag = p.own ? ['우리', 'own'] : p.state === 'oos' ? ['품절', 'oos'] : p.state === 'low' ? ['곧 품절', 'low']
-      : p.pricePct != null ? [`가격 ${fmt.signed(p.pricePct, 0, '%')}`, p.pricePct < 0 ? 'cut' : 'up'] : null;
+    const flag = p.own ? null : p.state === 'oos' ? ['품절', 'oos'] : p.state === 'low' ? ['곧 품절', 'low']
+      : p.pricePct != null ? [fmt.signed(p.pricePct, 0, '%'), p.pricePct < 0 ? 'cut' : 'up'] : null;
     const chans = [...new Set(p.its.map(i => i.sourceLabel))];
-    const tipText = [x.brand || '브랜드 모름', FORM_KO[p.form], `1회분 ${money(x.perServing)}`, `판매처 ${chans.join(' · ')}`,
+    const name = p.own ? 'REBOOT' : x.brand || '브랜드 모름';
+    const status = !flag ? '' : flag[1] === 'cut' || flag[1] === 'up' ? `가격 ${flag[0]}` : flag[0];
+    const tipText = [name, FORM_KO[p.form], `1회분 ${money(x.perServing)}`, `판매처 ${chans.join(' · ')}`,
       STOCK[p.state][0], p.pricePct != null ? `지난 수집 대비 ${fmt.signed(p.pricePct, 0, '%')}` : '', '누르면 브랜드 비교에서 펼쳐요'].filter(Boolean).join(' · ');
-    const cls = ['ins-pc', p.own ? 'own' : '', p.state === 'oos' ? 'oos' : '', p.watched ? 'watched' : ''].filter(Boolean).join(' ');
+    const cls = ['ins-pf-tile', p.own ? 'own' : '', p.state === 'oos' ? 'oos' : '', p.watched ? 'watched' : ''].filter(Boolean).join(' ');
     const brand = p.own ? 'REBOOT' : (x.line && x.line.brand) || x.brand || '브랜드 모름';
-    return `<button type="button" class="${cls}" data-act="brand-go" data-brand="${esc(brand)}" data-pf="${i}" data-ps="${x.perServing}" title="${esc(tipText)}" aria-label="${esc(tipText)}">
-      <span class="ins-pc-top">${formIcon(p.form)}
-        <span class="ins-pc-form">${esc(FORM_KO[p.form] || '기타')}</span>${flag ? `<span class="ins-pc-flag ${flag[1]}">${esc(flag[0])}</span>` : ''}</span>
-      <span class="ins-pc-name">${esc(p.own ? 'REBOOT' : x.brand || '브랜드 모름')}</span>
-      <span class="ins-pc-price">${esc(money(x.perServing))}<small> /1회</small></span>
-      <span class="ins-pc-src">${esc(chans.join(' · '))}</span>
+    return `<button type="button" class="${cls}" data-act="brand-go" data-brand="${esc(brand)}" data-name="${esc(name)}" data-form="${esc(FORM_KO[p.form] || '기타')}"
+      data-ps="${x.perServing}" data-src="${esc(chans.join(' · '))}" data-flag="${flag ? flag[1] : ''}" data-status="${esc(status)}" title="${esc(tipText)}" aria-label="${esc(tipText)}">
+      ${formIcon(p.form)}${flag ? `<span class="ins-pf-pill ${flag[1]}">${esc(flag[0])}</span>` : ''}${p.own ? '<span class="ins-pf-own">REBOOT</span>' : ''}
     </button>`;
   }
 
   function pantryHtml(d) {
     const all = pantryLines(d);
-    const priced = all.filter(p => p.rep.bucket && p.rep.perServing != null).sort((a, b) => a.rep.perServing - b.rep.perServing || b.reviews - a.reviews);
+    const priced = all.filter(p => p.rep.bucket && knownPs(p.rep)).sort((a, b) => a.rep.perServing - b.rep.perServing || b.reviews - a.reviews);
     const tier = PANTRY_SHELVES.some(([k]) => k === S.pf) ? S.pf : 'all';
     const ps = tier === 'all' ? priced : priced.filter(p => p.rep.bucket === tier);
-    const lo = ps.length ? ps[0].rep.perServing : 0, hi = ps.length ? ps[ps.length - 1].rep.perServing : 0;
     const own = priced.filter(p => p.own)[0];
     const tierBtn = (k, label, n) => `<button type="button" data-act="pf-tier" data-k="${k}" aria-pressed="${tier === k}">${esc(label)}<span class="n">${n}</span></button>`;
-    const tiers = `<div class="seg ins-pf-tiers" role="group" aria-label="1회분 가격대">${tierBtn('all', '전체', priced.length)}${PANTRY_SHELVES.map(([k, label, range]) =>
-      tierBtn(k, `${label} · ${range.replace('1회분 ', '')}`, priced.filter(p => p.rep.bucket === k).length)).join('')}</div>`;
-    const ticks = ps.map((p, i) => `<button type="button" class="ins-pf-tk${p.own ? ' own' : ''}" data-pf-go="${i}" tabindex="-1" aria-hidden="true"
-      style="left:${hi > lo ? ((p.rep.perServing - lo) / (hi - lo)) * 100 : 50}%" title="${esc(`${p.own ? 'REBOOT' : p.rep.brand || '브랜드 모름'} ${money(p.rep.perServing)}`)}"></button>`).join('');
+    const tiers = `<div class="ins-pf-bar"><div class="seg ins-pf-tiers" role="group" aria-label="1회분 가격대">${tierBtn('all', '전체', priced.length)}${PANTRY_SHELVES.map(([k, , , short]) =>
+      tierBtn(k, short, priced.filter(p => p.rep.bucket === k).length)).join('')}</div></div>`;
     const flow = ps.length ? `<div class="ins-pf" data-ref="pf" tabindex="0" data-own-ps="${own ? own.rep.perServing : ''}"
-        aria-label="진열대 ${ps.length}개, 1회분 싼 순서. 끌거나 왼쪽 · 오른쪽 화살표 키로 넘겨요">${ps.map(pantryItem).join('')}</div>
-      <div class="ins-pf-axis"><div class="ins-pf-line"></div>${ticks}<span class="ins-pf-end">← 더 싸요</span><span class="ins-pf-end r">더 비싸요 →</span></div>
-      <p class="ins-pf-note small" data-ref="pf-note" aria-live="polite"></p>`
+        aria-label="진열대 ${ps.length}개, 1회분 싼 순서. 끌거나 왼쪽 · 오른쪽 화살표 키로 넘겨요">${ps.map(pantryTile).join('')}</div>
+      <div class="ins-pf-cap" data-ref="pf-cap" aria-live="polite"></div>
+      <div class="ins-pf-scrub" data-ref="pf-scrub" role="slider" tabindex="0" aria-label="진열대 위치 (1회분 싼 순서)" aria-valuemin="1" aria-valuemax="${ps.length}">
+        <span class="ins-pf-end">${esc(money(ps[0].rep.perServing))}</span>
+        <div class="ins-pf-track"><div class="ins-pf-dots" aria-hidden="true">${ps.map(p => `<span${p.own ? ' class="own"' : ''}></span>`).join('')}</div>
+          <span class="ins-pf-tip" hidden></span></div>
+        <span class="ins-pf-end">${esc(money(ps[ps.length - 1].rep.perServing))}</span>
+      </div>`
       : '<div class="ins-pf-empty small muted">이 가격대에는 제품이 없어요</div>';
     const unpriced = all.filter(p => !p.rep.bucket).length;
     return `<section class="card mt-24 ins-pantry">
@@ -1258,19 +1363,21 @@
       ${flow}
       <div class="ins-legend small mt-16"><span><i class="ins-lg own"></i>우리 제품</span><span><i class="ins-lg oos"></i>품절 (빈자리)</span>
         <span><i class="ins-lg low"></i>곧 품절</span></div>
-      <p class="panel-note mt-8">같은 제품은 1회분이 가장 싼 판매처 한 곳만 놓았어요.${unpriced ? ` 가격을 못 읽은 ${unpriced}개는 뺐어요 (데이터 관리에서 가격을 넣을 수 있어요).` : ''} 카드를 끌어 휙 돌려 보고, 가운데 카드를 누르면 브랜드 비교에서 판매처별 상품을 펼쳐 봐요.</p>
+      <p class="panel-note mt-8">같은 제품은 1회분이 가장 싼 판매처 한 곳만 놓았어요.${unpriced ? ` 가격을 못 읽은 ${unpriced}개는 뺐어요 (데이터 관리에서 가격을 넣을 수 있어요).` : ''} 타일이나 아래 점 줄을 끌어 넘겨 보고, 가운데 타일을 누르면 브랜드 비교에서 판매처별 상품을 펼쳐 봐요.</p>
     </section>`;
   }
 
   // 커버플로우 움직임: 끌기 · 던지면 관성 · 카드에 맞춰 멈춤 · 양끝 고무줄 · ← → 키 · 트랙패드 옆으로 쓸기
   // pos = 가운데에 온 카드 순번(소수 가능). 움직임 줄이기 설정이면 관성 없이 바로 그 카드로
-  const PF_GAP = 120, PF_STEP = 48, PF_TILT = 55;
-  let pfRaf = 0;
+  const PF_TILT = 48;
+  let pfRaf = 0, pfRender = null;
   function initPantryFlow() {
     cancelAnimationFrame(pfRaf);
+    pfRender = null;
     const stage = $(S.root, '[data-ref="pf"]');
     if (!stage) return;
-    const cards = $$(stage, '.ins-pc'), ticks = $$(S.root, '.ins-pf-tk'), note = $(S.root, '[data-ref="pf-note"]');
+    const cards = $$(stage, '.ins-pf-tile'), dots = $$(S.root, '.ins-pf-dots span'), cap = $(S.root, '[data-ref="pf-cap"]');
+    const scrub = $(S.root, '[data-ref="pf-scrub"]'), track = $(scrub, '.ins-pf-track'), tip = $(scrub, '.ins-pf-tip');
     const n = cards.length, ownPs = parseFloat(stage.dataset.ownPs);
     const still = global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const ownAt = cards.findIndex(c => c.classList.contains('own'));
@@ -1278,30 +1385,59 @@
     const clamp = v => Math.max(0, Math.min(n - 1, v));
     const center = () => clamp(Math.round(pos));
 
-    // 좁은 화면(휴대폰 · 좁은 창)에서는 간격을 줄여 옆 카드가 보이게
-    const gap = () => Math.min(PF_GAP, stage.clientWidth * 0.3);
+    // 간격은 진열대 폭에 맞춤: 가운데 ↔ 첫 옆 타일 g, 그 뒤로 st씩 (한쪽 4장이 진열대 끝까지 차게)
+    const geo = () => {
+      const w = stage.clientWidth, tw = cards[0].offsetWidth;
+      const g = Math.min(tw * 0.95, w * 0.24);
+      return [g, Math.min(tw * 0.5, Math.max(28, (w / 2 - g - tw / 2) / 4))];
+    };
+    const gap = () => geo()[0];
+    function caption(c) {
+      const ps = parseFloat(c.dataset.ps), isOwn = c.classList.contains('own');
+      const vs = isOwn ? '이 줄의 기준점'
+        : Number.isFinite(ownPs) ? `REBOOT보다 ${money(Math.abs(ps - ownPs))} ${ps < ownPs ? '싸요' : ps > ownPs ? '비싸요' : '같아요'}` : '';
+      cap.innerHTML = `<div class="ins-pf-form">${esc(c.dataset.form)}</div><div class="ins-pf-name">${esc(c.dataset.name)}</div>
+        <div class="ins-pf-price">${esc(money(ps))}<small> / 1회</small></div>
+        <div class="ins-pf-meta">${esc(c.dataset.src)}${c.dataset.status ? ` · <span class="${esc(c.dataset.flag)}">${esc(c.dataset.status)}</span>` : ''}</div>
+        ${vs ? `<span class="ins-pf-vs${isOwn ? ' own' : ''}">${esc(vs)}</span>` : ''}`;
+    }
+    // 점이 트랙보다 많으면 간격을 줄여 양끝 점이 잘리지 않게 (폭이 바뀔 때만 다시 계산)
+    let dotsW = -1;
+    const fitDots = () => {
+      const box = dots.length && dots[0].parentNode, w = box ? box.clientWidth : 0;
+      if (!box || w === dotsW) return;
+      dotsW = w;
+      const gap = Math.max(1, Math.min(4, Math.floor((w - 18) / n) - 2));
+      box.style.gap = `${gap}px`;
+    };
     function render() {
-      const g = gap(), st = g * (PF_STEP / PF_GAP);
+      fitDots();
+      const [g, st] = geo();
       cards.forEach((c, k) => {
         const r = k - pos, a = Math.abs(r), s = Math.sign(r), m = Math.min(a, 1);
         const x = a <= 1 ? r * g : s * (g + (a - 1) * st);
-        c.style.transform = `translateX(${x}px) translateZ(${40 * (1 - m)}px) rotateY(${-Math.max(-1, Math.min(1, r)) * PF_TILT}deg) scale(${1 - 0.08 * m})`;
-        c.style.opacity = a > 4 ? 0 : a > 3 ? 4 - a : 1;
-        c.style.visibility = a > 4 ? 'hidden' : '';
+        c.style.transform = `translateX(${x}px) translateZ(${-120 * m}px) rotateY(${-Math.max(-1, Math.min(1, r)) * PF_TILT}deg)`;
+        c.style.opacity = a > 4.5 ? 0 : a > 3.5 ? (4.5 - a) * 0.64 : 1 - 0.12 * Math.min(a, 3);
+        c.style.visibility = a > 4.5 ? 'hidden' : '';
         c.style.zIndex = Math.round(100 - a * 10);
-        c.classList.toggle('side', a > 0.5);
       });
       const ci = center();
       if (ci === shown) return;
       shown = ci;
       cards.forEach((c, k) => { c.tabIndex = k === ci ? 0 : -1; });
-      ticks.forEach((t, k) => t.classList.toggle('cur', k === ci));
-      if (!note) return;
-      const c = cards[ci], ps = parseFloat(c.dataset.ps), name = c.classList.contains('own') ? 'REBOOT' : c.dataset.brand;
-      note.textContent = c.classList.contains('own') ? 'REBOOT · 이 줄의 기준점'
-        : Number.isFinite(ownPs) ? `${name} · REBOOT보다 1회분 ${money(Math.abs(ps - ownPs))} ${ps < ownPs ? '싸요' : ps > ownPs ? '비싸요' : '같아요'}`
-          : `${name} · 1회분 ${money(ps)}`;
+      dots.forEach((t, k) => t.classList.toggle('cur', k === ci));
+      if (scrub) {
+        scrub.setAttribute('aria-valuenow', ci + 1);
+        scrub.setAttribute('aria-valuetext', `${ci + 1} / ${n}, ${cards[ci].dataset.name} ${money(parseFloat(cards[ci].dataset.ps))}`);
+      }
+      if (!cap) return;
+      // 캡션은 살짝 사라졌다 바뀜 (움직임 줄이기면 바로)
+      if (still || !cap.innerHTML) { caption(cards[ci]); return; }
+      cap.classList.add('swap');
+      clearTimeout(cap._t);
+      cap._t = setTimeout(() => { caption(cards[shown]); cap.classList.remove('swap'); }, 120);
     }
+    pfRender = render;
     function run() {
       cancelAnimationFrame(pfRaf);
       if (still) { pos = target != null ? target : center(); target = null; vel = 0; render(); return; }
@@ -1358,20 +1494,82 @@
     stage.addEventListener('pointercancel', end);
     // 끌고 난 뒤의 클릭 · 옆 카드 클릭은 브랜드 비교로 가지 않게 (root 클릭 처리보다 먼저)
     stage.addEventListener('click', e => {
-      const dragged = moved, c = e.target.closest('.ins-pc');
+      const dragged = moved, c = e.target.closest('.ins-pf-tile');
       moved = false;
       if (!c) return;
       const k = cards.indexOf(c);
       if (dragged || k !== center()) { e.stopPropagation(); e.preventDefault(); if (!dragged) goTo(k); }
     }, true);
+    // 진열대 위 휠: 트랙패드 좌우 쓸기 · Shift+휠만 (세로 휠은 페이지 스크롤로 둠)
     stage.addEventListener('wheel', e => {
-      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+      if (!d) return;
       e.preventDefault();
-      if (still) { if (Math.abs(e.deltaX) > 20 && target == null) goTo(center() + Math.sign(e.deltaX)); return; }
+      if (still) { if (Math.abs(d) > 20 && target == null) goTo(center() + Math.sign(d)); return; }
       target = null;
-      vel += e.deltaX / PF_GAP / 400;
+      vel += d / gap() / 400;
       run();
     }, { passive: false });
+    if (scrub) initScrub();
+    // 점 줄 = 스크러버: 누르면 그 상품으로 · 누른 채 끌면 따라감 · 올리면 말풍선 · 휠 한 칸씩 · ← → Home End
+    function initScrub() {
+      const at = x => {
+        const a = dots[0].getBoundingClientRect(), b = dots[n - 1].getBoundingClientRect();
+        const x0 = a.left + a.width / 2, x1 = b.left + b.width / 2;
+        return x1 > x0 ? clamp(Math.round(((x - x0) / (x1 - x0)) * (n - 1))) : 0;
+      };
+      const showTip = k => {
+        const c = cards[k], r = dots[k].getBoundingClientRect(), t = track.getBoundingClientRect();
+        tip.textContent = `${c.dataset.name} · ${money(parseFloat(c.dataset.ps))}`;
+        tip.hidden = false;
+        tip.style.left = `${Math.max(0, Math.min(t.width, r.left + r.width / 2 - t.left))}px`;
+      };
+      let scrubbing = null, acc = 0, accT = 0;
+      track.addEventListener('pointerdown', e => {
+        if (e.button) return;
+        e.preventDefault();
+        scrubbing = e.pointerId;
+        track.setPointerCapture(e.pointerId);
+        scrub.classList.add('on');
+        const k = at(e.clientX);
+        goTo(k); showTip(k);
+      });
+      track.addEventListener('pointermove', e => {
+        const k = at(e.clientX);
+        if (scrubbing != null && k !== target && k !== center()) goTo(k);
+        if (e.pointerType === 'mouse' || scrubbing != null) showTip(k);
+      });
+      const stop = e => {
+        if (scrubbing == null || e.pointerId !== scrubbing) return;
+        scrubbing = null;
+        scrub.classList.remove('on');
+        if (e.pointerType !== 'mouse') tip.hidden = true;
+      };
+      track.addEventListener('pointerup', stop);
+      track.addEventListener('pointercancel', stop);
+      track.addEventListener('pointerleave', () => { if (scrubbing == null) tip.hidden = true; });
+      // 휠은 40만큼 모일 때마다 한 칸 · 끝에 닿으면 막지 않고 페이지 스크롤로 넘김
+      scrub.addEventListener('wheel', e => {
+        const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        const cur = target != null ? target : center();
+        if (!d || (d < 0 && cur <= 0) || (d > 0 && cur >= n - 1)) return;
+        e.preventDefault();
+        if (performance.now() - accT > 250) acc = 0;
+        accT = performance.now();
+        acc += e.deltaMode ? d * 40 : d;
+        const steps = Math.trunc(acc / 40);
+        if (!steps) return;
+        acc -= steps * 40;
+        goTo(cur + steps);
+      }, { passive: false });
+      scrub.addEventListener('keydown', e => {
+        const cur = target != null ? target : center();
+        const to = { ArrowRight: cur + 1, ArrowUp: cur + 1, ArrowLeft: cur - 1, ArrowDown: cur - 1, PageUp: cur + 5, PageDown: cur - 5, Home: 0, End: n - 1 }[e.key];
+        if (to == null) return;
+        e.preventDefault();
+        goTo(to);
+      });
+    }
     stage.addEventListener('keydown', e => {
       if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
       e.preventDefault();
@@ -1379,7 +1577,6 @@
       const c = cards[clamp(target != null ? target : center())];
       if (stage.contains(document.activeElement) && c) c.focus({ preventScroll: true });
     });
-    ticks.forEach((t, k) => t.addEventListener('click', () => goTo(k)));
     render();
   }
 
@@ -1699,7 +1896,7 @@
     const rows = brandRows();
     const chg = mkChanges() || [];
     const n = g => chg.filter(x => (x.group || 'watch') === g).length;
-    const priced = sh.items.filter(x => x.perServing != null);
+    const priced = sh.items.filter(knownPs);
     const vals = priced.filter(x => !x.own).map(x => x.perServing).sort((a, b) => a - b);
     const median = vals.length ? (vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2) : null;
     const own = priced.filter(x => x.own).sort((a, b) => a.perServing - b.perServing)[0];
@@ -1738,7 +1935,7 @@
   }
 
   function priceView(sh) {
-    const priced = sh.items.filter(x => x.perServing != null);
+    const priced = sh.items.filter(knownPs);
     const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에 <span class="ins-sw-sub">점 1개 = 상품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     return pantryHtml(sh) + overview;
   }
