@@ -71,6 +71,13 @@ VIDEO_PLAN = _obj({
     "include_character": {"type": "boolean"},
 })
 
+# 완성된 이미지·영상 → 캡션 3안 · 해시태그 (social_v1)
+SOCIAL = _obj({
+    "captions": {"type": "array", "items": _obj({"angle": _STR, "text": _STR})},
+    "hashtags": _STR_LIST,
+    "note_ko": _STR,
+})
+
 # 인터뷰 질문 하나 (interview_v1) — 보기는 서버가 정확히 3개만 씀
 INTERVIEW = _obj({
     "done": {"type": "boolean"},

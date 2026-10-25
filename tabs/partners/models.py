@@ -3,6 +3,7 @@
 - PartnerContact     업체 목록 (파일을 다시 가져오면 같은 구분만 바뀜)
 - PartnerHistory     협업 이력 (자동 · 수기 · 샘플). 업체 id·이름을 복사해 두어 업체 목록이 바뀌어도 이력은 남음
 - PartnerAttachment  메일 첨부파일 보관함 (파일은 DATA_DIR/uploads/partners/attachments/)
+- PartnerYoutubeCreator  유튜브 크리에이터 추천 (YouTube API 값 — 정책상 30일 안에 갱신, 못 하면 삭제)
 """
 import json
 
@@ -117,3 +118,41 @@ class PartnerAttachment(db.Model):
     def to_dict(self):
         return {"id": self.id, "name": self.filename, "size": self.size, "source": self.source,
                 "createdAt": iso(self.created_at), "createdBy": self.created_by}
+
+
+class PartnerYoutubeCreator(db.Model):
+    """유튜브 크리에이터 추천 (youtube.py). 이메일은 채널 소개란에 공개된 것만, 가져온 날짜와 함께."""
+    __tablename__ = "partners_youtube_creators"
+
+    id = db.Column(db.String(40), primary_key=True)                # 채널 id (UC…)
+    title = db.Column(db.String(200), nullable=False, default="")
+    handle = db.Column(db.String(100), nullable=False, default="")  # @이름
+    country = db.Column(db.String(10), nullable=False, default="")
+    thumb = db.Column(db.String(500), nullable=False, default="")   # 프로필 사진 주소 (유튜브 이미지 서버, 파일은 저장 안 함)
+    subscribers = db.Column(db.Integer, nullable=True)              # 비공개면 None
+    avg_views = db.Column(db.Integer, nullable=True)                # 최근 영상 10개 평균
+    video_count = db.Column(db.Integer, nullable=True)
+    total_views = db.Column(db.BigInteger, nullable=True)
+    email = db.Column(db.String(255), nullable=False, default="")
+    email_at = db.Column(db.DateTime, nullable=True)                # 이메일을 가져온(확인한) 날짜
+    keywords = db.Column(db.Text, nullable=False, default="[]")     # 매칭 키워드 (JSON)
+    stats_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)  # 구독자·조회수 기준일
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+    created_by = db.Column(db.String(100), nullable=False, default="")
+
+    def keyword_list(self):
+        return _json(self.keywords, [])
+
+    def set_keywords(self, items):
+        self.keywords = json.dumps(list(items)[:20], ensure_ascii=False)
+
+    @property
+    def url(self):
+        return f"https://www.youtube.com/{self.handle}" if self.handle.startswith("@") else f"https://www.youtube.com/channel/{self.id}"
+
+    def to_dict(self):
+        return {"id": self.id, "title": self.title, "handle": self.handle, "country": self.country, "url": self.url,
+                "thumb": self.thumb,
+                "subscribers": self.subscribers, "avgViews": self.avg_views, "videos": self.video_count,
+                "totalViews": self.total_views, "email": self.email, "emailAt": iso(self.email_at),
+                "keywords": self.keyword_list(), "statsAt": iso(self.stats_at), "createdAt": iso(self.created_at)}

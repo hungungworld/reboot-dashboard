@@ -5,13 +5,14 @@ AI 보조 검토(review_v2) · 외부 검토(컴플라이언스 파트)와 따�
 import re
 
 from server.models import iso, utcnow
+from . import brandkit
 
 SUGAR_RE = re.compile(r"\b(low|reduced|less|lower|zero|no|minimal|light)[\s-]*sugars?\b|\bsugar[\s-]*(free|less)\b|"
                       r"\bno\s+added\s+sugars?\b|\bunsweetened\b", re.I)
 ZERO_SUGAR_RE = re.compile(r"zero[\s-]*sugars?", re.I)  # 'Zero Sugar'는 이 탭에서 경고하지 않음 (사용자 결정 2026-10-24)
 HANGOVER_RE = re.compile(r"\bhang[\s-]?overs?\b|숙취")
-SLOGAN_RE = re.compile(r"restart\s*your\s*day", re.I)
-SLOGAN = "Restart Your Day"
+SLOGANS = brandkit.slogans()  # Restart Your Day · Buy Your Tomorrow — 둘 다 공식 (2026-10-25)
+SLOGAN_RES = [(s, re.compile(r"\s*".join(s.split()), re.I)) for s in SLOGANS]
 BRAND_WORD_RE = re.compile(r"\bre[\s-]?boot\b", re.I)
 BRAND_OK = ("Reboot", "REBOOT", "reboot")  # 소문자 reboot는 동사일 수 있어 그대로 둠
 NUMBER_RE = re.compile(r"(\$\s?\d[\d,.]*|\b\d+(?:\.\d+)?\s?(?:g|mg|mcg|ml|mL|oz|fl\.?\s?oz|kcal|cal|calories|grams?|%)(?![A-Za-z]))", re.I)
@@ -23,7 +24,7 @@ JELLY_RE = re.compile(r"\bjell(y|ies)\b|젤리", re.I)
 DRINK_RE = re.compile(r"\bdrinks?\b|\bbeverages?\b|음료", re.I)
 BALANCE_RE = re.compile(r"\bbalance\b", re.I)
 
-BRAND_FACTS = {"name", "slogan", "colors", "character", "cm_song", "category", "intro", "market", "company", "key_ingredient"}
+BRAND_FACTS = {"name", "slogan", "slogans", "colors", "character", "cm_song", "category", "intro", "market", "company", "key_ingredient"}
 PRODUCT_FACTS = {"internal_name": "internal_name", "name": "internal_name", "consumer_name": "consumer_name", "form": "form",
                  "flavors": "flavors", "flavor_shapes": "flavor_shapes", "pack": "pack", "price": "price", "volume": "volume",
                  "bottle": "bottle", "ingredients": "ingredients", "zero_sugar": "zero_sugar",
@@ -100,15 +101,16 @@ def keyword_check(text, kind, sheet, facts, claims=None):
         add("sugar", "당 표현 — 'Zero Sugar'(Balance) 외의 당 표현은 쓰지 않아요", "error", sugar[:5])
     if HANGOVER_RE.search(text):
         add("hangover", "숙취(hangover) 언급 — 효능처럼 읽혀 쓰지 않아요", "error", _terms(HANGOVER_RE, text))
-    for m in SLOGAN_RE.finditer(text):
-        found = m.group(0)
-        if found == SLOGAN:
-            continue
-        if found == SLOGAN.upper():
-            add("slogan", f"슬로건이 대문자로만 쓰였어요 — 원문 표기는 '{SLOGAN}'", "warn", [found])
-        else:
-            add("slogan", f"슬로건 표기 — 정확히 '{SLOGAN}'", "error", [found])
-        break
+    for slogan, slogan_re in SLOGAN_RES:
+        for m in slogan_re.finditer(text):
+            found = m.group(0)
+            if found == slogan:
+                continue
+            if found == slogan.upper():
+                add("slogan", f"슬로건이 대문자로만 쓰였어요 — 원문 표기는 '{slogan}'", "warn", [found])
+            else:
+                add("slogan", f"슬로건 표기 — 정확히 '{slogan}'", "error", [found])
+            break
     odd = [w for w in _terms(BRAND_WORD_RE, text, 12, exact=True) if w not in BRAND_OK]
     if odd:
         add("brand", "브랜드명 표기 — REBOOT 또는 Reboot", "warn", odd)

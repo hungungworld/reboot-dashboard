@@ -30,7 +30,14 @@
   POST   /api/partners/history/<id>/reply-draft     AI 영문 답장 초안 {points}
 판매 실적 (3-5)
   GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 🧪 더미 데이터
+유튜브 크리에이터 추천 (youtube.py · 소개란 공개 이메일만 · 30일 안에 갱신, 못 하면 삭제)
+  GET    /api/partners/youtube                목록 (?refresh=0이면 오래된 값 갱신 안 함)
+  POST   /api/partners/youtube/search         {keywords:[…]} 추천 받기 (YouTube Data API)
+  POST   /api/partners/youtube/delete         {ids:[…]} 삭제 (크리에이터 삭제 요청 시)
+  GET    /api/partners/youtube/export.csv     CSV 내보내기 (이 표만)
+  POST   /api/partners/youtube/import         CSV 가져오기 (multipart file — 내보내기 형식, 기준일 30일 이내만)
 """
+import csv
 import io
 import json
 import mimetypes
@@ -50,9 +57,9 @@ from server.core import ai as core_ai
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
-from . import guide_docx, importer, mailer, prompts, sales
+from . import guide_docx, importer, mailer, prompts, sales, youtube
 from .importer import CATERING, INFLUENCER, TYPES
-from .models import PartnerAttachment, PartnerContact, PartnerHistory
+from .models import PartnerAttachment, PartnerContact, PartnerHistory, PartnerYoutubeCreator
 
 bp = Blueprint("partners", __name__, url_prefix="/api/partners")
 
@@ -895,3 +902,155 @@ def sales_report():
     rows = PartnerContact.query.filter_by(ptype=INFLUENCER).order_by(PartnerContact.sort).all()
     names = [c.name for c in rows if not c.is_example]
     return jsonify(sales.report(names, catalog._today(), _date_arg("start"), _date_arg("end")))
+
+
+# ───────── 유튜브 크리에이터 추천 (youtube.py) ─────────
+
+YT_CSV_HEADER = ["channel_id", "크리에이터", "핸들", "국가", "구독자", "평균 조회수(최근 10개)", "영상 수", "총 조회수",
+                 "이메일(소개란 공개)", "이메일 가져온 날짜", "매칭 키워드", "기준일", "채널 URL", "프로필 사진"]
+YT_ID = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
+YT_CSV_MAX = 2 * MB
+
+
+def _yt_error(e):
+    return ApiError(str(e), e.status if e.status in (400, 409, 429, 503) else 502)
+
+
+@bp.before_request
+def _yt_schema():
+    if request.path.startswith("/api/partners/youtube"):
+        youtube.ensure_schema()
+
+
+@bp.get("/youtube")
+def youtube_list():
+    info = {"refreshed": 0, "removed": 0, "warning": ""}
+    if request.args.get("refresh", "1") != "0":
+        info = youtube.refresh()
+    rows = PartnerYoutubeCreator.query.all()
+    rows.sort(key=lambda r: -(r.subscribers or 0))
+    return jsonify(items=[r.to_dict() for r in rows], ready=youtube.ready(), keywords=youtube.KEYWORDS,
+                   staleDays=youtube.STALE_DAYS, maxDays=youtube.MAX_DAYS, **info)
+
+
+@bp.post("/youtube/search")
+def youtube_search():
+    kws = json_body().get("keywords") or []
+    if not isinstance(kws, list):
+        raise ApiError("키워드 목록이 올바르지 않습니다.")
+    if not youtube.ready():
+        raise ApiError("YouTube 키가 없습니다. 설정 › 연결에서 YOUTUBE_API_KEY를 넣어 주세요.", 503)
+    try:
+        out = youtube.search([clip(k, 60) for k in kws], _who())
+    except youtube.YoutubeError as e:
+        raise _yt_error(e)
+    worklog.add("partners", "수집", f"유튜브 크리에이터 추천 ({out['found']}개 채널, 새로 {out['added']}개)",
+                detail={"keywords": out["keywords"]})
+    return jsonify(out)
+
+
+@bp.post("/youtube/delete")
+def youtube_delete():
+    ids = json_body().get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise ApiError("지울 채널을 고르세요.")
+    n = 0
+    for cid in ids[:500]:
+        row = db.session.get(PartnerYoutubeCreator, str(cid))
+        if row is not None:
+            db.session.delete(row)
+            n += 1
+    db.session.commit()
+    worklog.add("partners", "기타", f"유튜브 크리에이터 {n}개 삭제", detail={"count": n})
+    return jsonify(deleted=n)
+
+
+def _num_cell(v):
+    return "" if v is None else v
+
+
+@bp.get("/youtube/export.csv")
+def youtube_export():
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(YT_CSV_HEADER)
+    rows = PartnerYoutubeCreator.query.all()
+    rows.sort(key=lambda r: -(r.subscribers or 0))
+    for r in rows:
+        w.writerow([r.id, r.title, r.handle, r.country, _num_cell(r.subscribers), _num_cell(r.avg_views),
+                    _num_cell(r.video_count), _num_cell(r.total_views), r.email,
+                    _local(r.email_at).date().isoformat() if r.email_at else "", " | ".join(r.keyword_list()),
+                    _local(r.stats_at).date().isoformat(), r.url, r.thumb])
+    today = _local(utcnow()).date().isoformat()
+    return Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=reboot-youtube-creators-{today}.csv"})
+
+
+def _csv_int(v):
+    s = re.sub(r"[,\s]", "", str(v or ""))
+    return int(s) if s.isdigit() else None
+
+
+def _csv_date(v):
+    try:
+        d = date.fromisoformat(str(v or "").strip()[:10])
+    except ValueError:
+        return None
+    return datetime(d.year, d.month, d.day, tzinfo=_tz()).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+@bp.post("/youtube/import")
+def youtube_import():
+    f = request.files.get("file")
+    if not f or not f.filename:
+        raise ApiError("가져올 CSV 파일을 고르세요.")
+    raw = f.read(YT_CSV_MAX + 1)
+    if len(raw) > YT_CSV_MAX:
+        raise ApiError("CSV는 2MB까지 가져올 수 있습니다.")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp949", errors="replace")
+    reader = csv.DictReader(io.StringIO(text))
+    if "channel_id" not in (reader.fieldnames or []):
+        raise ApiError("유튜브 크리에이터 CSV 내보내기 형식이 아닙니다 (channel_id 열 없음).")
+    now = utcnow()
+    oldest = now - timedelta(days=youtube.MAX_DAYS)
+    added = updated = skipped = 0
+    for rec in reader:
+        cid = str(rec.get("channel_id") or "").strip()
+        stats_at = _csv_date(rec.get("기준일"))
+        # 형식이 틀렸거나 기준일이 보관 기간(30일)보다 오래된 값, 미국 채널이 아닌 줄은 건너뜀
+        if (not YT_ID.match(cid) or stats_at is None or stats_at < oldest or stats_at > now + timedelta(days=1)
+                or str(rec.get("국가") or "").strip().upper() != youtube.COUNTRY
+                or (_csv_int(rec.get("구독자")) or 0) <= youtube.MIN_SUBSCRIBERS):
+            skipped += 1
+            continue
+        row = db.session.get(PartnerYoutubeCreator, cid)
+        if row is not None and row.stats_at >= stats_at:
+            skipped += 1        # 이미 더 최근 값이 있음
+            continue
+        if row is None:
+            row = PartnerYoutubeCreator(id=cid, created_by=_who())
+            db.session.add(row)
+            added += 1
+        else:
+            updated += 1
+        email = str(rec.get("이메일(소개란 공개)") or "").strip().lower()
+        row.title = clip(rec.get("크리에이터"), 200)
+        row.handle = clip(rec.get("핸들"), 100)
+        row.country = clip(rec.get("국가"), 10)
+        thumb = str(rec.get("프로필 사진") or "").strip()
+        row.thumb = thumb[:500] if thumb.startswith("https://") else ""
+        row.subscribers = _csv_int(rec.get("구독자"))
+        row.avg_views = _csv_int(rec.get("평균 조회수(최근 10개)"))
+        row.video_count = _csv_int(rec.get("영상 수"))
+        row.total_views = _csv_int(rec.get("총 조회수"))
+        row.email = email if EMAIL_RE.match(email) else ""
+        row.email_at = (_csv_date(rec.get("이메일 가져온 날짜")) or stats_at) if row.email else None
+        row.set_keywords([k.strip() for k in str(rec.get("매칭 키워드") or "").split("|") if k.strip()])
+        row.stats_at = stats_at
+    db.session.commit()
+    worklog.add("partners", "수집", f"유튜브 크리에이터 CSV 가져오기 (새로 {added} · 갱신 {updated} · 건너뜀 {skipped})",
+                detail={"file": _display_name(f.filename)})
+    return jsonify(added=added, updated=updated, skipped=skipped)

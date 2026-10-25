@@ -1315,12 +1315,14 @@
          <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${imageFootNote(v, layers)}</span>
           ${layers.length ? `<button type="button" class="link" data-act="toggle-layers">텍스트 레이어 ${S.showLayers ? '숨기기' : '보기'}</button>` : ''}</div>
          ${referencesHtml(v)}
+         ${socialHtml(v)}
          ${imageEditHtml(v)}`
       : vid
       ? `<div class="cnt-preview cnt-video"><video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 시안"></video></div>
          <p class="panel-note">${badge('시안')} 자막·로고는 영상에 넣지 않았어요. 제품 모양·라벨·장면은 게시 전에 직접 확인하세요.</p>
          ${v.body ? `<p class="panel-note">${esc(v.body)}</p>` : ''}
          ${referencesHtml(v)}
+         ${socialHtml(v)}
          ${videoEditHtml(v)}`
       : `<div class="prose cnt-doc">${ui.markdown(v.body)}</div>`;
     const cmp = complianceOf(v);
@@ -1354,6 +1356,29 @@
         <button type="button" class="btn small ghost" data-act="export-one" data-id="${esc(v.id)}">${icon('download')}이 버전만</button>
       </div>
       ${c.finalVersionId === v.id ? '<p class="panel-note">최종본 지정은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</p>' : ''}
+    </div>`;
+  }
+
+  // 이미지·영상 생성 직후 AI가 추천한 캡션 3안 · 해시태그 (서버 media.suggest_social · 고르기 전까지 제안)
+  function socialHtml(v) {
+    const s = v.social;
+    if (!s) return '';
+    const caps = s.captions || [];
+    if (!caps.length) return `<div class="cnt-social"><span class="panel-note">캡션·해시태그 추천 없음 — ${esc(s.note || '추천을 받지 못했어요.')}</span></div>`;
+    const basis = s.basis === 'image' ? '완성된 이미지를 보고 추천했어요' : '영상 장면 설명을 바탕으로 추천했어요 (영상 파일 자체는 보지 않음)';
+    const kw = s.review;
+    const st = kw ? (DATA.keywordStatus[kw.status] || DATA.keywordStatus.clear) : null;
+    const tags = (s.hashtags || []).join(' ');
+    return `<div class="cnt-social">
+      <div class="between"><strong>AI 추천 캡션 · 해시태그</strong>${st ? badge(st.label, st.tone) : ''}</div>
+      <p class="panel-note">${badge('AI 제안')} ${esc(basis)}${s.note ? ` · ${esc(s.note)}` : ''}</p>
+      <ol class="cnt-social-caps">${caps.map((c, i) => `<li>
+        <div class="between"><span class="small muted">${esc(c.angle || `${i + 1}안`)}</span>
+          <button type="button" class="btn small ghost" data-act="copy-text" data-text="${esc(c.text + (tags ? '\n\n' + tags : ''))}">복사</button></div>
+        <p>${esc(c.text)}</p></li>`).join('')}</ol>
+      ${tags ? `<div class="between cnt-social-tags"><span>${esc(tags)}</span><button type="button" class="btn small ghost" data-act="copy-text" data-text="${esc(tags)}">해시태그 복사</button></div>` : ''}
+      ${kw && kw.items && kw.items.length ? `<ul class="cnt-review-items">${kw.items.map(i => `<li class="${esc(i.level)}">${esc(i.label)}${i.terms && i.terms.length ? ` <code>${esc(i.terms.join(', '))}</code>` : ''}</li>`).join('')}</ul>` : ''}
+      <p class="panel-note">게시 전에 사람이 확인하세요. 키워드 확인은 참고용이며 법적 승인이 아니에요.</p>
     </div>`;
   }
 
@@ -1603,7 +1628,7 @@
     const cell = (label, v, extra) => `<div class="row"><span>${esc(label)}</span><span>${v == null || v === '' ? `<em class="cnt-missing">미제공 · 확인 필요</em>` : esc(v)}${extra || ''}</span></div>`;
     return `<p class="panel-note">AI는 아래 값만 사실 근거로 써요 (기준 ${esc(f.facts_version || '—')}). 바꾸려면 설정 › 제품 정보에서 고칩니다.</p>
       <div class="cnt-fact"><b>Reboot 브랜드 ${badge('항상 포함')}</b>
-        ${cell('슬로건', b.slogan)}${cell('브랜드 색', b.colors)}${cell('캐릭터', b.character)}${cell('CM송', b.cm_song)}${cell('구분', b.category)}</div>
+        ${cell('슬로건', (b.slogans || []).join(' · ') || b.slogan)}${cell('브랜드 색', b.colors)}${cell('캐릭터', b.character)}${cell('CM송', b.cm_song)}${cell('구분', b.category)}</div>
       ${prods.length ? prods.map(p => `<div class="cnt-fact"><b>${esc(p.internal_name)} ${badge(p.evidence || '확인 필요', p.evidence === '확인 완료' ? 'green' : 'orange')}</b>
         ${cell('제형', p.form)}
         ${cell('맛', p.flavors && p.flavors.value, p.flavors && p.flavors.status === 'provisional' ? ' ' + badge('임시', 'orange') : '')}
@@ -2240,7 +2265,10 @@
 
   function cardHtml(c) {
     const p = DATA.posters[c.contentType] || { en: 'CONTENT' };
-    const head = c.cover
+    // 대표 파일이 영상(mp4)이면 첫 장면을 썸네일로 (소리 없음 · 재생 안 함)
+    const head = c.cover && /\.mp4(\?|$)/i.test(c.cover)
+      ? `<div class="cnt-cover cnt-cover-video"><video src="${esc(c.cover)}#t=0.1" muted playsinline preload="metadata" tabindex="-1" aria-label="${esc(c.title)} 대표 영상"></video><span class="cnt-cover-play" aria-hidden="true">▶</span></div>`
+      : c.cover
       ? `<div class="cnt-cover"><img src="${esc(c.cover)}" alt="${esc(c.title)} 대표 이미지" loading="lazy"></div>`
       : `<div class="poster cnt-poster t-${esc(c.contentType)}"><div class="wordmark">REB∞T</div><strong>${esc(p.en)}</strong><small>${esc(c.channelLabels.join(' · ').toUpperCase())}</small></div>`;
     const targets = (c.brandFocus ? ['브랜드'] : []).concat((c.products || []).map(x => x.ko || x.name));
@@ -2326,6 +2354,11 @@
         case 'copy':
           if (v && global.navigator && global.navigator.clipboard) {
             global.navigator.clipboard.writeText(v.body).then(() => toast('복사했어요.'), () => toast('복사하지 못했어요.', 'error'));
+          }
+          break;
+        case 'copy-text':
+          if (global.navigator && global.navigator.clipboard) {
+            global.navigator.clipboard.writeText(b.dataset.text || '').then(() => toast('복사했어요.'), () => toast('복사하지 못했어요.', 'error'));
           }
           break;
         case 'export': exportZip(null); break;

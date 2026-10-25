@@ -4,6 +4,7 @@
 - 텍스트 초안: 카드뉴스 · 숏폼 구성안에 자산 ID 목록을 줘서 장·장면마다 어떤 사진을 쓸지 적게 함 (drafts.py)
 - 화면: GET /api/content/assets (목록) · /api/content/assets/<ID>.jpg (파일, 로그인 필요)
 """
+import itertools
 import json
 import re
 from functools import lru_cache
@@ -11,7 +12,8 @@ from pathlib import Path
 
 ASSET_DIR = Path(__file__).resolve().parent / "data" / "assets"
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{2,80}$")
-MAX_REFS = 5            # 한 번에 보내는 참고 사진 수 (편집 기준 이미지 포함)
+MAX_REFS = 16           # 한 번에 보내는 참고 사진 수 (편집 기준 이미지 포함) — OpenAI 이미지 편집이 받는 최대 장수 (2026-10-25)
+HIGGSFIELD_MAX_REFS = 5  # Higgsfield는 참고 사진 상한을 확인하지 못해 예전 값 유지
 FLAVORS = {"cherry": ("cherry", "체리"), "lemon": ("lemon", "레몬"), "lime": ("lime", "라임")}
 CHARACTER_CHOICES = ("사용", "사용 안 함", "AI 판단")
 CHARACTER_TYPES = ("image", "cardnews", "shortform")   # 시트에 캐릭터 칸을 보여 주는 콘텐츠
@@ -75,24 +77,22 @@ def flavors_in(*texts):
     return [f for f, words in FLAVORS.items() if any(w in t for w in words)]
 
 
-def _product_refs(pid, flavors, per):
-    """맛을 골랐으면 맛마다 가장 좋은 사진 1장 → 남은 자리는 제품 전체 사진(3병·봉지). 아니면 우선순위대로."""
+def _product_refs(pid, flavors):
+    """그 제품의 참고용 사진 전부 (우선순위 순). 맛을 골랐으면 그 맛 사진 먼저 + 맛 구분 없는 전체 사진(3병·봉지)만."""
     cands = sorted((a for a in all_assets() if a.get("product_id") == pid and a["ref"]),
                    key=lambda a: (a["priority"], a.get("flavor") is not None))
     if not flavors:
-        return cands[:per]
-    out = [next(a for a in cands if a.get("flavor") == f) for f in flavors if any(a.get("flavor") == f for a in cands)][:per]
-    out += [a for a in cands if a.get("flavor") is None][: per - len(out)]
-    return out
+        return cands
+    return ([a for a in cands if a.get("flavor") in flavors and a.get("flavor") is not None]
+            + [a for a in cands if a.get("flavor") is None])
 
 
 def pick_refs(product_ids, *, flavors=(), character=False, limit=MAX_REFS):
-    """제품마다 1~2장 (제품 하나면 2장) + 캐릭터 1장. 리볼버·글자 많은 사진(ref=false)은 고르지 않음."""
-    refs = []
+    """선택 제품(·맛)에 맞는 참고용 사진 전부 + 캐릭터 1장, 최대 limit장. 리볼버·글자 많은 사진(ref=false)은 고르지 않음.
+    제품을 번갈아 넣어 상한에서 잘려도 제품마다 고르게 들어감."""
     char_slot = 1 if character else 0
-    per = 2 if len(product_ids) == 1 else 1
-    for pid in product_ids:
-        refs.extend(_product_refs(pid, flavors, per))
+    lists = [_product_refs(pid, flavors) for pid in product_ids]
+    refs = [a for row in itertools.zip_longest(*lists) for a in row if a is not None]
     refs = refs[: max(0, limit - char_slot)]
     if character:
         refs.extend(sorted((a for a in all_assets() if a["type"] == "character" and a["ref"]), key=lambda a: a["priority"])[:1])

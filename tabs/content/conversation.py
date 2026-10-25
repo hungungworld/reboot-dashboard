@@ -64,8 +64,11 @@ def flow_context(sheet, decisions):
     out = []
     for key in O.flow_of(sheet):
         d = decisions.get(key) or {}
-        out.append({"key": key, "label": O.DECISION_LABELS.get(key, key), "hint": prompts.FLOW_HINTS.get(key, ""),
-                    "value": d.get("value"), "status": d.get("status") or "undecided"})
+        item = {"key": key, "label": O.DECISION_LABELS.get(key, key), "hint": prompts.FLOW_HINTS.get(key, ""),
+                "value": d.get("value"), "status": d.get("status") or "undecided"}
+        if key == "ratio":  # 채널에 맞는 보기 (첫 번째가 추천) — 챗봇이 chips로 씀
+            item["recommended_options"] = [{"label": a, "value": b, "reason": c} for a, b, c in O.ratio_options(sheet)]
+        out.append(item)
     return out
 
 
@@ -575,7 +578,8 @@ EXAMPLE_QUESTIONS = {
                      ("검정 + 네온", "검정 배경에 네온 라임 포인트", "브랜드 색 그대로예요"),
                      ("아침 햇살", "밝은 아침 햇살이 드는 공간", "하루의 시작 느낌을 줘요"),
                      ("단색 스튜디오", "단색 컬러 스튜디오 배경", "제품과 문구가 또렷하게 보여요")),
-    "ratio": _q("decisions.ratio", "비율", "이미지 비율은 어떻게 할까요?",
+    # 보기는 채널에 맞게 바꿔 씀 (_example_question → options.ratio_options · 첫 번째가 추천)
+    "ratio": _q("decisions.ratio", "비율·크기", "비율과 크기는 어떻게 할까요? 채널에 맞는 추천을 첫 번째에 뒀어요.",
                 ("1:1 정사각", "1:1 정사각", "피드 기본 비율이에요"),
                 ("4:5 세로", "4:5 세로", "피드에서 화면을 더 많이 차지해요"),
                 ("9:16 세로", "9:16 세로 (스토리·릴스)", "스토리·릴스에 맞아요")),
@@ -588,7 +592,7 @@ EXAMPLE_QUESTIONS = {
                    ("30초", "30초", "장면을 조금 더 보여줄 수 있어요"),
                    ("60초", "60초", "이야기를 담을 수 있어요")),
     "message": _q("decisions.message", "핵심 메시지", "가장 먼저 전할 메시지는 무엇인가요?",
-                  ("슬로건 중심", "슬로건 Restart Your Day 중심", "확인된 브랜드 문구라 안전해요"),
+                  ("슬로건 중심", "슬로건(Restart Your Day 또는 Buy Your Tomorrow) 중심", "확인된 브랜드 문구라 안전해요"),
                   ("브랜드 무드 중심", "검정 & 네온 브랜드 무드 중심", "제품 사실 없이도 쓸 수 있어요"),
                   ("제품 형태 중심", "제품 형태(모양 젤리·소형 병 음료) 중심", "제공된 제품 정보만 써요")),
     "cta": _q("decisions.cta", "CTA", "마지막 행동 유도 문구는 어떻게 할까요?",
@@ -605,9 +609,9 @@ EXAMPLE_QUESTIONS = {
                    ("한국어", "한국어", "한국어 채널용이에요")),
 }
 EXAMPLE_ORDER = {
-    "image": ["goal", "concept", "background", "tone", "language"],
-    "cardnews": ["goal", "concept", "tone", "slide_count", "target", "language"],
-    "shortform": ["goal", "concept", "duration", "tone", "target"],
+    "image": ["goal", "concept", "background", "ratio", "tone", "language"],
+    "cardnews": ["goal", "concept", "tone", "slide_count", "ratio", "target", "language"],
+    "shortform": ["goal", "concept", "duration", "ratio", "tone", "target"],
     "crm": ["goal", "format", "tone", "cta", "target"],
 }
 FIELD_RE = re.compile(r"^decisions\.[a-z][a-z0-9_]{1,39}$")
@@ -622,12 +626,13 @@ def interview_messages(cid):
 
 
 def _taken(sheet, decisions, asked_fields):
-    """다시 묻지 않을 항목: 이번 인터뷰에서 물은 것 · 시트 목적이 이미 있음 · 이미 확정된 결정 · 채널 기본 비율."""
+    """다시 묻지 않을 항목: 이번 인터뷰에서 물은 것 · 시트 목적이 이미 있음 · 이미 확정된 결정.
+    채널 기본 비율(proposed)은 확정이 아니라서 묻는다 — 보기 첫 번째가 채널 추천 (2026-10-25)."""
     out = set(asked_fields)
     if sheet["goal"]:
         out.add("sheet.goal")
     out.update("decisions." + k for k, d in decisions.items() if (d or {}).get("status") == "confirmed")
-    if (decisions.get("ratio") or {}).get("source") == "default":  # 채널 기본값 제안 — 바꾸고 싶으면 대화에서
+    if sheet["content_type"] not in ("image", "cardnews", "shortform"):
         out.add("decisions.ratio")
     return out
 
@@ -658,10 +663,12 @@ def _clean_question(raw, taken):
             "question": question, "options": opts[:3], "ready": raw.get("ready") is True}
 
 
-def _example_question(content_type, taken):
-    for key in EXAMPLE_ORDER.get(content_type, EXAMPLE_ORDER["image"]):
+def _example_question(sheet, taken):
+    for key in EXAMPLE_ORDER.get(sheet["content_type"], EXAMPLE_ORDER["image"]):
         q = EXAMPLE_QUESTIONS[key]
         if q["field"] not in taken:
+            if key == "ratio":
+                return dict(q, options=[{"label": a, "value": b, "reason": c} for a, b, c in O.ratio_options(sheet)])
             return dict(q, options=[dict(o) for o in q["options"]])
     return None
 
@@ -696,7 +703,7 @@ def next_question(sheet, decisions, facts, labels, asked):
                 return None, intro
             if isinstance(q, dict):
                 return dict(q, source="ai"), intro
-    q = _example_question(sheet["content_type"], taken)
+    q = _example_question(sheet, taken)
     ready = sum(1 for a in asked if a["status"] == "answered") >= READY_AFTER
     return (dict(q, source="example", ready=ready) if q else None), intro
 
