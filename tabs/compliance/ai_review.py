@@ -1,6 +1,6 @@
 """컴플라이언스 AI 2차 판정 (Claude).
 
-규칙 판정(R1~R15)을 대신하지 않습니다. 당 함량 표현은 팀 결정(2026-10-24, R11·R12 끔)에 따라 AI도 판정하지 않습니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
+규칙 판정(R1~R15)을 대신하지 않습니다. 당류 표현은 브랜드 가이드 v1.1 기준(R11·R12 · 2026-10-25 다시 켬)으로 판정합니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
 '더 안전한 문장'을 참고용으로 받습니다. 최종 사용 여부는 담당자 승인으로 정합니다.
 
 Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽습니다. 로직은 원본(JUNHEE/server)과 같습니다.
@@ -22,15 +22,15 @@ SYSTEM = """You review English advertising copy for REBOOT (slogan "Restart Your
 The line-up is four conventional foods, not dietary supplements and not drugs: Reboot Jelly Original and Reboot Jelly Balance (individually wrapped gummy-type shaped jellies, not konjac — cowboy hat (cherry), lasso (lemon), boot (lime) — in one pouch; never a revolver shape),
 Reboot Drink Original and Reboot Drink Balance (a non-carbonated drink in a 100 ml glass flask bottle, sold single or as a 3-bottle box).
 Flavors: Jelly Original lime, lemon, cherry · Jelly Balance cherry, lime, lemon · Drink Original lemon, cherry, lime · Drink Balance lemon, lime, cherry.
-The two Balance products carry "Zero Sugar" on reference packaging (conditional: the final wording is pending the sugar-claim review); the brand uses no other sugar wording or numbers, and never the reference nutrition figures (about 43 kcal, about 10 g sugar per 100 ml).
+The two Balance products are labeled "Zero Sugar" (the team assumes the labeling criteria are met); the brand uses no other sugar wording or numbers, and never the reference nutrition figures (about 43 kcal, about 10 g sugar per 100 ml).
 Shared ingredient: A-HAT (Hovenia dulcis extract with Lactobacillus fermentum, described as Aldicom's patented composition) plus Hovenia fruit; amounts are not provided and the patent scope is not verified.
-Pieces per pouch, ingredient amounts, nutrition facts, certifications, origin and allergens are not decided yet. No official event participation or partnership is confirmed.
+Each jelly pouch holds 10 individually wrapped jellies. Ingredient amounts, nutrition facts, certifications, origin and allergens are not decided yet. No official event participation or partnership is confirmed.
 The request names which product the copy is for.
 
 Assess the copy the way a careful US food-advertising compliance reviewer would:
 - FDA: a conventional food must not claim to prevent, treat, cure or mitigate a disease or condition (a hangover claim reads as a drug claim); structure/function claims on a conventional food must come from the food's nutritive value; no implied medical or clinical authority.
 - FTC: every objective claim needs competent and reliable substantiation; testimonials, reviews and endorsements must be genuine and disclosed; no incentivised reviews; no claims that encourage excessive drinking.
-- Sugar-content wording (low sugar, zero sugar, less/reduced sugar, sugar free, no added sugar) is outside this review by team decision (rules R11-R12 are switched off): do not list it as an issue and do not let it change the verdict. Still judge any health or hangover claim in the same sentence as usual.
+- Sugar wording follows the brand guide (rules R11-R12): only the two Balance products may say "Zero Sugar" (team assumes the criteria are met) - it is fine (PASS) for Balance copy and BLOCK for Original or brand-wide copy. "Low sugar", reduced/less sugar, no added sugar and 저당 are not allowed (BLOCK). Never accept sugar or calorie numbers in copy.
 - The team's own rules R1-R15 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
 
 Verdict scale (pick the strictest that applies):

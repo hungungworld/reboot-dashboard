@@ -71,7 +71,7 @@
     const out = { brand: (DATA.brand || {}).name || null };
     if (inq) {
       out.product = !p ? '[확인 필요: 문의한 제품 (Original·Balance 젤리 / Original·Balance 음료)]'
-        : p.en || `[확인 필요: ${p.ko} 영문 제품명 (저당 표기는 컴플라이언스 R11·R12 확인)]`;
+        : p.en || `[확인 필요: ${p.ko} 영문 제품명 (당류 표기는 컴플라이언스 R11·R12 확인)]`;
       out.flavor = !p ? null : p.flavorsFinal ? p.flavors.join(', ') : `[확인 필요: ${p.ko} 맛 확정 (임시: ${p.flavors.join(', ')})]`;
       out.pack = p ? p.pack : null;
       out.unit = p ? p.unit : null;
@@ -141,8 +141,9 @@
     ta.scrollTop = Math.max(0, lineNo * lh - ta.clientHeight / 3);
   }
 
-  function recheck(text) {
-    try { return REBOOT.use('compliance').review(text, { channel: 'cs' }); } catch (e) { return null; }
+  // 문의 제품 기준으로 점검 (모르면 4종 중 가장 엄격 · 서버 재검사와 같은 기준 · 2026-10-25)
+  function recheck(text, product) {
+    try { return REBOOT.use('compliance').review(text, { channel: 'cs', product: product || 'all' }); } catch (e) { return null; }
   }
 
   /** 최종 승인 전에 모두 통과해야 하는 조건 */
@@ -802,7 +803,7 @@
     const box = ui.root.querySelector('[data-el="detail"]');
     const inq = load().find(x => x.id === ui.selected);
     if (!inq) return;
-    const r = recheck(inq.draft);
+    const r = recheck(inq.draft, inq.product);
     const g = gates(inq, r);
     const todos = pendingTodos(inq.draft);
 
@@ -959,7 +960,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         renderList(ui);
       } else if (act === 'approve') {
         const cur = load().find(x => x.id === id);
-        const r = recheck(cur.draft);
+        const r = recheck(cur.draft, cur.product);
         if (!gates(cur, r).every(x => x.ok) || !ui.approver.trim()) { renderCheck(ui); return; }
         const done = account => {
           patch(id, inq => {
@@ -973,7 +974,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         // Gmail 문의는 서버에도 승인 기록 (보내기 때 본문 지문을 대조) · 더미 문의는 화면에만
         if (!cur.gmailId) return done('');
         btn.disabled = true;
-        api('/api/cs/approve', { message_id: cur.gmailId, body: cur.draft, approver: ui.approver.trim(), verdict: r.verdict })
+        api('/api/cs/approve', { message_id: cur.gmailId, body: cur.draft, approver: ui.approver.trim(), verdict: r.verdict, product: cur.product || '' })
           .then(res => done(res.account))
           .catch(e => { toast(`승인 실패: ${e.message}`); btn.disabled = false; });
       } else if (act === 'copy') {
@@ -1087,7 +1088,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       const inq = load().find(x => x.id === id);
       if (!inq) return { subject: head, body: '' };
       const t = TYPES[inq.type];
-      const r = recheck(inq.draft);
+      const r = recheck(inq.draft, inq.product);
       const todos = pendingTodos(inq.draft);
       const adv = loadAdverse().find(x => x.linkedInquiry === inq.id);
       add(`${SHARE_KIND[kind]} 드립니다.`);
@@ -1357,7 +1358,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
      보내기 전에 한 번 더: 승인 상태 · 지금 초안의 재검사(BLOCK이면 막음) · [확인 필요] 없음. 서버도 같은 조건으로 거절 */
 
   function sendCheck(inq) {
-    const r = recheck(inq.draft);
+    const r = recheck(inq.draft, inq.product);
     if (inq.status !== '승인' || !inq.approval) return { ok: false, why: '최종 승인 전입니다.' };
     if (!r) return { ok: false, why: '컴플라이언스 재검사를 할 수 없습니다 (새로고침).' };
     if (r.verdict === 'BLOCK') return { ok: false, why: '재검사 결과가 BLOCK입니다. 문의함에서 초안을 고치세요.' };
@@ -1486,7 +1487,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
         if (act === 'send') {
           const pv = await api('/api/cs/gmail/preview', { message_id: inq.gmailId });
           if (!global.confirm(`이 답장을 바로 보냅니다. 보낸 메일은 되돌릴 수 없습니다.\n\n받는 사람: ${pv.to}\n제목: ${pv.subject}\n승인: ${inq.approval.by} · 재검사 ${c.r.verdict}\n\n보낼까요?`)) { btn.disabled = false; return; }
-          const res = await api('/api/cs/gmail/send', { message_id: inq.gmailId, body: inq.draft });
+          const res = await api('/api/cs/gmail/send', { message_id: inq.gmailId, body: inq.draft, product: inq.product || '' });
           patch(id, x => { x.status = '발송 완료'; x.sentAt = Date.now(); x.sentId = res.sent_id; x.sentTo = res.to; x.sentMode = 'gmail'; x.sentBody = inq.draft; logTo(x, `Gmail로 보냄 → ${res.to}`); });
           toast(`보냈습니다 → ${res.to}`);
           return redraw();
