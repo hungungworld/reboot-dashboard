@@ -280,3 +280,12 @@
 .part-partners .ptn-rec-table th.resizing .ptn-col-grip::after,
 .part-partners .ptn-rec-salestable th[data-col]:hover .ptn-col-grip::after,
 .part-partners .ptn-rec-salestable th.resizing .ptn-col-grip::after { opacity: 1; background: var(--muted); }
+
+/* 업체 컨택 › ▶️ 유튜브 크리에이터 추천 */
+.part-partners .ptn-yt-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px 12px; }
+.part-partners .ptn-yt-kws { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.part-partners .ptn-yt-sub { align-items: center; gap: 12px; padding: 0 16px 12px; }
+.part-partners .ptn-yt-sort { width: auto; min-width: 180px; }
+.part-partners .ptn-yt-th, .part-partners .ptn-yt-sub2 { display: block; font-size: 10px; font-weight: 400; color: var(--faint); margin-top: 2px; }
+.part-partners .ptn-yt .note { margin: 0 16px 12px; }
+.part-partners .ptn-yt-av { width: 36px; height: 36px; flex: none; border-radius: 50%; object-fit: cover; background: var(--soft-2); }

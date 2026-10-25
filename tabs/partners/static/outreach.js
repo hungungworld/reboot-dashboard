@@ -341,6 +341,10 @@
 
   function paintBody(st) {
     const body = st.el.querySelector('[data-ref="body"]');
+    if (st.f.view !== 'board' && st.f.yt) {
+      paintYoutube(st);
+      return;
+    }
     if (st.f.view === 'board') {
       body.innerHTML = '<div></div>';
       paintCount(st);
@@ -395,11 +399,19 @@
       (!q || [c.name, c.location, c.category, c.email].join(' ').toLowerCase().includes(q)));
   }
 
-  function paintFilters(st) {
+  // 구분 칩 (케이터링 · 인플루언서) + ▶️ 유튜브 크리에이터 (누르면 아래 표가 크리에이터 추천으로 바뀜)
+  function typeChips(st) {
     const f = st.f;
     const items = st.data.items;
+    const yt = st.yt ? fmt.num(st.yt.items.length) : '';
+    st.el.querySelector('[data-ref="types"]').innerHTML = TYPES.map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${!f.yt && f.types.includes(t)}">${D.typeIcon[t]} ${esc(t)}<span class="n">${fmt.num(items.filter(c => c.type === t).length)}</span></button>`).join('') +
+      `<button type="button" class="chip" data-yt-toggle aria-pressed="${!!f.yt}">▶️ 유튜브 크리에이터${yt ? `<span class="n">${yt}</span>` : ''}</button>`;
+  }
+
+  function paintFilters(st) {
+    const f = st.f;
     const subs = st.data.subcategories || {};
-    st.el.querySelector('[data-ref="types"]').innerHTML = TYPES.map(t => `<button type="button" class="chip" data-type="${esc(t)}" aria-pressed="${f.types.includes(t)}">${D.typeIcon[t]} ${esc(t)}<span class="n">${fmt.num(items.filter(c => c.type === t).length)}</span></button>`).join('');
+    typeChips(st);
     const base = filtered(st, true);
     const shown = f.types.length ? f.types : TYPES;
     st.el.querySelector('[data-ref="tags"]').innerHTML = shown.map(t => (subs[t] || []).map(s => {
@@ -477,6 +489,203 @@
     }
   }
 
+  /* ───────── ▶️ 유튜브 크리에이터 추천 (서버 youtube.py — 소개란 공개 이메일만, 30일 안에 갱신 · 못 하면 삭제) ───────── */
+  const YT_SORTS = { subscribers: '구독자 많은 순', avgViews: '평균 조회수 높은 순', engage: '조회수÷구독자 높은 순', email: '이메일 있는 것 먼저' };
+  function ytEngage(c) { return c.subscribers && c.avgViews != null ? c.avgViews / c.subscribers : -1; }
+  function ytSorted(st) {
+    const by = st.f.ytSort in YT_SORTS ? st.f.ytSort : 'subscribers';
+    const key = {
+      subscribers: c => c.subscribers || 0, avgViews: c => c.avgViews || 0, engage: ytEngage,
+      email: c => (c.email ? 1e12 : 0) + (c.subscribers || 0)
+    }[by];
+    // 키워드 칩을 고르면 그 키워드(하나라도)로 찾은 크리에이터만
+    const pick = Array.isArray(st.f.ytTags) ? st.f.ytTags : [];
+    return st.yt.items.filter(c => !pick.length || (c.keywords || []).some(k => pick.includes(k)))
+      .sort((a, b) => key(b) - key(a));
+  }
+  // 칩 목록: 검색 키워드 + 저장된 크리에이터에 붙은 키워드 (예전 키워드로 찾은 채널도 거를 수 있게)
+  function ytKwChips(st) {
+    const all = [];
+    ytKeywords(st).concat(...st.yt.items.map(c => c.keywords || [])).forEach(k => { if (!all.includes(k)) all.push(k); });
+    const pick = Array.isArray(st.f.ytTags) ? st.f.ytTags : [];
+    return all.map(k => {
+      const n = st.yt.items.filter(c => (c.keywords || []).includes(k)).length;
+      return `<button type="button" class="chip" data-yt-kwchip="${esc(k)}" aria-pressed="${pick.includes(k)}">${esc(k)}<span class="n">${fmt.num(n)}</span></button>`;
+    }).join('');
+  }
+  function ytKeywords(st) {
+    return Array.isArray(st.f.ytKw) && st.f.ytKw.length ? st.f.ytKw : (st.yt ? st.yt.keywords : []);
+  }
+  function ytDate(iso) { return iso ? fmt.date(iso) : '—'; }
+
+  async function paintYoutube(st, note) {
+    const body = st.el.querySelector('[data-ref="body"]');
+    body.innerHTML = `<section class="card ptn-out-listcard ptn-yt">
+      <div class="ptn-out-filterbox"><div class="ptn-out-frow"><span class="ptn-out-flabel">구분</span><div class="chips" data-ref="types" role="group" aria-label="구분"></div></div></div>
+      <div data-ref="yt"><div class="skeleton ptn-skel"></div></div>
+    </section>`;
+    st.ytSel = st.ytSel || new Set();
+    typeChips(st);
+    try {
+      st.yt = await REBOOT.api('/api/partners/youtube');
+    } catch (e) {
+      const box = st.el.querySelector('[data-ref="yt"]');
+      if (box) box.innerHTML = `<p class="note error">${esc(e.message)}</p>`;
+      return;
+    }
+    if (!st.el.isConnected || !st.f.yt) return;
+    typeChips(st);
+    const msgs = [];
+    if (note) msgs.push(note);
+    if (st.yt.refreshed) msgs.push(`오래된 값 ${fmt.num(st.yt.refreshed)}개를 다시 받았습니다.`);
+    if (st.yt.removed) msgs.push(`보관 기간(${st.yt.maxDays}일)이 지난 ${fmt.num(st.yt.removed)}개를 지웠습니다.`);
+    st.ytNote = msgs.join(' ') + (st.yt.warning ? `<!--w-->${st.yt.warning}` : '');
+    paintYtTable(st);
+  }
+
+  function paintYtTable(st) {
+    const box = st.el.querySelector('[data-ref="yt"]');
+    if (!box || !st.yt) return;
+    const d = st.yt;
+    const ids = new Set(d.items.map(c => c.id));
+    st.ytSel.forEach(id => { if (!ids.has(id)) st.ytSel.delete(id); });
+    const list = ytSorted(st);
+    const [note, warn] = String(st.ytNote || '').split('<!--w-->');
+    const kws = ytKeywords(st);
+    const cnt = st.el.querySelector('[data-ref="count"]');
+    if (cnt) cnt.innerHTML = `크리에이터 <b>${fmt.num(list.length)}</b>명 · 이메일 공개 <b>${fmt.num(list.filter(c => c.email).length)}</b>명`;
+    box.innerHTML = `
+      <div class="ptn-yt-bar">
+        <div class="ptn-yt-kws"><span class="ptn-out-flabel">키워드</span><div class="chips" role="group" aria-label="키워드로 거르기 (하나라도 해당)">${ytKwChips(st)}</div>
+          <button type="button" class="link small" data-act="yt-kw" title="추천 받기에 쓸 검색 키워드: ${esc(kws.join(', '))}">검색 키워드 편집</button></div>
+        <div class="flex wrap">
+          <button type="button" class="btn small lime" data-act="yt-search"${d.ready ? '' : ' disabled title="설정 › 연결에서 YOUTUBE_API_KEY를 넣어 주세요"'}>${icon('search')} 추천 받기</button>
+          <a class="btn small soft" href="/api/partners/youtube/export.csv" download>${icon('download')} CSV 내보내기</a>
+          <label class="btn small soft">${icon('upload')} CSV 가져오기<input type="file" class="sr-only" accept=".csv" data-yt-file aria-label="유튜브 크리에이터 CSV 가져오기"></label>
+          <button type="button" class="btn small ghost" data-act="yt-delete" disabled>🗑️ 선택 삭제</button>
+        </div>
+      </div>
+      ${d.ready ? '' : `<p class="note warn mb-16">YouTube 키가 없어 새로 추천 받을 수 없습니다. ${settingsLink}에서 YOUTUBE_API_KEY를 넣어 주세요. (CSV 가져오기는 됩니다)</p>`}
+      ${note ? `<p class="note lime mb-16">${esc(note)}</p>` : ''}${warn ? `<p class="note warn mb-16">${esc(warn)}</p>` : ''}
+      <div class="flex wrap ptn-yt-sub">
+        <select class="input ptn-yt-sort" data-yt-sort aria-label="정렬">${Object.keys(YT_SORTS).map(k => `<option value="${k}"${(st.f.ytSort || 'subscribers') === k ? ' selected' : ''}>${YT_SORTS[k]}</option>`).join('')}</select>
+        <span class="small muted">채널 ${fmt.num(list.length)}개 · 이메일 공개 ${fmt.num(list.filter(c => c.email).length)}개</span>
+      </div>
+      <div class="table-wrap ptn-out-tablewrap">
+        <table class="data-table ptn-yt-table">
+          <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-yt-all aria-label="모두 선택"${list.length && list.every(c => st.ytSel.has(c.id)) ? ' checked' : ''}></th>
+            <th scope="col">크리에이터</th><th class="num" scope="col">구독자</th><th class="num" scope="col">평균 조회수<small class="ptn-yt-th">최근 10개</small></th>
+            <th class="num" scope="col">조회수÷구독자</th><th scope="col">이메일<small class="ptn-yt-th">소개란 공개</small></th><th scope="col">매칭 키워드</th><th scope="col">기준일</th></tr></thead>
+          <tbody>${list.length ? list.map(c => ytRow(st, c)).join('') : `<tr><td colspan="8">${ui.empty(d.ready ? '아직 추천 받은 크리에이터가 없습니다. 🔍 추천 받기를 눌러 주세요.' : '아직 크리에이터가 없습니다.', 'search')}</td></tr>`}</tbody>
+        </table>
+      </div>
+      <p class="panel-note ptn-out-foot">유튜브 공개 정보입니다. 이메일은 크리에이터가 채널 소개란에 직접 공개한 주소만 가져오고, 숨겨진 비즈니스 이메일은 가져오지 않습니다.
+        구독자·조회수는 기준일 값이며 ${d.staleDays}일이 지나면 다시 받고, ${d.maxDays}일 안에 다시 받지 못하면 지웁니다 (YouTube API 정책).
+        크리에이터가 삭제를 요청하면 체크 후 🗑️ 선택 삭제를 누르세요. CSV는 팀 노션에만 공유하고 ${d.maxDays}일이 지나면 지워 주세요.</p>`;
+    ytImgFallback(st);
+    ytSelState(st);
+  }
+
+  function ytRow(st, c) {
+    const url = safeUrl(c.url);
+    const eng = ytEngage(c);
+    const old = c.statsAt && (Date.now() - new Date(c.statsAt).getTime()) / 86400000 > st.yt.staleDays;
+    return `<tr${st.ytSel.has(c.id) ? ' class="selected"' : ''}>
+      <td class="ptn-rec-chk"><input type="checkbox" data-yt-sel="${esc(c.id)}"${st.ytSel.has(c.id) ? ' checked' : ''} aria-label="${esc(c.title)} 선택"></td>
+      <td><div class="flex ptn-out-who">${ytAvatar(c)}
+        <div class="ptn-out-name">${url ? `<a class="link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(c.title || c.id)}</a>` : esc(c.title || c.id)}
+          <small>${esc(c.handle || '')}${c.country ? ' · ' + esc(c.country) : ''}${c.videos != null ? ' · 영상 ' + fmt.num(c.videos) + '개' : ''}</small></div></div></td>
+      <td class="num">${c.subscribers != null ? fmt.num(c.subscribers) : '<span class="faint">비공개</span>'}</td>
+      <td class="num">${c.avgViews != null ? fmt.num(c.avgViews) : '—'}</td>
+      <td class="num">${eng >= 0 ? fmt.pct(eng * 100, 1) : '—'}</td>
+      <td>${c.email ? `<button type="button" class="link ptn-out-emailbtn" data-act="yt-compose" data-id="${esc(c.id)}" title="이 주소로 협업 메일 쓰기">${icon('mail')}${esc(c.email)}</button><small class="ptn-yt-sub2">가져온 날짜 ${esc(ytDate(c.emailAt))}</small>`
+        : `<span class="faint">공개 안 함</span>${url ? `<small class="ptn-yt-sub2"><a class="link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">채널에서 확인 ↗</a></small>` : ''}`}</td>
+      <td><div class="ptn-out-tags">${(c.keywords || []).map(k => `<span class="ptn-out-tag">${esc(k)}</span>`).join('') || '<span class="faint">—</span>'}</div></td>
+      <td class="nowrap">${esc(ytDate(c.statsAt))}${old ? ' ' + badge('갱신 필요', 'orange') : ''}</td>
+    </tr>`;
+  }
+
+  // 프로필 사진 (유튜브 이미지 서버 주소만 허용) · 없거나 못 불러오면 이니셜
+  const YT_IMG_HOST = /^https:\/\/([a-z0-9-]+\.)*(ggpht\.com|ytimg\.com|googleusercontent\.com)\//i;
+  function ytInitial(c) {
+    return `<span class="initial ptn-av${avIndex(c.id)}" aria-hidden="true">${esc(initials(c.title))}</span>`;
+  }
+  function ytAvatar(c) {
+    return YT_IMG_HOST.test(c.thumb || '')
+      ? `<img class="ptn-yt-av" src="${esc(c.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-yt-img="${esc(c.id)}">`
+      : ytInitial(c);
+  }
+  function ytImgFallback(st) {
+    st.el.querySelectorAll('img[data-yt-img]').forEach(img => img.addEventListener('error', () => {
+      const c = st.yt.items.find(x => x.id === img.dataset.ytImg);
+      if (c) img.outerHTML = ytInitial(c);
+    }, { once: true }));
+  }
+
+  function ytSelState(st) {
+    const btn = st.el.querySelector('[data-act="yt-delete"]');
+    if (btn) {
+      btn.disabled = !st.ytSel.size;
+      btn.textContent = st.ytSel.size ? `🗑️ 선택 삭제 (${st.ytSel.size})` : '🗑️ 선택 삭제';
+    }
+    st.el.querySelectorAll('[data-yt-sel]').forEach(c => c.closest('tr').classList.toggle('selected', c.checked));
+  }
+
+  async function ytAction(st, a, btn) {
+    if (a === 'yt-compose') {
+      const c = st.yt && st.yt.items.find(x => x.id === btn.dataset.id);
+      // 협업 이력의 업체 번호(20자)에 채널 id가 들어가지 않으므로 이름으로 기록됨
+      if (c) compose({ id: '', type: '인플루언서', name: c.title, email: c.email });
+    } else if (a === 'yt-kw') {
+      let text = null;
+      const ok = await ui.modal({
+        title: '검색 키워드 편집',
+        body: `<label class="field"><span>쉼표로 구분 · 최대 8개 (키워드 하나에 약 100 units, 하루 10,000 units)</span>
+          <input class="input" data-yt-kwinput value="${esc(ytKeywords(st).join(', '))}" maxlength="500"></label>`,
+        actions: [{ label: '취소', value: false }, { label: '저장', value: true, tone: 'lime', onClick: b => { text = b.querySelector('[data-yt-kwinput]').value; } }]
+      });
+      if (ok !== true || text == null) return;
+      st.f.ytKw = String(text).split(',').map(s => s.trim()).filter(Boolean).slice(0, 8);
+      saveFilters(st.f);
+      paintYtTable(st);
+    } else if (a === 'yt-search') {
+      const kws = ytKeywords(st);
+      ui.busy(btn, true);
+      try {
+        const out = await REBOOT.api('/api/partners/youtube/search', { keywords: kws });
+        toast(`채널 ${out.found}개를 찾았습니다 (새로 ${out.added}개).`);
+        paintYoutube(st, `키워드 ${out.keywords.length}개로 채널 ${fmt.num(out.found)}개를 찾았습니다 (새로 ${fmt.num(out.added)}개).`);
+      } catch (e) {
+        toast(e.message, 'error');
+        ui.busy(btn, false);
+      }
+    } else if (a === 'yt-delete') {
+      const ids = Array.from(st.ytSel);
+      if (!ids.length) return;
+      const ok = await ui.confirm(`선택한 크리에이터 ${ids.length}명의 정보(이메일 포함)를 지울까요? 되돌릴 수 없습니다.`, { title: '삭제 확인', ok: '삭제', danger: true });
+      if (!ok) return;
+      try {
+        const out = await REBOOT.api('/api/partners/youtube/delete', { ids });
+        st.ytSel.clear();
+        toast(`${out.deleted}명을 지웠습니다.`);
+        paintYoutube(st);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    }
+  }
+
+  async function ytImport(st, file) {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    try {
+      const out = await REBOOT.upload('/api/partners/youtube/import', fd);
+      paintYoutube(st, `CSV를 가져왔습니다 — 새로 ${fmt.num(out.added)} · 갱신 ${fmt.num(out.updated)} · 건너뜀 ${fmt.num(out.skipped)} (기준일이 30일 넘은 값·형식이 틀린 줄은 건너뜀)`);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
   function select(st, id) {
     st.f.selected = id;
     saveFilters(st.f);
@@ -499,8 +708,9 @@
         } else if (a === 'import-open') paintImport(st, !st.data.total, true);
         else if (a === 'import-upload') doImport(st, act);
         else if (a === 'example') loadExample(st, act);
+        else if (a.startsWith('yt-')) ytAction(st, a, act);
         else if (a === 'reset-filters') {
-          Object.assign(st.f, { types: [], tags: [], q: '' });
+          Object.assign(st.f, { types: [], tags: [], q: '', yt: false, ytTags: [] });
           saveFilters(st.f);
           paintBody(st);
         } else if (a === 'goto-history') {
@@ -516,7 +726,29 @@
         paintMain(st);
         return;
       }
+      const kc = t.closest('[data-yt-kwchip]');
+      if (kc) {
+        const pick = Array.isArray(st.f.ytTags) ? st.f.ytTags : [];
+        const k = kc.dataset.ytKwchip;
+        st.f.ytTags = pick.includes(k) ? pick.filter(x => x !== k) : pick.concat(k);
+        saveFilters(st.f);
+        paintYtTable(st);
+        return;
+      }
+      if (t.closest('[data-yt-toggle]')) {
+        st.f.yt = !st.f.yt;
+        saveFilters(st.f);
+        paintBody(st);
+        return;
+      }
       const ty = t.closest('[data-type]');
+      if (ty && st.f.yt) {
+        // 유튜브 화면에서 구분 칩을 누르면 업체 목록으로 돌아가며 그 구분만 보여 줌
+        Object.assign(st.f, { yt: false, types: [ty.dataset.type], tags: [] });
+        saveFilters(st.f);
+        paintBody(st);
+        return;
+      }
       if (ty) {
         const i = st.f.types.indexOf(ty.dataset.type);
         if (i >= 0) st.f.types.splice(i, 1); else st.f.types.push(ty.dataset.type);
@@ -556,7 +788,12 @@
       }
     });
     el.addEventListener('change', e => {
-      const inp = e.target.closest('[data-file]');
+      const t = e.target;
+      if (t.matches('[data-yt-file]')) { if (t.files && t.files[0]) ytImport(st, t.files[0]); t.value = ''; return; }
+      if (t.matches('[data-yt-sort]')) { st.f.ytSort = t.value; saveFilters(st.f); paintYtTable(st); return; }
+      if (t.matches('[data-yt-sel]')) { if (t.checked) st.ytSel.add(t.dataset.ytSel); else st.ytSel.delete(t.dataset.ytSel); ytSelState(st); return; }
+      if (t.matches('[data-yt-all]')) { ytSorted(st).forEach(c => { if (t.checked) st.ytSel.add(c.id); else st.ytSel.delete(c.id); }); paintYtTable(st); return; }
+      const inp = t.closest('[data-file]');
       if (inp && inp.files && inp.files[0]) pickFile(st, inp.dataset.file, inp.files[0]);
     });
     el.addEventListener('dragover', e => {
