@@ -122,6 +122,43 @@
       clear: { label: '키워드 미탐지', tone: '' }
     },
 
+    // 카드뉴스 편집기 (tabs/content/cardnews.py와 같은 ID) — 템플릿을 늘리려면 templates에 한 줄 + content.css에 .cnt-cn-t-<ID> 변수 묶음
+    cardnews: {
+      sourceMax: 12000,
+      templates: [
+        { id: 'neon', label: 'Reboot 블랙 네온', hint: '검정 배경 + 네온 라임 · 후킹 문구형' },
+        { id: 'clean', label: '클린 화이트', hint: '흰 배경 + 라임 형광펜 · 정보형' },
+        { id: 'photo', label: '제품 포토', hint: '사진을 꽉 채우고 흰 박스 · 사진 위주형' }
+      ],
+      layouts: [{ id: 'cover', label: '표지' }, { id: 'list', label: '목록' }, { id: 'quote', label: '인용' },
+        { id: 'stat', label: '숫자' }, { id: 'outro', label: '마무리' }],
+      languages: [{ id: 'en', label: 'English' }, { id: 'ko', label: '한국어' }],
+      ratios: [{ id: '4:5', label: '4:5 세로 · 인스타 추천' }, { id: '1:1', label: '1:1 정사각' }],
+      counts: [{ id: 0, label: 'AUTO' }, { id: 5, label: '5장' }, { id: 7, label: '7장' }, { id: 9, label: '9장' }],
+      tones: [{ id: 'info', label: '정보형' }, { id: 'casual', label: '캐주얼' }, { id: 'hook', label: '후킹형' }],
+      placeholders: { kicker: '작은 문구', title: '제목', sub: '부제 한 문장', items: '내용', quote: '인용문', number: '숫자',
+        desc: '숫자 설명', cta: '행동 유도 문구' },
+      // 키 없이 보는 예시 덱 — 브랜드 키트 사실(제품명 · 맛 · 모양 · Jelly Original 가격 · 슬로건)만 씀. 화면에 '예시' 배지
+      sample: {
+        deckTitle: 'Meet **Reboot** Jelly', brand: 'REBOOT', demo: true, template: 'neon', ratio: '4:5', language: 'en', tone: 'hook',
+        caption: 'Cowboy-shaped jellies, three flavors, one lineup. Which shape is your favorite?\nSave this post for later.',
+        hashtags: ['#Reboot', '#RebootJelly', '#CowboyJelly', '#JellyTime', '#RestartYourDay'],
+        needsCheck: ['예시 데이터예요. 실제 게시 전에 문구와 사진을 확인하세요.'],
+        cards: [
+          { layout: 'cover', kicker: 'REBOOT · JELLY', title: 'Meet **Reboot** Jelly', sub: 'Cowboy-shaped jellies in three flavors.', photo: { asset: 'jelly-original-pouch-scene' } },
+          { layout: 'list', title: 'Three **shapes**', items: [
+            { head: 'Cowboy boot', body: 'Lime, in bright green.' },
+            { head: 'Cowboy hat', body: 'Cherry, in pink.' },
+            { head: 'Lasso', body: 'Lemon, in sunny yellow.' }], photo: { asset: 'jelly-original-pieces' } },
+          { layout: 'list', title: 'Pick your **flavor**', items: [
+            { head: 'Cherry', body: 'Bright and bold.' }, { head: 'Lime', body: 'Fresh and zesty.' }, { head: 'Lemon', body: 'Sunny and sweet.' }] },
+          { layout: 'stat', title: 'Reboot Jelly Original', number: '$17.99', desc: 'per pouch of 10', photo: { asset: 'jelly-original-pouch-front' } },
+          { layout: 'quote', title: 'Our slogan', quote: '**Restart** Your Day', photo: { asset: 'rebu-poses-fullbody' } },
+          { layout: 'outro', title: 'Try **Reboot** Jelly', sub: 'Original, or Balance with Zero Sugar (not a low calorie food).', cta: 'Save this post for later', photo: { asset: 'jelly-balance-pouch-front' } }
+        ]
+      }
+    },
+
     jobStatus: {
       queued: '대기 중', running: '생성 중', saving: '파일 저장 중', succeeded: '완료', failed: '실패',
       submission_unknown: '결과 확인 불가', canceled: '취소됨'

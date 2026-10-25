@@ -26,10 +26,18 @@
   GET    /api/content/files/<이름>.png|jpg|webp|mp4 생성 이미지·영상 (로그인 필요)
   GET    /api/content/assets                        브랜드 자산 목록 (로고 · 제품 · 캐릭터 Rebu 사진)
   GET    /api/content/assets/<ID>.jpg               자산 사진 (로그인 필요)
+  POST   /api/content/cardnews/extract              카드뉴스 자료 파일 → 글자 (multipart: file · .md .txt .csv .docx)
+  GET    /api/content/campaigns/<id>/cardnews       카드뉴스 덱 {decks: {버전 ID: 덱}}
+  POST   /api/content/campaigns/<id>/cardnews/generate  {source, language, tone, count, ratio, template} → AI 덱 → 새 버전
+  POST   /api/content/campaigns/<id>/cardnews       편집한 덱 저장 {deck, parent_id?} → 새 버전 (AI 아님)
+  POST   /api/content/campaigns/<id>/cardnews/photo 카드 사진 (multipart: file · JPG — 화면이 줄여서 보냄)
+  POST   /api/content/campaigns/<id>/cardnews/backgrounds/plan  {deck, count} → AI 배경 넣을 카드 추천 (count 0 = AI가 장 수 판단)
+  POST   /api/content/campaigns/<id>/cardnews/backgrounds       {deck, cards:[{id, visual}]} → 카드마다 이미지 작업 (유료)
+  GET    /api/content/campaigns/<id>/cardnews/backgrounds       AI 배경 작업 상태 · 만든 배경
 """
 import json
 
-from flask import Blueprint, Response, jsonify, request, send_from_directory
+from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory
 from flask_login import current_user
 
 from server import worklog
@@ -37,7 +45,7 @@ from server.core.ai import AIError
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
-from . import assets, brandkit, conversation, higgsfield, media, prompts, providers, repository, review, schemas
+from . import assets, brandkit, cardnews, conversation, higgsfield, media, prompts, providers, repository, review, schemas
 from . import options as O
 from .export import build_zip
 from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentReference, ContentVersion
@@ -108,7 +116,7 @@ def meta():
         kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS, flows=O.CONTENT_FLOWS,
         references={"max": media.REF_PER_CAMPAIGN, "maxBytes": media.REF_MAX_BYTES},
         character={"choices": list(assets.CHARACTER_CHOICES), "contentTypes": list(assets.CHARACTER_TYPES), "name": "Rebu"},
-        productKit={pid: {"form": p.get("form"), "flavors": (p.get("flavors") or {}).get("value")}
+        productKit={pid: {"form": p.get("form"), "flavors": (p.get("flavors") or {}).get("value"), "ko": p.get("ko")}
                     for pid, p in brandkit.load()["products"].items()})
 
 
@@ -150,6 +158,10 @@ def campaigns_list():
             if finals.get(cid) == vid or cid not in covers:  # 최종본 이미지 우선, 없으면 가장 최근 이미지
                 covers[cid] = name
     items = [repository.campaign_summary(c, vcount.get(c.id, 0), covers.get(c.id), products) for c in rows]
+    deck_covers = cardnews.deck_covers([c for c in rows if c.content_type == "cardnews"])
+    for it in items:  # 카드뉴스 편집기 덱 → 앞 3장을 화면이 썸네일로 그림 (이미지 파일 없음)
+        if it["id"] in deck_covers:
+            it["deckCover"] = deck_covers[it["id"]]
     total_all = sum(counts.values())
     return jsonify(items=items, total=total_all, counts=counts, active=counts.get("제작 중", 0) + counts.get("검토 중", 0))
 
@@ -299,6 +311,7 @@ def campaigns_delete(cid):
     files = [n for (n,) in db.session.query(ContentVersion.image_file).filter(
         ContentVersion.campaign_id == cid, ContentVersion.image_file.isnot(None))]
     files += [r.file for r in repository.references_of(cid)]
+    files += [p.name for p in media.upload_dir().glob(f"c{cid}-cn*") if cardnews.PHOTO_RE.match(p.name)]  # 카드 사진 · AI 배경
     title = c.title
     for model in (ContentVersion, ContentMessage, ContentDecisionEvent, ContentJob, ContentReference):
         model.query.filter_by(campaign_id=cid).delete()
@@ -776,7 +789,11 @@ def assets_file(name):
 def files(name):
     if not media.FILE_RE.match(name or ""):
         raise ApiError("없는 파일입니다.", 404)
-    if (ContentVersion.query.filter_by(image_file=name).first() is None
+    photo = cardnews.PHOTO_RE.match(name)
+    if photo:  # 카드뉴스 카드 사진 — 덱 JSON에만 이름이 있어 캠페인이 있는지만 확인
+        if db.session.get(ContentCampaign, int(photo.group(1))) is None:
+            raise ApiError("없는 파일입니다.", 404)
+    elif (ContentVersion.query.filter_by(image_file=name).first() is None
             and ContentReference.query.filter_by(file=name).first() is None):
         raise ApiError("없는 파일입니다.", 404)
     folder = media.upload_dir()
@@ -786,3 +803,190 @@ def files(name):
     resp.headers["Cache-Control"] = "private, max-age=86400"
     resp.headers["Content-Disposition"] = f'inline; filename="reboot-content-{name}"'
     return resp
+
+
+# ───────── 카드뉴스 편집기 (cardnews.py · README 7.1a) ─────────
+
+def _cardnews_opts(data):
+    try:
+        count = int(data.get("count") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return {"language": data.get("language") if data.get("language") in cardnews.LANGUAGES else "en",
+            "tone": data.get("tone") if data.get("tone") in cardnews.TONES else "info",
+            "ratio": data.get("ratio") if data.get("ratio") in cardnews.RATIOS else "4:5",
+            "template": data.get("template") if data.get("template") in cardnews.TEMPLATES else cardnews.TEMPLATES[0],
+            "count": count if count in cardnews.COUNTS else 0}
+
+
+def _cardnews_campaign(cid):
+    c = _campaign(cid)
+    if c.content_type != "cardnews":
+        raise ApiError("카드뉴스 캠페인에서만 쓸 수 있어요.")
+    return c
+
+
+def _save_deck(c, deck, *, source, label, parent, note, model=None):
+    user = _who()
+    sheet = repository.sheet_of(c)
+    facts = brandkit.product_facts(sheet["product_ids"])
+    snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
+                                           model=model, mode="cardnews", deck=deck)
+    v = ContentVersion(campaign_id=c.id, seq=repository.next_seq(c.id), kind="cardnews", label=label[:40],
+                       title=deck["deckTitle"].replace("**", "")[:200], body=cardnews.deck_body(deck),
+                       parent_id=parent.id if parent else None, source=source, note=note[:500],
+                       facts_version=facts.get("facts_version") or "", snapshot_hash=shash, created_by=user)
+    v.snapshot = snap
+    v.review = {"keyword": cardnews.check(deck, sheet, facts)}
+    v.needs_check = deck["needsCheck"]
+    db.session.add(v)
+    db.session.flush()
+    c.selected_version_id = v.id
+    c.updated_by, c.updated_at = user, utcnow()
+    repository.add_event(c, f"카드뉴스를 저장했어요 — {v.label} (v{v.seq} · {len(deck['cards'])}장)",
+                         {"kind": "cardnews_version", "versionId": v.id}, user=user)
+    db.session.commit()
+    return v
+
+
+@bp.post("/cardnews/extract")
+def cardnews_extract():
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("파일을 골라 주세요.")
+    data = f.read(cardnews.EXTRACT_MAX_BYTES + 1)
+    if len(data) > cardnews.EXTRACT_MAX_BYTES:
+        raise ApiError("파일이 너무 커요 (5MB 이하).", 413)
+    try:
+        text = cardnews.extract_text(f.filename, data)
+    except ValueError as e:
+        raise ApiError(str(e))
+    return jsonify(text=text[:30000], name=clip(f.filename, 120), chars=len(text),
+                   truncated=len(text) > cardnews.SOURCE_MAX, max=cardnews.SOURCE_MAX)
+
+
+@bp.get("/campaigns/<int:cid>/cardnews")
+def cardnews_decks(cid):
+    _campaign(cid)
+    rows = (ContentVersion.query.filter_by(campaign_id=cid, kind="cardnews")
+            .order_by(ContentVersion.id.desc()).limit(100).all())
+    return jsonify(decks={str(v.id): v.snapshot["deck"] for v in rows if v.snapshot.get("deck")})
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/generate")
+def cardnews_generate(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=128 * 1024)
+    source = repository.clip_text(data.get("source"), 30000)
+    if len(source) < 10:
+        raise ApiError("카드뉴스에 넣을 내용을 10자 이상 입력해 주세요.")
+    if not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 쓸 수 있어요. 키 없이도 '예시로 구경하기'는 돼요.", 503)
+    opts = _cardnews_opts(data)
+    sheet = repository.sheet_of(c)
+    facts = brandkit.product_facts(sheet["product_ids"])
+    deck, note = cardnews.generate(source, opts, campaign_id=cid, sheet=sheet, decisions=c.decisions, facts=facts,
+                                   labels=repository.labels_of(sheet))
+    label = (repository.next_letter_labels(cid, 1) or ["AI 덱"])[0]
+    v = _save_deck(c, deck, source="ai", label=label, parent=None, model=providers.text_model(),
+                   note="카드뉴스 편집기 · AI 구성" + (f" · {note}" if note else ""))
+    return _state(cid, 201, versionId=v.id, deck=deck)
+
+
+@bp.post("/campaigns/<int:cid>/cardnews")
+def cardnews_save(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    try:
+        deck = cardnews.norm_deck(data.get("deck"), cid)
+    except ValueError as e:
+        raise ApiError(str(e))
+    parent = None
+    if data.get("parent_id") not in (None, ""):
+        try:
+            parent = db.session.get(ContentVersion, int(data["parent_id"]))
+        except (TypeError, ValueError):
+            parent = None
+        if parent is None or parent.campaign_id != cid:
+            raise ApiError("기준 버전을 찾지 못했습니다.")
+    label = clip(data.get("label"), 30).strip() or (parent.label if parent else "예시" if deck["demo"] else "직접 작성")
+    note = ("카드뉴스 편집기 · 직접 수정" + (f" · {parent.label} v{parent.seq}에서 수정" if parent else "")
+            + (" · 예시 데이터로 시작" if deck["demo"] else ""))
+    v = _save_deck(c, deck, source="manual", label=label, parent=parent, note=note)
+    return _state(cid, 201, versionId=v.id, deck=deck)
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/photo")
+def cardnews_photo(cid):
+    _cardnews_campaign(cid)
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("사진 파일이 없습니다.")
+    data = f.read(cardnews.PHOTO_MAX_BYTES + 1)
+    if len(data) > cardnews.PHOTO_MAX_BYTES:
+        raise ApiError("사진이 너무 커요 (6MB 이하).", 413)
+    dims = media.image_dims(data) if media.file_ext(data) == ".jpg" else None
+    if dims is None or not (16 <= dims[0] <= 4096 and 16 <= dims[1] <= 4096):
+        raise ApiError("JPG 사진만 올릴 수 있어요 (가로·세로 16~4096px).")
+    name = cardnews.photo_name(cid)
+    try:
+        (media.upload_dir() / name).write_bytes(data)
+    except OSError:
+        raise ApiError("사진을 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+    return jsonify(name=name, url=repository.file_url(name)), 201
+
+
+def _deck_from(c, data):
+    try:
+        return cardnews.norm_deck(data.get("deck"), c.id)
+    except ValueError as e:
+        raise ApiError(str(e))
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/backgrounds/plan")
+def cardnews_bg_plan(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    deck = _deck_from(c, data)
+    try:
+        count = max(0, min(len(deck["cards"]), int(data.get("count") or 0)))
+    except (TypeError, ValueError):
+        count = 0
+    if not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 AI 추천을 받을 수 있어요. 카드는 직접 고를 수 있어요.", 503)
+    sheet = repository.sheet_of(c)
+    plan = cardnews.plan_backgrounds(deck, count, sheet=sheet, decisions=c.decisions,
+                                     facts=brandkit.product_facts(sheet["product_ids"]))
+    return jsonify(cards=plan, count=sum(1 for p in plan if p["use"]))
+
+
+@bp.get("/campaigns/<int:cid>/cardnews/backgrounds")
+def cardnews_bg_list(cid):
+    _campaign(cid)
+    return jsonify(jobs=[cardnews.bg_dict(j) for j in cardnews.bg_jobs(cid)])
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/backgrounds")
+def cardnews_bg_start(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    deck = _deck_from(c, data)
+    items = [x for x in data.get("cards") or [] if isinstance(x, dict) and x.get("id")]
+    if not items:
+        raise ApiError("배경을 만들 카드를 하나 이상 골라 주세요.")
+    if len(items) > cardnews.BG_MAX:
+        raise ApiError(f"한 번에 {cardnews.BG_MAX}장까지 만들 수 있어요.")
+    if not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 AI 배경을 만들 수 있어요.", 503)
+    busy = {j.snapshot.get("card_id") for j in cardnews.bg_jobs(cid) if j.status in repository.ACTIVE_JOB}
+    items = [x for x in items if x["id"] not in busy]   # 이미 만드는 중인 카드는 다시 제출하지 않음 (중복 과금 방지)
+    if not items:
+        raise ApiError("고른 카드는 이미 배경을 만드는 중이에요.", 409)
+    made = cardnews.start_backgrounds(c, items, deck, user=_who())
+    if not made:
+        raise ApiError("고른 카드를 덱에서 찾지 못했어요.")
+    app = current_app._get_current_object()
+    for j in made:
+        cardnews.launch(app, j.id)
+    worklog.add("content", "기타", f"카드뉴스 AI 배경 요청 {len(made)}장: {c.title}", detail={"campaign": cid, "jobs": len(made)})
+    return jsonify(jobs=[cardnews.bg_dict(j) for j in made]), 202
