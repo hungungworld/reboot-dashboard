@@ -598,7 +598,8 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     assert base_sent[0].endswith(img["imageUrl"].rsplit("/", 1)[1])  # 1번 = 편집할 기준 이미지
     # 고른 맛(라임) 사진 전부 + 맛 구분 없는 봉지 사진
     assert [Path(x).name for x in base_sent[1:]] == ["jelly-original-lime-boot-wrapped.jpg", "jelly-original-lime-boot-spec.jpg",
-                                                     "jelly-original-pouch-front.jpg", "jelly-original-pouch-scene-2.jpg"]
+                                                     "jelly-original-pouch-front.jpg", "jelly-original-pouch-scene-2.jpg",
+                                                     "jelly-original-pouch-scene.jpg", "jelly-original-pieces.jpg"]
     assert "Image 1 is the base image to edit" in calls["edit"][1][1]
     assert auth_client.get(img["imageUrl"]).status_code == 200  # 원본 파일 유지
     # 수정할 때 프롬프트 작성 AI에게 기준 이미지에 들어간 문구를 넘김 (문구 수정 · 유지 판단용)
@@ -971,8 +972,9 @@ def test_manifest_files_exist_and_ids_are_valid():
         assert assets.path_of(a).is_file() and assets.path_of(a).suffix == ".jpg", a["file"]
         if a["type"] == "product":
             assert a["product_id"] in kit["products"] and a.get("flavor") in (None, *assets.FLAVORS)
-    # 리볼버가 보이는 사진 · 글자 많은 캐릭터 시트는 참고 사진으로 고르지 않음
-    assert not assets.get("jelly-original-pouch-scene")["ref"] and not assets.get("rebu-profile-sheet")["ref"]
+    # 글자 많은 캐릭터 시트는 참고 사진으로 고르지 않음
+    assert not assets.get("rebu-profile-sheet")["ref"]
+    assert assets.get("jelly-original-pouch-scene")["ref"] and assets.get("jelly-balance-pouch-scene")["ref"]  # 리볼버 뺀 사진으로 교체 (2026-10-25)
 
 
 def test_pick_refs_by_flavor_and_character():

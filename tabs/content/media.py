@@ -44,7 +44,8 @@ TEXT_MODES = ("bake", "none")
 IMAGE_SCOPE = "이미지에 그리라고 넘긴 문구만 검사 · 실제 그려진 글자(철자)는 검사하지 않음"
 NO_TEXT_RE = re.compile(r"(글자|문구|텍스트|카피)\s*(없이|빼고|빼줘|없는|넣지\s*마)|no\s+text|without\s+text", re.I)
 VIEW_EN = {"trio": "three bottles, front", "front": "front view", "angle": "lying at an angle", "spec": "product views",
-           "pouch": "pouch, front", "scene": "pouch with wrapped jellies", "wrapped": "individually wrapped jelly"}
+           "pouch": "pouch, front", "scene": "pouch with wrapped jellies", "wrapped": "individually wrapped jelly",
+           "pieces": "unwrapped jelly pieces (boot, hat, lasso)"}
 VIDEO_REF_TEXT = ("Keep the products and the mascot exactly as they appear in the reference images: same shape, colors, "
                   "proportions and printed labels/logo. Ignore measurement lines and captions in the reference images. "
                   "No on-screen text, subtitles, captions, logos or watermarks. No dialogue or voice-over.")

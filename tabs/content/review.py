@@ -26,7 +26,7 @@ BALANCE_RE = re.compile(r"\bbalance\b", re.I)
 
 BRAND_FACTS = {"name", "slogan", "slogans", "colors", "character", "cm_song", "category", "intro", "market", "company", "key_ingredient"}
 PRODUCT_FACTS = {"internal_name": "internal_name", "name": "internal_name", "consumer_name": "consumer_name", "form": "form",
-                 "flavors": "flavors", "flavor_shapes": "flavor_shapes", "pack": "pack", "price": "price", "volume": "volume",
+                 "flavors": "flavors", "shapes": "shapes", "pack": "pack", "price": "price", "volume": "volume",
                  "bottle": "bottle", "ingredients": "ingredients", "zero_sugar": "zero_sugar",
                  "development_direction": "development_direction", "direction": "development_direction"}
 CONSUMER_KINDS = ("copy", "cardnews", "script", "desc", "crm")
