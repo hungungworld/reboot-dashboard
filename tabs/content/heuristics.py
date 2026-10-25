@@ -40,6 +40,24 @@ def is_vague_ack(text):
     return bool(ACK_RE.match(text or ""))
 
 
+# 만들기 제안("이대로 만들까요?") 바로 다음의 짧은 동의 — 제안이 있을 때만 실행으로 봄
+AGREE_RE = re.compile(
+    r"(좋아|좋네|좋습니다|괜찮|오케이|오키|ok(ay)?|ㅇㅋ|ㅇㅇ|응|네|넹|넵|예|그래|그렇게|콜|고고|ㄱㄱ|진행|만들어|해\s*줘|해\s*주세요|"
+    r"부탁|가자|\bgo\b|\byes\b|sure)", re.I)
+DISAGREE_RE = re.compile(r"(아니|아뇨|잠깐|잠시만|말고|아직|다시\s*생각|바꾸|바꿔|수정|빼고|대신|근데|그런데|\?|？|\bno\b)", re.I)
+REFERENCE_RE = re.compile(r"(레퍼런스|레퍼|참고\s*(이미지|사진|자료)|올린\s*(이미지|사진)|첨부|reference)", re.I)
+
+
+def is_agreement(text):
+    """'좋아요', '네 만들어줘', 'ㄱㄱ' 같은 짧은 동의 (수정·질문이 섞이면 아님)."""
+    t = (text or "").strip()
+    return bool(t) and len(t) <= 40 and bool(AGREE_RE.search(t)) and not DISAGREE_RE.search(t)
+
+
+def mentions_reference(text):
+    return bool(REFERENCE_RE.search(text or ""))
+
+
 def excluded_media(text):
     out = set()
     for m in EXCLUDE_RE.finditer(text or ""):

@@ -8,34 +8,36 @@ CONTENT_TYPES = {
     "image": {"label": "이미지", "kind": "copy"},
     "cardnews": {"label": "카드뉴스", "kind": "cardnews"},
     "shortform": {"label": "숏폼 영상", "kind": "script"},
-    "product_desc": {"label": "상품 설명", "kind": "desc"},
     "crm": {"label": "CRM 메시지", "kind": "crm"},
-    "plan": {"label": "캠페인 기획서", "kind": "plan"},
 }
+# 없앤 콘텐츠 종류 — 예전에 만든 캠페인은 DB에 남기고 목록·열기에서 숨김
+RETIRED_TYPES = ("product_desc", "plan")
 
-# 게시 채널 — short는 자동 캠페인명용
+# 게시 채널 (하나만 선택) — short는 자동 캠페인명용. yamibuy는 다른 탭도 쓰는 ID라 그대로 두고 표시 이름만 Yami
 CHANNELS = {
     "instagram": {"label": "Instagram", "short": "인스타"},
     "tiktok": {"label": "TikTok", "short": "틱톡"},
     "amazon": {"label": "Amazon", "short": "아마존"},
     "weee": {"label": "Weee", "short": "Weee"},
-    "yamibuy": {"label": "Yamibuy", "short": "Yamibuy"},
+    "yamibuy": {"label": "Yami", "short": "Yami"},
+    "oliveyoung": {"label": "Global Olive Young", "short": "올리브영"},
     "crm": {"label": "CRM", "short": "CRM"},
 }
+# CRM 콘텐츠는 CRM 채널하고만 (나머지 조합은 자유)
+CRM_TYPE, CRM_CHANNEL = "crm", "crm"
 
 STATUSES = ("제작 중", "검토 중", "완료")
 
-# 결과물(버전) 종류
+# 결과물(버전) 종류 — desc·plan은 숨긴 옛 캠페인 표시용 이름만 남김
 KIND_LABELS = {
     "copy": "카피", "cardnews": "카드뉴스", "script": "숏폼 구성안", "desc": "상품 설명",
     "crm": "CRM 메시지", "plan": "기획서", "image": "이미지", "video": "영상",
 }
-TEXT_KINDS = ("copy", "cardnews", "script", "desc", "crm", "plan")
+TEXT_KINDS = ("copy", "cardnews", "script", "crm")
 
 # 모델의 action_request.type → 텍스트 결과물 종류
 ACTION_KINDS = {
-    "draft_copy": "copy", "draft_cardnews": "cardnews", "draft_script": "script",
-    "draft_desc": "desc", "draft_crm": "crm", "draft_plan": "plan",
+    "draft_copy": "copy", "draft_cardnews": "cardnews", "draft_script": "script", "draft_crm": "crm",
 }
 ACTION_TYPES = ("none",) + tuple(ACTION_KINDS) + ("generate_image", "edit_image", "generate_video", "select_version")
 INTENTS = ("question", "idea", "update_decision", "draft", "generate_media", "edit", "compare_versions",
@@ -54,7 +56,35 @@ DECISION_LABELS = {
     "featured_product": "메인 제품", "slide_count": "장 수", "duration": "영상 길이", "lighting": "조명",
     "composition": "구도", "mood": "분위기", "caption": "캡션", "hashtags": "해시태그", "subtitle": "자막",
     "use_character": "캐릭터 Rebu", "flavor": "맛",
+    "story": "스토리", "design_note": "시안 설명", "emphasis": "강조할 내용", "content_points": "담을 내용", "hook": "멘트",
 }
+
+# 콘텐츠별 대화 흐름 가이드 (순서를 강제하지 않는 체크리스트 · 화면 '브리프' 표 순서) — data.js flows와 같은 키
+CONTENT_FLOWS = {
+    "image": ["concept", "story", "design_note", "emphasis"],
+    "cardnews": ["content_points", "concept", "emphasis", "slide_count"],
+    "shortform": ["concept", "duration", "story", "design_note", "emphasis"],
+    "crm": ["format", "tone", "cta", "target"],
+}
+# 이 채널이면 초안을 만든 뒤 캡션 · 멘트(게시글 첫 줄 훅 · 고정 댓글)를 다듬자고 제안 (흐름 질문에는 넣지 않음)
+SOCIAL_CHANNELS = ("instagram", "tiktok")
+
+# 이미지 · 카드뉴스 캠페인을 만들 때 채널 기본 비율을 '제안'으로 넣음 — 비율은 따로 묻지 않음
+RATIO_TYPES = ("image", "cardnews")
+CHANNEL_RATIOS = {
+    "instagram": "4:5 세로", "tiktok": "9:16 세로", "amazon": "1:1 정사각", "weee": "1:1 정사각",
+    "yamibuy": "1:1 정사각", "oliveyoung": "1:1 정사각",
+}
+
+
+def flow_of(sheet):
+    return list(CONTENT_FLOWS.get(sheet.get("content_type"), []))
+
+
+def default_ratio(sheet):
+    if sheet.get("content_type") not in RATIO_TYPES:
+        return None
+    return next((CHANNEL_RATIOS[ch] for ch in sheet.get("channels") or [] if ch in CHANNEL_RATIOS), None)
 # 모델이 한국어 키를 줄 때
 DECISION_ALIASES = {
     "배경": "background", "톤": "tone", "말투": "tone", "콘셉트": "concept", "컨셉": "concept", "언어": "language",
@@ -63,6 +93,8 @@ DECISION_ALIASES = {
     "구도": "composition", "조명": "lighting", "분위기": "mood", "자막": "subtitle",
     "캐릭터": "use_character", "리부": "use_character", "rebu": "use_character", "character": "use_character",
     "mascot": "use_character", "맛": "flavor",
+    "스토리": "story", "시안": "design_note", "시안설명": "design_note", "시안 설명": "design_note", "강조": "emphasis",
+    "강조점": "emphasis", "담을내용": "content_points", "담을 내용": "content_points", "멘트": "hook", "훅": "hook",
 }
 
 # 제품·브랜드 사실에 해당하는 키 — 대화로 바꾸지 않고 '확인 대기'로 기록 (README 3.4)
@@ -102,14 +134,6 @@ def example_suggestions(field, sheet):
             items = [("재구매 유도", "이미 구매한 고객에게 다시 떠올리게 하는 메시지예요"),
                      ("신규 구독자 환영", "처음 연결된 고객에게 브랜드를 소개해요"),
                      ("제품 소식 알리기", "선택한 제품의 확인된 정보(형태·구성)만으로 소식을 전해요")]
-        elif ct == "product_desc":
-            items = [("제품 소개", "형태·포장 같은 확인된 정보 중심으로 정리해요"),
-                     ("구매 유도", "상세페이지에서 구매 결정을 돕는 구성이에요"),
-                     ("검색용 핵심 정보 정리", "제목·특징 문구를 채널 형식에 맞춰요")]
-        elif ct == "plan":
-            items = [("시즌 캠페인 기획", "다가오는 시즌에 맞춘 일정·채널 구성을 잡아요"),
-                     ("브랜드 알리기", "처음 보는 고객에게 Reboot를 소개하는 흐름이에요"),
-                     ("구매 유도", "채널별로 구매까지 이어지는 동선을 정리해요")]
         elif multi:
             items = [("라인업 함께 소개", "여러 제품을 고른 경우 제품별 정보를 나눠 함께 보여 줘요"),
                      ("브랜드와 제품 연결", "Restart Your Day 메시지와 제품을 이어 줘요"),
@@ -133,16 +157,8 @@ def example_suggestions(field, sheet):
             items = [("15초 세로형, 영어 자막", "숏폼 기본 길이와 형식이에요"),
                      ("첫 2초 안에 제품이나 슬로건 노출", "초반 이탈을 줄이는 구성이에요"),
                      ("아침 루틴 장면으로 시작", "Restart Your Day 메시지와 이어져요")]
-        elif ct == "product_desc":
-            items = [("Amazon 형식(제목 · 특징 5개 · 설명)", "채널 필드에 맞춰 바로 옮겨 쓸 수 있어요"),
-                     ("모르는 스펙은 [확인 필요]로 비워 두기", "용량·성분처럼 미제공 정보는 채우지 않아요"),
-                     ("짧고 쉬운 영어 문장", "미국 고객이 빠르게 읽을 수 있어요")]
-        elif ct == "crm":
+        else:
             items = [("이메일 1통 + SMS 1개, 짧게", "처음엔 작은 단위로 시작해요"),
                      ("제목은 40자 이내", "받은편지함에서 잘리지 않아요"),
                      ("할인·쿠폰 문구 없이", "확인되지 않은 혜택을 만들지 않아요")]
-        else:
-            items = [("미니 기획(1쪽)으로 먼저", "필요하면 상세 10개 항목으로 늘려요"),
-                     ("채널별 콘텐츠 아이디어 3개 포함", "바로 제작으로 이어갈 수 있어요"),
-                     ("예산·KPI 수치는 비워 두기", "확인된 입력이 없으면 정하지 않아요")]
     return [{"value": v, "reason": r} for v, r in items]

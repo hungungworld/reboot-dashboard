@@ -131,6 +131,9 @@ def _fallback_plan(snap, job):
             bits.append(f"{k.capitalize()} (Korean note): {dec[k]}.")
     if job.instructions:
         bits.append(f"Art direction (Korean): {job.instructions[:400]}")
+    copy = snap.get("copy_draft")
+    if copy:
+        bits.append(f"Leave clear space for the copy of this draft (Korean): {copy['body'][:300]}")
     layers = [{"role": "slogan", "text": SLOGAN}]
     if dec.get("headline"):
         layers.insert(0, {"role": "headline", "text": dec["headline"][:120]})
@@ -148,6 +151,7 @@ def _plan(snap, job, base):
         "sheet": snap.get("labels"), "decisions": snap.get("decisions"),
         "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
         "base_version": ({"label": base.label, "notes": base.body[:1500], "image": snap.get("base_image")} if base else None),
+        "copy_draft": snap.get("copy_draft"),
         "request": snap.get("request"), "instructions": job.instructions,
         "size": job.size, "character_use": assets.character_choice(snap.get("decisions")),
         "reference_photos": _provider(job) == "higgsfield" or providers.image_supports_edit(job.model),
@@ -322,6 +326,9 @@ def run_image_job(job_id):
         note_bits.append(f"{base.label} · v{base.seq}을 기준 이미지로 넣어 편집 (모델 편집 — 영역 밖 픽셀 완전 보존은 보장하지 않음)")
     elif job.base_version_id:
         note_bits.append("새 시안 (원본 편집 아님)")
+    copy = snap.get("copy_draft")
+    if copy and not edit:
+        note_bits.append(f"카피 초안 {copy['label']} · v{copy['seq']} 문구 기준")
     if requested_ratio and (not requested_ratio.replace(" ", "").startswith(job.size) if hf
                             else image_size(requested_ratio) != "1024x1024"):
         note_bits.append(f"요청 비율 {requested_ratio} → {job.size}로 생성 · 게시 전 크롭 필요할 수 있음")
@@ -429,15 +436,23 @@ def video_seconds(text):
 
 def _video_plan(snap, job, base, seconds, ratio):
     dec = {k: (v or {}).get("value") for k, v in (snap.get("decisions") or {}).items()}
+    prev = _prev_video(base)
     user = {"sheet": snap.get("labels"), "decisions": snap.get("decisions"),
             "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
-            "script": ({"label": base.label, "body": base.body[:4000]} if base is not None else None),
+            "script": ({"label": base.label, "body": base.body[:4000]} if base is not None and not prev else None),
+            "previous_video": ({"label": base.label, "prompt": prev.get("prompt", "")[:2500], "notes": base.body[:400]}
+                               if prev else None),
             "request": snap.get("request"), "instructions": job.instructions, "duration_seconds": seconds,
             "aspect_ratio": ratio, "character_use": assets.character_choice(snap.get("decisions")), "reference_photos": True}
     try:
         out = providers.call_json(prompts.VIDEO_V1, prompts.dumps(user), schema=schemas.VIDEO_PLAN,
                                   name="content_video_plan", action="영상 프롬프트 작성", max_tokens=1200, timeout=90)
     except AIError:
+        if prev.get("prompt"):  # 수정: 이전 프롬프트 + 수정 요청
+            first = prev["prompt"].split("\n\n")[0][:1500]
+            return {"prompt_en": first + (f" Revision (Korean): {job.instructions[:300]}" if job.instructions else ""),
+                    "notes_ko": "AI 프롬프트 작성에 실패해 이전 영상 프롬프트에 수정 요청을 붙여 썼어요.",
+                    "flavors": [], "include_character": bool(prev.get("include_character")), "fallback": True}
         bits = [f"{seconds}-second short-form video for REBOOT, a US food & beverage brand.",
                 "Deep black background with neon lime accents, smooth camera motion."]
         if dec.get("concept"):
@@ -453,6 +468,21 @@ def _video_plan(snap, job, base, seconds, ratio):
             "include_character": bool(out.get("include_character")), "fallback": False}
 
 
+def _prev_video(base):
+    """기준 버전이 영상이면 그 영상의 생성 기록 (수정 = 이 기록 + 수정 요청으로 새로 생성)."""
+    if base is None or base.kind != "video":
+        return {}
+    return (base.snapshot or {}).get("video") or {}
+
+
+def _ratio_in(text):
+    """수정 요청에 비율이 직접 있으면 그 비율 ('4:5 세로' · '가로로')."""
+    t = str(text or "")
+    if re.search(r"\d+\s*[:x×/]\s*\d+", t) or re.search(r"세로|가로|portrait|landscape", t, re.I):
+        return higgsfield.nearest_ratio(t, higgsfield.VIDEO_RATIOS, "9:16")
+    return None
+
+
 def _next_video_label(campaign_id):
     return f"영상 {ContentVersion.query.filter_by(campaign_id=campaign_id, kind='video').count() + 1}"
 
@@ -465,10 +495,15 @@ def run_video_job(job_id):
     db.session.commit()
     snap = job.snapshot
     dec = snap.get("decisions") or {}
-    base = db.session.get(ContentVersion, job.base_version_id) if job.base_version_id else None  # 숏폼 구성안
+    base = db.session.get(ContentVersion, job.base_version_id) if job.base_version_id else None  # 구성안·초안 또는 수정할 영상
+    prev = _prev_video(base)
     started = time.time()
     seconds = video_seconds((dec.get("duration") or {}).get("value") or (dec.get("length") or {}).get("value"))
     ratio = higgsfield.nearest_ratio((dec.get("ratio") or {}).get("value"), higgsfield.VIDEO_RATIOS, "9:16")
+    if prev:  # 수정: 요청에 길이·비율이 없으면 이전 영상 그대로
+        said = re.search(r"\d+\s*(초|s\b|sec)", job.instructions or "", re.I)
+        seconds = video_seconds(job.instructions) if said else (prev.get("duration") or seconds)
+        ratio = _ratio_in(job.instructions) or prev.get("aspect_ratio") or ratio
     try:
         plan = _video_plan(snap, job, base, seconds, ratio)
         include_char = _include_character(snap, plan)
@@ -506,8 +541,10 @@ def run_video_job(job_id):
         db.session.commit()
         return
     note_bits = [f"Higgsfield Seedance 2.0 · {higgsfield.VIDEO_RESOLUTION} · {seconds}초 · {ratio} · 소리 없음"]
-    if base is not None:
-        note_bits.append(f"{base.label} · v{base.seq} 구성안 기준")
+    if prev:
+        note_bits.append(f"{base.label} · v{base.seq}을 바탕으로 수정 요청을 반영해 새로 생성 (원본 영상 유지)")
+    elif base is not None:
+        note_bits.append(f"{base.label} · v{base.seq} {'구성안' if base.kind == 'script' else '초안'} 기준")
     if refs:
         note_bits.append(f"최종 패키지·캐릭터 사진 {len(refs)}장을 참고해 생성 · 라벨·모양은 게시 전 확인")
     if include_char:
@@ -516,10 +553,13 @@ def run_video_job(job_id):
                   "duration": seconds, "aspect_ratio": ratio, "prompt": job.prompt[:3000], "usage": usage,
                   "references": [a["id"] for a in refs], "include_character": bool(include_char),
                   "prompt_fallback": plan.get("fallback", False), "seconds": round(time.time() - started, 1),
-                  "job_id": job.id, "script_version_id": base.id if base is not None else None}
+                  "job_id": job.id, "script_version_id": prev.get("script_version_id") if prev else (base.id if base is not None else None),
+                  "revised_from": base.id if prev else None}
     v = ContentVersion(
-        campaign_id=c.id, seq=repository.next_seq(c.id), kind="video", label=_next_video_label(c.id),
-        title=(plan["notes_ko"] or "영상 시안")[:200], body=plan["notes_ko"] or "", image_file=name, parent_id=None,
+        campaign_id=c.id, seq=repository.next_seq(c.id), kind="video",
+        label=base.label if prev else _next_video_label(c.id),
+        title=(plan["notes_ko"] or "영상 시안")[:200], body=plan["notes_ko"] or "", image_file=name,
+        parent_id=base.id if prev else None,
         source="ai", approach="", note=" · ".join(note_bits)[:500],
         facts_version=(snap.get("facts") or {}).get("facts_version") or "", created_by=job.created_by, message_id=job.message_id)
     v.snapshot = dict(snap.get("snapshot") or {}, video=video_meta, model=model_path)
@@ -530,7 +570,7 @@ def run_video_job(job_id):
     job.status, job.result_version_id, job.finished_at = "succeeded", v.id, utcnow()
     if c.selected_version_id in (None, job.base_version_id, snap.get("selected_at_request")):
         c.selected_version_id = v.id
-    repository.add_event(c, f"영상이 준비됐어요 · {v.label} (v{v.seq})",
+    repository.add_event(c, f"{'영상 수정본' if prev else '영상'}이 준비됐어요 · {v.label} (v{v.seq})",
                          {"kind": "job_done", "jobId": job.id, "versionId": v.id}, user=job.created_by)
     c.updated_at = utcnow()
     db.session.commit()
@@ -581,6 +621,68 @@ def clean_layers(raw):
         if len(out) >= 6:
             break
     return out
+
+
+# ───────── 레퍼런스 이미지 (사용자가 올림 · 대화 AI가 봄 · 생성 참고 사진으로는 안 씀) ─────────
+
+REF_MAX_BYTES = 5 * 1024 * 1024   # 화면이 긴 쪽 1024px JPEG로 줄여 보내므로 넉넉한 상한
+REF_PER_CAMPAIGN = 3
+REF_MIMES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def image_dims(data):
+    """JPEG · PNG · WebP 머리에서 가로·세로 (못 읽으면 None)."""
+    size = png_size(data)
+    if size:
+        return size
+    if data[:3] == b"\xff\xd8\xff":
+        i = 2
+        while i + 9 < len(data):
+            if data[i] != 0xFF:
+                return None
+            marker = data[i + 1]
+            seg = int.from_bytes(data[i + 2:i + 4], "big")
+            if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+                return int.from_bytes(data[i + 7:i + 9], "big"), int.from_bytes(data[i + 5:i + 7], "big")
+            i += 2 + seg
+        return None
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP" and len(data) >= 30:
+        chunk = data[12:16]
+        if chunk == b"VP8X":
+            return int.from_bytes(data[24:27], "little") + 1, int.from_bytes(data[27:30], "little") + 1
+        if chunk == b"VP8 ":
+            return int.from_bytes(data[26:28], "little") & 0x3FFF, int.from_bytes(data[28:30], "little") & 0x3FFF
+        if chunk == b"VP8L":
+            b = int.from_bytes(data[21:25], "little")
+            return (b & 0x3FFF) + 1, ((b >> 14) & 0x3FFF) + 1
+    return None
+
+
+def save_reference(data, campaign_id):
+    """검사 통과한 레퍼런스 바이트 → (파일 이름, (가로, 세로)). 형식이 아니면 ValueError."""
+    ext = file_ext(data)
+    if ext not in REF_MIMES:
+        raise ValueError("레퍼런스는 JPG · PNG · WebP 이미지만 올릴 수 있어요.")
+    dims = image_dims(data)
+    if dims is None or not (16 <= dims[0] <= 4096 and 16 <= dims[1] <= 4096):
+        raise ValueError("이미지 크기를 읽지 못했거나 너무 커요 (가로·세로 16~4096px).")
+    name = f"c{campaign_id}-ref-{secrets.token_hex(8)}{ext}"
+    try:
+        (upload_dir() / name).write_bytes(data)
+    except OSError:
+        current_app.logger.exception("콘텐츠 레퍼런스 저장 실패")
+        return None, dims
+    return name, dims
+
+
+def read_reference(name):
+    """대화 AI에 보낼 (바이트, MIME) — 파일이 없으면 None."""
+    if not FILE_RE.match(name or ""):
+        return None
+    path = upload_dir() / name
+    if not path.is_file():
+        return None
+    return path.read_bytes(), REF_MIMES.get("." + name.rsplit(".", 1)[1], "image/jpeg")
 
 
 def save_upload(data, campaign_id):

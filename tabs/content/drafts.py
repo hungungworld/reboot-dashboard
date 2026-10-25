@@ -143,7 +143,7 @@ def _brand(facts):
 def generate(kind, *, mode, sheet, decisions, settings, facts, labels, base=None, request="", instructions="",
              targets=None, reference="", deadline=None):
     """→ (drafts, meta). AI 실패는 AIError. deadline(time.monotonic 기준)이 지나면 자동 재작성은 건너뜀."""
-    if mode == "edit" or kind == "plan":
+    if mode == "edit":
         n = 1
     else:
         n = max(1, min(3, int(settings.get("candidates") or 3)))

@@ -5,6 +5,7 @@
 - ContentDecisionEvent  시트·결정 변경 이력 (이전 값 · 새 값 · 출처 메시지 · 사용자 · 리비전) → 되돌리기
 - ContentVersion        결과물 버전 (텍스트 · 이미지 파일) — 부모 버전 · 생성 시점 설정 · 검토 결과
 - ContentJob            이미지 생성·편집 작업 (뒤에서 실행) — 요청 중복 방지 키 · 상태
+- ContentReference      사용자가 올린 레퍼런스 이미지 — 대화 AI가 보고 쓴 요약 (이미지 생성 참고 사진으로는 쓰지 않음)
 """
 import json
 
@@ -165,3 +166,18 @@ class ContentJob(db.Model):
     finished_at = db.Column(db.DateTime, nullable=True)
 
     snapshot = _json_prop("snapshot_json", dict)
+
+
+class ContentReference(db.Model):
+    __tablename__ = "content_references"
+
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, nullable=False, index=True)
+    file = db.Column(db.String(120), nullable=False, unique=True)         # 업로드 폴더 파일 이름 (jpg · png · webp)
+    width = db.Column(db.Integer, nullable=False, default=0)
+    height = db.Column(db.Integer, nullable=False, default=0)
+    note = db.Column(db.String(300), nullable=False, default="")          # 올린 사람이 붙인 한 줄 메모 (선택)
+    summary = db.Column(db.Text, nullable=False, default="")              # AI가 본 요약 (키 없거나 실패하면 빈 값)
+    summary_model = db.Column(db.String(80), nullable=False, default="")
+    created_by = db.Column(db.String(100), nullable=False, default="")
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
