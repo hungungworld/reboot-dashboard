@@ -237,3 +237,20 @@ def test_gmail_html_only_body_query_and_disconnect(app, monkeypatch):
         assert gmail.ready() is True
         gmail.disconnect()
         assert gmail.ready() is False and gmail._load_credentials() is None
+
+
+def test_ai_draft_few_shot_passes_recheck_and_avoids_demo_mails():
+    """CS 답장 few-shot (2026-10-25): 예시 답장은 CS 재점검 PASS · 시연 더미 문의와 문장이 겹치지 않음 · 시스템 프롬프트에 들어감."""
+    import re
+    from pathlib import Path
+    from tabs.compliance import server_review
+    from tabs.cs import ai_draft
+    assert ai_draft.FEW_SHOT.startswith("Examples of good replies")
+    assert len(ai_draft.FEW_SHOT_EXAMPLES) >= 3
+    assert [e["type"] for e in ai_draft.FEW_SHOT_EXAMPLES if server_review.review(e["reply"])["verdict"] != "PASS"] == []
+    src = (Path(__file__).parent.parent / "static" / "data.js").read_text(encoding="utf-8")
+    block = src[src.index("dummyInquiries: ["):]
+    dummy = re.findall(r"body: '([^']+)'", block) + re.findall(r'body: "([^"]+)"', block)
+    assert len(dummy) >= 10
+    shots = " ".join(e["customer"] + " " + e["reply"] for e in ai_draft.FEW_SHOT_EXAMPLES)
+    assert [d for d in dummy if d[:40] in shots] == []

@@ -37,7 +37,7 @@ check('경고장 원문 87개 중 PASS 0개', () => {
 });
 
 check('안전 문구는 모두 PASS', () => {
-  const bad = C.safePhrases.filter(p => verdict(p.text, { channel: 'b2c' }) !== 'PASS').map(p => p.text);
+  const bad = C.safePhrases.concat(C.humanReviewPhrases || []).filter(p => verdict(p.text, { channel: 'b2c' }) !== 'PASS').map(p => p.text);
   assert.deepStrictEqual(bad, [], `잘못 걸린 안전 문구: ${bad.join(' | ')}`);
 });
 
@@ -46,11 +46,20 @@ check('자체 점검 예문은 예상 판정대로', () => {
   assert.deepStrictEqual(bad, [], bad.join(' | '));
 });
 
-check('일괄 심의 더미 20개는 예상 판정대로 (예시 영어 · 줄마다 채널·제품)', () => {
-  assert.strictEqual(C.batchSample.length, 20);
-  const bad = C.batchSample.filter(x => verdict(x.copy, { channel: x.channel, product: x.product }) !== x.expect)
-    .map(x => `${x.copy} → ${verdict(x.copy, x)} (예상 ${x.expect})`);
+check('일괄 심의 더미 30개는 예상 판정대로 · 판정별 6개씩 (예시 영어 · 줄마다 채널·제품·기준)', () => {
+  assert.strictEqual(C.batchSample.length, 30);
+  const opts = x => ({ channel: x.channel, product: x.product, category: x.category || 'FOOD' });
+  const bad = C.batchSample.filter(x => verdict(x.copy, opts(x)) !== x.expect)
+    .map(x => `${x.copy} → ${verdict(x.copy, opts(x))} (예상 ${x.expect})`);
   assert.deepStrictEqual(bad, [], bad.join(' | '));
+  // 한국어 원문 판정과 합쳐도(더 엄격한 쪽) 예상과 같아야 함 → AI 번역이 달라도 결과가 흔들리지 않게
+  const R = { PASS: 0, COND: 1, REVIEW: 2, REVISE: 3, BLOCK: 4 };
+  const mixed = C.batchSample.filter(x => { const a = verdict(x.copy, opts(x)), k = verdict(x.ko, opts(x)); return (R[k] > R[a] ? k : a) !== x.expect; })
+    .map(x => x.ko);
+  assert.deepStrictEqual(mixed, [], `한국어와 합치면 달라지는 줄: ${mixed.join(' | ')}`);
+  const count = {};
+  C.batchSample.forEach(x => { count[x.expect] = (count[x.expect] || 0) + 1; });
+  assert.deepStrictEqual(count, { PASS: 6, BLOCK: 6, REVIEW: 6, REVISE: 6, COND: 6 });
   assert.ok(C.batchSample.every(x => /[가-힣]/.test(x.ko)), '더미 문구는 한국어(ko)가 있어야 함');
 });
 

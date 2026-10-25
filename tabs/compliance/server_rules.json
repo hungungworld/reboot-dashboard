@@ -24,7 +24,9 @@
     "(?<![A-Za-z0-9])alcohol['’]?s[\\s-]*negative[\\s-]*effects(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])negative[\\s-]*effects[\\s-]*of[\\s-]*alcohol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "\\b(?:eliminat|reduc|stop|eas|eras|banish|fight|beat|cure|treat|lower|decreas|block|neutraliz)\\w*\\s+(?:the\\s+|your\\s+)?(?:nausea|headaches?|vomiting|dizziness|blood[\\s-]*alcohol|BAC|alcohol\\s+absorption|alcohol\\s+levels?|acetaldehyde|toxins?)\\b",
-    "\\bsobers?\\s+(?:you\\s+)?up\\b"
+    "\\bsobers?\\s+(?:you\\s+)?up\\b",
+    "\\b(?:drink\\w*\\s+as\\s+much\\s+as\\s+you\\s+(?:want|like)|no\\s+matter\\s+how\\s+much\\s+you\\s+drink|however\\s+much\\s+you\\s+drink)[^.!?]{0,60}\\b(?:covered|got\\s+(?:you|your\\s+back)|fine|okay|solved?|fix\\w*|handle\\w*|take\\s+care)",
+    "(?:많이|얼마나|실컷|마음껏)\\s*마셔도[^.!?]{0,30}(?:해결|책임|걱정\\s*없|괜찮|끄떡없)"
    ],
    "ko": [
     "치료",
@@ -150,12 +152,16 @@
     "(?<![A-Za-z0-9])drink[\\s-]*more(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])keep[\\s-]*drinking(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])drink[\\s-]*without[\\s-]*worr(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])outdrink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])outdrink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])as[\\s-]*much[\\s-]*as[\\s-]*you[\\s-]*want(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])no[\\s-]*matter[\\s-]*how[\\s-]*much[\\s-]*you[\\s-]*drink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
    ],
    "ko": [
     "더 마셔",
     "밤새 마셔",
-    "마음껏 마셔"
+    "마음껏 마셔",
+    "많이 마셔도",
+    "실컷 마셔"
    ],
    "compensated": [],
    "incentive": [],
@@ -188,7 +194,10 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [
+    "\\bnot\\s+(?:a\\s+)?medicine\\b",
+    "의약품이\\s*아(?:니|닙)"
+   ]
   },
   {
    "code": "R8",
@@ -208,7 +217,18 @@
     "(?<![A-Za-z0-9])breaks[\\s-]*down[\\s-]*alcohol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])supports[\\s-]*health(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])boosts[\\s-]*immunit(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])these[\\s-]*statements[\\s-]*have[\\s-]*not[\\s-]*been[\\s-]*evaluated[\\s-]*by[\\s-]*the[\\s-]*food[\\s-]*and[\\s-]*drug[\\s-]*administration(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])these[\\s-]*statements[\\s-]*have[\\s-]*not[\\s-]*been[\\s-]*evaluated[\\s-]*by[\\s-]*the[\\s-]*food[\\s-]*and[\\s-]*drug[\\s-]*administration(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])fatigue(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])recover(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])recover(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])recharge[\\s-]*your[\\s-]*bod(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])recharge[\\s-]*your[\\s-]*energ(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])restore[\\s-]*your[\\s-]*energ(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])boost[\\s-]*your[\\s-]*energ(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])gut[\\s-]*health(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])digestive[\\s-]*health(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "\\breset\\w*\\s+(?:your\\s+|the\\s+)?(?:body|system|liver|stomach|gut|condition)\\b",
+    "\\b(?:condition|body|system)\\s+reset\\b"
    ],
    "ko": [
     "간 건강",
@@ -216,7 +236,15 @@
     "알코올 대사",
     "알코올 분해",
     "알코올을 분해",
-    "면역력 강화"
+    "면역력 강화",
+    "피로",
+    "회복",
+    "컨디션 리셋",
+    "컨디션 완벽",
+    "몸을 리셋",
+    "몸 리셋",
+    "장 건강",
+    "원기"
    ],
    "compensated": [],
    "incentive": [],
@@ -306,13 +334,20 @@
     "(?<![A-Za-z0-9])full[\\s-]*of(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])powered[\\s-]*b(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])dihydromyricetin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])DHM(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])DHM(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])probiotic(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])probiotics(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])lactobacillus(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])live[\\s-]*cultures(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])A[\\s-]*HAT(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
    ],
    "ko": [
     "듬뿍",
     "가득",
     "고함량",
-    "풍부한"
+    "풍부한",
+    "유산균",
+    "프로바이오틱"
    ],
    "compensated": [],
    "incentive": [],
@@ -337,6 +372,44 @@
     "FDA 인증",
     "FDA 허가",
     "FDA 공인"
+   ],
+   "compensated": [],
+   "incentive": [],
+   "incentiveVerdict": "",
+   "allow": []
+  },
+  {
+   "code": "R15",
+   "name": "미확정 정보·공식 제휴 암시",
+   "verdict": "REVIEW",
+   "byChannel": {},
+   "regex": [
+    "(?<![A-Za-z0-9])revolver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pistol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])gun[\\s-]*shaped(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])official[\\s-]*partner(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])official[\\s-]*sponsor(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])official[\\s-]*drink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])official[\\s-]*jell(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])official[\\s-]*snack(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])patented(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])patent(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])Coachella(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "\\b\\d+(?:\\.\\d+)?\\s*(?:kcal|calories|cals?)\\b",
+    "\\b\\d+(?:\\.\\d+)?\\s*(?:g|grams?|mg)\\s+(?:of\\s+)?(?:sugars?|carbs?|carbohydrates?|protein|fat|sodium|caffeine)\\b",
+    "\\b\\d+\\s+(?:jellies|pieces|pcs)\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:pouch|bag)\\b",
+    "\\d+(?:\\.\\d+)?\\s*(?:kcal|칼로리)",
+    "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g"
+   ],
+   "ko": [
+    "리볼버",
+    "권총",
+    "공식 후원",
+    "공식 파트너",
+    "공식 음료",
+    "공식 젤리",
+    "특허",
+    "코첼라"
    ],
    "compensated": [],
    "incentive": [],
@@ -694,7 +767,7 @@
    "BLOCK"
   ],
   [
-   "Low sugar. Pocket-sized. Made in Korea.",
+   "Pocket-sized.",
    "PASS"
   ],
   [
@@ -710,7 +783,7 @@
    "PASS"
   ],
   [
-   "10 sticks per box.",
+   "Individually wrapped jellies.",
    "PASS"
   ],
   [
@@ -718,19 +791,47 @@
    "PASS"
   ],
   [
-   "Lime, cherry and lemon jelly sticks.",
+   "Lime, lemon and cherry jellies.",
    "PASS"
   ],
   [
-   "Non-carbonated lime, cherry and lemon drinks, 6 small bottles per box.",
+   "Non-carbonated drinks in 100 ml glass flask bottles, single or 3-bottle box.",
    "PASS"
   ],
   [
-   "Korea's favorite after-party ritual.",
+   "A grab-and-go jelly with a bright citrus flavor.",
    "PASS"
   ],
   [
-   "A grab-and-go jelly stick with a bright citrus flavor.",
+   "Individually wrapped. Just tear and enjoy.",
+   "PASS"
+  ],
+  [
+   "Enjoy responsibly.",
+   "PASS"
+  ],
+  [
+   "Meet Reboot. Drinks and individually wrapped jellies with bold color, playful Western details, and three flavors to explore.",
+   "PASS"
+  ],
+  [
+   "Pick your flavor. Meet your Reboot.",
+   "PASS"
+  ],
+  [
+   "Explore Drinks / Explore Jellies / Meet Rebu",
+   "PASS"
+  ],
+  [
+   "오늘의 다음 장면을, 나답게.",
+   "PASS"
+  ],
+  [
+   "세 가지 맛. 오늘은 어떤 맛?",
+   "PASS"
+  ],
+  [
+   "모자 챙겼어. 이제 네 차례야!",
    "PASS"
   ],
   [
@@ -739,18 +840,6 @@
   ],
   [
    "Own your morning.",
-   "PASS"
-  ],
-  [
-   "Loved in Korea, now in the U.S.",
-   "PASS"
-  ],
-  [
-   "10 sticks per box, individually wrapped.",
-   "PASS"
-  ],
-  [
-   "Enjoy responsibly.",
    "PASS"
   ],
   [
@@ -820,6 +909,38 @@
   [
    "저당 젤리로 가볍게",
    "PASS"
+  ],
+  [
+   "컨디션 완벽 리셋.",
+   "REVISE"
+  ],
+  [
+   "맛마다 다른 회복 효과.",
+   "REVISE"
+  ],
+  [
+   "피로와 숙취를 한 병으로 해결.",
+   "BLOCK"
+  ],
+  [
+   "많이 마셔도 리부가 해결해 줄게!",
+   "BLOCK"
+  ],
+  [
+   "Drink as much as you want, Rebu has you covered!",
+   "BLOCK"
+  ],
+  [
+   "Only 43 kcal and 10g sugar per bottle.",
+   "REVIEW"
+  ],
+  [
+   "Our revolver-shaped jelly.",
+   "REVIEW"
+  ],
+  [
+   "Official partner of Coachella.",
+   "REVIEW"
   ],
   [
    "Our jelly eliminates nausea after drinking.",
@@ -946,7 +1067,7 @@
    "PASS"
   ],
   [
-   "Korean after-party jelly stick",
+   "Korean after-party jelly",
    "PASS"
   ],
   [
@@ -974,11 +1095,11 @@
    "PASS"
   ],
   [
-   "Ready to go: just tear and squeeze.",
+   "Ready to go: just tear and enjoy.",
    "PASS"
   ],
   [
-   "Our signature Korean jelly stick",
+   "Our signature Korean jelly",
    "PASS"
   ],
   [
@@ -1002,7 +1123,7 @@
    "PASS"
   ],
   [
-   "Contains [확인 필요: 당 함량] g of sugar per stick.",
+   "Zero Sugar",
    "PASS"
   ],
   [
