@@ -17,7 +17,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import amazon, channel_reviews, competitors, rules, service, trends, weee, yami, youtube
+from . import accuracy, amazon, channel_reviews, competitors, rules, service, trends, weee, yami, youtube
 from .http import CollectError
 from .models import Comment, Monthly, Review, Run, ShelfItem, load_json
 from .util import review_month, week_key
@@ -43,12 +43,15 @@ ITEMS = [
     {"id": "youtube", "label": "유튜브 수집", "group": "monthly", "needs": ["YOUTUBE_API_KEY"],
      "desc": "검색어 세트 A · B · K → 영상 · 댓글"},
     {"id": "voc", "label": "VOC 분류", "group": "monthly", "needs": [], "ai": True,
-     "desc": "댓글의 관련 여부 · 질문 주제"},
+     "desc": "댓글의 관련 여부 · 질문 주제 (사람 정답 예시 24건을 함께 줌)"},
+    {"id": "accuracy", "label": "정확도 검증", "group": "monthly", "needs": [], "ai": True, "manual": True,
+     "desc": "정답 76건으로 규칙 / AI 예시 없이 / AI 예시 포함 채점 (월간 묶음에 자동으로 들어가지 않음)"},
     {"id": "monthly", "label": "요약 · 전략", "group": "monthly", "needs": ["OPENAI_API_KEY"],
      "desc": "이달의 요약 3줄 · 고객 인사이트 · 페르소나 · SWOT"},
 ]
 BY_ID = {i["id"]: i for i in ITEMS}
-ORDER = ["weee", "amazon", "yami", "channel_reviews", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly"]
+ORDER = ["weee", "amazon", "yami", "channel_reviews", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly",
+         "accuracy"]
 LIMITS = {"serpapi": 250, "firecrawl": 1000, "youtube": 10000}
 REVIEW_BATCH, REVIEW_MAX = 40, 200
 COMMENT_BATCH, COMMENT_MAX = 80, 400
@@ -94,6 +97,8 @@ def estimate(item_id, cfg):
         return _competitor_cost(ai)
     if item_id in ("actions", "monthly"):
         return {"openai": 1 if ai else 0}
+    if item_id == "accuracy":
+        return {"openai": accuracy.calls_needed(ai)}
     return {}
 
 
@@ -314,8 +319,18 @@ def _run_monthly(cfg, ctx):
     return {"ok": True, "count": 1, "message": f"{month} 월간 요약 · 전략을 만들었어요.", "usage": {"openai": 1}}
 
 
+def _run_accuracy(cfg, ctx):
+    r, calls = accuracy.run(ctx["user"])
+    m = r["methods"]
+    name = dict(accuracy.METHODS)
+    text = " · ".join(f"{name[k]} {v['exact']}%" for k, v in m.items())
+    note = "" if "few" in m else " AI 키가 없어 규칙만 채점했어요."
+    return {"ok": True, "count": r["tests"], "message": f"정답 {r['tests']}건 채점: {text}.{note}", "usage": {"openai": calls}}
+
+
 RUNNERS = {"weee": _run_weee, "amazon": _run_amazon, "yami": _run_yami, "channel_reviews": _run_channel_reviews, "trends": _run_trends, "youtube": _run_youtube, "reviews": _run_reviews,
-           "voc": _run_voc, "competitors": _run_competitors, "actions": _run_actions, "monthly": _run_monthly}
+           "voc": _run_voc, "competitors": _run_competitors, "actions": _run_actions, "monthly": _run_monthly,
+           "accuracy": _run_accuracy}
 COLLECTORS = {"weee", "amazon", "yami", "channel_reviews", "trends", "youtube"}
 
 

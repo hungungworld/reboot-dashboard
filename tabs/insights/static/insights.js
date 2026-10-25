@@ -2171,7 +2171,7 @@
     const ox = v => (v ? 'O' : 'X');
     const ans = a => `${ox(a.relevant)} · ${ox(a.question)} · ${esc(tl(a.topic))}`;
     const run = `<button type="button" class="btn small" data-act="ins-update-only" data-items="accuracy">${icon('refresh')}채점 실행</button>`;
-    const one = s ? `${name[s.winner]} 방식이 정답 ${s.tests}건 중 ${s.methods[s.winner].exact}%를 맞혔어요 (세 칸 모두 일치 기준).`
+    const one = s ? `${Object.keys(s.methods).length > 1 ? '가장 높은 ' : ''}${name[s.winner]} 방식이 정답 ${s.tests}건 중 ${s.methods[s.winner].exact}%를 맞혔어요 (세 칸 모두 일치 기준).`
       : '아직 채점 전이에요. 채점 실행을 누르면 세 방식을 같은 정답으로 비교해요.';
     const ec = d.exampleCounts, tc = d.testCounts;
     const how = `<section class="card"><div class="card-head"><h2>검증 방법</h2>${badge('사람 정답', 'lime')}</div>
@@ -2186,7 +2186,7 @@
       const keys = d.methods.map(m => m[0]).filter(k => s.methods[k]);
       table = `<section class="card"><div class="card-head"><h2>채점 결과</h2><span class="small muted">${esc(fmt.datetime(s.at))}${s.model ? ` · ${esc(s.model)}` : ''}</span></div>
         <div class="table-wrap"><table class="data-table"><thead><tr><th>방식</th>${d.fields.map(f => `<th>${esc(f[1])}</th>`).join('')}<th>틀린 댓글</th></tr></thead>
-        <tbody>${keys.map(k => { const m = s.methods[k]; return `<tr${k === s.winner ? ' class="selected"' : ''}><td><b>${esc(name[k])}</b>${k === s.winner ? ` ${badge('가장 높음', 'lime')}` : ''}</td>
+        <tbody>${keys.map(k => { const m = s.methods[k]; return `<tr${k === s.winner ? ' class="selected"' : ''}><td><b>${esc(name[k])}</b>${k === s.winner && keys.length > 1 ? ` ${badge('가장 높음', 'lime')}` : ''}</td>
           ${d.fields.map(f => `<td>${esc(m[f[0]])}%</td>`).join('')}<td>${esc(m.wrong.length)}건</td></tr>`; }).join('')}</tbody></table></div>
         ${s.methods.few ? '' : '<p class="panel-note mt-8">AI 키가 없어 규칙만 채점했어요.</p>'}</section>`;
       table += keys.map(k => fold(`acc-wrong-${k}`, `${name[k]} · 틀린 댓글 ${s.methods[k].wrong.length}건 (정답 / 분류 결과: 관련 · 질문 · 주제)`,
