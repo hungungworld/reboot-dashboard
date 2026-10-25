@@ -165,7 +165,7 @@ def weekly_actions(ctx):
                     f"({SOURCE_LABEL.get(top['source'], top['source'])}) {_usd(top['before'])} → {_usd(top['after'])} ({top['pct']:+.0f}%){more}.")
             if rule == "price_cut":
                 why = "같은 진열대에서 가격 차이가 벌어지면 자사 상품이 상대적으로 비싸 보여 구매가 줄 수 있어요."
-                todo = "데이터 › 진열대에서 1회분 단가 구간을 비교하고, 할인 · 묶음 구성으로 대응할지 정하세요."
+                todo = "시장 › 가격 위치에서 1회분 단가 구간을 비교하고, 할인 · 묶음 구성으로 대응할지 정하세요."
             else:
                 why = "경쟁사 가격이 오르면 자사 가격 경쟁력이 상대적으로 좋아져요."
                 todo = "1회분 단가 비교를 상세페이지 · 콘텐츠 메시지에 쓸 수 있는지 검토하세요."
@@ -179,7 +179,7 @@ def weekly_actions(ctx):
                 "new_entry", "참고",
                 f"진열대에 새 상품 {len(new)}개가 들어왔어요: {names}{more}.",
                 "같은 검색어 · 카테고리에서 고객의 선택지가 늘어요.",
-                "데이터 › 경쟁사에서 새 상품의 가격 · 메시지를 확인하고 주시할지 정하세요.",
+                "시장 › 브랜드 비교에서 새 상품의 가격 · 메시지를 확인하고 주시할지 정하세요.",
                 {"새 상품": [{"title": x["title"], "source": x.get("source"), "price": x.get("price"), "link": x.get("link")} for x in new[:10]]},
                 weight=len(new)))
 
