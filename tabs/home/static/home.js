@@ -21,6 +21,57 @@
   const S = { root: null, view: '', briefing: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: {}, saved: null, poll: null, calMonth: '', watching: false };
   const ref = name => S.root && S.root.querySelector(`[data-ref="${name}"]`);
 
+  /* ───────── 줄바꿈: 문장 · 반점 단위 ─────────
+     글 묶음(p · li · .note …) 속 글자를 문장 끝 · 반점 뒤에서 나눠 <span class="home-ph">로 감쌈
+     → 문장이 바뀌는 곳에서 먼저 줄이 바뀌고, 한 문장이 길면 그 안에서 줄 길이를 고르게 (home.css)
+     숫자(1,234 · 3.5)는 뒤에 띄어쓰기가 없어 안 나뉨. 표 · 버튼 · 배지 · 입력칸 · 한 줄 칸은 건드리지 않음 */
+  const PH_BLOCK = 'p, li, dd, small, figcaption, blockquote, .note, .panel-note, .hint';
+  const PH_SKIP = 'table, button, .btn, label, .badge, input, textarea, select, code, pre, svg, [contenteditable], .home-ph';
+  // 문장 끝: 한글 뒤 . ! ? · 소문자 · 닫는 괄호 뒤 . 만 (U.S. · I.V. 약어, 10. 25. 날짜, Weee! 이름은 안 나눔)
+  // 반점: 연결 어미(…하고, …며, …지만, …는데) 뒤만 — 나열(맛, 패키지)은 안 나눔
+  const PH_CUT = /(?<=[가-힣][.!?]|[a-z)\]'"”’]\.|(?:고|며|면|서|지만|는데|은데|니|도|게|요|다|해|어|아|죠),)(\s+)/;
+  function phrase(el) {
+    const blocks = el.matches(PH_BLOCK) ? [el] : [];
+    blocks.push(...el.querySelectorAll(PH_BLOCK));
+    blocks.forEach(b => {
+      if (b.closest(PH_SKIP)) return;
+      const cs = global.getComputedStyle(b);
+      if (cs.whiteSpace === 'nowrap' || cs.textWrapMode === 'nowrap' || (cs.webkitLineClamp && cs.webkitLineClamp !== 'none')) return;
+      const walk = doc.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+      const texts = [];
+      for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+        if (PH_CUT.test(t.nodeValue) && !t.parentElement.closest(PH_SKIP)) texts.push(t);
+      }
+      texts.forEach(t => {
+        const frag = doc.createDocumentFragment();
+        t.nodeValue.split(PH_CUT).forEach((s, i) => {
+          if (i % 2 || !s.trim()) { frag.append(s); return; }
+          const sp = doc.createElement('span');
+          sp.className = 'home-ph';
+          sp.textContent = s;
+          frag.append(sp);
+        });
+        t.replaceWith(frag);
+      });
+    });
+  }
+  // 화면은 innerHTML로 자주 다시 그려지므로, 새로 붙은 노드를 모아 한 번에 처리
+  function phraseAll(nodes) {
+    const todo = new Set();
+    nodes.forEach(n => {
+      const el = n.nodeType === 3 ? n.parentElement : n;
+      if (el && el.nodeType === 1 && el.isConnected && el.closest('.part-home')) todo.add(el.closest(PH_BLOCK) || el);
+    });
+    todo.forEach(phrase);
+  }
+  if (doc && global.MutationObserver) {
+    const start = () => {
+      new global.MutationObserver(ms => phraseAll(ms.flatMap(m => [...m.addedNodes]))).observe(doc.body, { childList: true, subtree: true });
+      phraseAll([...doc.querySelectorAll('.part-home')]);
+    };
+    if (doc.body) start(); else doc.addEventListener('DOMContentLoaded', start);
+  }
+
   /* ───────── 날짜 (YYYY-MM-DD 문자열, UTC로 계산) ───────── */
   const toTime = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
   const fromTime = t => new Date(t).toISOString().slice(0, 10);
