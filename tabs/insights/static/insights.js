@@ -390,6 +390,9 @@
       case 'rv-page': S.rv.page = Number(d.p) || 1; drawRvTable(); break;
       case 'rv-open': openReview(d.id); break;
       case 'sum-ko': showKo(b, null, $(S.root, `[data-ref="sum-ko-${d.asin}"]`), `/api/insights/amazon-summaries/${encodeURIComponent(d.asin)}/translate`); break;
+      case 'rh-brand': S.rv.cmpOpen = S.rv.cmpOpen === d.b ? '' : d.b; drawSub('reviews'); break;
+      case 'rh-cmp': S.rv.cmp = d.b; rvScope('own'); break;
+      case 'rh-topic': S.rv.f.topic = S.rv.f.topic === d.t ? '' : d.t; S.rv.view = 'list'; S.rv.page = 1; drawSub('reviews'); break;
       case 'sum-all': {
         const list = $$(S.root, '.ins-sum-rv'), open = !list.every(x => x.open);
         list.forEach(x => { x.open = open; });
@@ -421,6 +424,7 @@
   }
 
   /* ═════════ 주간 리뷰 ═════════ */
+    if (t.dataset.ref === 'rh-vs') { S.rv.cmp = t.value; drawSub('reviews'); return; }
   async function loadWeekly() {
     try {
       S.weekly = await api('/api/insights/weekly');
@@ -2393,7 +2397,8 @@
     const view = RV_VIEWS.some(([k]) => k === S.rv.view) ? S.rv.view : 'list';
     const n = { list: d.cs.length + d.items.filter(r => !r.own).length, compare: d.table.length };
     const tabs = viewSeg('rv-view', RV_VIEWS.map(([k, l]) => [k, l, n[k]]), view, '구매자 리뷰 보기');
-    return qHead('reviews', d.oneLine, d.stats.total ? badge(`AI 분류 ${d.stats.ai} · 규칙 ${d.stats.total - d.stats.ai}`) : '') + tabs +
+    // 한 줄 답은 맨 위 카드(rvHero)가 맡음 — 질문 카드에는 리뷰가 없을 때 안내만
+    return qHead('reviews', d.summary ? '' : d.oneLine, d.stats.total ? badge(`AI 분류 ${d.stats.ai} · 규칙 ${d.stats.total - d.stats.ai}`) : '', d.stats.total && d.summary ? ' ' : '') + rvHero(d) + tabs +
       (view === 'list' ? rvListHtml(d) : compareHtml(d));
   }
 
@@ -2416,6 +2421,63 @@
   function rvFiltered(d) {
     const { scope, f, todo } = S.rv;
     const q = S.rv.q.trim().toLowerCase();
+  // 맨 위 카드: [알디콤] 한 줄 답 · 평점 · 별점 분포 · 주제 막대(세로선 = 고른 경쟁 브랜드) / [경쟁사] 브랜드마다 잘하는 점 · 약한 점
+  // 경쟁사는 제품이 서로 달라 평균으로 묶지 않고 브랜드별로 봄 (아마존 전체 리뷰 기준)
+  function rhBars(topics, vs, vsName) {
+    return topics.map(t => {
+      // 부작용은 비교 안 함: 아마존은 '부작용 없음'을 칭찬으로 세지만 우리 분류는 불만만 셈
+      const o = vs && t.name !== '부작용' ? vs.find(y => y.name === t.name) : null;
+      const g = o ? t.pct - o.pct : null;
+      const on = S.rv.scope !== 'comp' && S.rv.f.topic === t.name;
+      return `<button type="button" class="ins-rh-t${on ? ' on' : ''}" data-act="rh-topic" data-t="${esc(t.name)}" aria-pressed="${on}"
+          title="칭찬 ${fmt.num(t.pos)} · 불만 ${fmt.num(t.neg)}${o ? ` · ${vsName} 칭찬 ${o.pct}%` : ''}">
+        <span class="ins-rh-tn">${esc(hashTag(t.name))}</span>
+        <span class="ins-rh-bar"><i class="pos" style="width:${t.pct}%"></i><i class="neg" style="width:${100 - t.pct}%"></i>${o ? `<em style="left:${o.pct}%"></em>` : ''}</span>
+        <span class="ins-rh-pct">${t.pct}%${g != null ? ` <small${Math.abs(g) >= 10 ? ' class="big"' : ''}>${g > 0 ? '+' : g < 0 ? '−' : '±'}${Math.abs(g)}%p</small>` : ''}</span></button>`;
+    }).join('');
+  }
+  const rhLegend = vsName => `<p class="ins-rh-lg"><span><i class="pos"></i>칭찬</span><span><i class="neg"></i>불만</span>${vsName ? `<span><i class="tick"></i>${esc(vsName)} 칭찬 비율</span>` : ''}</p>`;
+  function rvHero(d) {
+    const sm = d.summary;
+    if (!sm) return '';
+    const own = S.rv.scope !== 'comp';
+    const seg = `<div class="seg" role="group" aria-label="누구의 리뷰">${[['own', '알디콤'], ['comp', `경쟁 브랜드 ${sm.brands.length}곳`]].map(([k, l]) =>
+      `<button type="button" data-act="rv-scope" data-v="${k}"${(k === 'own') === own ? ' class="selected"' : ''} aria-pressed="${(k === 'own') === own}">${l}</button>`).join('')}</div>`;
+    return `<section class="card mt-24 ins-rh">${seg}${own ? rhOwn(sm) : rhBrands(sm)}</section>`;
+  }
+  function rhOwn(sm) {
+    const x = sm.own;
+    if (!x.topics.length) return '<p class="mt-16">아직 알디콤 리뷰가 없어요. 최신 데이터 받기에서 판매처 리뷰를 고르세요.</p>';
+    const vs = sm.brands.find(b => b.brand === S.rv.cmp) || sm.brands.find(b => b.brand === sm.compareDefault);
+    const quotes = x.quotes.map(q => `<button type="button" class="ins-rh-q ${q.s === '+' ? 'pos' : 'neg'}" data-act="rv-open" data-id="${esc(q.id)}">
+      ${q.ko ? `<b>${esc(q.ko)}</b>` : ''}<span lang="en">“${esc(q.text)}”</span></button>`).join('');
+    const pick = sm.brands.length ? `<select class="ins-cf ins-rh-vs" data-ref="rh-vs" aria-label="비교할 경쟁 브랜드">${sm.brands.map(b =>
+      `<option value="${esc(b.brand)}"${vs && vs.brand === b.brand ? ' selected' : ''}>${b.watched ? '★ ' : ''}${esc(b.brand)}</option>`).join('')}</select>` : '';
+    const starRows = x.stars.map(s => `<div class="ins-rh-s"><span>${s.stars}</span><span class="ins-rh-sb"><i style="width:${s.percent}%"></i></span><span>${s.percent}%</span></div>`).join('');
+    return `<h2 class="ins-rh-h">${esc(x.line)}</h2>${quotes ? `<div class="ins-rh-qs">${quotes}</div>` : ''}
+      <div class="ins-rh-grid">
+        <div><div class="ins-rh-avg">${x.rating == null ? '—' : esc(x.rating.toFixed(1))}</div><p class="ins-rh-who">알디콤 리뷰 ${fmt.num(x.count)}개 · ${esc(x.basis)}</p>${starRows}</div>
+        <div><div class="ins-rh-cap"><span>주제별 칭찬 비율</span>${pick ? `<span class="ins-rh-vsl">비교 ${pick}</span>` : ''}</div>
+          ${rhBars(x.topics, vs && vs.topics, vs && vs.brand)}${rhLegend(vs && vs.brand)}</div>
+      </div>`;
+  }
+  function rhBrands(sm) {
+    if (!sm.brands.length) return '<p class="mt-16">아직 경쟁 브랜드 리뷰가 없어요. 최신 데이터 받기에서 Amazon 진열대를 고르세요.</p>';
+    const chip = (v, cls) => v ? `<span class="ins-rh-chip ${cls}">${esc(v.text)} <b>${v.pct}%</b></span>` : '<span></span>';
+    const rows = sm.brands.map(b => {
+      const open = S.rv.cmpOpen === b.brand;
+      return `<li class="${open ? 'open' : ''}"><button type="button" class="ins-rh-b" data-act="rh-brand" data-b="${esc(b.brand)}" aria-expanded="${open}">
+          <span class="ins-rh-bn">${b.watched ? '<span class="ins-star">★</span> ' : ''}${esc(b.brand)}</span>
+          <span class="ins-rh-br">${b.rating == null ? '—' : esc(b.rating.toFixed(1))} ★ · ${fmt.num(b.count)}개</span>
+          ${chip(b.voicePos, 'pos')}${chip(b.voiceNeg, 'neg')}</button>
+        ${open ? `<div class="ins-rh-bd">${rhBars(b.topics, sm.own.topics, '알디콤')}${rhLegend('알디콤')}
+          <button type="button" class="btn small ghost mt-8" data-act="rh-cmp" data-b="${esc(b.brand)}">알디콤 화면에서 이 브랜드와 비교</button></div>` : ''}</li>`;
+    }).join('');
+    return `<h2 class="ins-rh-h">경쟁 브랜드마다 잘하는 점 · 약한 점</h2>
+      <p class="ins-rh-who">아마존 리뷰 기준 · 리뷰 많은 순 · 누르면 주제별로 알디콤과 비교해요</p>
+      <ul class="ins-rh-list">${rows}</ul>`;
+  }
+
     const own = scope === 'own';
     const list = rvRows(d, scope).filter(r => (!f.source || r.source === f.source) && (!f.brand || own || r.brand === f.brand) &&
       (!f.line || !own || r.line === f.line) && (!f.topic || r.topics.includes(f.topic)) && (!f.s || r.sentiment === f.s) &&

@@ -56,7 +56,13 @@ PRODUCTS = {
     "B0COMP0001": {"product_results": {"title": "Flyby Hangover Recovery Aid, 30 Count", "brand": "Visit the Flyby Store",
                                        "extracted_price": 29.99, "stock": "In Stock", "rating": 4.3, "reviews": 5400},
                    "about_item": ["Supports recovery", "30 capsules"],
-                   "reviews_information": {"summary": {"text": "Customers like the convenience."},
+                   "reviews_information": {"summary": {"text": "Customers like the convenience.",
+                                                       "customer_reviews": {"5 star": {"percentage": 64}, "4 star": {"percentage": 18},
+                                                                            "3 star": {"percentage": 8}, "2 star": {"percentage": 4},
+                                                                            "1 star": {"percentage": 6}},
+                                                       "insights": [{"title": "Effectiveness", "sentiment": "mixed",
+                                                                     "mentions": {"total": 420, "positive": 300, "negative": 120},
+                                                                     "summary": "Most say it helps the next morning."}]},
                                            "authors_reviews": [{"title": "Works", "text": "It worked great after a party, easy to carry.",
                                                                 "rating": 5, "date": "October 3, 2026"}]}},
     "B0COMP0004": {"product_results": {"title": "Liquid I.V. Hydration Multiplier - 16 Count", "brand": "Liquid I.V.",
@@ -447,6 +453,20 @@ def test_update_job_collects_everything(auth_client, monkeypatch, fake_net, fixe
     own_row = next(b for b in rv["table"] if b["own"])
     assert own_row["topics"]["맛·향"]["neg"] == 2
     assert rv["summaries"][0]["text"] == "Customers like the convenience."
+    # 아마존 전체 리뷰 기준 별점 분포 · 주제 (분포 · 주제가 있는 상품만)
+    st = rv["amazonStats"]
+    assert [s["asin"] for s in st] == ["B0COMP0001"] and st[0]["own"] is False and st[0]["reviews"] == 5400
+    assert [x["stars"] for x in st[0]["stars"]] == [5, 4, 3, 2, 1] and st[0]["stars"][0]["percent"] == 64
+    assert st[0]["aspects"][0] == {"name": "Effectiveness", "sentiment": "mixed", "total": 420, "pos": 300, "neg": 120,
+                                   "summary": "Most say it helps the next morning."}
+    # 맨 위 카드: 경쟁사는 브랜드마다 (아마존 주제 → 우리 주제, Effectiveness → 효과), 알디콤은 모은 리뷰로
+    sm = rv["summary"]
+    assert [b["brand"] for b in sm["brands"]] == ["Flyby"] and sm["compareDefault"] == "Flyby"
+    fb = sm["brands"][0]
+    assert fb["count"] == 5400 and fb["rating"] == 4.3 and fb["stars"][0] == {"stars": 5, "percent": 64}
+    assert fb["topics"] == [{"name": "효과", "pos": 300, "neg": 120, "pct": 71}] and fb["line"] == "'효과가 좋다'는 평이 71%예요"
+    own_side = sm["own"]
+    assert own_side["basis"] == "Amazon" and any(t["name"] == "맛·향" and t["neg"] == 2 for t in own_side["topics"])
 
     tr = auth_client.get("/api/insights/trends").get_json()
     assert [k["keyword"] for k in tr["keywords"]] == ["hangover", "hangover drink"]
@@ -858,6 +878,35 @@ def test_item_form_from_amazon_product():
     x = {"title": "Blowfish for Hangovers - Fast Hangover Relief", "message": "Item Form: Tablet / Drink plenty of water"}
     assert rule_form_of(x) == "tablet"  # 상품명에 없으면 제품 선택 → 판매 문구('Drink')보다 앞
     assert rule_form_of(dict(x, title="Blowfish Liquid Shot")) == "liquid"  # 상품명이 먼저
+
+
+def test_amazon_review_stats_shapes():
+    from tabs.insights.amazon import _reviews, review_stats
+    # 별점 분포는 dict · list 어느 모양이든, 숫자만 오거나 count만 와도 읽음
+    assert review_stats({"reviews_information": {"summary": {"customer_reviews": {"5_star": 70, "1_star": 30}}}})["stars"] == [
+        {"stars": 5, "percent": 70.0, "count": None}, {"stars": 1, "percent": 30.0, "count": None}]
+    lst = review_stats({"rating_breakdown": [{"stars": 4, "count": 12}, {"name": "x"}]})
+    assert lst == {"stars": [{"stars": 4, "percent": None, "count": 12}], "aspects": []}
+    assert review_stats({}) == {"stars": [], "aspects": []}
+    # 대표 리뷰는 응답에 온 만큼 모두 (예전 8개 제한 없음)
+    rows = [{"text": f"review {i}", "rating": 5} for i in range(12)]
+    assert len(_reviews({"reviews_information": {"authors_reviews": rows}})[0]) == 12
+
+
+def test_customer_summary_side_merges_amazon_topics():
+    from tabs.insights.service import _side, _voice, aspect_topic
+    assert aspect_topic("Hangover relief") == "효과" and aspect_topic("Value for money") == "가격"
+    assert aspect_topic("Side effects") == "부작용" and aspect_topic("Drinkability") == "맛·향" and aspect_topic("Disappointing") is None
+    item = {"brand": "Z", "reviews": 100, "rating": 4.0, "stars": [{"stars": 5, "percent": 60}, {"stars": 1, "percent": 40}],
+            "aspects": [{"name": "Effectiveness", "total": 50, "pos": 40, "neg": 10},
+                        {"name": "Hangover relief", "total": 30, "pos": 10, "neg": 20},   # 같은 '효과' → 언급 많은 쪽만
+                        {"name": "Taste", "total": 20, "pos": 5, "neg": 15}]}
+    s = _side([], [item, dict(item)], [])   # 옵션만 다른 같은 숫자 상품은 한 번만
+    assert s["count"] == 100 and s["rating"] == 4.0 and s["stars"][0] == {"stars": 5, "percent": 60}
+    assert {t["name"]: (t["pos"], t["neg"]) for t in s["topics"]} == {"효과": (40, 10), "맛·향": (5, 15)}
+    assert s["topPos"]["name"] == "효과" and s["topNeg"] == {"name": "맛·향", "n": 15, "pct": 75}
+    # 한 줄 답은 고객 말투로
+    assert _voice(s)["line"] == "'효과가 좋다'는 평이 80%, '맛이 별로다'는 불만이 75%예요"
 
 
 def test_form_rules_and_yami_parser():
