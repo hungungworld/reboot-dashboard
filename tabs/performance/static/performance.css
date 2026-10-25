@@ -152,3 +152,11 @@
 .perf-fold::before { content: '▾'; font-size: .8em; transition: transform .15s; }
 .perf-fold[aria-expanded="false"]::before { transform: rotate(-90deg); }
 .perf-fold:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* AI 인사이트 (채널별 성과 표 위, 두괄식) */
+.part-performance .perf-insight { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2, rgba(0, 0, 0, .03)); }
+.part-performance .perf-insight-body { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.part-performance .perf-insight-head { margin: 0 0 6px; font-size: 14px; line-height: 1.6; color: var(--ink); }
+.part-performance .perf-insight-lines { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+.part-performance .perf-insight-label { display: inline-block; min-width: 34px; margin-right: 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.part-performance .perf-insight strong { font-weight: 700; color: var(--ink); }

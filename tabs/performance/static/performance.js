@@ -18,6 +18,7 @@
   const S = {
     root: null, view: 'main', data: null, rows: [], rng: null, chans: [], period: null, sum: null,
     currency: 'KRW', fx: null, selected: new Set(), charts: {}, ai: { state: 'idle' }, aiTimer: null, aiCtrl: null,
+    insight: { state: 'idle' }, insightTimer: null, insightCtrl: null,
     watching: false
   };
   const KPI_ICONS = { spend: 'dollar', revenue: 'chart', roas: 'up', conversions: 'check', cpa: 'filter', profit: 'spark' };
@@ -227,6 +228,7 @@
     return `reboot-performance-advice:${S.period.start}:${S.period.end}:${REBOOT.today()}:${m.updatedAt || (S.data && S.data.source) || ''}`;
   }
   function scheduleAdvice(force) {
+    if (S.view !== 'report') scheduleInsight();
     clearTimeout(S.aiTimer);
     if (S.aiCtrl) { S.aiCtrl.abort(); S.aiCtrl = null; }
     if (!S.sum || !S.sum.rows) { S.ai = { state: 'idle' }; return; }
@@ -265,6 +267,78 @@
     }
     S.aiCtrl = null;
     paintAi();
+  }
+
+  /* ───────── AI 인사이트 (채널별 성과 표 위, 두괄식) — 예산 제안과 따로 부름 ───────── */
+  function insightKey() {
+    return adviceKey().replace('reboot-performance-advice:', 'reboot-performance-insight:');
+  }
+  function scheduleInsight(force) {
+    clearTimeout(S.insightTimer);
+    if (S.insightCtrl) { S.insightCtrl.abort(); S.insightCtrl = null; }
+    if (!S.sum || !S.sum.rows) { S.insight = { state: 'idle' }; return; }
+    const cached = !force && readCache(insightKey());
+    if (cached && cached.headline) {   // 예전 3줄 형식(lines) 결과는 다시 받음
+      S.insight = { state: 'ok', data: cached, cached: true };
+      renderInsight();
+      return;
+    }
+    S.insight = { state: 'loading' };
+    renderInsight();
+    S.insightTimer = setTimeout(() => loadInsight(), force ? 0 : 900);
+  }
+  async function loadInsight() {
+    const h = await REBOOT.health();
+    if (h && h.openai === false) {
+      S.insight = { state: 'nokey' };
+      renderInsight();
+      return;
+    }
+    const ctrl = global.AbortController ? new global.AbortController() : null;
+    S.insightCtrl = ctrl;
+    const period = Object.assign({}, S.period);
+    const key = insightKey();
+    try {
+      const data = await REBOOT.api('/api/performance/insight', period, ctrl ? { signal: ctrl.signal } : {});
+      if (S.insightCtrl !== ctrl || data.start !== S.period.start || data.end !== S.period.end) return;
+      writeCache(key, data);
+      S.insight = { state: 'ok', data };
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      if (S.insightCtrl !== ctrl) return;
+      S.insight = e.status === 503 ? { state: 'nokey' } : { state: 'error', message: e.message };
+    }
+    S.insightCtrl = null;
+    renderInsight();
+  }
+  // AI가 **굵게** 감싼 부분만 <strong>으로 (먼저 esc 하므로 다른 태그는 그대로 막힘)
+  function boldHtml(t) {
+    return esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  }
+  function renderInsight() {
+    const box = ref('insight');
+    if (!box) return;
+    const st = S.insight.state;
+    const tag = `<span class="flex">${badge('AI 인사이트', 'purple')}<span class="small muted">참고용</span></span>`;
+    let body;
+    if (st === 'ok') {
+      const d = S.insight.data;
+      const pts = (d.points || []).map(p => `<li>${p.label ? `<span class="perf-insight-label">${esc(p.label)}</span>` : ''}${boldHtml(p.text)}</li>`).join('');
+      body = `<div><p class="perf-insight-head">${boldHtml(d.headline)}</p>${pts ? `<ul class="perf-insight-lines">${pts}</ul>` : ''}</div>
+        <button type="button" class="btn small ghost" data-act="insight-again" aria-label="AI 인사이트 다시 만들기">${icon('refresh')}</button>`;
+    } else if (st === 'nokey') {
+      body = `<p class="panel-note">AI 미연결 — 설정 › 연결에서 OPENAI_API_KEY를 넣으면 전체 성과 요약을 볼 수 있습니다.</p>`;
+    } else if (st === 'error') {
+      body = `<p class="panel-note">AI 인사이트를 받지 못했습니다: ${esc(S.insight.message)}</p>
+        <button type="button" class="btn small ghost" data-act="insight-again">${icon('refresh')} 다시 만들기</button>`;
+    } else if (st === 'loading') {
+      body = `<div class="perf-loading"><span class="spinner" aria-hidden="true"></span>전략 마케터가 이 기간 성과를 요약하고 있어요…</div>`;
+    } else {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = tag + `<div class="perf-insight-body">${body}</div>`;
   }
 
   function paintAi() {
@@ -450,6 +524,7 @@
             <button type="button" class="btn small" data-act="fx">${icon('refresh')} 환율 확인</button>
             <span class="perf-fx" data-ref="fx-label"></span>
           </div></div>
+        <div class="perf-insight" data-ref="insight" aria-live="polite" hidden></div>
         <div id="perf-table-body"${S.tableOpen === false ? ' hidden' : ''}><div class="table-wrap" data-ref="table"></div>
         <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나옵니다. 여러 채널을 고를 수 있고, 다시 누르면 해제됩니다. 달러 표시는 이 표에만 적용됩니다.</p></div>
       </section>
@@ -464,6 +539,7 @@
     renderInfo();
     renderKpis();
     renderTable();
+    renderInsight();
     paintFx();
     renderReview();
     renderAi();
@@ -765,6 +841,7 @@
         S.root.querySelector('#perf-table-body').hidden = !S.tableOpen;
       }
       else if (a === 'ai-again') scheduleAdvice(true);
+      else if (a === 'insight-again') scheduleInsight(true);
       else if (a === 'reset') resetToSample();
       else if (a === 'print') global.print();
       return;
