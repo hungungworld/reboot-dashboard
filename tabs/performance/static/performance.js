@@ -346,9 +346,22 @@
     else { renderReview(); renderAi(); }
   }
 
+  // 잘한 점 · 개선할 점: AI가 "- " 줄로 주면 핵심 요약 목록(굵게 포함), 아니면(숫자 기준 · 예전 결과) 문단 그대로
+  function reviewLines(text) {
+    return String(text || '').split('\n').map(l => l.trim()).filter(l => /^[-•]\s+/.test(l)).map(l => l.replace(/^[-•]\s+/, ''));
+  }
   function reviewCard(title, text, ai) {
     const tag = ai ? `<span class="flex">${badge('AI', 'purple')}<span class="small muted">참고용</span></span>` : badge('숫자 기준');
-    return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2>${tag}</div><p class="perf-review-text">${esc(text || '—')}</p></section>`;
+    const lines = reviewLines(text);
+    const body = lines.length
+      ? `<ul class="perf-insight-lines perf-review-lines">${lines.map(l => `<li>${boldHtml(l)}</li>`).join('')}</ul>`
+      : `<p class="perf-review-text">${esc(text || '—')}</p>`;
+    return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2>${tag}</div>${body}</section>`;
+  }
+  // 보고서(A4)용: 굵게 표시 기호는 빼고 줄은 그대로
+  function reviewPlain(text) {
+    const lines = reviewLines(text);
+    return lines.length ? `<ul>${lines.map(l => `<li>${esc(l.replace(/\*\*/g, ''))}</li>`).join('')}</ul>` : `<p>${esc(text)}</p>`;
   }
   function renderReview() {
     const box = ref('review');
@@ -719,8 +732,8 @@
     const num = M.insights(S.sum);
     const tag = ai ? `${badge('AI', 'purple')}<span class="tiny muted">참고용</span>` : badge('숫자 기준');
     const an = (ai && ai.analysis) || {};
-    rev.innerHTML = `<div class="perf-report-box"><h3>잘한 점 ${an.good ? tag : badge('숫자 기준')}</h3><p>${esc(an.good || num.good)}</p></div>
-      <div class="perf-report-box"><h3>개선할 점 ${an.improve ? tag : badge('숫자 기준')}</h3><p>${esc(an.improve || num.improve)}</p></div>`;
+    rev.innerHTML = `<div class="perf-report-box"><h3>잘한 점 ${an.good ? tag : badge('숫자 기준')}</h3>${reviewPlain(an.good || num.good)}</div>
+      <div class="perf-report-box"><h3>개선할 점 ${an.improve ? tag : badge('숫자 기준')}</h3>${reviewPlain(an.improve || num.improve)}</div>`;
     if (ai) {
       const b = ai.budget || { items: [] };
       box.innerHTML = `${ai.overview ? `<p>${esc(ai.overview)}</p>` : ''}

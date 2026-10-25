@@ -8,6 +8,7 @@
   POST   /api/partners/import                 업체 파일 가져오기 (multipart: catering=CSV, influencer=XLSX, file=자동 판단)
   POST   /api/partners/example                예시 데이터(가상 업체 · example.com) 불러오기 — 비어 있는 구분만
   GET    /api/partners/template/<catering.csv|influencer.xlsx>   가져오기 양식
+  GET    /api/partners/export/<catering.csv|influencer.csv>      지금 업체 목록 내보내기 (가져오기와 같은 머리글)
   GET    /api/partners/overview               컨택 업체 수 · 진행 중 협업 · 회신 받음 · 회신 대기 · 업체별 최신 진행 상태
 협업 메일 (3-2)
   POST   /api/partners/email/generate         영문 제목·본문 생성 (OpenAI JSON)
@@ -296,6 +297,18 @@ def _add_samples():
     return made
 
 
+@bp.get("/export/<name>")
+def export_contacts(name):
+    ptype = {"catering.csv": CATERING, "influencer.csv": INFLUENCER}.get(name)
+    if ptype is None:
+        raise ApiError("없는 내보내기입니다.", 404)
+    _sync_bundled()
+    rows = PartnerContact.query.filter_by(ptype=ptype).order_by(PartnerContact.sort).all()
+    today = _local(utcnow()).date().isoformat()
+    return Response(importer.export_csv(ptype, rows), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=reboot-partners-{name[:-4]}-{today}.csv"})
+
+
 @bp.get("/template/<name>")
 def template(name):
     if name == "catering.csv":
@@ -375,9 +388,10 @@ def email_generate():
         rec = _history_or_404(_int(data.get("reply_to")))
         reply = {"subject": rec.subject, "body": rec.body, "from": rec.reply_from, "reply": rec.reply_body}
     period = data.get("period") if isinstance(data.get("period"), dict) else {}
+    facts = _contact_facts(contact) or {"name": name, "type": ptype}
     system, user = prompts.mail_messages(
         ptype, clip(data.get("prompt"), 6000), prompts.product_desc(catalog.get_brand(), catalog.get_products()),
-        clip(data.get("ideal"), 1500).strip(), name, _contact_facts(contact) or {"name": name, "type": ptype},
+        clip(data.get("ideal"), 1500).strip(), name, facts,
         clip(data.get("purpose"), 2000), clip(period.get("start"), 10), clip(period.get("end"), 10),
         clip(data.get("proposal"), 3000), clip(data.get("requests"), 3000), reply=reply)
     out = core_ai.openai_json(system, user, schema=prompts.MAIL_SCHEMA, schema_name="partner_email", max_tokens=1500,

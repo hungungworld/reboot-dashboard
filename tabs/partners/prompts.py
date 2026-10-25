@@ -51,14 +51,16 @@ DEFAULT_PROMPTS = {
 - {partner}가 위 조건에 맞는 이유를 업체 정보에 근거해 1~2문장으로 구체적으로 씁니다.
 - 현장 샘플링·바 메뉴 페어링처럼 이벤트 현장에서 바로 실행할 수 있는 협업으로 제안합니다.
 - 상대가 부담 없이 답할 수 있게 짧은 통화(15분) 또는 회신을 다음 단계로 제안합니다.""",
-    INFLUENCER: """REBOOT 파트너십 책임자로서 미국 인플루언서 대행사·플랫폼 {partner}와 협업하고 싶다는 제안 메일을 씁니다.
+    INFLUENCER: """REBOOT 파트너십 책임자로서 미국 인플루언서 외주 업체(대행사·플랫폼) {partner}에게, 우리 조건에 맞는 인플루언서를 찾아 연결해 달라는 제안 메일을 씁니다.
 
 제품: {product}
-우리가 원하는 인플루언서: {ideal}
+우리가 찾는 인플루언서: {ideal}
 
-- {partner}의 크리에이터 네트워크·서비스가 위 조건에 맞는 이유를 업체 정보에 근거해 1~2문장으로 씁니다.
-- 제품 시딩·크리에이터별 할인코드처럼 성과를 확인할 수 있는 협업으로 제안하고, FTC 광고 표기(#ad)를 지킨다는 점을 한 줄로 밝힙니다.
-- 상대가 부담 없이 답할 수 있게 크리에이터 추천 목록 또는 짧은 통화(15분)를 다음 단계로 제안합니다.""",
+- 메일의 중심은 "위 조건에 맞는 인플루언서를 찾아 추천·섭외해 달라"는 요청입니다. 받는 업체 자신의 라이프스타일·콘텐츠를 칭찬하거나 그 업체와 직접 콘텐츠를 만들자고 쓰지 않습니다.
+- {partner}가 이 일을 맡기에 맞는 이유(크리에이터 네트워크·서비스)를 업체 정보에 근거해 1문장으로 씁니다.
+- 우리가 찾는 인플루언서 조건을 '우리가 찾는 인플루언서'에 근거해 2~3개 항목으로 분명하게 씁니다 (조건을 지어내지 않음).
+- 찾은 인플루언서와 할 협업(제품 시딩·크리에이터별 할인코드 등)을 짧게 밝히고, FTC 광고 표기(#ad)를 지킨다는 점을 한 줄로 씁니다.
+- 다음 단계로 조건에 맞는 크리에이터 추천 목록(채널 지표 · 21세 이상 시청자 비율)과 단가 회신, 또는 짧은 통화(15분)를 제안합니다.""",
 }
 
 GUIDE_PURPOSES = {
@@ -118,9 +120,11 @@ def product_desc(brand=None, products=None):
         return custom[:1500]
     brand = brand or {}
     names = ", ".join(f"{p.get('name')} ({p.get('form') or '-'})" for p in (products or []) if p.get("name"))
-    return (f"{brand.get('name') or 'REBOOT'} - a Korean brand launching in the US with stick jellies and non-carbonated drinks"
-            f"{' (' + names + ')' if names else ''}. Conventional food, not a dietary supplement or medicine. "
-            f"Slogan: \"{brand.get('slogan') or 'Restart Your Day'}\". Positioned as an after-party / morning-after ritual for adults 21+.")
+    # 컴플라이언스 R2(BLOCK): 'hangover' · 'morning after' 금지 — 효능 없이 '파티 다음 날' 맥락으로만 소개
+    return (f"{brand.get('name') or 'REBOOT'} is a Korean brand of stick jellies and non-carbonated drinks"
+            f"{' (' + names + ')' if names else ''}, made as a light after-party ritual for adults 21+ - "
+            f"something easy to reach for the day after a night out. Conventional food (not a dietary supplement); "
+            f"we make no health claims. Slogan: \"{brand.get('slogan') or 'Restart Your Day'}\".")
 
 
 def fill(template, product, ideal, partner):
