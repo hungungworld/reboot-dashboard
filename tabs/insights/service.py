@@ -382,6 +382,16 @@ def weekly_view(t=None):
         stale = {"week": latest, "label": week_label(latest)}
     comp = [x for x in now if not x["own"]]
     line_list = lines.build(comp)
+    # 자사 가격 순위: 모든 판매처 · 같은 제품은 한 줄(가장 싼 1회분) — 진열대 탭 카드와 같은 기준
+    ranked = sorted((g for g in lines.build(now) if g["perServing"]), key=lambda g: g["perServing"]["min"])
+    own_rank = None
+    for i, g in enumerate(ranked, start=1):
+        if g["own"]:
+            best = min((x for x in now if x["own"] and x["perServing"] is not None and x["line"]["id"] == g["id"]),
+                       key=lambda x: x["perServing"])
+            own_rank = {"rank": i, "total": len(ranked), "perServing": best["perServing"], "source": SOURCE_LABEL[best["source"]],
+                        "bucketLabel": BUCKET_LABEL.get(best["bucket"], "")}
+            break
     before = {(x["source"], x["key"]): x for x in prev or []}
     restocks = [x for x in comp if before.get((x["source"], x["key"]), {}).get("in_stock") is False and x["in_stock"] is True]
     watch_lines = [{"id": g["id"], "label": g["label"], "oosChannels": [SOURCE_LABEL[s] for s in g["oosChannels"]], "partialOos": g["partialOos"],
@@ -400,8 +410,11 @@ def weekly_view(t=None):
                       **{g: sum(1 for c in chg if c["group"] == g) for g in ("threat", "chance", "watch")}},
                   "weeks": {src: {"now": week_label(i["week"]), "prev": week_label(i["prev"]) if i["prev"] else None}
                             for src, i in info.items()},
-                  "ownWeee": own_pos, "ownCount": sum(1 for x in now if x["own"]),
+                  "ownWeee": own_pos, "ownRank": own_rank, "ownCount": sum(1 for x in now if x["own"]),
                   "lines": len(line_list), "oosLines": sum(1 for g in line_list if g["oosChannels"]),
+                  # 품절 기준 두 가지 (진열대 탭과 같은 말): 모든 판매처 품절 · 일부 판매처 품절
+                  "oosAll": sum(1 for g in line_list if g["oosChannels"] and len(g["oosChannels"]) == len(g["channels"])),
+                  "oosSome": sum(1 for g in line_list if g["oosChannels"] and len(g["oosChannels"]) < len(g["channels"])),
                   "lowStock": sum(len(g["low"]) for g in line_list), "lowLimit": lines.LOW_STOCK, "restocks": len(restocks),
                   "unknownStock": sum(1 for x in comp if x["in_stock"] is None), "watchLines": watch_lines,
                   "unconfirmed": sum(1 for g in line_list if not g["confirmed"]),

@@ -53,7 +53,20 @@
     if (!personaP) personaP = api('/api/insights/personas').catch(() => null);
     return personaP.then(v => (Array.isArray(v) ? copy(v) : []));
   }
-  REBOOT.expose('insights', { searchTrend, personas });
+  // 이번 주 액션 중 긴급 · 기회만 (홈 이번 주 할 일 맨 위) — 읽기 전용, 근거 화면 주소 포함
+  let weeklyP = null;
+  function weeklySignals() {
+    if (!weeklyP) weeklyP = api('/api/insights/weekly').catch(() => { weeklyP = null; return null; });
+    return weeklyP.then(w => (w && Array.isArray(w.actions) ? {
+      week: w.week,
+      items: w.actions.filter(a => a.grade !== '참고').map(a => {
+        const src = ACTION_SRC[a.rule];
+        return { id: a.id, grade: a.grade, title: firstSentence(a.fact), todo: a.todo,
+          href: `/dashboard/insights${src ? src[0] : '#weekly'}`, src: src ? src[1] : '주간 리뷰' };
+      })
+    } : null));
+  }
+  REBOOT.expose('insights', { searchTrend, personas, weeklySignals });
 
   /* ───────── 상태 ───────── */
   const S = {
@@ -234,9 +247,27 @@
     const kpis = $(S.root, '[data-ref="kpis"]');
     if (kpis) kpis.hidden = tab !== 'weekly';   // 주간 카드는 주간 리뷰에서만 (월간은 자체 카드)
     drawActions();
+    paintTitle();
     if (tab === 'weekly') { drawWeekly(); setHash('weekly'); }
     if (tab === 'monthly') { if (S.monthly) drawMonthly(); else loadMonthly(S.month); setHash('monthly'); }
     if (tab === 'data') showSub(sub || S.sub || 'shelf');
+  }
+
+  // 화면마다 제목 (주간은 이번 주 긴급 · 기회 수)
+  function paintTitle() {
+    const page = REBOOT.page;
+    const w = S.weekly;
+    const n = g => w.actions.filter(a => a.grade === g).length;
+    if (S.tab === 'weekly') {
+      page.title(!w ? '이번 주 시장 신호' : w.actions.length ? `이번 주 긴급 ${n('긴급')} · 기회 ${n('기회')}` : '이번 주는 특이사항 없음');
+      page.subtitle(w ? `${w.week} · ${w.weekLabel} · 진열대 · 고객 반응 · 검색 수요에서 고른 할 일` : '진열대 · 고객 반응 · 검색 수요를 모아 할 일을 정리해요.');
+    } else if (S.tab === 'monthly') {
+      page.title('지난 한 달, 무엇이 달라졌나');
+      page.subtitle('요약 · 고객 인사이트 · 경쟁사 동향 · 전략을 한 달 단위로 봐요.');
+    } else {
+      page.title('숫자의 원본과 근거');
+      page.subtitle('주간 · 월간 리뷰의 숫자가 나온 진열대 · 리뷰 · 댓글 원본이에요.');
+    }
   }
 
   function drawActions() {
@@ -362,6 +393,7 @@
       return;
     }
     drawKpis();
+    paintTitle();
     if (S.tab === 'weekly') drawWeekly();
     const urgent = S.weekly.actions.filter(a => a.grade === '긴급').length;
     const prev = store.get('summary', null);
@@ -376,18 +408,22 @@
     const w = S.weekly;
     if (!box || !w) return;
     const n = g => w.actions.filter(a => a.grade === g).length;
-    const next = w.seasons[0];
+    // 시즌 검색 기회: 작년 같은 시기 검색이 늘었던 가장 가까운 시즌 (없으면 가장 가까운 시즌) — 이번 주 액션의 시즌과 같은 곳
+    const next = w.seasons.find(x => x.lastYear && x.lastYear.pct > 0) || w.seasons[0];
+    const lift = next && next.lastYear && next.lastYear.pct > 0 ? next.lastYear : null;
     const s = w.shelf;
     // 첫 카드는 같은 화면의 이번 주 액션으로 스크롤
-    const links = ['#weekly', '#data/shelf', '#data/reviews', '/dashboard/home#calendar'];
+    const links = ['#weekly', '#data/shelf', '#data/reviews', '#monthly'];
     box.innerHTML = [
       ui.kpi({ label: '이번 주 액션', value: w.actions.length, unit: '개', featured: true, icon: 'spark',
         change: n('긴급') ? `긴급 ${n('긴급')}` : '', foot: w.actions.length ? `기회 ${n('기회')} · 참고 ${n('참고')}` : (w.hasData ? '특이사항 없음' : '데이터 업데이트 필요') }),
-      ui.kpi({ label: '진열대 상품', value: s.total, unit: '개', icon: 'grid', change: s.oos ? `품절 ${s.oos}` : '', tone: s.oos ? 'down' : '',
+      ui.kpi({ label: '진열대 상품', value: s.total, unit: '개', icon: 'grid', tone: s.oosAll || s.oosSome ? 'down' : '',
+        change: s.oosAll ? `모든 판매처 품절 ${s.oosAll}` : s.oosSome ? `일부 판매처 품절 ${s.oosSome}` : '',
         foot: s.compare && s.compChanges ? `가격 변동 ${s.compChanges.price} · 새 상품 ${s.compChanges.new}` : (s.total ? '변화 비교는 2주차부터' : '아직 수집 전') }),
       ui.kpi({ label: '새 리뷰 (7일)', value: w.reviews.count, unit: '개', icon: 'chat', foot: `자사 ${w.reviews.own} · 경쟁사 ${w.reviews.other}` }),
-      ui.kpi({ label: '다음 시즌', value: next ? next.name : '—', icon: 'calendar', change: next ? fmt.dday(next.start) : '',
-        foot: next ? fmt.date(next.start) : '모니터링 시즌 없음' })
+      ui.kpi({ label: '시즌 검색 기회', value: lift ? fmt.signed(lift.pct, 0, '%') : '—', icon: 'calendar',
+        change: next ? `${next.name} ${fmt.dday(next.start)}` : '',
+        foot: lift ? `작년 같은 시기 '${lift.keyword}' 검색` : next ? '작년 같은 시기 검색 데이터 없음' : '모니터링 시즌 없음' })
     ].map((html, i) => kpiLink(links[i], html)).join('');
   }
 
@@ -428,6 +464,9 @@
     top_question: ['#data/audience', '유튜브 댓글'], season_search: ['#monthly', '월간 리뷰 · 검색 트렌드']
   };
 
+  // 사실 문장의 첫 문장만 (참고 한 줄 · 홈 할 일 제목)
+  const firstSentence = t => { const m = String(t || '').match(/^.+?[.!?](?=\s|$)/); return m ? m[0] : String(t || ''); };
+
   function actionCard(a) {
     const src = ACTION_SRC[a.rule];
     return `<article class="ins-action ${GRADE_CLASS[a.grade] || ''}">
@@ -453,7 +492,13 @@
     const head = `<div class="card-head"><h2>이번 주 액션 <span class="muted small">${esc(w.week)} · ${esc(w.weekLabel)}</span></h2>
       <div class="flex">${w.aiUsed ? badge('AI 문장', 'purple') : badge('규칙 문장')}</div></div>`;
     let list;
-    if (acts.length) list = `<div class="stack tight">${acts.map(actionCard).join('')}</div>`;
+    // 긴급 · 기회는 카드로, 참고는 접은 상자 안에 한 줄씩
+    const main = acts.filter(a => a.grade !== '참고'), refs = acts.filter(a => a.grade === '참고');
+    const refList = refs.length ? `<details class="ins-fold ins-ref" data-fold="refs"${S.open.refs ? ' open' : ''}>
+      <summary>${badge('참고', GRADE_TONE['참고'])} 참고 ${refs.length}개</summary>
+      ${refs.map(a => { const src = ACTION_SRC[a.rule]; return `<div class="ins-ref-row"><span>${esc(firstSentence(a.fact))}</span>
+        ${src ? `<a class="link small" href="${src[0]}">${esc(src[1])} ${icon('arrow')}</a>` : ''}</div>`; }).join('')}</details>` : '';
+    if (acts.length) list = `<div class="stack tight">${main.map(actionCard).join('')}${refList}</div>`;
     else if (w.hasData) list = `<div class="empty-art">${icon('check')}<span><b>특이사항 없음</b><br>이번 주에는 규칙에 걸린 신호가 없어요. 데이터 › 진열대에서 흐름을 확인하세요.</span></div>`;
     else list = `<div class="empty-art">${icon('refresh')}<span><b>특이사항 없음</b><br>아직 모은 데이터가 없어서 걸린 신호가 없어요. 오른쪽 위 <b>데이터 업데이트</b>로 진열대 · 리뷰 · 검색 트렌드를 모으면 이번 주 액션이 계산돼요.</span>
       <button type="button" class="btn lime small" data-act="ins-update">${icon('refresh')}데이터 업데이트</button></div>`;
@@ -465,7 +510,7 @@
       <p class="panel-note mt-8">등급은 규칙이 정하고, AI는 문장만 다듬어요.${w.aiReady ? '' : ' 지금은 OpenAI 키가 없어 규칙 문장 그대로예요.'}</p>
     </details>` : '';
     const weeks = Object.keys(s.weeks || {}).map(src => `${SRC_LABEL[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
-    const own = s.ownWeee;
+    const own = s.ownRank;   // 모든 판매처 · 같은 제품은 한 줄 (진열대 탭과 같은 기준)
     // 재고 주의 제품: 한 줄 설명 (품절 채널 · 옵션 품절 · 남은 개수)
     const watchLines = s.watchLines || [];
     const watchWhat = g => g.oosChannels.length ? `${g.oosChannels.join(' · ')}에서 품절`
@@ -482,8 +527,8 @@
         ${tile('재고 주의 제품', `${esc(watchLines.length)}개`,
           w1 ? esc(`${w1.label} — ${watchWhat(w1)}${watchLines.length > 1 ? ` 외 ${watchLines.length - 1}개` : ''}`) : '품절 · 곧 품절 없음',
           w1 ? `href="#data/shelf" data-act="ins-goto-line" data-line="${esc(w1.id)}"` : 'href="#data/shelf"', w1 ? 'red' : '')}
-        ${tile('자사 가격 순위', own ? `${esc(own.rank)}위 <span class="ins-sum-of">/ ${esc(own.total)}</span>` : '—',
-          own ? esc(`Weee! ${money(own.perServing)} · ${own.bucketLabel} · 1위가 가장 저렴`) : '진열대에서 자사 상품을 못 찾았어요',
+        ${tile('REBOOT 가격 순위', own ? `${esc(own.rank)}위 <span class="ins-sum-of">/ ${esc(own.total)}</span>` : '—',
+          own ? esc(`${own.source} ${money(own.perServing)} · ${own.bucketLabel} · 1위가 가장 저렴`) : '진열대에서 자사 상품을 못 찾았어요',
           'href="#data/shelf"')}
       </div>
       ${s.ownOos ? `<div class="note error mt-16">자사 상품 ${esc(s.ownOos)}개가 품절이에요. 판매처에 재입고 일정을 확인하세요.</div>` : ''}`
@@ -1151,7 +1196,7 @@
     return `<button type="button" class="${cls}" data-act="prod" data-id="${esc(x.id)}" title="${esc(tipText)}" aria-label="${esc(tipText)}">
       <span class="ins-pc-top">${formIcon(p.form)}
         <span class="ins-pc-form">${esc(FORM_KO[p.form] || '기타')}</span>${flag ? `<span class="ins-pc-flag ${flag[1]}">${esc(flag[0])}</span>` : ''}</span>
-      <span class="ins-pc-name">${esc(x.brand || '브랜드 모름')}</span>
+      <span class="ins-pc-name">${esc(p.own ? 'REBOOT' : x.brand || '브랜드 모름')}</span>
       <span class="ins-pc-price">${esc(money(x.perServing))}<small> /1회</small></span>
       <span class="ins-pc-src">${esc(chans.join(' · '))}</span>
     </button>`;
@@ -1185,6 +1230,9 @@
     const all = pantryLines(d);
     const comp = all.filter(p => !p.own);
     const oos = comp.filter(p => p.state === 'oos').length;
+    // 일부 판매처 품절: 한 판매처의 상품이 모두 품절이지만 다른 판매처엔 있음 (주간 리뷰와 같은 기준)
+    const chanOos = p => [...new Set(p.its.map(x => x.source))].some(src => p.its.filter(x => x.source === src).every(x => stockState(x, d.lowStock) === 'oos'));
+    const some = comp.filter(p => p.state !== 'oos' && chanOos(p)).length;
     const low = comp.filter(p => p.state === 'low').length;
     const vals = priced.map(x => x.perServing).sort((a, b) => a - b);
     const median = vals.length ? (vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2) : null;
@@ -1202,8 +1250,8 @@
       <div class="ins-stat"><span>진열대 상품</span><b>${esc(d.items.length)}개</b><small>판매처 ${esc(srcs)}곳</small></div>
       <div class="ins-stat"><span>가장 많은 1회분 가격대</span><b>${esc(top.label)} ${top.n}개</b>
         ${bar}<small>${bands.filter(b => b !== top).map(b => `${esc(b.label)} ${b.n}개`).join(' · ')}</small></div>
-      <div class="ins-stat${own ? '' : ' red'}"><span>알디콤 1회분 ${infoTip(TIP.own)}</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small></div>
-      <div class="ins-stat${oos ? ' red' : low ? ' orange' : ''}"><span>경쟁 제품 품절</span><b>${oos}개</b><small>곧 품절 ${low}개</small></div>
+      <div class="ins-stat${own ? '' : ' red'}"><span>REBOOT 1회분 ${infoTip(TIP.own)}</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small></div>
+      <div class="ins-stat${oos ? ' red' : some || low ? ' orange' : ''}"><span>경쟁 제품 품절 (모든 판매처)</span><b>${oos}개</b><small>일부 판매처 품절 ${some}개 · 곧 품절 ${low}개</small></div>
     </div>`;
   }
 
