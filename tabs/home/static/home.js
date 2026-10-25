@@ -2,9 +2,11 @@
    화면 2개 (왼쪽 메뉴): 데일리 브리핑 · 콘텐츠 캘린더 (시작하기는 2026-10-24 삭제)
    콘텐츠 캘린더 맨 아래: 다음 급등 예상 (접기 · 인사이트 검색 수요 탭에서 2026-10-25 옮김)
    모든 화면 오른쪽 아래: 이번 주 To-Do 버튼 → 사이드 패널 (home.js가 모든 페이지에서 불리므로 여기서 붙임)
-   데일리 브리핑: 히어로(뉴스 신호 · 할 일 · 다음 시즌) → 시즌 카드 3 → KPI 4 → 왼쪽: 성과 차트 · 업계 뉴스 / 오른쪽: To-Do · 최근 활동
-   - 뉴스: 저장된 결과만 읽음 (구글 뉴스는 '지금 수집' 버튼·하루 1회 작업만 부름)
-   - To-Do: 그 주 처음 열면 자동 생성 (OpenAI 키가 없으면 규칙), 항목마다 근거 표시
+   데일리 브리핑: 히어로(긴급 · 기회 · 다음 시즌) → 왼쪽: 이번 주 할 일 · 업계 뉴스 / 오른쪽: 다가오는 시즌 · 한눈에 보기 · 최근 활동
+   (2026-10-25 다시 배치: 시즌 카드 3 · KPI 4 · 성과 차트를 오른쪽 한 줄 요약으로 — 성과 차트는 성과분석 탭에)
+   - 뉴스: 저장된 결과만 읽음 (구글 뉴스는 '지금 수집' 버튼·하루 1회 작업만 부름) · 규제 기사는 컴플라이언스 바로가기
+   - 이번 주 할 일: 인사이트 긴급 · 기회(REBOOT.use('insights').weeklySignals, 읽기 전용) → 홈 할 일
+     홈 할 일은 그 주 처음 열면 자동 생성 (OpenAI 키가 없으면 규칙), 항목마다 근거 표시
    다른 파트에 공개: REBOOT.use('home').seasons() — 시즌 캘린더(D-day · 준비 기간 포함) */
 (function (global) {
   'use strict';
@@ -18,7 +20,7 @@
   const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
   const DAY = 86400000;
 
-  const S = { root: null, view: '', briefing: false, chart: null, range: 'cur', week: null, prevWeek: null, todos: null, news: null, newsOpen: {}, saved: null, poll: null, calMonth: '', watching: false };
+  const S = { root: null, view: '', briefing: false, week: null, todos: null, signals: null, news: null, newsOpen: {}, saved: null, poll: null, calMonth: '' };
   const ref = name => S.root && S.root.querySelector(`[data-ref="${name}"]`);
 
   /* ───────── 줄바꿈: 문장 · 반점 단위 ─────────
@@ -97,132 +99,33 @@
     const p = (REBOOT.meta() || []).find(x => x.id === id);
     return p ? p.label : id ? id : '워크스페이스';
   }
-  function cssVar(name, fallback) {
-    const v = global.getComputedStyle(S.root || doc.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  }
   const isUrl = u => /^https?:\/\//i.test(String(u || ''));
   const arrow = d => (d > 0 ? '▲' : d < 0 ? '▼' : '–');
 
-  /* ───────── KPI ───────── */
-  async function paintKpis() {
-    const box = ref('kpis');
-    const [week, camp] = await Promise.all([weekSummary(), campaigns()]);
-    S.week = week && !week.empty ? week : null;
-    const w = S.week;
-    const tone = d => (d == null ? 'flat' : d > 0 ? '' : d < 0 ? 'down' : 'flat');
-    const foot = w ? `${w.compare ? w.compare.label : '비교 없음'} · ${w.sample ? '샘플 데이터' : `${md(w.start)}—${md(w.end)}`}` : '성과 데이터 없음';
-    const cards = [];
-    const link = (href, html) => `<a class="home-kpi-link" href="${href}">${html}</a>`;
-    cards.push(link('/dashboard/performance', ui.kpi({
-      label: '이번 주 매출', icon: 'dollar', featured: true, value: w ? fmt.num(w.revenue) : '—', unit: w ? '원' : '',
-      change: w && w.change && w.change.revenue != null ? `${arrow(w.change.revenue)} ${fmt.num(Math.abs(w.change.revenue), 1)}%` : '',
-      tone: w && w.change ? tone(w.change.revenue) : 'flat', foot
-    })));
-    cards.push(link('/dashboard/performance', ui.kpi({
-      label: '광고 수익률 (ROAS)', icon: 'chart', value: w && w.roas != null ? fmt.num(w.roas, 0) : '—', unit: w && w.roas != null ? '%' : '',
-      change: w && w.change && w.change.roas != null ? `${arrow(w.change.roas)} ${fmt.num(Math.abs(w.change.roas), 1)}%` : '',
-      tone: w && w.change ? tone(w.change.roas) : 'flat', foot
-    })));
-    if (camp && Number.isFinite(Number(camp.active))) {
-      cards.push(link('/dashboard/content', ui.kpi({ label: '진행 중인 캠페인', icon: 'spark', value: fmt.num(camp.active), unit: '개', foot: `전체 ${fmt.num(camp.total || 0)}개 · 콘텐츠 제작` })));
-    } else {
-      const list = seasons().filter(s => s.inLead || s.ongoing).sort((a, b) => a.dday - b.dday);
-      const near = list[0];
-      cards.push(link('/dashboard/content', ui.kpi({
-        label: '준비 중인 시즌', icon: 'calendar', value: fmt.num(list.length), unit: '개', tone: 'flat',
-        change: near ? `${near.name} ${near.ongoing ? '진행 중' : fmt.dday(near.start)}` : '', foot: '준비 기간에 들어온 시즌'
-      })));
+  /* ───────── 한눈에 보기 (오른쪽 · 시장 신호 · 성과 · 검토 대기) — 숫자는 각 탭이 원본, 여기는 한 줄 요약 + 바로가기 ───────── */
+  async function paintGlance() {
+    const box = ref('glance');
+    if (!box) return;
+    if (!S.week) {
+      const week = await weekSummary();
+      S.week = week && !week.empty ? week : null;
     }
+    const w = S.week;
+    const row = (href, label, value, tag) => `<a class="home-glance-row" href="${href}"><span>${esc(label)}${tag || ''}</span><b>${value}</b>${icon('arrow')}</a>`;
+    const rows = [];
+    const sig = S.signals;
+    const n = g => (sig ? sig.items.filter(i => i.grade === g).length : 0);
+    rows.push(row('/dashboard/insights#weekly', '시장 신호', sig ? esc(`긴급 ${n('긴급')} · 기회 ${n('기회')}`) : '—'));
+    const ch = w && w.change && w.change.revenue;
+    rows.push(row('/dashboard/performance', '이번 주 매출', w ? esc(`${fmt.krw(w.revenue)}${ch != null ? ` ${arrow(ch)}${fmt.num(Math.abs(ch), 1)}%` : ''}`) : '—',
+      w && w.sample ? ' ' + badge('예시', 'orange') : ''));
     const cs = csStats();
     const comp = compliancePending();
-    const parts = [];
-    if (cs && Number.isFinite(Number(cs.open))) parts.push(`CS ${cs.open}`);
-    if (comp != null) parts.push(`카피 ${comp}`);
-    const csOpen = cs && Number(cs.open) || 0;
-    const total = csOpen + (comp || 0);
+    const csOpen = cs && Number.isFinite(Number(cs.open)) ? Number(cs.open) : null;
+    const parts = [csOpen != null ? `CS ${csOpen}` : '', comp != null ? `카피 ${comp}` : ''].filter(Boolean);
     // 대기 건수가 더 많은 파트로 (같으면 컴플라이언스)
-    cards.push(link(csOpen > (comp || 0) ? '/dashboard/cs' : '/dashboard/compliance', ui.kpi({
-      label: '검토가 필요한 업무', icon: 'clock', value: parts.length ? fmt.num(total) : '—', unit: parts.length ? '건' : '', tone: 'flat',
-      change: parts.join(' · '), foot: parts.length ? '담당자 확인 필요' : '연결된 파트 없음'
-    })));
-    box.innerHTML = cards.join('');
-  }
-
-  /* ───────── 이번 주 성과 차트 ───────── */
-  function destroyChart() { if (S.chart) { try { S.chart.destroy(); } catch (e) { /* 이미 없음 */ } S.chart = null; } }
-  async function paintChart() {
-    const card = ref('chart-card');
-    const w = S.week;
-    if (!w) {
-      destroyChart();
-      ref('chart-body').innerHTML = ui.empty('성과 데이터가 없어요. 성과분석에서 매출 CSV를 올리면 여기에 이번 주 매출·광고비가 나옵니다.', 'chart');
-      return;
-    }
-    const prevBtn = card.querySelector('[data-range="prev"]');
-    if (prevBtn) prevBtn.disabled = !w.compare;
-    let s = w;
-    if (S.range === 'prev' && w.compare) {
-      if (!S.prevWeek) S.prevWeek = await safe(() => REBOOT.use('performance').summary({ start: w.compare.start, end: w.compare.end }));
-      if (S.prevWeek) s = S.prevWeek;
-    }
-    ref('chart-tag').innerHTML = w.sample ? badge('샘플 데이터', 'orange') : '';
-    ref('chart-value').textContent = fmt.krw(s.revenue);
-    const ch = s.change && s.change.revenue;
-    ref('chart-change').innerHTML = ch != null ? badge(`${arrow(ch)} ${fmt.num(Math.abs(ch), 1)}%`, ch >= 0 ? 'green' : 'red') : '';
-    ref('chart-range').textContent = `${s.start.replace(/-/g, '.')} — ${md(s.end)} 매출 합계 · 광고비 ${fmt.krw(s.spend)}`;
-    drawChart(s.daily || []);
-  }
-  function drawChart(daily) {
-    destroyChart();
-    const C = global.Chart;
-    const canvas = ref('chart');
-    if (!C || !canvas) return;
-    const muted = cssVar('--muted', '#858981'), line = cssVar('--line', '#e9ece4');
-    const rev = cssVar('--home-rev', '#759a08'), spend = cssVar('--home-spend', '#334324');
-    const fillTop = cssVar('--home-rev-fill', 'rgba(215,255,63,.35)'), surface = cssVar('--surface', '#ffffff');
-    const family = global.getComputedStyle(doc.body).fontFamily;
-    const font = size => ({ family, size });
-    S.chart = new C(canvas, {
-      type: 'line',
-      data: {
-        labels: daily.map(d => `${md(d.date)} ${WEEKDAY[dow(d.date)]}`),
-        datasets: [
-          {
-            label: '매출', data: daily.map(d => d.revenue), borderColor: rev, borderWidth: 2, tension: 0.35,
-            pointRadius: 0, pointHoverRadius: 5, pointBackgroundColor: rev, pointBorderColor: surface, pointBorderWidth: 2,
-            fill: 'origin',
-            backgroundColor: ctx => {
-              const area = ctx.chart.chartArea;
-              if (!area) return 'transparent';
-              const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
-              g.addColorStop(0, fillTop);
-              g.addColorStop(1, 'rgba(215,255,63,0)');
-              return g;
-            }
-          },
-          {
-            label: '광고비', data: daily.map(d => d.spend), borderColor: spend, backgroundColor: spend, borderWidth: 1.6,
-            borderDash: [5, 5], tension: 0.35, pointRadius: 0, pointHoverRadius: 4, pointBorderColor: surface, pointBorderWidth: 2, fill: false
-          }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false, animation: { duration: 250 },
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { display: false },  // 범례는 카드 위 HTML (매출 · 광고비)
-          tooltip: { titleFont: font(11), bodyFont: font(12), padding: 10, callbacks: { label: c => ` ${c.dataset.label}: ${fmt.krw(c.parsed.y)}` } }
-        },
-        scales: {
-          x: { grid: { display: false }, border: { color: line }, ticks: { color: muted, font: font(10), maxRotation: 0 } },
-          y: {
-            beginAtZero: true, grid: { color: line }, border: { display: false },
-            ticks: { color: muted, font: font(10), maxTicksLimit: 5, callback: v => (Math.abs(v) >= 10000 ? fmt.num(Math.round(v / 10000)) + '만' : fmt.num(v)) }
-          }
-        }
-      }
-    });
+    rows.push(row((csOpen || 0) > (comp || 0) ? '/dashboard/cs' : '/dashboard/compliance', '검토 대기', parts.length ? esc(parts.join(' · ')) : '—'));
+    box.innerHTML = rows.join('');
   }
 
   /* ───────── 시즌 (브리핑 히어로 · 시즌 카드 · 콘텐츠 캘린더) ───────── */
@@ -231,33 +134,41 @@
     return seasons().filter(s => s.ongoing || s.dday >= 0).sort((a, b) => seasonKey(a) - seasonKey(b));
   }
   const pad2 = v => (v == null ? '—' : String(v).padStart(2, '0'));
+  // 히어로: 긴급 할 일이 있으면 '오늘 먼저 할 일 N개', 없으면 다음 시즌 / 숫자: 긴급 · 기회 · 다음 시즌
   function paintHero() {
     const title = ref('hero-title');
     if (!title) return;
     const s = upcomingSeasons()[0];
-    title.textContent = !s ? '이번 주 우선순위를 정해 보세요.'
-      : s.ongoing ? `${s.name}, 지금이 바로 그 시즌.`
-        : s.dday === 0 ? `오늘은 ${s.name}.` : `${s.name}까지 ${s.dday}일, 준비는 지금부터.`;
-    const n = S.news;
-    ref('hero-news').textContent = n ? pad2(topSurges(n).length) : '—';
-    ref('hero-todo').textContent = S.todos ? pad2(S.todos.items.filter(i => !i.done).length) : '—';
+    const when = !s ? '' : s.ongoing ? `${s.name} 진행 중` : `${s.name} ${fmt.dday(s.start)}`;
+    const urgent = urgentCount();
+    title.textContent = urgent ? `오늘 먼저 할 일 ${urgent}개${when ? `, ${when}` : ''}`
+      : !s ? '이번 주 우선순위를 정해 보세요.'
+        : s.ongoing ? `${s.name}, 지금이 바로 그 시즌.`
+          : s.dday === 0 ? `오늘은 ${s.name}.` : `${s.name}까지 ${s.dday}일, 준비는 지금부터.`;
+    const sig = S.signals;
+    ref('hero-urgent').textContent = sig || S.todos ? pad2(urgent) : '—';
+    ref('hero-chance').textContent = sig ? pad2(sig.items.filter(i => i.grade === '기회').length) : '—';
     ref('hero-season').textContent = s ? (s.ongoing ? 'NOW' : fmt.dday(s.start)) : '—';
   }
-  function paintSeasonCards() {
-    const box = ref('season-cards');
+  // 긴급 = 인사이트 긴급 신호 + CS 긴급 건이 있으면 1 (CS 할 일은 AI 할 일 안에 있음)
+  function urgentCount() {
+    const sig = S.signals ? S.signals.items.filter(i => i.grade === '긴급').length : 0;
+    const cs = csStats();
+    return sig + (cs && Number(cs.urgent) > 0 ? 1 : 0);
+  }
+  // 다가오는 시즌 (오른쪽 · 한 줄씩) — 달력 · 준비 기간 자세히는 콘텐츠 캘린더
+  function paintSeasons() {
+    const box = ref('seasons');
     const list = upcomingSeasons().slice(0, 3);
     if (!list.length) {
-      box.innerHTML = `<div class="card" style="grid-column:1/-1">${ui.empty('다가오는 시즌이 없어요. 설정 › 수집 설정에서 시즌을 추가하세요.', 'calendar')}</div>`;
+      box.innerHTML = ui.empty('다가오는 시즌이 없어요. 설정 › 수집 설정에서 시즌을 추가하세요.', 'calendar');
       return;
     }
-    box.innerHTML = list.map((s, i) => {
-      const status = s.ongoing ? badge('진행 중', 'green') : s.inLead ? badge('준비 기간', 'green') : badge('다가오는 시즌');
-      const range = s.end && s.end !== s.start ? `${s.start.replace(/-/g, '.')} — ${md(s.end)}` : s.start.replace(/-/g, '.');
-      const note = s.notes || (s.ongoing ? '게시 일정과 재고를 확인하세요.' : `준비 시작 ${md(addDays(s.start, -s.leadDays))} · 준비 기간 ${s.leadDays}일`);
-      return `<div class="season-card${i === 0 && (s.inLead || s.ongoing) ? ' featured' : ''}">
-        <div class="between">${status}<span class="days-left">${s.ongoing ? 'NOW' : esc(fmt.dday(s.start))}</span></div>
-        <h3>${esc(s.name)}</h3><p>${esc(range)} (${WEEKDAY[dow(s.start)]})</p><div class="rule"></div><p>${esc(note)}</p>
-        <a class="link" href="/dashboard/content">캠페인 준비 ${icon('arrow')}</a></div>`;
+    box.innerHTML = list.map(s => {
+      const status = s.ongoing ? badge('진행 중', 'green') : s.inLead ? badge('준비 기간', 'green') : '';
+      const tip = s.notes || (s.ongoing ? '게시 일정과 재고를 확인하세요.' : `준비 시작 ${md(addDays(s.start, -s.leadDays))} · 준비 기간 ${s.leadDays}일`);
+      return `<button type="button" class="home-season-row${s.inLead || s.ongoing ? ' on' : ''}" data-go-view="calendar" title="${esc(tip)}">
+        <b>${s.ongoing ? 'NOW' : esc(fmt.dday(s.start))}</b><span class="grow">${esc(s.name)}<small>${esc(s.start.replace(/-/g, '.'))} (${WEEKDAY[dow(s.start)]})</small></span>${status}</button>`;
     }).join('');
   }
 
@@ -367,12 +278,12 @@
   function saveBadge() {
     const t = S.todos;
     if (!t) return;
-    const v = { week: t.week.start, open: t.items.filter(i => !i.done).length };
+    const v = { week: t.week.start, open: t.items.filter(i => !i.done).length + (S.signals ? S.signals.items.length : 0) };
     const old = store.get('todoBadge', null);
     if (!old || old.week !== v.week || old.open !== v.open) store.set('todoBadge', v);
     const el = doc.querySelector('[data-count="home"]');
     if (el) { el.textContent = v.open > 99 ? '99+' : String(v.open); el.hidden = v.open <= 0; }
-    dock.sync(t);
+    dock.sync(t, S.signals);
   }
   function todoHtml(t) {
     const tag = t.origin === 'ai' ? badge('AI', 'purple') : t.origin === 'rule' ? badge('규칙') : badge('직접', 'blue');
@@ -383,17 +294,33 @@
         <span class="grow"><span class="task-title">${esc(t.title)}</span><span class="meta">${tag}근거: ${esc(t.reason || '—').replace(/\bD-(\d)/g, 'D‑$1')}${src}${t.done && t.doneBy ? ` · 완료 ${esc(t.doneBy)}` : ''}</span></span></label>
       <button type="button" class="home-todo-del" data-act="todo-del" aria-label="삭제: ${esc(t.title)}">${icon('x')}</button></div>`;
   }
+  // 인사이트 신호 한 줄 (읽기 전용 · 체크 없음 — 데이터가 바뀌면 다음 주간 계산에서 빠짐)
+  function signalHtml(x) {
+    return `<div class="task home-signal ${x.grade === '긴급' ? 'urgent' : 'chance'}">
+      <span class="grow"><span class="task-title"><span class="home-grade">${esc(x.grade)}</span>${esc(x.title)}</span>
+        <span class="meta">할 일: ${esc(x.todo)}</span></span>
+      <a class="link home-signal-go" href="${esc(x.href)}">${esc(x.src)} ${icon('arrow')}</a></div>`;
+  }
+  // 이번 주 할 일 = 인사이트 긴급 → 인사이트 기회 → 홈 할 일(AI · 규칙 · 직접)
   function paintTodos() {
     const t = S.todos;
     const list = ref('todos');
     if (!t) return;
+    const sig = S.signals ? S.signals.items.slice().sort((a, b) => (a.grade === '긴급' ? 0 : 1) - (b.grade === '긴급' ? 0 : 1)) : [];
     const open = t.items.filter(i => !i.done).length;
-    ref('todo-count').textContent = t.items.length ? `${open}개 남음` : '';
-    const how = !t.generated ? '아직 만들지 않음' : t.origin === 'ai' ? 'AI가 시즌·뉴스·현황을 종합 (참고용)' : `규칙으로 생성${t.aiReady ? '' : ' (AI 미연결)'}`;
-    ref('todo-meta').textContent = `${md(t.week.start)} — ${md(t.week.end)} · ${how}`;
-    list.innerHTML = t.items.length ? t.items.map(todoHtml).join('') : ui.empty('이번 주 할 일이 없어요. + 로 추가하거나 다시 만들기를 누르세요.', 'check');
+    ref('todo-count').textContent = t.items.length || sig.length ? `${open + sig.length}개` : '';
+    const how = !t.generated ? '아직 만들지 않음' : t.origin === 'ai' ? 'AI 할 일은 시즌·뉴스·현황 종합 (참고용)' : `규칙으로 생성${t.aiReady ? '' : ' (AI 미연결)'}`;
+    ref('todo-meta').textContent = `${md(t.week.start)} — ${md(t.week.end)} · ${sig.length ? '긴급 → 기회 → 홈 할 일 · ' : ''}${how}`;
+    const sigBlock = sig.length ? `<div class="home-signals">${sig.map(signalHtml).join('')}</div>` : '';
+    list.innerHTML = t.items.length || sig.length ? sigBlock + t.items.map(todoHtml).join('') : ui.empty('이번 주 할 일이 없어요. + 로 추가하거나 다시 만들기를 누르세요.', 'check');
     saveBadge();
     paintHero();
+  }
+  async function loadSignals() {
+    S.signals = await safe(() => REBOOT.use('insights').weeklySignals());
+    paintTodos();
+    paintHero();
+    paintGlance();
   }
   async function loadTodos() {
     try {
@@ -475,11 +402,9 @@
   function articleLink(a, text) {
     return isUrl(a.url) ? `<a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>` : esc(text);
   }
-  // 히어로 '뉴스 시그널' 숫자: 업계 핵심 분야(자리 보장: 숙취 · 경쟁사 · 규제)의 보도 급증 수. 분야별 변화는 검색어 점검 안에서 봄
-  function topSurges(n) {
-    const core = new Set((n.groups || []).filter(g => g.kind === 'signal').map(g => g.id));
-    return (n.signals || []).filter(s => s.surge && core.has(s.group));
-  }
+  // 규제 기사는 컴플라이언스 탭으로 바로 (표시 문구 점검)
+  const isRegulation = a => a.area === 'regulation' || a.topic === '규제·정책';
+  const compLink = a => (isRegulation(a) ? `<a class="home-comp-link" href="/dashboard/compliance">컴플라이언스에서 점검 ${icon('arrow')}</a>` : '');
 
   /* 기사 보관 (책갈피): /api/home/news/saved — 시장·고객 인사이트 › 데이터 › 뉴스 수집에서 모아 봄 */
   const BOOKMARK = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg>';
@@ -571,6 +496,7 @@
         <p class="home-lead-title">${articleLink(a, a.titleKo || a.title)}</p>
         ${a.summaryKo ? `<p class="home-lead-sum">${esc(a.summaryKo)}</p>` : ''}
         ${a.whyKo ? `<p class="home-lead-view"><span class="sr-only">${viewLabel(a)}: </span>${esc(a.whyKo)}</p>` : ''}
+        ${compLink(a)}
       </article>`;
   }
   function rowHtml(a, i, read) {
@@ -578,7 +504,8 @@
     return `<article class="home-row${isUrl(a.url) ? ' home-news-card' : ''}${read ? ' read' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''} title="${esc(tipText(a))}">
         <span class="home-row-no">${i}</span>
         <div class="home-row-main"><p class="home-row-title">${articleLink(a, a.titleKo || a.title)}${a.fallback ? ' ' + badge('요약 없음') : ''}</p>
-          ${a.whyKo ? `<p class="home-row-view"><span aria-hidden="true">→</span> <span class="sr-only">${viewLabel(a)}: </span>${esc(a.whyKo)}</p>` : a.domain && !a.titleKo ? `<p class="home-row-view">${esc(a.domain)}</p>` : ''}</div>
+          ${a.whyKo ? `<p class="home-row-view"><span aria-hidden="true">→</span> <span class="sr-only">${viewLabel(a)}: </span>${esc(a.whyKo)}</p>` : a.domain && !a.titleKo ? `<p class="home-row-view">${esc(a.domain)}</p>` : ''}
+          ${compLink(a)}</div>
         <span class="home-row-side">${a.surge ? '<b>급증</b> · ' : ''}${side}</span>${saveBtn(a)}</article>`;
   }
 
@@ -671,17 +598,6 @@
   }
 
   /* ───────── 화면 ───────── */
-  function watchTheme() {
-    if (S.watching) return;
-    S.watching = true;
-    const redraw = () => { if (S.chart && S.week) paintChart(); };
-    if (global.MutationObserver) new global.MutationObserver(redraw).observe(doc.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    if (global.matchMedia) {
-      const mq = global.matchMedia('(prefers-color-scheme: dark)');
-      if (mq.addEventListener) mq.addEventListener('change', redraw);
-    }
-  }
-
   /* 홈의 하위 화면: 데일리 브리핑 · 콘텐츠 캘린더
      탭 줄(role="tablist")은 core.js가 왼쪽 메뉴로 옮겨 보여 줍니다. 주소 #briefing · #calendar로 바로 열 수 있음 */
   const VIEWS = [['briefing', '데일리 브리핑', 'chart'], ['calendar', '콘텐츠 캘린더', 'calendar']];
@@ -708,12 +624,12 @@
   }
   function paintBriefing() {
     paintHero();
-    paintSeasonCards();
+    paintSeasons();
     paintActivity();
     loadNews();
-    watchTheme();
     const noop = () => {};
-    paintKpis().catch(noop).then(() => paintChart()).catch(noop).then(loadTodos);
+    paintGlance().catch(noop).then(loadTodos);
+    loadSignals();
   }
   function showView(id, opts) {
     S.view = id;
@@ -745,36 +661,28 @@
       <div data-view-panel="briefing" role="tabpanel" hidden>
         <section class="brief-hero" data-go-view="calendar" title="콘텐츠 캘린더 보기">
           <div><span class="eyebrow">YOUR DAILY START</span><h2 data-ref="hero-title">—</h2>
-            <p>시즌의 타이밍과 업계의 이야기를 연결해 이번 주 우선순위를 정해보세요.</p>
+            <p>시장 신호 · 시즌 · 고객 응대를 모아 이번 주 우선순위를 정리했어요.</p>
             <div class="flex wrap" style="margin-top:19px"><a class="btn lime" href="/dashboard/content">${icon('spark')} 캠페인 준비하기</a>
               <a class="btn small" href="/dashboard/insights">시장 인사이트 보기</a></div></div>
           <div class="hero-stat">
-            <div><strong data-ref="hero-news">—</strong><small>뉴스 시그널</small></div>
-            <div><strong data-ref="hero-todo">—</strong><small>이번 주 할 일</small></div>
+            <div><strong data-ref="hero-urgent">—</strong><small>긴급</small></div>
+            <div><strong data-ref="hero-chance">—</strong><small>기회</small></div>
             <div><strong data-ref="hero-season">—</strong><small>다음 주요 시즌</small></div>
           </div>
         </section>
-        <div class="section-title"><h2>다가오는 미국 시즌</h2>${badge('시즌 캘린더 · 설정에서 편집')}</div>
-        <div class="three-col" data-ref="season-cards"></div>
-        <div class="kpis section-gap" data-ref="kpis" aria-label="이번 주 요약">${'<div class="kpi"><div class="skeleton" style="height:100%"></div></div>'.repeat(4)}</div>
-        <div class="home-layout">
+        <div class="home-layout section-gap">
           <div class="stack">
-            <section class="card" data-ref="chart-card">
-              <div class="card-head"><h2>이번 주 성과 <span data-ref="chart-tag"></span></h2>
-                <div class="flex wrap">
-                  <div class="period" role="group" aria-label="기간">
-                    <button type="button" class="selected" data-range="cur" aria-pressed="true">최근 7일</button>
-                    <button type="button" data-range="prev" aria-pressed="false">직전 7일</button>
-                  </div>
-                  <a class="link" href="/dashboard/performance">자세히 보기 ${icon('arrow')}</a>
-                </div></div>
-              <div data-ref="chart-body">
-                <div class="between home-chart-top">
-                  <div class="home-chart-summary"><strong data-ref="chart-value">—</strong><span data-ref="chart-change"></span><small data-ref="chart-range"></small></div>
-                  <div class="home-legend" aria-hidden="true"><span class="rev">매출</span><span class="spend">광고비</span></div>
-                </div>
-                <div class="home-chart"><canvas data-ref="chart" role="img" aria-label="최근 7일 일별 매출(실선)과 광고비(점선) — 자세한 숫자는 성과분석"></canvas></div>
-              </div>
+            <section class="card">
+              <div class="card-head home-todo-head"><h2>이번 주 할 일 <span class="muted small" data-ref="todo-count"></span></h2>
+                <div class="flex"><button type="button" class="btn small ghost" data-act="todo-regen" title="완료 안 한 자동 항목을 새로 만들기">${icon('refresh')} 다시 만들기</button>
+                <button type="button" class="icon-btn" data-act="todo-add" aria-label="할 일 추가">${icon('plus')}</button></div></div>
+              <p class="panel-note home-todo-meta" data-ref="todo-meta"></p>
+              <form class="home-todo-form" data-ref="todo-form" hidden>
+                <input class="input" name="title" maxlength="200" placeholder="할 일 (예: 핼러윈 릴스 2편 게시)" aria-label="할 일">
+                <input class="input" name="reason" maxlength="500" placeholder="근거 (선택)" aria-label="근거">
+                <div class="flex"><button type="submit" class="btn small lime">추가</button><button type="button" class="btn small ghost" data-act="todo-cancel">취소</button></div>
+              </form>
+              <div data-ref="todos"><div class="skeleton" style="height:120px"></div></div>
             </section>
             <section class="card home-brief" aria-label="미국 시장 브리핑">
               <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="home-brief-sub" data-ref="news-sub"></span></div>
@@ -788,21 +696,10 @@
             </section>
           </div>
           <aside class="stack">
-            <section class="card">
-              <div class="card-head home-todo-head"><h2>이번 주 To-Do <span class="muted small" data-ref="todo-count"></span></h2>
-                <div class="flex"><button type="button" class="btn small ghost" data-act="todo-regen" title="완료 안 한 자동 항목을 새로 만들기">${icon('refresh')} 다시 만들기</button>
-                <button type="button" class="icon-btn" data-act="todo-add" aria-label="할 일 추가">${icon('plus')}</button></div></div>
-              <p class="panel-note home-todo-meta" data-ref="todo-meta"></p>
-              <form class="home-todo-form" data-ref="todo-form" hidden>
-                <input class="input" name="title" maxlength="200" placeholder="할 일 (예: 핼러윈 릴스 2편 게시)" aria-label="할 일">
-                <input class="input" name="reason" maxlength="500" placeholder="근거 (선택)" aria-label="근거">
-                <div class="flex"><button type="submit" class="btn small lime">추가</button><button type="button" class="btn small ghost" data-act="todo-cancel">취소</button></div>
-              </form>
-              <div data-ref="todos"><div class="skeleton" style="height:120px"></div></div>
-            </section>
-            <section class="card"><h3 class="home-side-title">더 깊은 시장 정보가 필요하다면</h3>
-              <p class="panel-note" style="margin:10px 0 16px">진열대 · 구매자 리뷰 · 잠재 고객은 시장·고객 인사이트에서 확인하세요.</p>
-              <a class="btn small" href="/dashboard/insights">시장·고객 인사이트 ${icon('arrow')}</a></section>
+            <section class="card"><div class="card-head"><h2>다가오는 시즌</h2><button type="button" class="link small" data-go-view="calendar">캘린더 ${icon('arrow')}</button></div>
+              <div class="home-seasons" data-ref="seasons"></div></section>
+            <section class="card"><div class="card-head"><h2>한눈에 보기</h2></div>
+              <div class="home-glance" data-ref="glance"><div class="skeleton" style="height:96px"></div></div></section>
             <section class="card"><div class="card-head"><h2>최근 워크스페이스 활동</h2></div><ul class="activity" data-ref="activity"><li>불러오는 중…</li></ul></section>
           </aside>
         </div>
@@ -817,15 +714,8 @@
         if (v.dataset.goView && global.scrollTo) global.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
-      const r = e.target.closest('[data-range]');
-      if (r && !r.disabled) {
-        S.range = r.dataset.range;
-        root.querySelectorAll('[data-range]').forEach(b => { b.classList.toggle('selected', b === r); b.setAttribute('aria-pressed', String(b === r)); });
-        paintChart();
-        return;
-      }
       const card = e.target.closest('.home-news-card');
-      if (card && !e.target.closest('button')) {
+      if (card && !e.target.closest('button, .home-comp-link')) {
         markRead(card.dataset.href);
         if (!e.target.closest('a')) global.open(card.dataset.href, '_blank', 'noopener');
         paintNews();
@@ -862,7 +752,7 @@
      버튼 → 오른쪽 사이드 패널: 할 일 확인 · 체크만 (추가 · 삭제 · 다시 만들기는 데일리 브리핑에서)
      홈 화면이 열려 있으면 브리핑의 To-Do 카드와 같은 목록을 함께 고침 */
   const dock = (() => {
-    const D = { el: null, todos: null, open: false, loading: false };
+    const D = { el: null, todos: null, signals: null, open: false, loading: false };
     const q = name => D.el && D.el.querySelector(`[data-dock="${name}"]`);
 
     function itemHtml(t) {
@@ -870,25 +760,35 @@
         <input type="checkbox" data-dock-toggle${t.done ? ' checked' : ''} aria-label="완료 표시: ${esc(t.title)}">
         <span class="grow"><span class="home-dock-title">${esc(t.title)}</span><span class="home-dock-reason">근거: ${esc(t.reason || '—')}</span></span></label>`;
     }
+    // 인사이트 긴급 · 기회 (읽기 전용) — 누르면 근거 화면
+    function signalHtml(x) {
+      return `<a class="home-dock-item home-dock-signal ${x.grade === '긴급' ? 'urgent' : 'chance'}" href="${esc(x.href)}">
+        <span class="home-grade">${esc(x.grade)}</span><span class="grow"><span class="home-dock-title">${esc(x.title)}</span><span class="home-dock-reason">${esc(x.src)}에서 근거 보기</span></span></a>`;
+    }
     function paint() {
       if (!D.el) return;
       const t = D.todos;
-      const open = t ? t.items.filter(i => !i.done).length : 0;
+      const sig = D.signals ? D.signals.items.slice().sort((a, b) => (a.grade === '긴급' ? 0 : 1) - (b.grade === '긴급' ? 0 : 1)) : [];
+      const open = (t ? t.items.filter(i => !i.done).length : 0) + sig.length;
       const count = q('count');
       count.textContent = open > 99 ? '99+' : String(open);
       count.hidden = !t || open <= 0;
-      q('left').textContent = t && t.items.length ? `${open}개 남음` : '';
+      q('left').textContent = open ? `${open}개 남음` : '';
       q('meta').textContent = t ? `${md(t.week.start)} — ${md(t.week.end)}` : '';
       const list = q('list');
       if (!t) { list.innerHTML = D.loading ? '<div class="skeleton" style="height:120px"></div>' : ''; return; }
       list.innerHTML = !t.generated
         ? ui.empty('이번 주 할 일이 아직 없어요. 데일리 브리핑을 열면 자동으로 만들어져요.', 'check')
-        : t.items.length ? t.items.map(itemHtml).join('') : ui.empty('이번 주 할 일이 없어요.', 'check');
+        : t.items.length || sig.length ? sig.map(signalHtml).join('') + t.items.map(itemHtml).join('') : ui.empty('이번 주 할 일이 없어요.', 'check');
     }
     async function load() {
       D.loading = true;
       paint();
-      try { D.todos = await REBOOT.api('/api/home/todos'); }
+      try {
+        const [t, sig] = await Promise.all([REBOOT.api('/api/home/todos'), safe(() => REBOOT.use('insights').weeklySignals())]);
+        D.todos = t;
+        D.signals = sig;
+      }
       catch (e) { const list = q('list'); if (list) list.innerHTML = `<p class="note error">할 일을 불러오지 못했습니다: ${esc(e.message)}</p>`; return; }
       finally { D.loading = false; }
       paint();
@@ -941,7 +841,7 @@
       if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', mount);
       else mount();
     }
-    return { sync(t) { D.todos = t; paint(); } };
+    return { sync(t, sig) { D.todos = t; if (sig) D.signals = sig; paint(); } };
   })();
 
   REBOOT.register({
