@@ -1806,7 +1806,7 @@ ${v.selfBad.length ? `<h4 class="cmp-h4">기대와 다른 예문</h4><ul class="
      이 탭 줄은 core가 왼쪽 메뉴 '규제 모니터링' 아래에 들여 써서 보여 줌 */
   const MON_TABS = [
     ['auto', '수집 결과', 'filter', '서버가 하루 1회 기관 공식 데이터에서 가져옴 · 직접 올린 경고장도 여기에 합쳐짐'],
-    ['cands', '사례집 후보', 'edit', '경고장에서 뽑은 문구 · 사람이 승인한 것만 사례집·규칙 검증에 씀'],
+    ['cands', '사례집 후보', 'edit', '경고장·NAD 결정에서 뽑은 문구 · 사람이 승인한 것만 사례집·규칙 검증에 씀'],
     ['manual', '사람이 확인', 'user', '서버가 자동으로 못 읽는 사이트 바로가기 · 저장되지 않는 즉석 조회']
   ];
   SUBS.monitor = MON_TABS;
@@ -1878,7 +1878,7 @@ ${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refre
 </div>
 <label class="cmp-field"><span>경고장 본문</span><textarea class="cmp-input" rows="6" data-el="wltext"></textarea></label>
 <div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="wl-text" disabled>본문에서 문구 뽑기</button></div>
-<div data-el="wlmsg" aria-live="polite"></div>`, false) + fold('guide', '출처 안내', `공식 API ${auto}곳 · 어디서 무엇을 가져와 어디에 쓰나 · 필요한 키 · 지금 상태`, `
+<div data-el="wlmsg" aria-live="polite"></div>`, false) + fold('guide', '출처 안내', `자동 수집 ${auto}곳 · 어디서 무엇을 가져와 어디에 쓰나 · 필요한 키 · 지금 상태`, `
 <div data-el="mon-guide">${monGuideHTML(null, [])}</div>`, false) + `</div>
 </div>
 <div class="cmp-subpanel" data-sub="cands" hidden>
@@ -1888,7 +1888,7 @@ ${monHead('cands')}
 <div class="cmp-subpanel" data-sub="manual" hidden>
 ${monHead('manual')}
 <div class="cmp-folds">` + fold('manual', '바로가기로 확인하는 곳', `${(DATA.manualChecks || []).length}곳 · 서버가 자동으로 못 읽는 사이트`, `
-<p class="cmp-muted">아래 사이트는 서버 자동 수집이 막혀 있어 버튼으로 열어 확인합니다 (2026-10-24 확인). 나머지 출처(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)는 '수집 결과' 메뉴에서 [지금 수집]과 하루 1회 작업으로 모읍니다.</p>
+<p class="cmp-muted">아래 사이트는 아직 자동 수집하지 않아 버튼으로 열어 확인합니다. 나머지 출처(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)와 Firecrawl로 읽는 곳(NAD · FTC 보도자료 · Prop 65 60일 통지 · 올리브영 회원 정책, 2026-10-26부터)은 '수집 결과' 메뉴에서 [지금 수집]과 하루 1회 작업으로 모읍니다. Prop 65 통지·올리브영 정책은 Firecrawl 크레딧을 아끼려고 주 1회만 새로 읽습니다.</p>
 <div class="cmp-table-wrap"><table class="cmp-table">
   <thead><tr><th>사이트</th><th>무엇을 보나</th><th>자동으로 못 읽는 이유</th></tr></thead>
   <tbody>${(DATA.manualChecks || []).map(m => `<tr><td class="cmp-nowrap">${link(m.url, m.name + ' ↗')}</td><td>${esc(m.what)}</td><td class="cmp-muted">${esc(m.why)}</td></tr>`).join('')}</tbody>
@@ -2161,7 +2161,7 @@ ${monFilterHTML()}
 
     cbox.innerHTML = `
 <p class="cmp-summary">후보 ${cands.length}개 · 승인 대기 ${nCand}개 · 승인 ${approved.length}개</p>
-<p class="cmp-muted">수집한 경고장 문구는 자동으로 사례집이나 규칙에 들어가지 않습니다. 사람이 승인한 문구만 내려받아 <code>data.js</code>의 <code>warningQuotes</code>에 옮기고 규칙 검증을 다시 실행합니다. <b>PASS로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요합니다.</p>
+<p class="cmp-muted">수집한 경고장·NAD 결정 문구(NAD는 식품·음료·건강 결정만)는 자동으로 사례집이나 규칙에 들어가지 않습니다. 사람이 승인한 문구만 내려받아 <code>data.js</code>의 <code>warningQuotes</code>에 옮기고 규칙 검증을 다시 실행합니다. <b>PASS로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요합니다.</p>
 ${cands.length ? `
 <div class="cmp-row">
   <label class="cmp-field"><span>검토자</span><input class="cmp-input" data-el="reviewer" value="${esc(reviewer)}" placeholder="이름"></label>
@@ -2451,7 +2451,7 @@ ${cands.length ? `
     <p class="cmp-agency-one">${esc(a.oneLine)}</p>
     <h5>REBOOT에 해당하는 것</h5>
     <ul>${a.forUs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-    <p class="cmp-muted"><b>어기면</b> ${esc(a.risk)} · <b>관련 규칙</b> ${esc(a.rules)}</p>
+    <p class="cmp-muted"><b>어기면</b> ${esc(a.risk)} · <b>관련 규칙</b> ${esc(a.rules)}</p>${policyLine(a)}
     <div class="cmp-actions">${link(a.url, '공식 정책 ↗')}</div>
   </article>`).join('')}</div>`, false) + fold('ag-terms', '자주 나오는 용어', `${(DATA.agencyTerms || []).length}개`, `
 <dl class="cmp-terms">${(DATA.agencyTerms || []).map(t => `<div><dt>${esc(t.term)}</dt><dd>${esc(t.desc)}</dd></div>`).join('')}</dl>`, false) + `</div>`;
@@ -2468,3 +2468,15 @@ ${cands.length ? `
   });
   REBOOT.expose('compliance', { review, bannedTerms, rules, translate });
 })(typeof window !== 'undefined' ? window : globalThis);
+  // 플랫폼 약관 갱신일 (규제 모니터링 'oliveyoung-policy' 출처가 주 1회 채움 · 2026-10-26) — 지금은 올리브영만
+  const POLICY_SOURCE = { 'Olive Young': 'oliveyoung-policy' };
+  function policyLine(a) {
+    const sid = POLICY_SOURCE[a.code];
+    if (!sid) return '';
+    const m = monitorData();
+    const src = m && m.sources.find(x => x.id === sid);
+    const it = src && src.items[0];
+    if (!it) return `<p class="cmp-muted"><b>회원 정책 갱신일</b> 아직 수집 전 · 규제 모니터링에서 [지금 수집]</p>`;
+    return `<p class="cmp-muted"><b>회원 정책 갱신일</b> ${esc(it.date || '—')} · ${link(it.url, '약관 원문 ↗')}${src.updatedAt ? ` · 마지막 확인 ${fmt(Date.parse(src.updatedAt))}` : ''}${src.stale ? ' · <span class="cmp-fail">이번 수집 실패</span>' : ''}</p>`;
+  }
+

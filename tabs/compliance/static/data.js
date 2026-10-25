@@ -765,7 +765,7 @@
         forUs: [
           "상품명·상세 문구도 같은 기준입니다. Global에 올라간 'Hangover Helper'·'Hangover Cure Stick' 같은 이름은 우리 규칙에서 상품명 자체가 BLOCK(R1·R2)이라, 같은 이름으로 US에 올리면 안 됩니다.",
           '올리브영은 별점과 상관없이 후기에 포인트를 줍니다(텍스트·사진 후기 적립). 이건 플랫폼 제도라 괜찮지만, 브랜드가 따로 "좋은 후기 쓰면 선물"을 붙이면 R10 위반입니다.',
-          '매장이 캘리포니아에 있어 Prop 65(납 등 경고 문구) 대상이 될 수 있습니다. 2026년에도 수입 간식 판매점까지 함께 통지받은 사례가 많습니다 (규제 모니터링 바로가기에서 확인).',
+          '매장이 캘리포니아에 있어 Prop 65(납 등 경고 문구) 대상이 될 수 있습니다. 2026년에도 수입 간식 판매점까지 함께 통지받은 사례가 많습니다 (규제 모니터링 수집 결과의 Prop 65 60일 통지에서 확인).',
           '입점 서류(식품시설 등록 · 영문 라벨 · 제조물 책임보험 증명 등)는 공개 자료가 없습니다 → 알디콤 입점 담당에게 받아 확인.'
         ],
         risk: '상품 등록 거절 · 판매 중단 · 매장(캘리포니아) Prop 65 통지', rules: 'R1 · R2 · R10 · R15',
@@ -807,7 +807,24 @@
       { id: 'courtlistener', range: '검색어 3개 × 15건 (2·3번째는 최근 1년) · 관련성은 사람이 확인', agency: '법원', name: '허위광고 판결', via: 'CourtListener API', modes: ['auto'],
         key: 'COURTLISTENER_TOKEN',
         gets: '숙취·건강식품·기능성 음료 · 저당 표시(low sugar·sugar free) 허위광고 판결 검색 결과',
-        gives: '참고 목록 (관련성은 사람이 확인)' }
+        gives: '참고 목록 (관련성은 사람이 확인)' },
+      // 2026-10-26: 예전 '사람이 확인' 바로가기 4곳 → Firecrawl로 자동 수집 (주소 1개 = 약 1 크레딧 · 인사이트 Weee!와 월 1,000 같이 씀)
+      { id: 'nad-decisions', range: '결정 요약 목록 첫 쪽 (최신 약 10건) · NAD·NARB만', agency: 'NAD', name: 'NAD 광고 심의 결정', via: 'BBB National Programs 결정 요약 (Firecrawl)', modes: ['auto'],
+        key: 'FIRECRAWL_API_KEY',
+        gets: '광고 자율 심의 결정 요약 (날짜 · 회사 · 문제 된 광고 문구). 결정문 전문은 유료라 요약만',
+        gives: '목록 · 식품·음료·건강 결정의 따옴표 문구는 사례집 후보 → 지금 규칙이 잡는지 보고 승인하면 사례집·규칙 검증에 반영' },
+      { id: 'ftc-press', range: '보도자료 첫 쪽 (최신 20건) 중 제목에 광고·후기·건강·식품이 있는 것', agency: 'FTC', name: 'FTC 보도자료', via: 'ftc.gov 보도자료 목록 (Firecrawl)', modes: ['auto'],
+        key: 'FIRECRAWL_API_KEY',
+        gets: '광고·후기·인플루언서·건강 광고 단속 소식 (제목 · 날짜 · 요약)',
+        gives: '목록 · 한글 요약 → 규칙(R10 후기 등)을 고칠지 검토 · 공식 규칙·공고는 Federal Register' },
+      { id: 'prop65-notices', range: '주 1회 · gummy·jelly·candy 검색 × 최신 20건 · 최근 1년 · 대마 제품은 뺌', agency: 'CA', name: 'Prop 65 60일 통지', via: '캘리포니아 법무부 60일 통지 검색 (Firecrawl)', modes: ['auto'],
+        key: 'FIRECRAWL_API_KEY',
+        gets: '비슷한 제품(젤리·구미·사탕)이 경고 문구 없이 통지받은 사례 (제품 · 물질 · 회사 · 통지 PDF)',
+        gives: '목록 → 라벨 경고 문구·원료(납 등) 점검 참고 · 문구 판정과는 관계없음' },
+      { id: 'oliveyoung-policy', range: '주 1회 · 회원 정책 1쪽', agency: '플랫폼', name: '올리브영 US 회원 정책', via: 'us.oliveyoung.com 약관 (Firecrawl)', modes: ['auto'],
+        key: 'FIRECRAWL_API_KEY',
+        gets: '약관 갱신일(Last Updated) · 후기 작성 적립 문장',
+        gives: '갱신일이 바뀌면 🆕 · 기준·참고 › 기관·플랫폼의 올리브영 카드에 갱신일 표시 → 후기 이벤트를 따로 붙여도 되는지 (R10)' }
     ],
     // range: 가져오는 범위 — 모든 결과가 아니라 '최근 최대 N건'임을 화면에 밝힘 (GPT 검토 ⑰ · 기간은 REFRESH_LOOKBACK_DAYS 기본 365일)
     // 수집 항목에 붙이는 우리 제품군 태그 (2026-10-24). 제목·회사·요약·한글 요약에서 찾음 · 어느 것도 아니면 '공통'
@@ -822,23 +839,18 @@
 
     monitorAgencies: [
       { code: 'FDA', ko: '미국 식품의약국' }, { code: 'FTC', ko: '미국 연방거래위원회' },
-      { code: 'CBP', ko: '미국 관세국경보호청' }, { code: '법원', ko: '미국 법원 판결' }
+      { code: 'CBP', ko: '미국 관세국경보호청' }, { code: '법원', ko: '미국 법원 판결' },
+      { code: 'NAD', ko: '광고 자율 심의 (BBB National Programs)' }, { code: 'CA', ko: '캘리포니아 Prop 65' },
+      { code: '플랫폼', ko: '판매 플랫폼 정책' }
     ],
 
     // 규제 모니터링: 서버가 자동으로 못 읽는 곳 (2026-10-24 확인) → 화면의 바로가기 버튼으로 사람이 확인
     // 자동 수집되는 곳(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)은 refresh.py
+    // 2026-10-26: NAD · FTC 보도자료 · Prop 65 60일 통지 · 올리브영 회원 정책은 Firecrawl 자동 수집으로 옮김 (monitorSources)
+    // 2026-10-25: 수입 경보 33-15(곤약 젤리) 바로가기는 뺌 — 우리 젤리는 곤약이 아닌 구미형 (담당 확인)
     manualChecks: [
-      { name: 'NAD 광고 심의 결정', url: 'https://bbbprograms.org/media/newsroom/decisions', why: '화면을 자바스크립트로 그려 서버가 못 읽음 · 피드 없음',
-        what: '건강·음료·건강기능식품 광고 결정에서 문제 된 표현. 같은 페이지에서 주간 결정 요약 메일을 구독할 수 있음' },
-      { name: 'Prop 65 물질 목록 (OEHHA)', url: 'https://oehha.ca.gov/proposition-65/proposition-65-list/', why: '봇 차단 (Incapsula)',
-        what: '납 등 경고 문구가 필요한 물질 목록 갱신일 · 원료(젤리 원료·색소)가 목록에 있는지' },
-      { name: 'Prop 65 60일 통지 검색 (캘리포니아 법무부)', url: 'https://oag.ca.gov/prop65/60-day-notice-search', why: '검색 결과를 서버가 읽을 수 있는 형태로 주지 않음',
-        what: '제품 칸에 jelly · gummy · candy · drink로 검색 → 비슷한 제품이 경고 문구 없이 통지받은 사례' },
-      { name: 'FTC 보도자료', url: 'https://www.ftc.gov/news-events/news/press-releases', why: 'FTC RSS가 서버 요청을 막음 (FTC 공고는 Federal Register로 자동 수집 중)',
-        what: '건강 광고·후기·인플루언서 단속 소식' },
-      // 2026-10-25: 수입 경보 33-15(곤약 젤리) 바로가기는 뺌 — 우리 젤리는 곤약이 아닌 구미형 (담당 확인)
-      { name: 'Olive Young US 리뷰 적립·회원 정책', url: 'https://us.oliveyoung.com/terms/oy-members-policy', why: '약관 변경 알림·피드 없음 (월 1회 확인)',
-        what: '올리브영 US 후기 적립(별점과 상관없이 포인트) · 회원 혜택 조건 변경 → 우리가 후기 이벤트를 따로 붙여도 되는지 (R10)' }
+      { name: 'Prop 65 물질 목록 (OEHHA)', url: 'https://oehha.ca.gov/proposition-65/proposition-65-list/', why: '원료와 맞춰 보는 기준을 아직 정하지 않음 (이름만 같다고 해당이라 할 수 없음 · 시험 성적서 필요)',
+        what: '납 등 경고 문구가 필요한 물질 목록 갱신일 · 원료(젤리 원료·색소)가 목록에 있는지' }
     ],
 
     // 수출 단계별로 어느 기관이 관련되는지

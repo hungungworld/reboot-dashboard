@@ -12,6 +12,7 @@
   --cmp-REVIEW-bg: #EFF0FC; --cmp-REVIEW-ink: #4A5190;
   --cmp-PASS-bg: #F2F5D9; --cmp-PASS-ink: #5A6320;
   --cmp-FDA: #3F6FA8; --cmp-FTC: #8A5A1F; --cmp-CBP: #4F7A2E; --cmp-USTR: #6A4F9C;
+  --cmp-NAD: #9A4F6E; --cmp-CA: #2F7F86; --cmp-PLAT: #6B6B6B;
   color: var(--cmp-ink); font-size: 14px; letter-spacing: -0.025em;
 }
 @media (prefers-color-scheme: dark) {
@@ -27,6 +28,7 @@
     --cmp-REVIEW-bg: #23263D; --cmp-REVIEW-ink: #B6BCF0;
     --cmp-PASS-bg: #2B3018; --cmp-PASS-ink: #D6E48A;
     --cmp-FDA: #8EC3F0; --cmp-FTC: #F1C48E; --cmp-CBP: #A6E3BC; --cmp-USTR: #CDBBF2;
+    --cmp-NAD: #F0B3CC; --cmp-CA: #9CDDE2; --cmp-PLAT: #C4C4C4;
   }
 }
 :root[data-theme="dark"] .part-compliance {
@@ -41,6 +43,7 @@
   --cmp-REVIEW-bg: #23263D; --cmp-REVIEW-ink: #B6BCF0;
   --cmp-PASS-bg: #2B3018; --cmp-PASS-ink: #D6E48A;
   --cmp-FDA: #8EC3F0; --cmp-FTC: #F1C48E; --cmp-CBP: #A6E3BC; --cmp-USTR: #CDBBF2;
+  --cmp-NAD: #F0B3CC; --cmp-CA: #9CDDE2; --cmp-PLAT: #C4C4C4;
 }
 
 .part-compliance .cmp-wrap { display: grid; gap: 20px; }
@@ -234,6 +237,9 @@
 .part-compliance .cmp-ag-FTC { color: var(--cmp-FTC); }
 .part-compliance .cmp-ag-CBP { color: var(--cmp-CBP); }
 .part-compliance .cmp-ag-USTR { color: var(--cmp-USTR); }
+.part-compliance .cmp-ag-NAD { color: var(--cmp-NAD); }
+.part-compliance .cmp-ag-CA { color: var(--cmp-CA); }
+.part-compliance .cmp-ag-플랫폼 { color: var(--cmp-PLAT); }
 .part-compliance .cmp-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .part-compliance .cmp-flow-step { background: var(--cmp-soft); border: 1px solid var(--cmp-rule); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; font-size: 12.5px; }
 .part-compliance .cmp-flow-no { width: 22px; height: 22px; border-radius: 50%; background: var(--cmp-accent); color: var(--cmp-accent-ink); font-size: 10.5px; font-weight: 650; display: grid; place-items: center; }

@@ -14,7 +14,10 @@ Flask 통합: 저장 위치는 DATA_DIR/parts_override/compliance/monitor-data.j
 - FDA 수입 거부: Data Dashboard API (FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY) · 한국산 식품만
 - CBP CROSS: 품목분류 결정 검색 API (키 없음) · 젤리·2106.90 · 음료 2202.10·2202.99 · 헛개
 - Federal Register: FTC 전체 + FDA 식품 관련 공고 (키 없음). FTC 보도자료 RSS는 봇 차단이라 대신 씀
-- 자동으로 못 읽는 곳 (2026-10-24 확인): NAD(화면을 자바스크립트로 그림 · 피드 없음) · Prop 65(OEHHA 봇 차단) → 화면의 바로가기 버튼
+- Firecrawl (FIRECRAWL_API_KEY · 2026-10-26): 서버가 직접 못 읽던 곳을 Firecrawl이 화면을 그려 읽음 (주소 1개 = 약 1 크레딧)
+  NAD 결정 요약(매일 · 식품·건강 결정의 따옴표 문구는 사례집 후보) · FTC 보도자료(매일 · 광고·후기·건강 관련만) ·
+  Prop 65 60일 통지(주 1회 · gummy·jelly·candy) · 올리브영 US 회원 정책(주 1회 · 갱신일이 바뀌면 🆕)
+- 자동으로 못 읽는 곳: Prop 65 물질 목록(OEHHA) → 화면의 바로가기 버튼
 - FDA 경고장: warning_letters.py (Data Dashboard API · fda.gov XLSX · 사람이 올린 XLSX·본문). fda.gov는 자동 요청을
   봇 차단으로 막을 수 있어, 막히면 이유를 errors에 남기고 올려 둔 경고장은 그대로 보여 줌
 """
@@ -434,6 +437,143 @@ def fda_gras_notices():
     return items, [warn] if warn else [], note, {"counts": counts, "fetchedAt": fetched, "noKo": True}
 
 
+# ───────── Firecrawl 수집 (2026-10-26) — 사람이 바로가기로 보던 곳 중 4곳 ─────────
+FIRECRAWL_URL = "https://api.firecrawl.dev/v1/scrape"
+WEEKLY = timedelta(days=7)   # 주 1회 출처: 마지막 정상 수집이 이보다 최근이면 다시 부르지 않음 (크레딧 절약)
+
+
+def _firecrawl_md(url):
+    """Firecrawl로 페이지 하나 → 본문 마크다운."""
+    key = env("FIRECRAWL_API_KEY")
+    if not key:
+        raise RuntimeError("FIRECRAWL_API_KEY 없음")
+    body = json.dumps({"url": url, "formats": ["markdown"], "onlyMainContent": True, "waitFor": 3000}).encode("utf-8")
+    req = urllib.request.Request(FIRECRAWL_URL, data=body, method="POST", headers={
+        "User-Agent": UA, "Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        msg = {401: "Firecrawl이 키를 거절함", 403: "Firecrawl이 키를 거절함", 402: "Firecrawl 크레딧을 모두 씀",
+               429: "Firecrawl 요청이 많음 · 잠시 뒤 다시"}.get(e.code)
+        raise RuntimeError(msg) if msg else e
+    if not data.get("success"):
+        raise RuntimeError(f"Firecrawl이 페이지를 읽지 못함 ({str(data.get('error') or '')[:80]})")
+    return str((data.get("data") or {}).get("markdown") or "")
+
+
+def _us_date(s):
+    # "October 22, 2026" → 2026-10-22 · "09/18/2026" → 2026-09-18 (못 읽으면 빈칸)
+    for fmt in ("%B %d, %Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(s.strip(), fmt).date().isoformat()
+        except ValueError:
+            pass
+    return ""
+
+
+def _sig(text):
+    import hashlib
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
+
+
+NAD_URL = "https://bbbprograms.org/media/newsroom/decisions"
+# "New York, NY – October 22, 2026 – The National Advertising Division recommended ..." (구분 기호는 – 또는 -)
+NAD_LINE = re.compile(r"^[A-Z][^\n–]{1,40}?\s[–-]\s([A-Z][a-z]+ \d{1,2}, \d{4})\s[–-]\s(.+)$", re.M)
+NAD_PROGRAMS = re.compile(r"National Advertising (Division|Review Board)|\bNARB\b")   # 광고 심의만 (개인정보·직판 프로그램은 뺌)
+# 우리와 가까운 결정만 사례집 후보로 (식품·음료·건강). 크루즈·통신 같은 결정의 문구는 후보로 올리지 않음
+NAD_FOOD = re.compile(r"food|beverage|drink|juice|snack|gumm|candy|sugar|nutrition|supplement|vitamin|probiotic|protein|"
+                      r"hangover|alcohol|energy|hydration|electrolyte|immun|liver|digest", re.I)   # 'health'는 보청기·병원까지 걸려 뺌
+QUOTE = re.compile(r"[“\"]([^”\"]{6,200})[”\"]")
+
+
+def nad_decisions():
+    """NAD·NARB 결정 요약 (BBB National Programs). 결정문 전문은 유료라 요약만. 개별 링크가 없어 목록 주소로 연결."""
+    items = []
+    for when, text in NAD_LINE.findall(_firecrawl_md(NAD_URL)):
+        text = text.strip()
+        if not NAD_PROGRAMS.search(text):
+            continue
+        d = _us_date(when)
+        item = {"id": f"nad-{d}-{_sig(text)}", "date": d, "title": text[:240], "firm": "NAD · 자율 광고 심의",
+                "url": NAD_URL, "summary": text[:400]}
+        if NAD_FOOD.search(text):
+            quotes = [q.strip() for q in QUOTE.findall(text)]
+            if quotes:
+                item["quotes"] = quotes   # → 사례집 후보 (지금 규칙으로 판정해 보여 주고 사람이 승인)
+        items.append(item)
+    return items[:20]
+
+
+FTC_PRESS_URL = "https://www.ftc.gov/news-events/news/press-releases"
+FTC_PRESS = re.compile(r"^### \[(.+?)\]\((https://www\.ftc\.gov/news-events/news/press-releases/[^)\s]+)\)\s+Date\s+"
+                       r"([A-Z][a-z]+ \d{1,2}, \d{4})\s+(.*?)\s*$", re.M)
+# 제목으로 광고·후기·건강·식품 관련만 (FTC는 '기만' 사건이 너무 많아 그 단어로는 거르지 않음 · 합병·경쟁 소식은 뺌)
+FTC_AD_WORDS = re.compile(r"\bads?\b|advertis|review|endorse|influencer|testimonial|health|supplement|dietary|"
+                          r"food|drink|beverage|weight|\bcures?\b|made in usa|unsubstantiated", re.I)
+FTC_SKIP = re.compile(r"acqui|merger|competition|antitrust", re.I)
+
+
+def ftc_press():
+    """FTC 보도자료 목록 1쪽 (최신 20건) 중 광고·건강 관련. FTC 공식 규칙·공고는 Federal Register로 따로 수집."""
+    items = []
+    for title, url, when, summary in FTC_PRESS.findall(_firecrawl_md(FTC_PRESS_URL)):
+        if not FTC_AD_WORDS.search(title) or FTC_SKIP.search(title):
+            continue
+        items.append({"id": url.rsplit("/", 1)[-1], "date": _us_date(when), "title": title[:240],
+                      "firm": "FTC · 보도자료", "url": url, "summary": summary[:400]})
+    return items
+
+
+PROP65_URL = "https://oag.ca.gov/prop65/60-day-notice-search-results?"
+PROP65_TERMS = ("gummy", "jelly", "candy")
+PROP65_SKIP = re.compile(r"delta-?\s?[89]|\bTHC\b|tetrahydrocannabinol|cannabi|\bCBD\b|marijuana|hemp|kratom", re.I)   # 대마 제품은 우리와 무관
+
+
+def _prop65_field(block, label):
+    m = re.search(rf"^{label}:\s*\n+\s*(.+?)\s*$", block, re.M)
+    return m.group(1).strip() if m else ""
+
+
+def prop65_notices():
+    """캘리포니아 법무부 Prop 65 60일 통지 (제품 칸 검색). 비슷한 제품이 경고 문구 없이 통지받은 사례 · 라벨·원료 참고."""
+    since = _lookback().isoformat()
+    seen, items = set(), []
+    for term in PROP65_TERMS:
+        md = _firecrawl_md(PROP65_URL + urllib.parse.urlencode({"field_prop65_product_value": term}))
+        for block in re.split(r"^### \[AG Number ", md, flags=re.M)[1:]:
+            m = re.match(r"([\d-]+) \(View Details\)\]\((\S+?)\)", block)
+            if not m or m.group(1) in seen:
+                continue
+            chem, source = _prop65_field(block, "Chemical"), _prop65_field(block, "Source")
+            d = _us_date(_prop65_field(block, "Date Filed"))
+            if PROP65_SKIP.search(f"{chem} {source}") or (d and d < since):
+                continue
+            seen.add(m.group(1))
+            items.append({"id": m.group(1), "date": d, "title": f"{source} · {chem}"[:240],
+                          "firm": _prop65_field(block, "Alleged Violators")[:200], "url": m.group(2),
+                          "summary": f"Prop 65 60일 통지 · 물질: {chem} · 통지한 곳: {_prop65_field(block, 'Noticing Party')}"[:400]})
+    return sorted(items, key=lambda i: i["date"], reverse=True)[:30]
+
+
+OY_POLICY_URL = "https://us.oliveyoung.com/terms/oy-members-policy"
+
+
+def oliveyoung_policy():
+    """올리브영 US 회원 정책 (후기 적립 · R10 참고). 갱신일이 id라 약관이 바뀌면 🆕로 보임."""
+    md = _firecrawl_md(OY_POLICY_URL)
+    m = re.search(r"Last Updated:\s*([A-Z][a-z]+ \d{1,2}, \d{4})", md)
+    if not m:
+        raise RuntimeError("올리브영 정책 페이지에서 갱신일(Last Updated)을 찾지 못함 · 페이지 모양이 바뀌었을 수 있음")
+    d = _us_date(m.group(1))
+    # 후기를 써서 적립하는 문장 ("writing a review on the US Online Store")
+    review_re = re.compile(r"\b(?:writ|post|submit)\w* (?:a |your )?(?:product )?reviews?\b", re.I)
+    review = [line.strip() for line in md.splitlines() if review_re.search(line)][:2]
+    return [{"id": f"oy-members-{d}", "date": d, "title": f"O.Y MEMBERS Policy · Last Updated {m.group(1)}",
+             "firm": "Olive Young US · 회원 정책", "url": OY_POLICY_URL,
+             "summary": (" ".join(review) or "후기 관련 문장 없음 · 원문 확인")[:400]}]
+
+
 SOURCES = [
     ("fda-warning-letters", "FDA 경고장 (식품 분야 전체 · 🍺 표시만 숙취·음주 관련)", fda_warning_letters),
     ("openfda-food-recalls", "openFDA 식품 리콜 (젤리·음료·헛개)", openfda_recalls),
@@ -443,7 +583,20 @@ SOURCES = [
     ("cbp-cross", "CBP CROSS 품목분류 결정 (젤리·음료·헛개)", cbp_rulings),
     ("federal-register", "Federal Register FTC·FDA 공고", federal_register),
     ("fda-gras", "FDA GRAS 통지 (원료 표의 원료별 · 주 1회)", fda_gras_notices),
+    ("nad-decisions", "NAD 광고 심의 결정 요약", nad_decisions),
+    ("ftc-press", "FTC 보도자료 (광고·후기·건강 관련)", ftc_press),
+    ("prop65-notices", "Prop 65 60일 통지 (젤리·구미·사탕 · 주 1회)", prop65_notices, "weekly"),
+    ("oliveyoung-policy", "올리브영 US 회원 정책 (주 1회)", oliveyoung_policy, "weekly"),
 ]
+# 네 번째 칸 "weekly": 주 1회만 새로 부름 (그 사이 수집은 지난번 정상 자료를 그대로 씀 · Firecrawl 크레딧 절약)
+
+
+def _recent(src, within):
+    try:
+        at = datetime.strptime(src.get("updatedAt") or "", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return not src.get("stale") and datetime.now(timezone.utc) - at < within
 
 
 def collect(bodies=False):
@@ -453,7 +606,10 @@ def collect(bodies=False):
     sources, errors = [], []
     now = _now_iso()
     prev = {s.get("id"): s for s in _current().get("sources", [])}
-    for sid, label, fn in SOURCES:
+    for sid, label, fn, *opt in SOURCES:
+        if "weekly" in opt and _recent(prev.get(sid) or {}, WEEKLY):
+            sources.append(dict(prev[sid], label=label))   # 주 1회 출처 · 아직 7일이 안 됨 → 지난번 자료 (갱신 시각도 그대로)
+            continue
         try:
             items = fn(bodies=bodies) if fn is fda_warning_letters else fn()
             note, extra = "", None
