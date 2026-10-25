@@ -55,7 +55,7 @@ DECISION_LABELS = {
     "target": "타깃", "length": "길이", "format": "형식", "season": "시즌", "accent_color": "포인트 색",
     "featured_product": "메인 제품", "slide_count": "장 수", "duration": "영상 길이", "lighting": "조명",
     "composition": "구도", "mood": "분위기", "caption": "캡션", "hashtags": "해시태그", "subtitle": "자막",
-    "use_character": "캐릭터 Rebu", "flavor": "맛",
+    "use_character": "캐릭터 Rebu", "flavor": "맛", "product_flavors": "제품별 맛",
     "story": "스토리", "design_note": "시안 설명", "emphasis": "강조할 내용", "content_points": "담을 내용", "hook": "멘트",
     "slogan_choice": "쓸 슬로건",
 }

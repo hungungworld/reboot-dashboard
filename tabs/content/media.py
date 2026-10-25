@@ -296,7 +296,7 @@ def _include_character(snap, plan):
 
 
 def _references(snap, job, plan, include_char, has_base):
-    """참고 사진 고르기 — 사용자가 말한 맛이 있으면 그 맛, 없으면 AI가 고른 맛."""
+    """참고 사진 고르기 — 사용자가 말한 맛 → 시트에서 제품마다 고른 맛 → AI가 고른 맛 순서."""
     if _provider(job) == "openai" and not providers.image_supports_edit(job.model):
         return []
     dec = snap.get("decisions") or {}
@@ -304,7 +304,9 @@ def _references(snap, job, plan, include_char, has_base):
                              *((dec.get(k) or {}).get("value") for k in ("flavor", "featured_product", "concept")))
     pids = (snap.get("sheet") or {}).get("product_ids") or []
     cap = assets.HIGGSFIELD_MAX_REFS if _provider(job) == "higgsfield" else assets.MAX_REFS
-    return assets.pick_refs(pids, flavors=said or plan.get("flavors") or [], character=include_char,
+    picked = assets.product_flavors_of(dec, pids, repository.products_index())
+    per_product = {pid: f if len(f) < len(assets.FLAVOR_ORDER) else plan.get("flavors") or [] for pid, f in picked.items()}
+    return assets.pick_refs(pids, flavors=said, per_product=per_product, character=include_char,
                             limit=cap - (1 if has_base else 0))
 
 

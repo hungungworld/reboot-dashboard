@@ -980,8 +980,9 @@ def test_pick_refs_by_flavor_and_character():
     # 제품(·맛)에 맞는 참고용 사진 전부 — 우선순위 순, 상한 16장 (2026-10-25)
     one = ids(assets.pick_refs(["drink_original"]))
     assert one[:2] == ["drink-original-trio", "drink-original-cherry-front"] and len(one) == 10
-    assert ids(assets.pick_refs(["drink_original"], flavors=["lime"])) == [
-        "drink-original-lime-front", "drink-original-lime-angle", "drink-original-lime-spec", "drink-original-trio"]
+    assert ids(assets.pick_refs(["drink_original"], flavors=["lime"])) == [  # 맛을 일부만 고르면 3병 사진은 뺌
+        "drink-original-lime-front", "drink-original-lime-angle", "drink-original-lime-spec"]
+    assert ids(assets.pick_refs(["drink_original"], flavors=["cherry", "lime", "lemon"])) == one  # 셋 다 = 제한 없음
     two = ids(assets.pick_refs(["jelly_balance", "drink_balance"], flavors=["lemon"], character=True))
     assert two[:2] == ["jelly-balance-lemon-lasso-wrapped", "drink-balance-lemon-front"] and two[-1] == "rebu-poses-fullbody"
     assert not any(x for x in two if "cherry" in x or "lime" in x)  # 고른 맛 · 맛 구분 없는 사진만
@@ -990,6 +991,57 @@ def test_pick_refs_by_flavor_and_character():
     assert {a["product_id"] for a in many[:-1]} == {"jelly_original", "jelly_balance", "drink_original", "drink_balance"}
     assert len(assets.pick_refs(["jelly_original"], limit=assets.HIGGSFIELD_MAX_REFS)) == 5
     assert all(a["ref"] for a in many) and assets.flavors_in("체리 맛으로", "Lime!") == ["cherry", "lime"]
+
+
+def test_pick_refs_per_product_flavors_and_catalog():
+    ids = lambda refs: [a["id"] for a in refs]
+    refs = ids(assets.pick_refs(["jelly_original", "drink_balance"],
+                                per_product={"jelly_original": ["cherry"], "drink_balance": ["lime", "lemon"]}))
+    assert "jelly-original-cherry-hat-wrapped" in refs and "jelly-original-pouch-front" in refs
+    assert "drink-balance-lime-front" in refs and "drink-balance-lemon-front" in refs
+    assert not any(x for x in refs if x.startswith("jelly") and ("lime" in x or "lemon" in x))
+    assert not any(x for x in refs if x.startswith("drink") and "cherry" in x) and "drink-balance-trio" not in refs
+    # 대화에서 말한 맛이 시트 선택보다 우선
+    said = ids(assets.pick_refs(["jelly_original"], flavors=["lime"], per_product={"jelly_original": ["cherry"]}))
+    assert "jelly-original-lime-boot-wrapped" in said and not any("cherry" in x for x in said)
+    cat = [a["id"] for a in assets.catalog_for(["drink_original"], "사용 안 함", {"drink_original": ["lemon"]})]
+    assert "drink-original-lemon-front" in cat and "drink-original-trio" not in cat
+    assert not any("cherry" in x or "lime" in x for x in cat if x.startswith("drink"))
+
+
+def test_product_flavors_from_sheet_and_patch(auth_client):
+    camp = create(auth_client, brand_focus=False, product_ids=["jelly_original", "drink_balance"],
+                  product_flavors={"jelly_original": ["cherry", "lime"], "drink_balance": ["cherry", "lime", "lemon"]})
+    d = camp["decisions"]["product_flavors"]
+    assert d["status"] == "confirmed" and d["source"] == "sheet" and "체리 · 라임" in d["value"]
+    assert camp["productFlavors"] == {"jelly_original": ["cherry", "lime"], "drink_balance": ["cherry", "lime", "lemon"]}
+    for bad in ({"jelly_original": []}, {"jelly_original": ["grape"]}, ["cherry"]):
+        res = auth_client.post("/api/content/campaigns", json=sheet(product_ids=["jelly_original"], product_flavors=bad))
+        assert res.status_code == 400, bad
+    assert "product_flavors" not in create(auth_client)["decisions"]  # 브랜드만이면 저장 안 함
+    res = auth_client.patch(f"/api/content/campaigns/{camp['id']}", json={
+        "expected_revision": camp["revision"],
+        "sheet": {"product_ids": ["drink_balance"], "product_flavors": {"drink_balance": ["lemon"]}}})
+    assert res.status_code == 200
+    c = res.get_json()["campaign"]
+    assert c["productFlavors"] == {"drink_balance": ["lemon"]} and "제품별 맛" in c["messages"][-1]["text"]
+    res = auth_client.patch(f"/api/content/campaigns/{c['id']}", json={
+        "expected_revision": c["revision"], "sheet": {"brand_focus": True, "product_ids": [], "product_flavors": {}}})
+    assert res.status_code == 200 and "product_flavors" not in res.get_json()["campaign"]["decisions"]
+
+
+def test_image_uses_sheet_flavor_photos(auth_client, ai, sync_jobs, monkeypatch):
+    sent = []
+    monkeypatch.setattr(providers, "edit_image", lambda paths, prompt, size, model: (sent.append(paths), (PNG, {}))[1])
+    camp = create(auth_client, brand_focus=False, product_ids=["drink_original"],
+                  product_flavors={"drink_original": ["lemon"]})
+    monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (sent.append([]), (PNG, {}))[1])
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Bottle on white.", "keep": [], "change": [], "text_layers": [],
+                                  "notes_ko": "시안", "flavors": ["cherry"], "include_character": False})
+    chat(auth_client, camp, "이미지 만들어줘")
+    names = [Path(x).name for x in sent[-1]]  # 시트에서 고른 맛(레몬)이 AI가 고른 맛(체리)보다 우선
+    assert names and all("lemon" in n for n in names) and not any("trio" in n for n in names)
 
 
 def test_assets_require_login(client):
