@@ -146,6 +146,23 @@
 .part-partners .ptn-out-iconbtn { width: 30px; height: 30px; text-decoration: none; }
 .part-partners .ptn-out-send { border-color: var(--lime-soft-line); }
 .part-partners .ptn-out-aside { position: sticky; top: calc(var(--topbar-h) + 16px); }
+/* 협업 메일: 왼쪽 = 3. 메일 검토(+ 첨부 · 발송), 오른쪽 = 1 · 2 → 문구 점검 → 받는 업체 · 발송 안내 */
+.part-partners .ptn-out-mailbench { grid-template-columns: minmax(0, 1fr) 400px; }
+.part-partners .ptn-out-mailbench > .ptn-out-aside { position: static; }
+.part-partners .ptn-out-mailbench > .ptn-out-aside .field-grid { grid-template-columns: 1fr; }
+.part-partners .ptn-out-mailbench > .ptn-out-aside .card-head { flex-wrap: wrap; gap: 8px; }
+@media (max-width: 1200px) {
+  .part-partners .ptn-out-mailbench { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+@media (max-width: 950px) {
+  .part-partners .ptn-out-mailbench { grid-template-columns: 1fr; }
+}
+/* 1 · 2 · 3 카드 접기 · 펴기: 제목을 누르면 내용이 숨겨짐 */
+.part-partners .ptn-fold { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.part-partners .ptn-fold::before { content: '▾'; font-size: 12px; color: var(--muted); transition: transform .15s; }
+.part-partners .ptn-fold-card.is-folded .ptn-fold::before { transform: rotate(-90deg); }
+.part-partners .ptn-fold-card.is-folded .ptn-fold-body { display: none; }
+.part-partners .ptn-fold-card.is-folded .card-head { margin-bottom: 0; }
 .part-partners .ptn-out-tips { margin: 0; padding-left: 18px; font-size: 11px; color: var(--muted); line-height: 1.8; }
 .part-partners .ptn-out-findings { list-style: none; margin: 0; padding: 0; }
 .part-partners .ptn-out-findings li { padding: 12px 0; border-bottom: 1px solid var(--line-3); }

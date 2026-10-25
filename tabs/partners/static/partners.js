@@ -73,16 +73,7 @@
       if (tabOf(id) && id !== current) show(id);
     });
 
-    // 제목 오른쪽 버튼: 업체 파일 가져오기 (업체 컨택 탭의 가져오기 카드를 엶)
-    const actions = REBOOT.page.actions();
-    if (actions) {
-      actions.innerHTML = `<button type="button" class="btn lime" data-act="ptn-import">${icon('upload')} 업체 파일 가져오기</button>`;
-      actions.addEventListener('click', e => {
-        if (!e.target.closest('[data-act="ptn-import"]')) return;
-        try { REBOOT.use('partners.outreach').openImport(); } catch (err) { /* outreach.js 없음 */ }
-        show('contacts');
-      });
-    }
+    // 제목 오른쪽 버튼은 두지 않음 — 업체 파일 가져오기는 업체 컨택 › 업체 목록 카드 머리와 맨 아래 가져오기 카드에서
 
     const hash = (global.location.hash || '').slice(1);
     show(tabOf(hash) ? hash : (tabOf(store.get(KEY_TAB, '')) ? store.get(KEY_TAB, '') : 'contacts'));

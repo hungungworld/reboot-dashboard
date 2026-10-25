@@ -21,6 +21,7 @@
     draft: `outreach.draft.u${me.id || 0}`,
     guide: `outreach.guide.u${me.id || 0}`,
     filters: `outreach.filters.u${me.id || 0}`,
+    fold: `outreach.fold.u${me.id || 0}`,
     prompts: 'outreach.prompts'
   };
   const TYPES = D.types;
@@ -173,6 +174,20 @@
     if (!String(text || '').trim() || (cfg && cfg.prompts && text === cfg.prompts[type])) delete all[type];
     else all[type] = text;
     store.set(K.prompts, all);
+  }
+
+  // 협업 메일 1 · 2 · 3 카드 접기 · 펴기 (사용자별로 기억)
+  function folded(k) { const f = store.get(K.fold, null); return !!(f && f[k]); }
+  function foldTitle(k, title) {
+    return `<h2><button type="button" class="ptn-fold" data-act="fold" data-k="${k}" aria-expanded="${!folded(k)}" aria-controls="ptn-fold-${k}">${esc(title)}</button></h2>`;
+  }
+  function toggleFold(btn) {
+    const k = btn.dataset.k;
+    const f = Object.assign({}, store.get(K.fold, null) || {});
+    f[k] = !f[k];
+    store.set(K.fold, f);
+    btn.setAttribute('aria-expanded', String(!f[k]));
+    btn.closest('.ptn-fold-card').classList.toggle('is-folded', f[k]);
   }
 
   function getFilters() {
@@ -405,16 +420,39 @@
     return out;
   }
 
-  const CONTACT_SORTS = { file: '기본 순서', name: '이름순', email: '이메일 있는 것 먼저' };
+  // 정렬 기준: key → [이름, 기본 방향(1 = 오름차순 · -1 = 내림차순)] — 머리글을 다시 누르면 방향이 바뀜
+  const CONTACT_SORTS = { file: ['기본 순서', 1], name: ['업체', 1], type: ['구분', 1], tag: ['세부 카테고리', 1], email: ['이메일', 1] };
+  function contactKey(st, k) {
+    const meta = tagMeta(st);
+    return {
+      name: c => c.name.toLowerCase(), type: c => c.type,
+      tag: c => (c.tags[0] && meta[c.tags[0]] ? meta[c.tags[0]].label : null), email: c => (c.email ? c.email.toLowerCase() : null)
+    }[k];
+  }
+  // 값 없는 행은 방향과 관계없이 늘 아래 · 글자는 가나다/ABC, 숫자는 크기로
+  function sortList(list, getter, dir) {
+    return list.sort((a, b) => {
+      const x = getter(a), y = getter(b);
+      const ex = x == null || x === '', ey = y == null || y === '';
+      if (ex || ey) return ex && ey ? 0 : ex ? 1 : -1;
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir;
+    });
+  }
+  function sortState(f, yt) {
+    const sorts = yt ? YT_SORTS : CONTACT_SORTS;
+    const k = (yt ? f.ytSort : f.sort) in sorts ? (yt ? f.ytSort : f.sort) : (yt ? 'subscribers' : 'file');
+    const d = Number(yt ? f.ytDir : f.dir);
+    return { k, dir: d === 1 || d === -1 ? d : sorts[k][1] };
+  }
   function filtered(st, ignoreTags) {
     const f = st.f;
     const q = String(f.q || '').trim().toLowerCase();
     const list = st.data.items.filter(c => (!f.types.length || f.types.includes(c.type)) &&
       (ignoreTags || !f.tags.length || c.tags.some(t => f.tags.includes(t))) && (!f.hasEmail || c.email) &&
       (!q || [c.name, c.location, c.category, c.email].join(' ').toLowerCase().includes(q)));
-    if (f.sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name));
-    else if (f.sort === 'email') list.sort((a, b) => (b.email ? 1 : 0) - (a.email ? 1 : 0));
-    return list;
+    const { k, dir } = sortState(f, false);
+    if (k === 'file') return dir < 0 ? list.reverse() : list;
+    return sortList(list, contactKey(st, k), dir);
   }
 
   /* ───────── 한 줄 필터 바 · 정렬 머리글 · 페이지 (시장·고객 인사이트 › 경쟁사 비교와 같은 모양) ───────── */
@@ -426,9 +464,10 @@
   function cfToggle(key, label, on) {
     return `<button type="button" class="ptn-cf${on ? ' on' : ''}" data-act="cf-tog" data-k="${key}" aria-pressed="${!!on}">${esc(label)}</button>`;
   }
-  function cfSort(sorts, cur) {
-    return `<select class="ptn-cf sort" data-cf="sort" aria-label="정렬">${Object.keys(sorts).map(k =>
-      `<option value="${k}"${cur === k ? ' selected' : ''}>정렬: ${esc(sorts[k])}</option>`).join('')}</select>`;
+  // 정렬 상자: 칸마다 오름차순 ↑ · 내림차순 ↓ 두 가지 (값 'key|방향')
+  function cfSort(sorts, s) {
+    return `<select class="ptn-cf sort" data-cf="sort" aria-label="정렬">${Object.keys(sorts).flatMap(k => [1, -1].map(d =>
+      `<option value="${k}|${d}"${s.k === k && s.dir === d ? ' selected' : ''}>정렬: ${esc(sorts[k][0])} ${d > 0 ? '↑ 오름차순' : '↓ 내림차순'}</option>`)).join('')}</select>`;
   }
   // 구분: 케이터링 · 인플루언서 · 유튜브 크리에이터 (고르면 아래 표가 크리에이터 추천으로 바뀜)
   function typeSelect(st) {
@@ -442,8 +481,9 @@
       ${any ? '<button type="button" class="ptn-link" data-act="reset-filters">필터 지우기</button>' : ''}<span class="ptn-cf-gap"></span>${sortHtml}</div>`;
   }
   // 정렬되는 머리글: 누르면 그 기준으로 정렬, 지금 기준은 라임 세모
-  function sortTh(label, k, cur, cls) {
-    return `<th scope="col" class="${cls || ''}${cur === k ? ' sorted' : ''}"><button type="button" class="ptn-th-sort" data-act="cf-sort" data-k="${k}">${esc(label)}<i aria-hidden="true">${cur === k ? '▼' : '↕'}</i></button></th>`;
+  function sortTh(label, k, s, cls) {
+    const on = s.k === k;
+    return `<th scope="col" class="${cls || ''}${on ? ' sorted' : ''}"${on ? ` aria-sort="${s.dir > 0 ? 'ascending' : 'descending'}"` : ''}><button type="button" class="ptn-th-sort" data-act="cf-sort" data-k="${k}" title="누를 때마다 오름차순 ↔ 내림차순">${esc(label)}<i aria-hidden="true">${on ? (s.dir > 0 ? '▲' : '▼') : '↕'}</i></button></th>`;
   }
   // 페이지 버튼: 칸 수(SLOTS) 고정, 1–5 · 6–10 묶음 — 없는 페이지 칸은 흐리게
   function pager(cur, pages, total, from, to, unit) {
@@ -470,7 +510,7 @@
       `<label class="search ptn-cf-q">${icon('search')}<input class="input" type="search" data-ref="q" placeholder="업체 검색" aria-label="업체 검색 (업체명 · 지역 · 카테고리 · 이메일)" value="${esc(f.q)}"></label>`,
       typeSelect(st), cfSelect('tag', '세부 카테고리', tagOpts, f.tags[0] && meta[f.tags[0]] ? f.tags[0] : ''),
       cfToggle('hasEmail', '이메일 있는 것만', f.hasEmail)
-    ], any, cfSort(CONTACT_SORTS, f.sort in CONTACT_SORTS ? f.sort : 'file'));
+    ], any, cfSort(CONTACT_SORTS, sortState(f, false)));
     st.el.querySelector('[data-ref="total"]').innerHTML = badge(`${fmt.num(st.data.items.length)}곳`);
   }
 
@@ -479,10 +519,10 @@
     const subs = tagMeta(st);
     const p = pageOf(list, st.page);
     st.page = p.cur;
-    const sortKey = st.f.sort in CONTACT_SORTS ? st.f.sort : 'file';
+    const ss = sortState(st.f, false);
     const pad = p.pages > 1 ? '<tr class="ptn-pad" aria-hidden="true"><td colspan="4"></td></tr>'.repeat(PAGE - p.shown.length) : '';   // 마지막 페이지도 표 높이 그대로
     st.el.querySelector('[data-ref="rows"]').innerHTML = list.length ? `<div class="table-wrap"><table class="data-table ptn-cf-table">
-      <thead><tr>${sortTh('업체', 'name', sortKey)}<th scope="col">구분</th><th scope="col">세부 카테고리</th>${sortTh('이메일', 'email', sortKey)}</tr></thead>
+      <thead><tr>${sortTh('업체', 'name', ss)}${sortTh('구분', 'type', ss)}${sortTh('세부 카테고리', 'tag', ss)}${sortTh('이메일', 'email', ss)}</tr></thead>
       <tbody>${p.shown.map(c => `
       <tr class="clickable${c.id === st.f.selected ? ' selected' : ''}" data-id="${esc(c.id)}" tabindex="0" aria-label="${esc(c.name)} 상세 보기">
         <td><div class="ptn-1l">${contactAvatar(c)}
@@ -553,22 +593,24 @@
   }
 
   /* ───────── 유튜브 크리에이터 추천 (서버 youtube.py — 소개란 공개 이메일만, 30일 안에 갱신 · 못 하면 삭제) ───────── */
-  const YT_SORTS = { subscribers: '구독자 많은 순', avgViews: '평균 조회수 높은 순', engage: '조회수÷구독자 높은 순', email: '이메일 있는 것 먼저' };
-  function ytEngage(c) { return c.subscribers && c.avgViews != null ? c.avgViews / c.subscribers : -1; }
+  const YT_SORTS = {
+    name: ['크리에이터', 1], subscribers: ['구독자', -1], avgViews: ['평균 조회수', -1], engage: ['조회수÷구독자', -1],
+    email: ['이메일', 1], kw: ['매칭 키워드', 1], statsAt: ['기준일', -1]
+  };
+  function ytEngage(c) { return c.subscribers && c.avgViews != null ? c.avgViews / c.subscribers : null; }
+  const YT_KEY = {
+    name: c => String(c.title || '').toLowerCase(), subscribers: c => c.subscribers, avgViews: c => c.avgViews, engage: ytEngage,
+    email: c => (c.email ? c.email.toLowerCase() : null), kw: c => ((c.keywords || [])[0] || null), statsAt: c => c.statsAt || null
+  };
   function ytSorted(st) {
-    const by = st.f.ytSort in YT_SORTS ? st.f.ytSort : 'subscribers';
-    const key = {
-      subscribers: c => c.subscribers || 0, avgViews: c => c.avgViews || 0, engage: ytEngage,
-      email: c => (c.email ? 1e12 : 0) + (c.subscribers || 0)
-    }[by];
+    const { k, dir } = sortState(st.f, true);
     // 키워드 · 대상을 고르면 그 크리에이터만 (검색: 이름 · 핸들 · 이메일)
     const pick = Array.isArray(st.f.ytTags) ? st.f.ytTags : [];
     const tg = Array.isArray(st.f.ytTargets) ? st.f.ytTargets : [];
     const q = String(st.f.ytQ || '').trim().toLowerCase();
-    return st.yt.items.filter(c => (!pick.length || (c.keywords || []).some(k => pick.includes(k))) &&
+    return sortList(st.yt.items.filter(c => (!pick.length || (c.keywords || []).some(w => pick.includes(w))) &&
       (!tg.length || tg.includes(c.target)) && (!st.f.ytEmail || c.email) &&
-      (!q || [c.title, c.handle, c.email].join(' ').toLowerCase().includes(q)))
-      .sort((a, b) => key(b) - key(a));
+      (!q || [c.title, c.handle, c.email].join(' ').toLowerCase().includes(q))), YT_KEY[k], dir);
   }
   // 대상 선택지 (미국 · 영미권 · 미국 타겟 추정)
   function ytTargetOpts(st) {
@@ -640,7 +682,7 @@
       `<label class="search ptn-cf-q">${icon('search')}<input class="input" type="search" data-ref="ytq" placeholder="크리에이터 검색" aria-label="크리에이터 검색 (이름 · 핸들 · 이메일)" value="${esc(f.ytQ || '')}"></label>`,
       typeSelect(st), cfSelect('kw', '키워드 전체', ytKwOpts(st), kwCur), cfSelect('target', '대상 전체', ytTargetOpts(st), tgCur),
       cfToggle('ytEmail', '이메일 공개만', f.ytEmail)
-    ], any, cfSort(YT_SORTS, f.ytSort in YT_SORTS ? f.ytSort : 'subscribers'));
+    ], any, cfSort(YT_SORTS, sortState(f, true)));
     box.innerHTML = `
       ${d.ready ? '' : `<p class="note warn mb-16">YouTube 키가 없어 새로 추천 받을 수 없습니다. ${settingsLink}에서 YOUTUBE_API_KEY를 넣어 주세요. (CSV 가져오기는 됩니다)</p>`}
       ${note ? `<p class="note lime mb-16">${esc(note)}</p>` : ''}${warn ? `<p class="note warn mb-16">${esc(warn)}</p>` : ''}
@@ -666,12 +708,12 @@
     }
     const p = pageOf(list, st.ytPage);
     st.ytPage = p.cur;
-    const sk = st.f.ytSort in YT_SORTS ? st.f.ytSort : 'subscribers';
+    const sk = sortState(st.f, true);
     const pad = p.pages > 1 ? '<tr class="ptn-pad" aria-hidden="true"><td colspan="8"></td></tr>'.repeat(PAGE - p.shown.length) : '';
     box.innerHTML = `<div class="table-wrap"><table class="data-table ptn-cf-table ptn-yt-table">
       <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-yt-all aria-label="조건에 맞는 ${fmt.num(list.length)}명 모두 선택"${list.every(c => st.ytSel.has(c.id)) ? ' checked' : ''}></th>
-        <th scope="col">크리에이터</th>${sortTh('구독자', 'subscribers', sk, 'num')}${sortTh('평균 조회수', 'avgViews', sk, 'num')}
-        ${sortTh('조회수÷구독자', 'engage', sk, 'num')}${sortTh('이메일', 'email', sk)}<th scope="col">매칭 키워드</th><th scope="col">기준일</th></tr></thead>
+        ${sortTh('크리에이터', 'name', sk)}${sortTh('구독자', 'subscribers', sk, 'num')}${sortTh('평균 조회수', 'avgViews', sk, 'num')}
+        ${sortTh('조회수÷구독자', 'engage', sk, 'num')}${sortTh('이메일', 'email', sk)}${sortTh('매칭 키워드', 'kw', sk)}${sortTh('기준일', 'statsAt', sk)}</tr></thead>
       <tbody>${p.shown.map(c => ytRow(st, c)).join('')}${pad}</tbody></table></div>
       ${pager(p.cur, p.pages, list.length, p.from, p.from + p.shown.length - 1, '명')}`;
     ytImgFallback(st);
@@ -839,14 +881,24 @@
     if (key === 'tag') f.tags = v ? [v] : [];
     else if (key === 'kw') f.ytTags = v ? [v] : [];
     else if (key === 'target') f.ytTargets = v ? [v] : [];
-    else if (key === 'sort') { if (f.yt) f.ytSort = v; else f.sort = v; }
+    else if (key === 'sort') {
+      const [k, d] = String(v).split('|');
+      if (f.yt) Object.assign(f, { ytSort: k, ytDir: Number(d) }); else Object.assign(f, { sort: k, dir: Number(d) });
+    }
     cfRepaint(st);
   }
   // 토글 · 정렬 머리글 · 페이지 버튼
   function cfAction(st, a, btn) {
     const f = st.f;
     if (a === 'cf-tog') { f[btn.dataset.k] = !f[btn.dataset.k]; cfRepaint(st); }
-    else if (a === 'cf-sort') { if (f.yt) f.ytSort = btn.dataset.k; else f.sort = btn.dataset.k; cfRepaint(st); }
+    else if (a === 'cf-sort') {
+      // 같은 머리글을 다시 누르면 방향만 바꾸고, 다른 머리글이면 그 칸의 기본 방향으로
+      const k = btn.dataset.k;
+      const s = sortState(f, !!f.yt);
+      const dir = s.k === k ? -s.dir : (f.yt ? YT_SORTS : CONTACT_SORTS)[k][1];
+      if (f.yt) Object.assign(f, { ytSort: k, ytDir: dir }); else Object.assign(f, { sort: k, dir });
+      cfRepaint(st);
+    }
     else if (a === 'cf-page') {
       if (f.yt) { st.ytPage = Number(btn.dataset.p); paintYtRows(st); } else { st.page = Number(btn.dataset.p); paintRows(st); }
     }
@@ -1016,47 +1068,9 @@
     <div class="workbench ptn-out-mailbench">
       <div class="stack tight">
         ${d.reply ? replyBanner(d.reply) : ''}
-        <section class="card">
-          <div class="card-head"><h2>1. 받는 업체 · 원하는 파트너</h2>
-            <div class="seg" role="group" aria-label="업체 구분">${TYPES.map(t => `<button type="button" data-mtype="${esc(t)}" aria-pressed="${d.type === t}">${D.typeIcon[t]} ${esc(t)}</button>`).join('')}</div></div>
-          <div class="field-grid">
-            <label class="field"><span>받는 업체 (${esc(d.type)})</span>
-              <select class="input" data-f="partnerId">
-                <option value="">직접 입력</option>
-                ${opts.map(c => `<option value="${esc(c.id)}"${c.id === d.partnerId ? ' selected' : ''}>${esc(c.name)}${c.email ? '' : ' (이메일 없음)'}</option>`).join('')}
-              </select></label>
-            <label class="field"><span>업체 이름</span><input class="input" data-f="partnerName" value="${esc(d.partnerName)}" placeholder="직접 입력할 때 업체 이름"${d.partnerId ? ' readonly' : ''}></label>
-          </div>
-          <label class="field"><span>우리가 원하는 ${d.type === '케이터링' ? '케이터링 업체' : '인플루언서'}</span>
-            <textarea class="input" rows="3" data-f="ideal">${esc(d.ideal[d.type] || '')}</textarea><small>생성 프롬프트의 {ideal} 자리에 들어갑니다.</small></label>
-          <details class="ptn-out-prompt mt-16">
-            <summary>생성 프롬프트 · ${esc(d.type)} <span data-ref="prompt-badge">${custom ? badge('팀에서 수정함', 'orange') : badge('기본')}</span></summary>
-            <div class="ptn-out-steps" aria-label="메일 구조"><span class="ptn-out-steps-title">메일 구조</span>
-              ${(cfg.mailSteps || D.mailSteps).map((x, i) => `<span class="ptn-out-step"><b>${i + 1}</b>${esc(x)}</span>`).join('<span class="ptn-out-arrow" aria-hidden="true">→</span>')}</div>
-            <textarea class="input mono ptn-out-prompttext" rows="9" data-f="prompt" aria-label="생성 프롬프트 원문">${esc(promptFor(d.type, cfg))}</textarea>
-            <div class="between mt-8 ptn-out-wrap">
-              <small class="hint">자리표시자: <code>{product}</code> 제품 설명 · <code>{ideal}</code> 원하는 파트너 · <code>{partner}</code> 업체명. 팀 공용으로 저장됩니다. 공통 규칙(150–200단어 · 섹션 이름 미출력 · 의학 주장·과음 조장 금지 · 모든 항목 반영)은 서버가 항상 덧붙입니다.</small>
-              <button type="button" class="btn small ghost" data-act="reset-prompt">↺ 기본 프롬프트로 되돌리기</button>
-            </div>
-            <details class="mt-8"><summary class="small">{product}에 들어가는 제품 설명</summary><p class="small muted mt-8">${esc(cfg.productDesc || '')}</p></details>
-          </details>
-        </section>
-
-        <section class="card">
-          <div class="card-head"><h2>2. 협업 조건</h2><button type="button" class="btn small ghost" data-act="reset-cond">↺ ${esc(d.type)} 기본 문구</button></div>
-          <label class="field"><span>협업 목적</span><textarea class="input" rows="2" data-f="purpose">${esc(cond.purpose)}</textarea></label>
-          <div class="field"><span class="field-label">기간</span>
-            <div class="flex ptn-out-period"><input type="date" class="input" data-f="start" value="${esc(d.start)}" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input" data-f="end" value="${esc(d.end)}" aria-label="종료일"></div></div>
-          <label class="field"><span>제안 내용</span><textarea class="input" rows="4" data-f="proposal">${esc(cond.proposal)}</textarea></label>
-          <label class="field"><span>요청사항</span><textarea class="input" rows="3" data-f="requests">${esc(cond.requests)}</textarea><small>한국어로 써도 됩니다 — 목적 · 제안 · 요청의 모든 항목이 영어 메일에 반영됩니다.</small></label>
-          <div class="flex wrap mt-16">
-            <button type="button" class="btn lime" data-act="generate"${s.openai ? '' : ' disabled'}>영문 제목·본문 생성</button>
-            <span class="hint">${s.openai ? (d.reply ? '답장 모드: 상대방 회신을 반영해 답장을 씁니다.' : 'OpenAI가 JSON(subject · body)으로 만듭니다.') : `${settingsLink}에서 OPENAI_API_KEY를 넣으면 사용 가능 · 지금은 아래에 직접 쓸 수 있습니다.`}</span>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-head"><h2>3. 메일 검토</h2><span data-ref="ai-badge">${d.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
+        <section class="card ptn-fold-card${folded('s3') ? ' is-folded' : ''}">
+          <div class="card-head">${foldTitle('s3', '3. 메일 검토')}<span data-ref="ai-badge">${d.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
+          <div class="ptn-fold-body" id="ptn-fold-s3">
           <label class="field"><span>수신자</span><input class="input" type="text" inputmode="email" data-f="to" value="${esc(d.to)}" placeholder="partner@example.com (여러 명은 쉼표로, 5명까지)" autocomplete="off"></label>
           <label class="field"><span>제목</span><input class="input" data-f="subject" value="${esc(d.subject)}" maxlength="300"></label>
           <label class="field"><span>본문</span><textarea class="input ptn-out-body" rows="14" data-f="body">${esc(d.body)}</textarea><small data-ref="wc"></small></label>
@@ -1066,6 +1080,7 @@
             <button type="button" class="btn soft small" data-act="review">문구 점검</button>
           </div>
           <div data-ref="ko">${d.ko ? koBox(d.ko) : ''}</div>
+          </div>
         </section>
 
         <section class="card">
@@ -1093,11 +1108,53 @@
       </div>
 
       <aside class="stack tight ptn-out-aside">
-        <section class="card tinted" data-ref="target"></section>
+        <section class="card ptn-fold-card${folded('s1') ? ' is-folded' : ''}">
+          <div class="card-head">${foldTitle('s1', '1. 받는 업체 · 원하는 파트너')}
+            <div class="seg" role="group" aria-label="업체 구분">${TYPES.map(t => `<button type="button" data-mtype="${esc(t)}" aria-pressed="${d.type === t}">${D.typeIcon[t]} ${esc(t)}</button>`).join('')}</div></div>
+          <div class="ptn-fold-body" id="ptn-fold-s1">
+          <div class="field-grid">
+            <label class="field"><span>받는 업체 (${esc(d.type)})</span>
+              <select class="input" data-f="partnerId">
+                <option value="">직접 입력</option>
+                ${opts.map(c => `<option value="${esc(c.id)}"${c.id === d.partnerId ? ' selected' : ''}>${esc(c.name)}${c.email ? '' : ' (이메일 없음)'}</option>`).join('')}
+              </select></label>
+            <label class="field"><span>업체 이름</span><input class="input" data-f="partnerName" value="${esc(d.partnerName)}" placeholder="직접 입력할 때 업체 이름"${d.partnerId ? ' readonly' : ''}></label>
+          </div>
+          <label class="field"><span>우리가 원하는 ${d.type === '케이터링' ? '케이터링 업체' : '인플루언서'}</span>
+            <textarea class="input" rows="3" data-f="ideal">${esc(d.ideal[d.type] || '')}</textarea><small>생성 프롬프트의 {ideal} 자리에 들어갑니다.</small></label>
+          <details class="ptn-out-prompt mt-16">
+            <summary>생성 프롬프트 · ${esc(d.type)} <span data-ref="prompt-badge">${custom ? badge('팀에서 수정함', 'orange') : badge('기본')}</span></summary>
+            <div class="ptn-out-steps" aria-label="메일 구조"><span class="ptn-out-steps-title">메일 구조</span>
+              ${(cfg.mailSteps || D.mailSteps).map((x, i) => `<span class="ptn-out-step"><b>${i + 1}</b>${esc(x)}</span>`).join('<span class="ptn-out-arrow" aria-hidden="true">→</span>')}</div>
+            <textarea class="input mono ptn-out-prompttext" rows="9" data-f="prompt" aria-label="생성 프롬프트 원문">${esc(promptFor(d.type, cfg))}</textarea>
+            <div class="between mt-8 ptn-out-wrap">
+              <small class="hint">자리표시자: <code>{product}</code> 제품 설명 · <code>{ideal}</code> 원하는 파트너 · <code>{partner}</code> 업체명. 팀 공용으로 저장됩니다. 공통 규칙(150–200단어 · 섹션 이름 미출력 · 의학 주장·과음 조장 금지 · 모든 항목 반영)은 서버가 항상 덧붙입니다.</small>
+              <button type="button" class="btn small ghost" data-act="reset-prompt">↺ 기본 프롬프트로 되돌리기</button>
+            </div>
+            <details class="mt-8"><summary class="small">{product}에 들어가는 제품 설명</summary><p class="small muted mt-8">${esc(cfg.productDesc || '')}</p></details>
+          </details>
+          </div>
+        </section>
+
+        <section class="card ptn-fold-card${folded('s2') ? ' is-folded' : ''}">
+          <div class="card-head">${foldTitle('s2', '2. 협업 조건')}<button type="button" class="btn small ghost" data-act="reset-cond">↺ ${esc(d.type)} 기본 문구</button></div>
+          <div class="ptn-fold-body" id="ptn-fold-s2">
+          <label class="field"><span>협업 목적</span><textarea class="input" rows="2" data-f="purpose">${esc(cond.purpose)}</textarea></label>
+          <div class="field"><span class="field-label">기간</span>
+            <div class="flex ptn-out-period"><input type="date" class="input" data-f="start" value="${esc(d.start)}" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input" data-f="end" value="${esc(d.end)}" aria-label="종료일"></div></div>
+          <label class="field"><span>제안 내용</span><textarea class="input" rows="4" data-f="proposal">${esc(cond.proposal)}</textarea></label>
+          <label class="field"><span>요청사항</span><textarea class="input" rows="3" data-f="requests">${esc(cond.requests)}</textarea><small>한국어로 써도 됩니다 — 목적 · 제안 · 요청의 모든 항목이 영어 메일에 반영됩니다.</small></label>
+          <div class="flex wrap mt-16">
+            <button type="button" class="btn lime" data-act="generate"${s.openai ? '' : ' disabled'}>영문 제목·본문 생성</button>
+            <span class="hint">${s.openai ? (d.reply ? '답장 모드: 상대방 회신을 반영해 답장을 씁니다.' : 'OpenAI가 JSON(subject · body)으로 만듭니다.') : `${settingsLink}에서 OPENAI_API_KEY를 넣으면 사용 가능 · 지금은 아래에 직접 쓸 수 있습니다.`}</span>
+          </div>
+          </div>
+        </section>
         <section class="card" data-ref="review">
           <div class="card-head"><h2>문구 점검</h2>${badge('B2B 기준', 'blue')}</div>
           <p class="panel-note">‘문구 점검’을 누르면 제목·본문의 금지·주의 표현을 찾아 등급 · 사유 · 수정 후보를 보여 줍니다. 1차 참고용이며 최종 판단은 담당자가 합니다.</p>
         </section>
+        <section class="card tinted" data-ref="target"></section>
         <section class="card">
           <div class="card-head"><h2>발송 안내</h2></div>
           <ul class="ptn-out-tips">
@@ -1236,6 +1293,7 @@
       else if (a === 'att-del') deleteAttachment(st, box, b.dataset.id);
       else if (a === 'reset-prompt') resetPrompt(st, box);
       else if (a === 'reset-cond') resetCond(st);
+      else if (a === 'fold') toggleFold(b);
       else if (a === 'reply-cancel') cancelReply(st);
       else if (a === 'goto-contacts') go('contacts');
     });
