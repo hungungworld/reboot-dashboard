@@ -99,6 +99,58 @@
   }
   function topicsText(list) { return (list || []).map(x => `${x.topic} ${x.count}`).join(' · ') || '없음'; }
 
+  /* ───────── 줄바꿈: 문장 · 반점 단위 ─────────
+     글 묶음(p · li · .note …) 속 글자를 문장 끝 · 반점 뒤에서 나눠 <span class="ins-ph">로 감쌈
+     → 문장이 바뀌는 곳에서 먼저 줄이 바뀌고, 한 문장이 길면 그 안에서 줄 길이를 고르게 (insights.css)
+     숫자(1,234 · 3.5)는 뒤에 띄어쓰기가 없어 안 나뉨. 표 · 버튼 · 배지 · 입력칸 · 툴팁 · 한 줄 칸은 건드리지 않음 */
+  const PH_BLOCK = 'p, li, dd, small, figcaption, blockquote, .note, .panel-note, .hint';
+  const PH_SKIP = 'table, button, .btn, label, .badge, .ins-tip, input, textarea, select, code, pre, svg, [contenteditable], .ins-ph';
+  // 문장 끝: 한글 뒤 . ! ? · 소문자 · 닫는 괄호 뒤 . 만 (U.S. · I.V. 약어, 10. 25. 날짜, Weee! 이름은 안 나눔)
+  // 반점: 연결 어미(…하고, …며, …지만, …는데) 뒤만 — 나열(맛, 패키지)은 안 나눔
+  const PH_CUT = /(?<=[가-힣][.!?]|[a-z)\]'"”’]\.|(?:고|며|면|서|지만|는데|은데|니|도|게|요|다|해|어|아|죠),)(\s+)/;
+  function phrase(el) {
+    const blocks = el.matches(PH_BLOCK) ? [el] : [];
+    blocks.push(...el.querySelectorAll(PH_BLOCK));
+    blocks.forEach(b => {
+      if (b.closest(PH_SKIP)) return;
+      const cs = global.getComputedStyle(b);
+      if (cs.whiteSpace === 'nowrap' || cs.textWrapMode === 'nowrap' || (cs.webkitLineClamp && cs.webkitLineClamp !== 'none')) return;
+      const walk = doc.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+      const texts = [];
+      for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+        if (PH_CUT.test(t.nodeValue) && !t.parentElement.closest(PH_SKIP)) texts.push(t);
+      }
+      texts.forEach(t => {
+        const frag = doc.createDocumentFragment();
+        t.nodeValue.split(PH_CUT).forEach((s, i) => {
+          if (i % 2 || !s.trim()) { frag.append(s); return; }
+          const sp = doc.createElement('span');
+          sp.className = 'ins-ph';
+          sp.textContent = s;
+          frag.append(sp);
+        });
+        t.replaceWith(frag);
+      });
+    });
+  }
+  // 화면은 innerHTML로 자주 다시 그려지므로, 새로 붙은 노드를 모아 한 번에 처리 (모달 .part-insights 포함)
+  function phraseAll(nodes) {
+    const todo = new Set();
+    nodes.forEach(n => {
+      const el = n.nodeType === 3 ? n.parentElement : n;
+      if (el && el.nodeType === 1 && el.isConnected && el.closest('.part-insights')) todo.add(el.closest(PH_BLOCK) || el);
+    });
+    todo.forEach(phrase);
+  }
+  const doc = global.document;
+  if (doc && global.MutationObserver) {
+    const start = () => {
+      new global.MutationObserver(ms => phraseAll(ms.flatMap(m => [...m.addedNodes]))).observe(doc.body, { childList: true, subtree: true });
+      phraseAll([...doc.querySelectorAll('.part-insights')]);
+    };
+    if (doc.body) start(); else doc.addEventListener('DOMContentLoaded', start);
+  }
+
   /* ───────── 화면 ───────── */
   function render(root) {
     S.root = root;
@@ -657,7 +709,7 @@
         <div class="ins-insight-body">
           ${x.faq && x.faq.length ? `<div><span class="field-label">FAQ</span><ul>${x.faq.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
           ${x.expressions && x.expressions.length ? `<div><span class="field-label">고객 표현</span><ul>${x.expressions.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
-          <div><span class="field-label">분류 정확도</span><p class="small muted">아직 검증 전이에요 (데이터 › 정확도 검증).</p></div>
+          <div><span class="field-label">분류 정확도</span><p class="small muted">사람 정답으로 채점한 결과는 <a class="link" href="#data/accuracy">데이터 › 정확도 검증</a>에서 볼 수 있어요.</p></div>
         </div></details>`).join('')
       : ui.empty('아직 고객 데이터가 없어요. 월간 분석 실행으로 유튜브 댓글을 모으거나 리뷰를 모으세요.', 'users');
     const st = m.strategy;
@@ -713,7 +765,6 @@
       b.setAttribute('aria-selected', String(on));
     });
     setHash('data/' + sub);
-    if (sub === 'accuracy') { drawAccuracy(); return; }
     if (S.data[sub] && sub !== 'news') drawSub(sub); else loadData(sub);   // 뉴스 수집은 홈에서 새로 보관했을 수 있어 매번 다시 읽음
   }
 
@@ -736,7 +787,8 @@
     const body = $(panel('data'), '[data-ref="data-body"]');
     if (!body) return;
     const d = S.data[sub];
-    body.innerHTML = { shelf: shelfHtml, competitors: competitorsHtml, reviews: reviewsHtml, audience: audienceHtml, news: newsHtml }[sub](d);
+    body.innerHTML = { shelf: shelfHtml, competitors: competitorsHtml, reviews: reviewsHtml, audience: audienceHtml, news: newsHtml,
+      accuracy: accuracyHtml }[sub](d);
     if (sub === 'news') drawNewsList();
     if (sub === 'shelf') { fitSwarm(); focusLine(); }
     if (sub === 'competitors' && S.focusChg) {
@@ -2111,23 +2163,40 @@
     } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
   }
 
-  /* 정확도 검증 (자리만 · README '정확도 검증') */
-  function drawAccuracy() {
-    const body = $(panel('data'), '[data-ref="data-body"]');
-    if (!body) return;
-    body.innerHTML = qHead('accuracy', '아직 검증 전이에요. 지금 분류는 규칙(단어 · 별점) 또는 AI 결과이고, 둘 다 사람 확인이 필요해요.') + `
-      <div class="workbench mt-24">
-        <section class="card">
-          <div class="card-head"><h2>검증 방법</h2>${badge('준비 중', 'orange')}</div>
-          <div class="workflow-step"><span class="stepnum">01</span>리뷰 · 댓글 30건을 골라 사람이 정답(주제 · 칭찬/불만 · 질문 여부)을 붙여요</div>
-          <div class="workflow-step"><span class="stepnum">02</span>같은 30건을 규칙 / AI(예시 없이) / AI(예시 포함) 세 방식으로 분류해요</div>
-          <div class="workflow-step"><span class="stepnum">03</span>정답과 맞은 비율로 채점해요</div>
-          <div class="workflow-step"><span class="stepnum">04</span>이긴 방식으로 전체를 분류해요</div>
-          <p class="panel-note mt-8">정답 30건이 모이면 시작해요. 그 전까지 AI 분류는 참고만 하세요.</p>
-        </section>
-        <aside class="stack"><section class="card"><h3>지금 분류 상태</h3>
-          <p class="small muted mt-8">${S.data.reviews ? esc(`리뷰 ${S.data.reviews.stats.total}개 중 AI 분류 ${S.data.reviews.stats.ai}개 · 나머지는 규칙`) : '구매자 리뷰 탭을 열면 분류 상태가 보여요.'}</p></section></aside>
-      </div>`;
+  /* 정확도 검증: 유튜브 댓글 VOC 분류를 사람 정답 76건으로 채점 (README '정확도 검증') */
+  function accuracyHtml(d) {
+    const s = d.saved;
+    const name = Object.fromEntries(d.methods);
+    const tl = k => (k === 'none' ? '-' : d.topicLabels[k] || k);
+    const ox = v => (v ? 'O' : 'X');
+    const ans = a => `${ox(a.relevant)} · ${ox(a.question)} · ${esc(tl(a.topic))}`;
+    const run = `<button type="button" class="btn small" data-act="ins-update-only" data-items="accuracy">${icon('refresh')}채점 실행</button>`;
+    const one = s ? `${name[s.winner]} 방식이 정답 ${s.tests}건 중 ${s.methods[s.winner].exact}%를 맞혔어요 (세 칸 모두 일치 기준).`
+      : '아직 채점 전이에요. 채점 실행을 누르면 세 방식을 같은 정답으로 비교해요.';
+    const ec = d.exampleCounts, tc = d.testCounts;
+    const how = `<section class="card"><div class="card-head"><h2>검증 방법</h2>${badge('사람 정답', 'lime')}</div>
+      <div class="workflow-step"><span class="stepnum">01</span>유튜브 댓글 100건에 사람이 정답(관련 · 질문 · 주제)을 붙였어요</div>
+      <div class="workflow-step"><span class="stepnum">02</span>그중 ${ec.total}건은 AI 프롬프트에 예시(퓨샷)로 넣고, 나머지 ${tc.total}건은 채점에만 써요 (겹치지 않음)</div>
+      <div class="workflow-step"><span class="stepnum">03</span>같은 ${tc.total}건을 규칙 / AI 예시 없이 / AI 예시 포함으로 분류해 맞은 비율을 봐요</div>
+      <div class="workflow-step"><span class="stepnum">04</span>VOC 분류(데이터 업데이트)는 예시 포함 방식을 써요. AI는 답마다 판단 근거를 먼저 써요</div>
+      <p class="panel-note mt-8">채점용: 관련 ${tc.relevant} · 질문 ${tc.question}건 / 예시: 관련 ${ec.relevant} · 질문 ${ec.question}건.
+        정답이 적은 주제(구매처 · 가격 · 맛 · 비교 질문은 0건)는 정확도를 말하기 어려워요.</p></section>`;
+    let table = '';
+    if (s) {
+      const keys = d.methods.map(m => m[0]).filter(k => s.methods[k]);
+      table = `<section class="card"><div class="card-head"><h2>채점 결과</h2><span class="small muted">${esc(fmt.datetime(s.at))}${s.model ? ` · ${esc(s.model)}` : ''}</span></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>방식</th>${d.fields.map(f => `<th>${esc(f[1])}</th>`).join('')}<th>틀린 댓글</th></tr></thead>
+        <tbody>${keys.map(k => { const m = s.methods[k]; return `<tr${k === s.winner ? ' class="selected"' : ''}><td><b>${esc(name[k])}</b>${k === s.winner ? ` ${badge('가장 높음', 'lime')}` : ''}</td>
+          ${d.fields.map(f => `<td>${esc(m[f[0]])}%</td>`).join('')}<td>${esc(m.wrong.length)}건</td></tr>`; }).join('')}</tbody></table></div>
+        ${s.methods.few ? '' : '<p class="panel-note mt-8">AI 키가 없어 규칙만 채점했어요.</p>'}</section>`;
+      table += keys.map(k => fold(`acc-wrong-${k}`, `${name[k]} · 틀린 댓글 ${s.methods[k].wrong.length}건 (정답 / 분류 결과: 관련 · 질문 · 주제)`,
+        `<ul class="ins-reviews">${s.methods[k].wrong.map(w => `<li><p>#${esc(w.no)} ${esc(w.text)}</p>
+          <small class="muted">정답 ${ans(w.gold)} / 분류 ${ans(w.pred)}</small></li>`).join('')}</ul>`)).join('');
+    }
+    const ex = fold('acc-examples', `프롬프트에 넣는 예시 ${d.examples.length}건 (퓨샷)`,
+      `<ul class="ins-reviews">${d.examples.map(x => `<li><p>${esc(x.text)}</p><small class="muted">${ans(x)} · 근거: ${esc(x.reason)}</small></li>`).join('')}</ul>`);
+    return qHead('accuracy', one, run) + `<div class="stack mt-24">${table}${how}</div>${ex}
+      ${d.aiReady ? '' : '<p class="panel-note mt-8">AI 키가 없으면 규칙만 채점해요 (설정 › 연결).</p>'}`;
   }
 
   /* ═════════ 데이터 업데이트 ═════════ */
@@ -2141,7 +2210,7 @@
     try { plan = await api('/api/insights/update/plan'); } catch (e) { toast(e.message, 'error'); return; }
     if (plan.running) { toast('데이터 업데이트가 이미 진행 중이에요.'); checkRun(false); return; }
     const want = only && only.length ? new Set(only)
-      : new Set(plan.items.filter(i => (preset === 'monthly' ? i.group === 'monthly' || i.id === 'reviews' : i.group === 'weekly')).map(i => i.id));
+      : new Set(plan.items.filter(i => !i.manual && (preset === 'monthly' ? i.group === 'monthly' || i.id === 'reviews' : i.group === 'weekly')).map(i => i.id));
     const row = i => `<label class="ins-item${i.ready ? '' : ' off'}">
       <input type="checkbox" data-item="${esc(i.id)}"${want.has(i.id) && i.ready ? ' checked' : ''}${i.ready ? '' : ' disabled'}>
       <span class="grow"><b>${esc(i.label)}</b> <span class="small muted">${esc(i.desc)}</span>

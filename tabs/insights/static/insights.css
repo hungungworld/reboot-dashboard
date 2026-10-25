@@ -6,6 +6,8 @@
    text-wrap-style만 바꿔서 nowrap 칸(배지 · 표 · 알약)은 그대로 한 줄 */
 .part-insights { text-wrap-style: pretty; }
 .part-insights :is(h1, h2, h3, h4, summary, th, label, .badge, .kpi-label, .panel-note) { text-wrap-style: balance; }
+/* 문장 · 반점 한 조각(insights.js phrase) — 한 줄에 들어가면 통째로 다음 줄로, 길면 조각 안에서 줄 길이를 고르게 */
+.part-insights .ins-ph { display: inline-block; max-width: 100%; text-wrap-style: balance; }
 .part-insights .ins-skel { height: 220px; }
 .part-insights .ins-skel-sm { height: 90px; }
 .part-insights .ins-h3 { font-size: 13px; margin: 20px 0 10px; display: flex; align-items: baseline; gap: 8px; }
@@ -574,9 +576,10 @@
 
 @media (max-width: 950px) {
   .part-insights .ins-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .part-insights .ins-chg-cols, .part-insights .ins-chg-cols.one .ins-chg-col { grid-template-columns: 1fr; }
+  /* minmax(0, …): 한 줄로 줄이는 긴 상품명(.ins-chg-title) 때문에 칸이 화면 밖으로 넓어지지 않게 */
+  .part-insights .ins-chg-cols, .part-insights .ins-chg-cols.one .ins-chg-col { grid-template-columns: minmax(0, 1fr); }
 }
-@media (max-width: 720px) { .part-insights .ins-chg-sum { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .part-insights .ins-chg-sum { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 720px) {
   .part-insights .ins-insight-body, .part-insights .ins-swot { grid-template-columns: 1fr; }
   .part-insights .ins-steps, .part-insights .ins-facts > div { grid-template-columns: 1fr; }
