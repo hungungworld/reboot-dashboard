@@ -195,3 +195,58 @@ def advise(summary, source, today=None):
         "model": openai_model(),
         "seasons": [s["name"] for s in data["upcoming_seasons"]],
     }
+
+
+# ───────── 채널별 성과 표 위 AI 인사이트 (두괄식) — 위 예산 제안과 따로 부름 ─────────
+INSIGHT_SYSTEM = """당신은 10년 경력의 전략 마케팅 전문가입니다.
+한국 숙취해소 젤리·음료 브랜드 REBOOT(일반 식품)의 미국 시장 광고 성과를 보고, 바쁜 한국인 마케터가 표를 보기 전에 읽을 핵심을 두괄식으로 짚어 줍니다.
+
+규칙
+- 사용자 메시지(JSON)에 있는 숫자만 근거로 씁니다. 주어지지 않은 숫자나 사실을 만들지 않습니다. 비중(%)처럼 계산한 값은 주어진 숫자로 직접 계산합니다.
+- compare가 null이면 증감·추세를 말하지 않습니다.
+- data_source가 "sample"이면 headline을 "샘플 데이터 기준,"으로 시작합니다.
+- 제품 효능(숙취 해소·예방 등)을 단정하는 문구를 쓰지 않습니다.
+- 숫자 형식: ROAS·CTR·CVR은 %를 붙이고 ROAS는 정수(예: 365%), CTR·CVR은 소수 둘째 자리까지(예: 0.99%). 금액은 ₩와 천 단위 쉼표(예: ₩7,295,000). 개수는 천 단위 쉼표.
+- 숫자와 핵심 어휘(채널 이름, 지표 이름, 핵심 판단)는 **이렇게** 굵게 감쌉니다. 한 문장에 굵게는 3곳 이하.
+- 한국어, 문장은 짧게(80자 안팎).
+
+출력
+- headline: 결론 한 문장. 이번 기간 성과에서 가장 중요한 판단
+- points: 2~4개. label은 근거·원인·판단 같은 2~4글자 이름표, text는 한 문장
+  (근거: 결론을 받치는 숫자 / 원인: 퍼널 CTR·CVR·CPA에서 찾은 이유 / 판단: 지금 가장 먼저 할 전략적 행동)"""
+
+INSIGHT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "headline": {"type": "string"},
+        "points": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"label": {"type": "string"}, "text": {"type": "string"}},
+                "required": ["label", "text"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["headline", "points"],
+    "additionalProperties": False,
+}
+
+
+def insight(summary, source, today=None):
+    if not summary["channels"] or summary["totals"]["spend"] <= 0:
+        raise AIError("이 기간에는 광고비 데이터가 없어 AI 인사이트를 만들 수 없습니다.", 400)
+    data = build_input(summary, source, today)
+    data.pop("budget_base", None)
+    data.pop("upcoming_seasons", None)
+    raw = openai_json(INSIGHT_SYSTEM, data, schema=INSIGHT_SCHEMA, schema_name="performance_insight", max_tokens=800,
+                      part="performance", action=f"성과 AI 인사이트 ({summary['start']} ~ {summary['end']})")
+    headline = _txt(raw.get("headline"), 300)
+    points = []
+    for p in (raw.get("points") or [])[:4]:
+        if isinstance(p, dict) and _txt(p.get("text"), 300):
+            points.append({"label": _txt(p.get("label"), 10), "text": _txt(p.get("text"), 300)})
+    if not headline:
+        raise AIError("AI가 인사이트를 돌려주지 않았습니다. 다시 만들기를 눌러 주세요.")
+    return {"headline": headline, "points": points, "model": openai_model()}
