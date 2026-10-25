@@ -483,6 +483,12 @@
 .part-insights .ins-rv-pre { grid-column: 2; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .part-insights .ins-rv[open] .ins-rv-pre { display: none; }
 .part-insights .ins-rv-body { padding: 4px 0 0 20px; }
+/* 아마존 리뷰 요약 (2026-10-26): 줄 전체를 눌러 펼침 · 펼치면 번역 보기 · 아마존 원문 링크 */
+.part-insights .ins-sum-rv > summary { padding: 8px 10px; margin: 0 -10px; border-radius: 10px; }
+.part-insights .ins-sum-rv > summary:hover { background: var(--soft-2); }
+.part-insights .ins-sum-act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; }
+.part-insights .ins-sum-ko { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--soft); }
+.part-insights .ins-sum-ko p { margin: 6px 0 0; }
 .part-insights .ins-rv-st { font-size: 11px; font-weight: 600; color: var(--muted); }
 .part-insights .ins-rv-st.todo { color: var(--red); }
 .part-insights .ins-rv-st.done { color: var(--green); }
