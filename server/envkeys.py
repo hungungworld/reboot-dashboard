@@ -43,6 +43,8 @@ SERVICES = [
     Service("OPENFDA_API_KEY", "openFDA", "규제 모니터링 (키 없이 먼저 호출)", "키 없이도 동작"),
     Service("REGULATIONS_GOV_API_KEY", "Regulations.gov", "규제 모니터링 (규칙·규칙안)", "무료 키"),
     Service("COURTLISTENER_TOKEN", "CourtListener", "규제 모니터링 (허위광고 판결)", "무료 토큰"),
+    Service("FDA_DASHBOARD_USER", "FDA Data Dashboard 계정 (이메일)", "규제 모니터링 (수입 거부 · 경고장)", secret=False),
+    Service("FDA_DASHBOARD_KEY", "FDA Data Dashboard 키", "규제 모니터링 (수입 거부 · 경고장)", "무료 키"),
     Service("SHOPIFY_TOKEN", "Shopify", "할인코드별 주문·매출 (연동 예정)"),
     Service("HIGGSFIELD_API_KEY", "Higgsfield", "콘텐츠 이미지·영상 (연동 예정)"),
     Service("GMAIL_ADDRESS", "Gmail 주소 (SMTP)", "협업 메일 발송", secret=False,
