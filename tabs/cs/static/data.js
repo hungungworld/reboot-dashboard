@@ -14,14 +14,15 @@
     // 판매 제품 4종 — 브랜드 키트(tabs/content/data/brand_kit.json · 2026-10-24) 기준. 답변 템플릿의 {product}·{flavor}·{pack}을 채웁니다.
     // 맛은 확정(flavorsFinal: true) · "Zero Sugar"는 Balance 2종에만(zeroSugar) · 봉지 안 개수·함량·인증·원산지·알레르기는 미정 → 답장에서 [확인 필요]
     // 2026-10-25 브랜드 가이드 v1.1: 젤리는 구미형(곤약 아님) · 맛별 모양 체리=카우보이 모자 · 레몬=올가미 · 라임=부츠 (리볼버 모양은 소개 안 함)
-    // ZERO SUGAR는 조건부(당 표현 검토 후 출시 문구 확정) → zeroSugarFinal이 false인 동안 답장에 쓰지 않고 [확인 필요]
+    // ZERO SUGAR: 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 → zeroSugarFinal true (Balance 문의에 'Zero Sugar'라고 답함)
+    // 젤리는 봉지당 10개 (제품 최종 정보) · 함량·인증·원산지·알레르기·영양 수치는 미정 → 답장에서 [확인 필요]
     brand: { name: 'REBOOT', slogan: 'Restart Your Day' },
-    zeroSugarFinal: false,
+    zeroSugarFinal: true,
     products: [
       { id: 'jelly', ko: 'Original 젤리', en: 'Reboot Jelly Original', form: 'individually wrapped gummy-type shaped jelly (cherry = cowboy hat, lemon = lasso, lime = cowboy boot)', flavors: ['lime', 'lemon', 'cherry'], flavorsFinal: true,
-        pack: 'one pouch of individually wrapped jellies', unit: 'jelly', zeroSugar: false },
+        pack: 'one pouch of 10 individually wrapped jellies', unit: 'jelly', zeroSugar: false },
       { id: 'jelly-ls', ko: 'Balance 젤리', en: 'Reboot Jelly Balance', form: 'individually wrapped gummy-type shaped jelly (cherry = cowboy hat, lemon = lasso, lime = cowboy boot)', flavors: ['cherry', 'lime', 'lemon'], flavorsFinal: true,
-        pack: 'one pouch of individually wrapped jellies', unit: 'jelly', zeroSugar: true },
+        pack: 'one pouch of 10 individually wrapped jellies', unit: 'jelly', zeroSugar: true },
       { id: 'drink', ko: 'Original 음료', en: 'Reboot Drink Original', form: 'non-carbonated drink', flavors: ['lemon', 'cherry', 'lime'], flavorsFinal: true,
         pack: 'single 100 ml bottle or 3-bottle box', unit: 'bottle', zeroSugar: false },
       { id: 'drink-ls', ko: 'Balance 음료', en: 'Reboot Drink Balance', form: 'non-carbonated drink', flavors: ['lemon', 'lime', 'cherry'], flavorsFinal: true,

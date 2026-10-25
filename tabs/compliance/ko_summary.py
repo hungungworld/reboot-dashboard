@@ -154,7 +154,8 @@ def summarize(items):
 
 def enrich_sources(sources):
     """refresh.py 결과(sources)에 title_ko·summary_ko를 붙임 (제자리 수정)."""
-    flat = [(src, it) for src in sources for it in src.get("items", [])]
+    # noKo: 한글 요약이 필요 없는 출처 (FDA GRAS 통지 = 원료 이름 목록 · AI 비용 아낌 · 2026-10-25)
+    flat = [(src, it) for src in sources if not src.get("noKo") for it in src.get("items", [])]
     if not flat:
         return
     ko = summarize([{"source": src.get("label", ""), "id": it.get("id", ""), "title": it.get("title", ""),

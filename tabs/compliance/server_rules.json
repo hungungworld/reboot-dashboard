@@ -1,12 +1,19 @@
 {
  "version": "2026-10-24",
  "channel": "cs",
+ "products": [
+  "jelly",
+  "jelly-ls",
+  "drink",
+  "drink-ls"
+ ],
  "rules": [
   {
    "code": "R1",
    "name": "질병·치료 클레임",
    "verdict": "BLOCK",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])cure(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])prevent(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -23,30 +30,40 @@
     "(?<![A-Za-z0-9])intoxication(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])alcohol['’]?s[\\s-]*negative[\\s-]*effects(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])negative[\\s-]*effects[\\s-]*of[\\s-]*alcohol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "\\b(?:eliminat|reduc|stop|eas|eras|banish|fight|beat|cure|treat|lower|decreas|block|neutraliz)\\w*\\s+(?:the\\s+|your\\s+)?(?:nausea|headaches?|vomiting|dizziness|blood[\\s-]*alcohol|BAC|alcohol\\s+absorption|alcohol\\s+levels?|acetaldehyde|toxins?)\\b",
+    "(?<![A-Za-z0-9])inflammation(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])anti[\\s-]*inflammator(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "\\b(?:eliminat|reduc|stop|eas|eras|banish|fight|beat|cure|treat|lower|decreas|block|neutraliz)\\w*\\s+(?:the\\s+|your\\s+)?(?:morning\\s+|next[\\s-]*day\\s+)?(?:nause?a|nausia|headaches?|vomiting|dizziness|bloating|blood[\\s-]*alcohol|BAC|alcohol\\s+absorption|alcohol\\s+levels?|acetaldehyde|toxins?)\\b",
     "\\bsobers?\\s+(?:you\\s+)?up\\b",
     "\\b(?:drink\\w*\\s+as\\s+much\\s+as\\s+you\\s+(?:want|like)|no\\s+matter\\s+how\\s+much\\s+you\\s+drink|however\\s+much\\s+you\\s+drink)[^.!?]{0,60}\\b(?:covered|got\\s+(?:you|your\\s+back)|fine|okay|solved?|fix\\w*|handle\\w*|take\\s+care)",
-    "(?:많이|얼마나|실컷|마음껏)\\s*마셔도[^.!?]{0,30}(?:해결|책임|걱정\\s*없|괜찮|끄떡없)"
+    "(?:많이|얼마나|실컷|마음껏)\\s*마셔도[^.!?]{0,30}(?:해결|책임|걱정\\s*없|괜찮|끄떡없)",
+    "\\b(?:help|helps|helping|support|supports|aid|aids|care|ease|eases)\\b[^.!?]{0,30}\\b(?:after|following)\\s+(?:drinking|a\\s+night\\s+out|a\\s+big\\s+night|alcohol|a\\s+party|partying)\\b",
+    "\\bafter[\\s-]*(?:party|drinking)\\s+care\\b",
+    "(?:음주|술자리|술\\s*마신)\\s*(?:후|뒤|다음)[^.!?]{0,15}(?:케어|관리|도움|챙겨)"
    ],
    "ko": [
     "치료",
     "예방",
     "완화",
     "해독",
-    "금단"
+    "금단",
+    "염증"
    ],
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
    "allow": [
     "\\bprevent(?:s|ed|ing)?\\s+(?:spoilage|melting|leaks?|leaking|freezing|sticking|clumping|damage|mold|contamination|choking)\\b"
-   ]
+   ],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R2",
    "name": "'hangover' 직접 언급",
    "verdict": "BLOCK",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])hangover(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])hang[\\s-]*over(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -59,13 +76,17 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R3",
    "name": "안전성 보장·간 보호",
    "verdict": "BLOCK",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])protect[\\s-]*your[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])protects[\\s-]*your[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -91,13 +112,17 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R4",
    "name": "알코올 홍조·ALDH2",
    "verdict": "BLOCK",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])asian[\\s-]*glow(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])alcohol[\\s-]*flush(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -106,7 +131,8 @@
     "(?<![A-Za-z0-9])flush[\\s-]*reaction(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])flushing(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])ALDH2(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])red[\\s-]*face(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])red[\\s-]*face(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "\\b(?:alcohol|drinking)\\W{1,3}flush"
    ],
    "ko": [
     "홍조",
@@ -115,13 +141,17 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R5",
    "name": "효과 보장·과장",
    "verdict": "REVISE",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])guarantee(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])clinically[\\s-]*proven(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -129,23 +159,39 @@
     "(?<![A-Za-z0-9])100%(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])works[\\s-]*every[\\s-]*time(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])instant[\\s-]*results(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])miracle(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])miracle(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])No\\.1(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])No\\.[\\s-]*1(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])#1(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])number[\\s-]*one(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])works[\\s-]*fast(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])fast[\\s-]*acting(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])acts[\\s-]*fast(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])works[\\s-]*quickl(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])"
    ],
    "ko": [
     "효과 보장",
     "확실한 효과",
-    "기적"
+    "기적",
+    "1위",
+    "넘버원",
+    "빠른 효과",
+    "즉효"
    ],
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R6",
    "name": "음주 조장",
    "verdict": "REVISE",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])drink[\\s-]*all[\\s-]*night(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])party[\\s-]*harder(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -166,13 +212,17 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "green",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R7",
    "name": "의약품 오인",
    "verdict": "REVISE",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])hangover[\\s-]*pill(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])pill(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -183,7 +233,10 @@
     "(?<![A-Za-z0-9])nature['’]?s[\\s-]*aspirin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])aspirin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])medicine(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])prescription(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])prescription(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])trusted[\\s-]*by[\\s-]*pharmacists(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pharmacist[\\s-]*recommended(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])recommended[\\s-]*by[\\s-]*pharmacists(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
    ],
    "ko": [
     "숙취약",
@@ -197,13 +250,17 @@
    "allow": [
     "\\bnot\\s+(?:a\\s+)?medicine\\b",
     "의약품이\\s*아(?:니|닙)"
-   ]
+   ],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R8",
    "name": "구조·기능 클레임",
    "verdict": "REVISE",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])supports[\\s-]*liver[\\s-]*health(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])liver[\\s-]*health(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -227,8 +284,29 @@
     "(?<![A-Za-z0-9])boost[\\s-]*your[\\s-]*energ(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])gut[\\s-]*health(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])digestive[\\s-]*health(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])acetaldehyde(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])GABA(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])brain[\\s-]*fog(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])bloating(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pre[\\s-]*alcohol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pre[\\s-]*drinking(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pre[\\s-]*drink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])liver[\\s-]*support(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])liver[\\s-]*care(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])support[\\s-]*your[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])supports[\\s-]*your[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])support[\\s-]*the[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])supports[\\s-]*the[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "\\breset\\w*\\s+(?:your\\s+|the\\s+)?(?:body|system|liver|stomach|gut|condition)\\b",
-    "\\b(?:condition|body|system)\\s+reset\\b"
+    "\\b(?:condition|body|system)\\s+reset\\b",
+    "\\b(?:feel|feels|felt|feeling|wake\\s+up|woke\\s+up|waking\\s+up)\\s+(?:feeling\\s+)?(?:fresh|great|fine|good|clear[\\s-]*headed|light)\\s+(?:the\\s+)?next\\s+(?:day|morning)\\b",
+    "\\b(?:wake|waking|woke)\\s+up\\s+(?:feeling\\s+)?(?:fresh|clear[\\s-]*headed|good\\s+as\\s+new)\\b",
+    "\\b(?:wake|waking|woke)\\s+up\\s+to\\s+(?:a\\s+|an\\s+)?(?:fresh|clear|bright|better|easy)[^.!?]{0,25}\\bmorning\\b",
+    "\\b(?:fresh|clear)[^.!?]{0,15}\\bmorning\\s+(?:tomorrow|after)\\b",
+    "\\b(?:before|after|following|while)\\s+(?:drinking|you\\s+drink|alcohol)\\b",
+    "다음\\s*날[^.!?]{0,15}(?:가뿐|개운|상쾌|멀쩡|거뜬|쌩쌩)",
+    "(?:가뿐|개운|멀쩡|거뜬|쌩쌩)한\\s*(?:다음\\s*날|아침)"
    ],
    "ko": [
     "간 건강",
@@ -244,12 +322,24 @@
     "몸을 리셋",
     "몸 리셋",
     "장 건강",
-    "원기"
+    "원기",
+    "간에 좋",
+    "간을 위한",
+    "간 케어",
+    "음주 전",
+    "음주 후",
+    "음주 전후",
+    "술 마시기 전",
+    "술 마신 후",
+    "술 마신 뒤"
    ],
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R9",
@@ -258,6 +348,7 @@
    "byChannel": {
     "b2b": "REVIEW"
    },
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])clinically[\\s-]*tested(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])clinically[\\s-]*studied(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -268,7 +359,11 @@
     "(?<![A-Za-z0-9])human[\\s-]*stud(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])human[\\s-]*trial(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])research[\\s-]*shows(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])studies[\\s-]*show(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])studies[\\s-]*show(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])science[\\s-]*backed(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])backed[\\s-]*by[\\s-]*science(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])scientifically[\\s-]*formulated(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])scientifically[\\s-]*proven(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
    ],
    "ko": [
     "임상",
@@ -278,13 +373,17 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R10",
    "name": "후기·리뷰",
    "verdict": "REVIEW",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])testimonial(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])5[\\s-]*star(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -318,13 +417,91 @@
     "\\b(?:do|does|did|will|would|can)(?:n['’]t|\\s+not)\\s+(?:offer|give|provide|pay|send)[^.!?]{0,60}reviews?",
     "\\bnever\\s+(?:offer|give|provide|pay|send)[^.!?]{0,60}reviews?",
     "(리뷰|후기)[^.!?]{0,20}(쿠폰|적립|증정|할인|환불)[^.!?]{0,15}(않|없|안 )"
-   ]
+   ],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": "red"
+  },
+  {
+   "code": "R11",
+   "name": "가이드에 없는 당 표시 ('low sugar'·저당·reduced sugar)",
+   "verdict": "BLOCK",
+   "byChannel": {},
+   "byProduct": {},
+   "regex": [
+    "(?<![A-Za-z0-9])low[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])low[\\s-]*in[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])lite[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])light[\\s-]*in[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])reduced[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])less[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])lower[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])sugar[\\s-]*reduced(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])no[\\s-]*added[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])no[\\s-]*sugar[\\s-]*added(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])without[\\s-]*added[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+   ],
+   "ko": [
+    "저당",
+    "당이 낮은",
+    "당 함량이 낮은",
+    "당류 저감",
+    "당을 줄인",
+    "당 줄인",
+    "설탕 무첨가",
+    "무가당"
+   ],
+   "compensated": [],
+   "incentive": [],
+   "incentiveVerdict": "",
+   "allow": [],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
+  },
+  {
+   "code": "R12",
+   "name": "'Zero Sugar' 표시 (Balance만)",
+   "verdict": "COND",
+   "byChannel": {},
+   "byProduct": {
+    "jelly": "BLOCK",
+    "drink": "BLOCK",
+    "jelly-ls": "PASS",
+    "drink-ls": "PASS"
+   },
+   "regex": [
+    "(?<![A-Za-z0-9])zero[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])sugar[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])no[\\s-]*sugar(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])sugarless(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+   ],
+   "ko": [
+    "제로 슈거",
+    "제로슈거",
+    "제로 슈가",
+    "제로슈가",
+    "무설탕"
+   ],
+   "compensated": [],
+   "incentive": [],
+   "incentiveVerdict": "",
+   "allow": [
+    "\\bno\\s+sugar\\s+alcohols?\\b"
+   ],
+   "legal": "yellow",
+   "legalByProduct": {
+    "jelly": "red",
+    "drink": "red"
+   },
+   "compensatedLegal": ""
   },
   {
    "code": "R13",
    "name": "성분 강조·숙취 연상 성분",
    "verdict": "REVIEW",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])packed[\\s-]*with(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])loaded[\\s-]*with(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -337,28 +514,56 @@
     "(?<![A-Za-z0-9])DHM(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])probiotic(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])probiotics(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])lactobacillus(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])live[\\s-]*cultures(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])A[\\s-]*HAT(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])atractylodes(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])astragalus(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])konjac(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])glucomannan(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])folic[\\s-]*acid(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])artichoke[\\s-]*extract(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])artichoke[\\s-]*leaf(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])dihydromyricetin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])DHM(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])N[\\s-]*acetylcysteine(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])N[\\s-]*acetyl[\\s-]*cysteine(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])NAC(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])milk[\\s-]*thistle(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])silymarin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])glutathione(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
    ],
    "ko": [
     "듬뿍",
     "가득",
     "고함량",
     "풍부한",
-    "유산균",
-    "프로바이오틱"
+    "프로바이오틱",
+    "창출",
+    "황기",
+    "곤약",
+    "글루코만난",
+    "엽산",
+    "아티초크",
+    "디하이드로미리세틴",
+    "N-아세틸시스테인",
+    "아세틸시스테인",
+    "밀크시슬",
+    "실리마린",
+    "글루타치온"
    ],
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R14",
    "name": "정부 승인·인증 주장",
    "verdict": "BLOCK",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])FDA[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])FDA[\\s-]*certified(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -376,13 +581,17 @@
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   },
   {
    "code": "R15",
    "name": "미확정 정보·공식 제휴 암시",
    "verdict": "REVIEW",
    "byChannel": {},
+   "byProduct": {},
    "regex": [
     "(?<![A-Za-z0-9])revolver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])pistol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -395,9 +604,56 @@
     "(?<![A-Za-z0-9])patented(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])patent(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])Coachella(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])gluten[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])gluten[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])non[\\s-]*GMO(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])GMO[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])organic(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])all[\\s-]*natural(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])100%[\\s-]*natural(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])lab[\\s-]*tested(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])third[\\s-]*party[\\s-]*tested(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])3rd[\\s-]*party[\\s-]*lab[\\s-]*tested(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])kosher(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])halal(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])turmeric(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])curcumin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])ginger(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])jujube(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])goji[\\s-]*berr(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])goji(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])wolfberr(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])licorice(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])liquorice(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pear[\\s-]*juice(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])Korean[\\s-]*pear(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])green[\\s-]*plum(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])maesil(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])red[\\s-]*ginseng(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])ginseng(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])green[\\s-]*tea[\\s-]*extract(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])kudzu(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pueraria(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])alder(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])taurine(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])vitamin[\\s-]*C(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])vitamin[\\s-]*B6(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])vitamin[\\s-]*B12(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])B[\\s-]*vitamins(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])electrolytes(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])citrus[\\s-]*peel(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])tangerine[\\s-]*peel(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])orange[\\s-]*peel(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])rice[\\s-]*germ[\\s-]*extract(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])rice[\\s-]*bran[\\s-]*extract(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])fermented[\\s-]*rice[\\s-]*germ(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])DL[\\s-]*alanine(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])alanine(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])zinc(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])magnesium(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "\\b\\d+(?:\\.\\d+)?\\s*(?:kcal|calories|cals?)\\b",
     "\\b\\d+(?:\\.\\d+)?\\s*(?:g|grams?|mg)\\s+(?:of\\s+)?(?:sugars?|carbs?|carbohydrates?|protein|fat|sodium|caffeine)\\b",
-    "\\b\\d+\\s+(?:jellies|pieces|pcs)\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:pouch|bag)\\b",
+    "\\b(?!10\\b)\\d+\\s+(?:jellies|pieces|pcs)\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:pouch|bag)\\b",
     "\\d+(?:\\.\\d+)?\\s*(?:kcal|칼로리)",
     "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g"
    ],
@@ -409,12 +665,49 @@
     "공식 음료",
     "공식 젤리",
     "특허",
-    "코첼라"
+    "코첼라",
+    "글루텐 프리",
+    "유기농",
+    "무농약",
+    "할랄",
+    "강황",
+    "울금",
+    "커큐민",
+    "생강",
+    "대추",
+    "구기자",
+    "감초",
+    "배즙",
+    "매실",
+    "홍삼",
+    "인삼",
+    "녹차 추출물",
+    "녹차추출물",
+    "칡",
+    "갈근",
+    "오리나무",
+    "타우린",
+    "비타민 C",
+    "비타민C",
+    "비타민 B",
+    "비타민B",
+    "전해질",
+    "귤껍질",
+    "진피",
+    "미배아",
+    "미강",
+    "쌀눈",
+    "알라닌",
+    "아연",
+    "마그네슘"
    ],
    "compensated": [],
    "incentive": [],
    "incentiveVerdict": "",
-   "allow": []
+   "allow": [],
+   "legal": "yellow",
+   "legalByProduct": {},
+   "compensatedLegal": ""
   }
  ],
  "golden": [
@@ -760,7 +1053,7 @@
   ],
   [
    "White Willow Bark, also called ‘Nature’s Aspirin’, acts as a natural anti-inflammatory agent in the human body.*",
-   "REVISE"
+   "BLOCK"
   ],
   [
    "Milk Thistle helps to protect the liver from damage.*",
@@ -863,7 +1156,7 @@
    "REVISE"
   ],
   [
-   "Doctor-formulated jelly stick.",
+   "Doctor-formulated jelly.",
    "REVISE"
   ],
   [
@@ -883,7 +1176,7 @@
    "BLOCK"
   ],
   [
-   "Mango flavor jelly stick, 10 sticks per box.",
+   "Lime flavor jelly shaped like a cowboy boot, in a 3-bottle box with our drinks.",
    "PASS"
   ],
   [
@@ -892,23 +1185,35 @@
   ],
   [
    "Low sugar lemon-lime jelly.",
-   "PASS"
+   "BLOCK"
   ],
   [
    "Reduced sugar lemon-lime drink.",
-   "PASS"
+   "BLOCK"
   ],
   [
-   "Sugar-free jelly sticks.",
-   "PASS"
+   "Sugar-free jellies.",
+   "COND"
   ],
   [
    "Zero sugar, less sugar, low sugar.",
-   "PASS"
+   "BLOCK"
   ],
   [
    "저당 젤리로 가볍게",
+   "BLOCK"
+  ],
+  [
+   "Zero Sugar cherry, lime and lemon jellies.",
+   "COND"
+  ],
+  [
+   "Sweetened with allulose and stevia, no sugar alcohols.",
    "PASS"
+  ],
+  [
+   "Wake up to a fresh, clear morning tomorrow.",
+   "REVISE"
   ],
   [
    "컨디션 완벽 리셋.",
@@ -941,6 +1246,110 @@
   [
    "Official partner of Coachella.",
    "REVIEW"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract and Lactobacillus fermentum.",
+   "PASS"
+  ],
+  [
+   "Made with A-HAT.",
+   "PASS"
+  ],
+  [
+   "헛개나무 열매와 유산균을 담은 A-HAT",
+   "PASS"
+  ],
+  [
+   "원재료: 헛개나무 열매 추출물, 유산균",
+   "PASS"
+  ],
+  [
+   "Packed with A-HAT.",
+   "REVIEW"
+  ],
+  [
+   "헛개를 듬뿍 담은 젤리",
+   "REVIEW"
+  ],
+  [
+   "Made with A-HAT to support liver health.",
+   "REVISE"
+  ],
+  [
+   "Contains turmeric and ginger.",
+   "REVIEW"
+  ],
+  [
+   "Made with milk thistle.",
+   "REVIEW"
+  ],
+  [
+   "Hovenia dulcis has been used for centuries to help after drinking.",
+   "BLOCK"
+  ],
+  [
+   "Korea's No.1 ingredient for after-party care.",
+   "BLOCK"
+  ],
+  [
+   "A-HAT 특허 성분으로 다음 날도 가뿐하게",
+   "REVISE"
+  ],
+  [
+   "Supports Processing of Acetaldehyde",
+   "REVISE"
+  ],
+  [
+   "Reduces Alcohol \"Flush\"",
+   "BLOCK"
+  ],
+  [
+   "Supports GABA Rebound",
+   "REVISE"
+  ],
+  [
+   "Reduces Morning Nausia",
+   "BLOCK"
+  ],
+  [
+   "Reduces Bloating & Inflammation",
+   "BLOCK"
+  ],
+  [
+   "Pre-Alcohol Gummies",
+   "REVISE"
+  ],
+  [
+   "Science-Backed Formula",
+   "REVISE"
+  ],
+  [
+   "Gluten Free · Non GMO",
+   "REVIEW"
+  ],
+  [
+   "Science-backed liver support.",
+   "REVISE"
+  ],
+  [
+   "Good for your liver.",
+   "REVISE"
+  ],
+  [
+   "Reboot keeps your liver happy.",
+   "REVISE"
+  ],
+  [
+   "Take before drinking.",
+   "REVISE"
+  ],
+  [
+   "Used in Korea for centuries after drinking.",
+   "REVISE"
+  ],
+  [
+   "Reboot Jelly Original is Zero Sugar.",
+   "COND"
   ],
   [
    "Our jelly eliminates nausea after drinking.",
@@ -1124,7 +1533,7 @@
   ],
   [
    "Zero Sugar",
-   "PASS"
+   "COND"
   ],
   [
    "Prevents hangovers.",
@@ -1152,7 +1561,7 @@
   ],
   [
    "I felt great the next morning!",
-   "REVIEW"
+   "REVISE"
   ],
   [
    "Say goodbye to hang-overs",
@@ -1173,6 +1582,1300 @@
   [
    "Guaranteed results, 100% safe.",
    "BLOCK"
+  ]
+ ],
+ "goldenLegal": [
+  [
+   "PREVENT HANGOVERS - No product is more proven or effective at preventing hangover symptoms including headaches, nausea, brain-fog, and anxiety.",
+   "",
+   "red"
+  ],
+  [
+   "PROTECT YOUR LIVER AND BRAIN - Research shows Dycetin reduces alcohol induced damage to the liver and brain.",
+   "",
+   "red"
+  ],
+  [
+   "Dycetin is the most effective hangover preventing supplement currently available.",
+   "",
+   "red"
+  ],
+  [
+   "Not only does DHM [ingredient in Dycetin] enhance enzymes in the liver responsible for breaking down alcohol and its toxic by-products, but it also reduces the effect alcohol has on GABA receptors in the brain. This keeps you feeling more sober while drinking and greatly reduces hangover symptoms the next day.",
+   "",
+   "red"
+  ],
+  [
+   "Top Rated National Hangover Prevention Supplement",
+   "",
+   "red"
+  ],
+  [
+   "NEVER SUFFER ANOTHER HANGOVER",
+   "",
+   "red"
+  ],
+  [
+   "Dycetin tablets protect your liver and brain from alcohol, prevent hangovers . . .",
+   "",
+   "red"
+  ],
+  [
+   "ADVANCED HANGOVER PREVENTION FORMULA",
+   "",
+   "red"
+  ],
+  [
+   "DYCETIN is a potent hangover prevention supplement which contains both Dihydromyricetin and a blend of electrolytes. It may reduce hangover symptoms by up to 99%.",
+   "",
+   "red"
+  ],
+  [
+   "To reduce feelings of alcohol intoxication, take one tablet before you start drinking, and one additional tablet after finishing your first two drinks.",
+   "",
+   "red"
+  ],
+  [
+   "Dycetin can be used in three main ways - to prevent hangovers after a night of drinking, to reduce feelings of intoxication while drinking, or to raise the alcohol intoxication threshold so you can have a few drinks without becoming intoxicated.",
+   "",
+   "red"
+  ],
+  [
+   "To prevent hangovers with Dycetin, take 2 tablets at the end of the night with a large glass of water.",
+   "",
+   "red"
+  ],
+  [
+   "If you’ll be attending a social function where drinking is expected but you’d prefer not to become intoxicated, Dycetin can help. Simply take 2 tablets 30 minutes before drinking and you’ll be able to drink a 2-3 beers without noticing any intoxication.",
+   "",
+   "red"
+  ],
+  [
+   "Dycetin is a natural scientifically proven hangover prevention supplement that blocks the affect alcohol has on the brain and allows the liver to process alcohol more quickly. Taking Dycetin after a night on the town will allow you to wake up feeling normal rather than being stuck in bed with a crippling hangover.",
+   "",
+   "red"
+  ],
+  [
+   "Dycetin’s main ingredient, Dihydromyricetin, is the only single ingredient scientifically proven to prevent hangovers. It does this both by blocking alcohol’s effect on the brain’s GABA receptors and by allowing the liver to clear alcohol and its toxic byproduct acetaldehyde from the body at a much faster rate than normal. Combined, these effects allow Dycetin to prevent hangovers and reduce feelings of alcohol intoxication.",
+   "",
+   "red"
+  ],
+  [
+   "To prevent a hangover, take 2 tablets of Dycetin before bed with a large glass of water.",
+   "",
+   "red"
+  ],
+  [
+   "This stuff really works. Either before you imbibe, or after. If you have had too much to drink, it will stop the spins, and staggers, and you don't get a hangover the next morning. It will knock out an existing hangover as well.",
+   "",
+   "red"
+  ],
+  [
+   "I tried it before drinking once and it was like I was drinking non-alcoholic beer, I wasn't even phased. I take it at the end of a long night of partying on a weeknight and am up for work at 7 and even feel more tired than hungover at all. It also does well to take mid-drinking in order to keep from getting out of line.",
+   "",
+   "red"
+  ],
+  [
+   "Understanding the history of alcohol consumption led us to believe that throughout the ages different cultures have traditionally applied a variety of natural remedies for hangover relief and prevention as well as to help nullify the toll nightlife could have on the body.",
+   "",
+   "red"
+  ],
+  [
+   "One tested combination of ingredients in unique concentrations proved uniquely effective against hangovers: Prickly Pear Cactus, Succinic Acid, and Oriental Raisin Tree.",
+   "",
+   "red"
+  ],
+  [
+   "We bring you 3ContRx [ingredient blend in PartyPal], the most effective hangover treatments from 3 different parts of the globe all combined into easy to use tablets that REALLY WORK!",
+   "",
+   "red"
+  ],
+  [
+   "THE SAFER WAY TO ENJOY CACTUS – Having a hangover can really ruin your day. Nausea, dry mouth, dizziness; all of these symptoms we know all too well. However, with Prickly Pear Cactus Extract [ingredient in PartyPal], you can say goodbye to the day-after woes! By reducing inflammation associated with a hangover and increasing the ability for your cells to repair themselves after a night of drinking debauchery, you can feel better right away!",
+   "",
+   "red"
+  ],
+  [
+   "Dihydromyricetin, or DHM [ingredient in PartyPal], is a truly scientific way to prevent the dreaded hangover.",
+   "",
+   "red"
+  ],
+  [
+   "GUARANTEED RELIEF – We take this product ourselves, and are proud to present it to you as a true hangover cure.",
+   "",
+   "red"
+  ],
+  [
+   "Hangover Cure through Prevention",
+   "",
+   "red"
+  ],
+  [
+   "If you take our supplements you will have much less of a hangover the next morning.",
+   "",
+   "red"
+  ],
+  [
+   "These supplements contain ingredients that help your body deal with the breakdown products of alcohol, which cause hangovers.",
+   "",
+   "red"
+  ],
+  [
+   "Hangover Heaven Nightlife Prep is a physician and PhD formulated hangover prevention product designed to be taken before drinking to reduce hangover symptoms the next day.",
+   "",
+   "red"
+  ],
+  [
+   "Dosing depends on how much you plan to drink and the severity of your hangovers.",
+   "",
+   "red"
+  ],
+  [
+   "Hangover Heaven IV Hydration is the first medical practice dedicated to the treatment, prevention, and cure of hangovers. With Hangover Heaven Nightlife Prep Supplements, you can significantly reduce your changes [sic] of having a hangover.",
+   "",
+   "red"
+  ],
+  [
+   "Best Hangover Pills to Prevent Hangovers",
+   "",
+   "red"
+  ],
+  [
+   "Multivitamin Specially Formulated to Help with Hangovers.",
+   "",
+   "red"
+  ],
+  [
+   "Specially formulated to help you Avoid Hangovers . . .",
+   "",
+   "red"
+  ],
+  [
+   "HELPS AVOID HANGOVERS!",
+   "",
+   "red"
+  ],
+  [
+   "MULTIVITAMIN SPECIALLY FORMULATED TO HELP YOU AVOID HANGOVERS",
+   "",
+   "red"
+  ],
+  [
+   "Convenient individual packets makes hangover prevention easy by taking 1 dose (2 hangover pills) before/while drinking.",
+   "",
+   "red"
+  ],
+  [
+   "KILL YOUR HANGOVER BEFORE IT EVEN STARTS with powerful vitamin, mineral, anti-oxidant, herbal blend. Preventing hangovers works better than a hangover cure or cures you can try.",
+   "",
+   "red"
+  ],
+  [
+   "GET RID OF TOXIC ACETALDEHYDE POISONING that adds to your hangovers with N-acetyl Cysteine [ingredient in Happy Hour Vitamins (H2V)]. Protect your liver with milk thistle, kudzu flower powder, and artichoke leaf extract [ingredients in Happy Hour Vitamins (H2V)]. Paired with water makes the perfect hangover kit.",
+   "",
+   "red"
+  ],
+  [
+   "These are the hangover cure pills you are looking for!",
+   "",
+   "red"
+  ],
+  [
+   "Hangovers are much more than just dehydration . . . Headache often occurs when alcohol in the bloodstream absorbs all the vitamins and nutrients from the body’s organs. . . . Solution: Take in a healthy dose of vitamins & nutrients prior to drinking",
+   "",
+   "red"
+  ],
+  [
+   "Hangovers are much more than just dehydration . . . Diarrhea, Nausea, and Vomiting all go hand in hand. . . . These are truly the hangover vitamins you need.",
+   "",
+   "red"
+  ],
+  [
+   "Antioxidants can help the body deal with toxins & other effects from alcohol",
+   "",
+   "red"
+  ],
+  [
+   "Happy Hour Vitamins contains Thiamine which has been used to help calm the effects of alcohol withdrawal syndrome.",
+   "",
+   "red"
+  ],
+  [
+   "Avoid Hangovers . . . with Happy Hour Vitamins",
+   "",
+   "red"
+  ],
+  [
+   "I started thinking that it would be great if there was a multivitamin specifically formulated for the drinking population. One that would help support the bar industry lifestyle by focusing on . . . the reduction of hangover symptoms.",
+   "",
+   "red"
+  ],
+  [
+   "HOW TO STOP THE STRUGGLE WITH HANGOVERS",
+   "",
+   "red"
+  ],
+  [
+   "With the H2V Partner Program, you can start making more money by selling the most effective hangover cure on the market.",
+   "",
+   "red"
+  ],
+  [
+   "I struggled with hangovers while working as bartender for over a decade. Striving to find a hangover cure, I hired a PhD chemist and consulted medical professionals to create Happy Hour Vitamins, hangover vitamins. Now Happy Hour Vitamins allow me to avoid my hangovers . . .",
+   "",
+   "red"
+  ],
+  [
+   "I got these for my wedding ‘Emergency Hang-over Kits’. They work wonders; everyone was so excited to wake up the next morning and not feel sluggish or tired or have a major headache.",
+   "",
+   "red"
+  ],
+  [
+   "I keep the packets in my purse and when I start drinking I just take them its [sic] as easy as that and bam no hangover!",
+   "",
+   "red"
+  ],
+  [
+   "I am a bartender and always advise my customers to take a couple before beginning their shenanigans for the evening. They always come back and thank me for introducing them to Happy Hour Vitamins. I tell them that is easy to sell, no one wants a hangover!",
+   "",
+   "red"
+  ],
+  [
+   "Happy Hour Vitamins Formulated for Hangovers . . .",
+   "",
+   "red"
+  ],
+  [
+   "Forgot to take Happy Hour Vitamins and woke up Hungover? Take a pack of Happy Hour Vitamins as your hangover cure!",
+   "",
+   "red"
+  ],
+  [
+   "These are the hangover pills you need for the perfect wedding, bachelor, bachelorette, vacation, party or everyday hangover kit!",
+   "",
+   "red"
+  ],
+  [
+   "Avoiding hangovers is easy with Happy Hour Vitamins, just take 1 dose (2 capsules) before/while drinking to help you the next morning.",
+   "",
+   "red"
+  ],
+  [
+   "We were tired of hangovers and figured there had to be a better way. So we hired a chemist, domestic manufacturer & consulted medical professionals.",
+   "",
+   "red"
+  ],
+  [
+   "The Only Thing You Have To Lose Is Your Hangover!",
+   "",
+   "red"
+  ],
+  [
+   "DETOXX FOR HANGOVERS",
+   "",
+   "red"
+  ],
+  [
+   "DeToxx helps reduce hangover symptoms . . . Natural ingredients including milk thistle, prickly pear and cysteine work while you drink, helping to metabolize the toxins that cause hangover symptoms . . .",
+   "",
+   "red"
+  ],
+  [
+   "Helps prevent hangover symptoms*",
+   "",
+   "red"
+  ],
+  [
+   "Ultimate Hangover Relief",
+   "",
+   "red"
+  ],
+  [
+   "PUT YOUR HANGOVER TO BED",
+   "",
+   "red"
+  ],
+  [
+   "Miracoal is the only product on the market that takes this healing process to the next level combining the purest form of organic coconut charcoal with electrolytes to flush away toxins and impurities in your digestive system and provide fast detoxifying rejuvenation, helping you wake up hangover-free.*",
+   "",
+   "red"
+  ],
+  [
+   "We know that hangovers don’t concede to a demanding schedule or life. . . . we have researched, created and patented an effective formula that detoxes impurities from your system and provides fast-acting relief the woes of a night well spent. So we invented our ‘Miracoal’ and set out to change the world, one hangover at a time.",
+   "",
+   "red"
+  ],
+  [
+   "I love using Miracoal! I don’t drink often but every time I do I use Miracoal and I’m back to business in the morning. No hangover feelings at all!",
+   "",
+   "red"
+  ],
+  [
+   ". . . Then I found Miracoal! Now when I go out, if I have a few cocktails, I just take my Miracoal before I go to bed. I wake up the next morning hangover-free and ready to tackle my day!",
+   "",
+   "red"
+  ],
+  [
+   "Miracoal Hangover Prevention and Relief Pills",
+   "",
+   "red"
+  ],
+  [
+   "Each capsule offers much more than just hangover relief . . .",
+   "",
+   "red"
+  ],
+  [
+   "THE ULTIMATE HANGOVER PREVENTION",
+   "",
+   "red"
+  ],
+  [
+   "Activated charcoal [ingredient in Miracoal – Ultimate Hangover Relief & Total Body Detox] removes impurities from your digestive system, helping you recover from drinking and put your hangover to bed!",
+   "",
+   "red"
+  ],
+  [
+   "We’ve harnessed its [charcoal’s] healing powers into an easy-to-use capsule, formulated specifically to provide easy hangover relief and prevention.",
+   "",
+   "red"
+  ],
+  [
+   "You’ll wake up feeling . . . hangover-free!",
+   "",
+   "red"
+  ],
+  [
+   "Since activated charcoal has long been considered a safe and effective treatment for acute toxic poisoning, we've turned it into a powerful new hangover prevention pill.",
+   "",
+   "red"
+  ],
+  [
+   "Purple Tree® is a natural multivitamin specifically designed to reduce alcohol's negative effects in the body . . . Hangovers hinder our work, fitness and family routines, so we embarked on a mission to help health-conscious adults who drink . . .",
+   "",
+   "red"
+  ],
+  [
+   "Yes, Purple Tree is a hangover prevention pill that works.",
+   "",
+   "red"
+  ],
+  [
+   "Although a hangover cure for heavy-drinking situations like this does not exist, Purple Tree surely helps to mitigate some of the hangover symptoms, if taken beforehand.",
+   "",
+   "red"
+  ],
+  [
+   "Purple Tree’s key ingredient is called Dihydromyricetin (DHM), an extract from the Japanese Raisin Tree, which has been used for centuries as an anti-alcohol herb and hangover cure in Asia.",
+   "",
+   "red"
+  ],
+  [
+   "Say Goodbye to Hangovers . . . SHOP NOW",
+   "",
+   "red"
+  ],
+  [
+   "Purple Tree – Supplement for Hangover Prevention",
+   "",
+   "red"
+  ],
+  [
+   "Our hangover prevention pills were crafted by Doctors and Scientists with vast experience in natural supplements.",
+   "",
+   "red"
+  ],
+  [
+   "Purple Tree Hangover Cure & Prevention Pills",
+   "",
+   "red"
+  ],
+  [
+   "HELPS PREVENT HANGOVER SYMPTOMS",
+   "",
+   "red"
+  ],
+  [
+   "Purple Tree’s science-backed formula includes Dihydromyricetin (DHM), a liver detox and hangover prevention ingredient. DHM is a natural extract that has been used as anti-alcohol herb and hangover cure since ancient medicine.*",
+   "",
+   "red"
+  ],
+  [
+   "Purple Tree helps to prevent hangover symptoms . . .",
+   "",
+   "red"
+  ],
+  [
+   "Key Benefits . . . helps to combat alcohol’s negative effects in the body, including hangover*",
+   "",
+   "red"
+  ],
+  [
+   "White Willow Bark, also called ‘Nature’s Aspirin’, acts as a natural anti-inflammatory agent in the human body.*",
+   "",
+   "red"
+  ],
+  [
+   "Milk Thistle helps to protect the liver from damage.*",
+   "",
+   "red"
+  ],
+  [
+   "Pocket-sized.",
+   "",
+   ""
+  ],
+  [
+   "Contains Hovenia dulcis extract.",
+   "",
+   ""
+  ],
+  [
+   "Before the first toast.",
+   "",
+   ""
+  ],
+  [
+   "Best served chilled.",
+   "",
+   ""
+  ],
+  [
+   "Individually wrapped jellies.",
+   "",
+   ""
+  ],
+  [
+   "Restart Your Day.",
+   "",
+   ""
+  ],
+  [
+   "Lime, lemon and cherry jellies.",
+   "",
+   ""
+  ],
+  [
+   "Non-carbonated drinks in 100 ml glass flask bottles, single or 3-bottle box.",
+   "",
+   ""
+  ],
+  [
+   "A grab-and-go jelly with a bright citrus flavor.",
+   "",
+   ""
+  ],
+  [
+   "Individually wrapped. Just tear and enjoy.",
+   "",
+   ""
+  ],
+  [
+   "Enjoy responsibly.",
+   "",
+   ""
+  ],
+  [
+   "Meet Reboot. Drinks and individually wrapped jellies with bold color, playful Western details, and three flavors to explore.",
+   "",
+   ""
+  ],
+  [
+   "Pick your flavor. Meet your Reboot.",
+   "",
+   ""
+  ],
+  [
+   "Explore Drinks / Explore Jellies / Meet Rebu",
+   "",
+   ""
+  ],
+  [
+   "오늘의 다음 장면을, 나답게.",
+   "",
+   ""
+  ],
+  [
+   "세 가지 맛. 오늘은 어떤 맛?",
+   "",
+   ""
+  ],
+  [
+   "모자 챙겼어. 이제 네 차례야!",
+   "",
+   ""
+  ],
+  [
+   "Before the first toast, raise a different kind of glass.",
+   "",
+   ""
+  ],
+  [
+   "Own your morning.",
+   "",
+   ""
+  ],
+  [
+   "Prevents hangovers fast.",
+   "",
+   "red"
+  ],
+  [
+   "Protect your liver before the party.",
+   "",
+   "red"
+  ],
+  [
+   "Say goodbye to Asian glow.",
+   "",
+   "red"
+  ],
+  [
+   "Guaranteed results every morning.",
+   "",
+   "yellow"
+  ],
+  [
+   "Drink all night, feel fine.",
+   "",
+   "green"
+  ],
+  [
+   "Doctor-formulated jelly.",
+   "",
+   "yellow"
+  ],
+  [
+   "Supports liver health.",
+   "",
+   "yellow"
+  ],
+  [
+   "Clinically tested formula.",
+   "",
+   "yellow"
+  ],
+  [
+   "Read our 5-star testimonials.",
+   "",
+   "yellow"
+  ],
+  [
+   "Get a free box for a 5-star review!",
+   "",
+   "red"
+  ],
+  [
+   "Lime flavor jelly shaped like a cowboy boot, in a 3-bottle box with our drinks.",
+   "",
+   ""
+  ],
+  [
+   "숙취 해소에 좋은 젤리",
+   "",
+   "red"
+  ],
+  [
+   "Low sugar lemon-lime jelly.",
+   "",
+   "red"
+  ],
+  [
+   "Reduced sugar lemon-lime drink.",
+   "",
+   "red"
+  ],
+  [
+   "Sugar-free jellies.",
+   "",
+   "yellow"
+  ],
+  [
+   "Zero sugar, less sugar, low sugar.",
+   "",
+   "red"
+  ],
+  [
+   "저당 젤리로 가볍게",
+   "",
+   "red"
+  ],
+  [
+   "Zero Sugar cherry, lime and lemon jellies.",
+   "",
+   "yellow"
+  ],
+  [
+   "Sweetened with allulose and stevia, no sugar alcohols.",
+   "",
+   ""
+  ],
+  [
+   "Wake up to a fresh, clear morning tomorrow.",
+   "",
+   "yellow"
+  ],
+  [
+   "컨디션 완벽 리셋.",
+   "",
+   "yellow"
+  ],
+  [
+   "맛마다 다른 회복 효과.",
+   "",
+   "yellow"
+  ],
+  [
+   "피로와 숙취를 한 병으로 해결.",
+   "",
+   "red"
+  ],
+  [
+   "많이 마셔도 리부가 해결해 줄게!",
+   "",
+   "red"
+  ],
+  [
+   "Drink as much as you want, Rebu has you covered!",
+   "",
+   "red"
+  ],
+  [
+   "Only 43 kcal and 10g sugar per bottle.",
+   "",
+   "yellow"
+  ],
+  [
+   "Our revolver-shaped jelly.",
+   "",
+   "yellow"
+  ],
+  [
+   "Official partner of Coachella.",
+   "",
+   "yellow"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract and Lactobacillus fermentum.",
+   "",
+   ""
+  ],
+  [
+   "Made with A-HAT.",
+   "",
+   ""
+  ],
+  [
+   "헛개나무 열매와 유산균을 담은 A-HAT",
+   "",
+   ""
+  ],
+  [
+   "원재료: 헛개나무 열매 추출물, 유산균",
+   "",
+   ""
+  ],
+  [
+   "Packed with A-HAT.",
+   "",
+   "yellow"
+  ],
+  [
+   "헛개를 듬뿍 담은 젤리",
+   "",
+   "yellow"
+  ],
+  [
+   "Made with A-HAT to support liver health.",
+   "",
+   "yellow"
+  ],
+  [
+   "Contains turmeric and ginger.",
+   "",
+   "yellow"
+  ],
+  [
+   "Made with milk thistle.",
+   "",
+   "yellow"
+  ],
+  [
+   "Hovenia dulcis has been used for centuries to help after drinking.",
+   "",
+   "red"
+  ],
+  [
+   "Korea's No.1 ingredient for after-party care.",
+   "",
+   "red"
+  ],
+  [
+   "A-HAT 특허 성분으로 다음 날도 가뿐하게",
+   "",
+   "yellow"
+  ],
+  [
+   "Supports Processing of Acetaldehyde",
+   "",
+   "yellow"
+  ],
+  [
+   "Reduces Alcohol \"Flush\"",
+   "",
+   "red"
+  ],
+  [
+   "Supports GABA Rebound",
+   "",
+   "yellow"
+  ],
+  [
+   "Reduces Morning Nausia",
+   "",
+   "red"
+  ],
+  [
+   "Reduces Bloating & Inflammation",
+   "",
+   "red"
+  ],
+  [
+   "Pre-Alcohol Gummies",
+   "",
+   "yellow"
+  ],
+  [
+   "Science-Backed Formula",
+   "",
+   "yellow"
+  ],
+  [
+   "Gluten Free · Non GMO",
+   "",
+   "yellow"
+  ],
+  [
+   "Science-backed liver support.",
+   "",
+   "yellow"
+  ],
+  [
+   "Good for your liver.",
+   "",
+   "yellow"
+  ],
+  [
+   "Reboot keeps your liver happy.",
+   "",
+   "yellow"
+  ],
+  [
+   "Take before drinking.",
+   "",
+   "yellow"
+  ],
+  [
+   "Used in Korea for centuries after drinking.",
+   "",
+   "yellow"
+  ],
+  [
+   "Reboot Jelly Original is Zero Sugar.",
+   "",
+   "yellow"
+  ],
+  [
+   "Our jelly eliminates nausea after drinking.",
+   "",
+   "red"
+  ],
+  [
+   "Reduces blood alcohol concentration.",
+   "",
+   "red"
+  ],
+  [
+   "FDA approved jelly.",
+   "",
+   "red"
+  ],
+  [
+   "Store in a cool place to prevent spoilage.",
+   "",
+   ""
+  ],
+  [
+   "We do not offer refunds in exchange for reviews.",
+   "",
+   ""
+  ],
+  [
+   "We send a free sample for an honest review, positive or negative.",
+   "",
+   "yellow"
+  ],
+  [
+   "Wake up without the headache.",
+   "",
+   ""
+  ],
+  [
+   "Helps your body process alcohol faster.",
+   "",
+   "yellow"
+  ],
+  [
+   "Clinically proven to reduce hangover symptoms.",
+   "",
+   "red"
+  ],
+  [
+   "Get 20% off your next order when you leave a 5-star review!",
+   "",
+   "red"
+  ],
+  [
+   "Leave us a review and get a free gift.",
+   "",
+   "yellow"
+  ],
+  [
+   "Approved by the FDA for daily use.",
+   "",
+   "red"
+  ],
+  [
+   "Tastes like lime and cherry.",
+   "",
+   ""
+  ],
+  [
+   "Each stick is individually wrapped for on-the-go snacking.",
+   "",
+   ""
+  ],
+  [
+   "Made in Korea with Hovenia dulcis extract.",
+   "",
+   ""
+  ],
+  [
+   "Keep out of reach of children to prevent choking.",
+   "",
+   ""
+  ],
+  [
+   "Drink responsibly.",
+   "",
+   ""
+  ],
+  [
+   "Party all night and feel fine tomorrow.",
+   "",
+   ""
+  ],
+  [
+   "Supports healthy liver function.",
+   "",
+   "yellow"
+  ],
+  [
+   "Say goodbye to the morning-after struggle.",
+   "",
+   "red"
+  ],
+  [
+   "Doctors recommend our jelly.",
+   "",
+   ""
+  ],
+  [
+   "No artificial colors or flavors.",
+   "",
+   ""
+  ],
+  [
+   "Detoxifies your body after a night out.",
+   "",
+   "red"
+  ],
+  [
+   "We are sorry you felt nauseous. Please stop using the product and contact a doctor.",
+   "",
+   ""
+  ],
+  [
+   "Absorbs alcohol so you stay sharp.",
+   "",
+   ""
+  ],
+  [
+   "Try it risk-free with our 30-day money-back guarantee.",
+   "",
+   "yellow"
+  ],
+  [
+   "저희 젤리는 숙취 해소에 도움을 줍니다.",
+   "",
+   "red"
+  ],
+  [
+   "리뷰 남기면 쿠폰 드려요",
+   "",
+   "yellow"
+  ],
+  [
+   "별점 5점 리뷰 남기시면 전액 환불해 드려요",
+   "",
+   "red"
+  ],
+  [
+   "After-Party · Reset · Refresh",
+   "",
+   ""
+  ],
+  [
+   "Start your morning fresh.",
+   "",
+   ""
+  ],
+  [
+   "Korean after-party jelly",
+   "",
+   ""
+  ],
+  [
+   "Korea's pre-toast ritual",
+   "",
+   ""
+  ],
+  [
+   "Light, fresh-tasting jelly",
+   "",
+   ""
+  ],
+  [
+   "A refreshing treat for your morning routine",
+   "",
+   ""
+  ],
+  [
+   "삭제 · 라벨 확인 + 전문가 상담 안내",
+   "",
+   ""
+  ],
+  [
+   "삭제 · 알레르기 성분과 섭취 방법을 라벨대로 안내",
+   "",
+   ""
+  ],
+  [
+   "판매 문구에서 제외",
+   "",
+   ""
+  ],
+  [
+   "Ready to go: just tear and enjoy.",
+   "",
+   ""
+  ],
+  [
+   "Our signature Korean jelly",
+   "",
+   ""
+  ],
+  [
+   "Part of the Korean after-party tradition",
+   "",
+   ""
+  ],
+  [
+   "Crafted in Korea",
+   "",
+   ""
+  ],
+  [
+   "Made with Hovenia dulcis (oriental raisin tree) extract",
+   "",
+   ""
+  ],
+  [
+   "B2C에서는 삭제 · B2B 자료에서만 근거 문서와 함께",
+   "",
+   ""
+  ],
+  [
+   "Tell us what you think.",
+   "",
+   ""
+  ],
+  [
+   "Zero Sugar",
+   "",
+   "yellow"
+  ],
+  [
+   "Prevents hangovers.",
+   "",
+   "red"
+  ],
+  [
+   "We give a free sample if you leave a 5-star review.",
+   "",
+   "red"
+  ],
+  [
+   "Thank you for your message. We are sorry to hear that. Please stop using the product and contact a doctor.",
+   "",
+   ""
+  ],
+  [
+   "Rich in Hovenia dulcis.",
+   "",
+   "yellow"
+  ],
+  [
+   "Doctor recommended.",
+   "",
+   ""
+  ],
+  [
+   "Drink all night with Reboot.",
+   "",
+   "green"
+  ],
+  [
+   "I felt great the next morning!",
+   "",
+   "yellow"
+  ],
+  [
+   "Say goodbye to hang-overs",
+   "",
+   "red"
+  ],
+  [
+   "No more Asian glow.",
+   "",
+   "red"
+  ],
+  [
+   "숙취 해소에 좋아요",
+   "",
+   "red"
+  ],
+  [
+   "간 보호 젤리",
+   "",
+   "red"
+  ],
+  [
+   "Guaranteed results, 100% safe.",
+   "",
+   "red"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "jelly",
+   "red"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "jelly-ls",
+   ""
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "drink",
+   "red"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "drink-ls",
+   ""
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "all",
+   "red"
+  ],
+  [
+   "Low sugar jelly.",
+   "jelly",
+   "red"
+  ],
+  [
+   "Low sugar jelly.",
+   "jelly-ls",
+   "red"
+  ],
+  [
+   "Low sugar jelly.",
+   "drink",
+   "red"
+  ],
+  [
+   "Low sugar jelly.",
+   "drink-ls",
+   "red"
+  ],
+  [
+   "Low sugar jelly.",
+   "all",
+   "red"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "jelly",
+   ""
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "jelly-ls",
+   ""
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "drink",
+   ""
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "drink-ls",
+   ""
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "all",
+   ""
+  ],
+  [
+   "Good for your liver.",
+   "jelly",
+   "yellow"
+  ],
+  [
+   "Good for your liver.",
+   "jelly-ls",
+   "yellow"
+  ],
+  [
+   "Good for your liver.",
+   "drink",
+   "yellow"
+  ],
+  [
+   "Good for your liver.",
+   "drink-ls",
+   "yellow"
+  ],
+  [
+   "Good for your liver.",
+   "all",
+   "yellow"
+  ]
+ ],
+ "goldenProduct": [
+  [
+   "Zero Sugar lime jellies.",
+   "jelly",
+   "BLOCK"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "jelly-ls",
+   "PASS"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "drink",
+   "BLOCK"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "drink-ls",
+   "PASS"
+  ],
+  [
+   "Zero Sugar lime jellies.",
+   "all",
+   "BLOCK"
+  ],
+  [
+   "Low sugar jelly.",
+   "jelly",
+   "BLOCK"
+  ],
+  [
+   "Low sugar jelly.",
+   "jelly-ls",
+   "BLOCK"
+  ],
+  [
+   "Low sugar jelly.",
+   "drink",
+   "BLOCK"
+  ],
+  [
+   "Low sugar jelly.",
+   "drink-ls",
+   "BLOCK"
+  ],
+  [
+   "Low sugar jelly.",
+   "all",
+   "BLOCK"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "jelly",
+   "PASS"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "jelly-ls",
+   "PASS"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "drink",
+   "PASS"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "drink-ls",
+   "PASS"
+  ],
+  [
+   "Contains Hovenia dulcis fruit extract.",
+   "all",
+   "PASS"
+  ],
+  [
+   "Good for your liver.",
+   "jelly",
+   "REVISE"
+  ],
+  [
+   "Good for your liver.",
+   "jelly-ls",
+   "REVISE"
+  ],
+  [
+   "Good for your liver.",
+   "drink",
+   "REVISE"
+  ],
+  [
+   "Good for your liver.",
+   "drink-ls",
+   "REVISE"
+  ],
+  [
+   "Good for your liver.",
+   "all",
+   "REVISE"
   ]
  ]
 }

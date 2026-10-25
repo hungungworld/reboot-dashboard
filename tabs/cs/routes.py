@@ -113,7 +113,7 @@ def approve():
     approver = clip(data.get("approver"), 60).strip()
     if not approver:
         raise ApiError("승인자 이름이 없습니다.")
-    verdict = _server_verdict(body)   # 화면이 보낸 판정 값은 쓰지 않고 서버가 다시 점검
+    verdict = _server_verdict(body, data.get("product"))   # 화면이 보낸 판정 값은 쓰지 않고 서버가 다시 점검
     try:
         rec = approvals.record(message_id, body, approver, _account(), verdict)
     except approvals.ApprovalError as e:
@@ -123,10 +123,12 @@ def approve():
     return jsonify(ok=True, approved_at=rec["approved_at"], account=rec["account"])
 
 
-def _server_verdict(body):
-    """서버 재검사 (compliance 규칙 · CS 채널). BLOCK이면 승인·발송 거절."""
+def _server_verdict(body, product=None):
+    """서버 재검사 (compliance 규칙 · CS 채널). BLOCK이면 승인·발송 거절.
+    product: 문의 제품 id → 제품별 판정 (예: Original 문의에 "Zero Sugar" → BLOCK). 모르면 4종 중 가장 엄격 (2026-10-25)"""
     from tabs.compliance import server_review
-    r = server_review.review(body, "cs")
+    product = product if product in server_review.products() else "all"
+    r = server_review.review(body, "cs", product)
     if r["verdict"] == "BLOCK":
         found = " · ".join(f'{c} {", ".join(r["hits"][c][:2])}' for c in r["codes"])
         raise ApiError(f"서버 재검사에서 사용 불가(BLOCK) 표현이 나왔습니다: {found}. 표현을 바꾼 뒤 다시 승인하세요.")
@@ -153,7 +155,7 @@ def gmail_send():
         raise ApiError("답장 내용이 비었거나 너무 깁니다.")
     if TODO.search(body):
         raise ApiError("[확인 필요] 빈칸이 남아 있어 보낼 수 없습니다.")
-    _server_verdict(body)   # 규칙이 바뀌었을 수도 있으니 보내기 직전에 한 번 더
+    _server_verdict(body, data.get("product"))   # 규칙이 바뀌었을 수도 있으니 보내기 직전에 한 번 더
     try:
         rec = approvals.begin_send(message_id, body)   # 대조 + '보내는 중' 표시 (동시에 눌러도 한 번만)
     except approvals.ApprovalError as e:

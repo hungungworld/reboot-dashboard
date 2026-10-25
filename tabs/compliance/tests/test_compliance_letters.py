@@ -244,3 +244,85 @@ def test_ai_review_has_few_shot_without_eval_sentences():
     assert ai_review.FEW_SHOT in ai_review.SYSTEM and ai_review.SYSTEM.startswith(ai_review.SYSTEM_BASE)
     assert not [t for t in evals if t in ai_review.FEW_SHOT]
     assert {"checks", "uncertain"} <= set(ai_review.SCHEMA["required"])
+
+
+GRAS_SAMPLE = (
+    "Downloaded from FDA GRAS Notices; Last updated 10/21/2026.\r\n\r\n"
+    "GRAS Notice (GRN) No.,Substance,Intended Use,Basis,Notifier,Date of closure,FDA's Letter\r\n"
+    '=T("988"), Lactobacillus fermentum LfQi6, Probiotic in foods, Scientific procedures, Acme, 03/28/2022, FDA has no questions (in PDF)\r\n'
+    '=T("820"), Lactobacillus fermentum CECT5716, Infant formula, Scientific procedures, Bio, 04/03/2019,'
+    " At the notifier's request, FDA ceased to evaluate this notice\r\n"
+    '=T("400"), D-psicose, Sweetener, Scientific procedures, Sweet Co, 06/18/2012, FDA has no questions\r\n'
+).encode("cp1252")
+
+
+def test_gras_notices_parse_and_match_ingredients(app, monkeypatch):
+    """FDA GRAS 통지 (2026-10-25): 내려받기 파일 파싱 · 원료별 통과/전체 건수 · 통지 없는 원료는 0건 · 한글 요약 안 함."""
+    rows = refresh._parse_gras(GRAS_SAMPLE)
+    assert [r["grn"] for r in rows] == ["988", "820", "400"] and rows[0]["closed"] == "2022-03-28"
+    monkeypatch.setattr(refresh, "_gras_rows", lambda: (rows, "2026-10-25T00:00:00Z", ""))
+    with app.app_context():
+        items, warns, note, extra = refresh.fda_gras_notices()
+    c = extra["counts"]
+    assert c["l-fermentum"] == {"label": "L. fermentum", "total": 2, "ok": 1}
+    assert c["allulose"]["ok"] == 1 and c["hovenia"]["total"] == 0 and extra["noKo"] is True
+    assert [i["grn"] for i in items if i["ingredient"] == "l-fermentum"] == ["988", "820"]   # 통과한 통지 먼저
+    assert all(i["url"].startswith("https://www.hfpappexternal.fda.gov/") for i in items) and "헛개 0/0" in note
+
+
+def test_gras_terms_match_ingredient_table():
+    """refresh.GRAS_TERMS의 원료 id는 모두 data.js 원료 표에 있어야 함 (화면 칸이 비지 않게)."""
+    import re
+    src = (Path(__file__).parent.parent / "static" / "data.js").read_text(encoding="utf-8")
+    ids = set(re.findall(r"\{ id: '([a-z0-9-]+)', status: '(?:confirmed|candidate|avoid|base)'", src))
+    assert ids and not set(refresh.GRAS_TERMS) - ids
+
+
+def test_review_request_slack_link_and_reply(app, auth_client, monkeypatch):
+    """문구 검토 요청 (2026-10-25): 팀별 1회용 링크 · Slack 알림 · 로그인 없이 회신 · 상태가 목록에 보임 · 토큰은 저장 안 함."""
+    from tabs.compliance import review_requests as rr
+    sent = []
+    monkeypatch.setattr(rr, "_slack", lambda text: sent.append(text) or "")
+    res = auth_client.post("/api/compliance/review-requests", json={
+        "text": "Reboot Jelly Original: lime, lemon and cherry jellies.", "ko": "라임·레몬·체리 젤리", "channel": "b2c",
+        "product": "jelly", "aiVerdict": "PASS", "teams": ["legal", "quality", "nope"], "memo": "이번 주 인스타 게시용"})
+    assert res.status_code == 200, res.get_json()
+    out = res.get_json()
+    assert set(out["links"]) == {"legal", "quality"} and out["slack"]["ok"] is True
+    assert out["request"]["ruleVerdict"] == "PASS" and "tokenHash" not in json.dumps(out["request"])
+    assert "법무팀 확인하러 가기" in sent[0] and out["links"]["legal"] in sent[0]
+    token = out["links"]["legal"].rsplit("/", 1)[1]
+    raw = (Path(app.config["DATA_DIR"]) / "compliance" / "review-requests.json").read_text(encoding="utf-8")
+    assert token not in raw   # 링크 토큰은 지문만 저장
+
+    anon = app.test_client()   # 로그인 없이 회신
+    page = anon.get(f"/review/{token}")
+    assert page.status_code == 200 and "lime, lemon and cherry" in page.get_data(as_text=True)
+    bad = anon.post(f"/review/{token}", data={"decision": "반려", "name": "김법무", "comment": ""})
+    assert bad.status_code == 400 and "이유" in bad.get_data(as_text=True)
+    ok = anon.post(f"/review/{token}", data={"decision": "승인", "name": "김법무", "comment": ""})
+    assert ok.status_code == 200 and "회신을 보냈습니다" in ok.get_data(as_text=True)
+    assert anon.get("/review/not-a-real-token").status_code == 404
+    assert anon.get("/api/compliance/review-requests").status_code == 401   # 목록은 로그인 필요
+    items = auth_client.get("/api/compliance/review-requests").get_json()["items"]
+    teams = items[0]["teams"]
+    assert teams["legal"]["status"] == "승인" and teams["legal"]["by"] == "김법무" and teams["quality"]["status"] == "대기"
+    assert "*[REBOOT 문구 검토 회신]* 법무팀 *승인*" in sent[-1]
+    assert items[0]["ruleLegal"] == "" and "법무 확인" not in sent[0]   # PASS 문구는 법적 신호 없음
+
+    # 법적 신호가 Slack 알림에 같이 감 (2026-10-25): 근거가 있으면 쓸 수 있는 표현 → 🟡 법무 확인
+    res = auth_client.post("/api/compliance/review-requests", json={
+        "text": "Clinically proven formula.", "channel": "b2c", "product": "jelly", "teams": ["legal"]})
+    assert res.status_code == 200 and res.get_json()["request"]["ruleLegal"] == "yellow"
+    assert "🟡 법무 확인" in sent[-1]
+
+
+def test_review_request_without_slack_still_gives_links(auth_client, monkeypatch):
+    """Slack 웹훅이 없어도 요청은 저장되고 링크를 돌려줌 (직접 전달) · 팀을 안 고르면 거절."""
+    from tabs.compliance import review_requests as rr
+    monkeypatch.setattr(rr, "env", lambda k: "")
+    res = auth_client.post("/api/compliance/review-requests", json={"text": "Restart Your Day.", "teams": ["regulatory"]})
+    out = res.get_json()
+    assert res.status_code == 200 and out["slack"]["ok"] is False and "SLACK_WEBHOOK_URL" in out["slack"]["error"]
+    assert list(out["links"]) == ["regulatory"]
+    assert auth_client.post("/api/compliance/review-requests", json={"text": "Hi", "teams": []}).status_code == 400
