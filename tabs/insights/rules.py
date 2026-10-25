@@ -196,7 +196,7 @@ def weekly_actions(ctx):
     if multi:
         top = multi[0]
         more = f" 외 {len(multi) - 1}개 제품" if len(multi) > 1 else ""
-        again = " 지난 수집부터 계속 품절이에요." if top["again"] else ""
+        again = " 지난주에 이어 계속 품절이에요." if top["again"] else ""
         acts.append(_action(
             "comp_oos_multi", "긴급",
             f"{top['line']} — {' · '.join(top['oos'])}에서 모두 품절이에요{more}.{again}",
@@ -211,7 +211,7 @@ def weekly_actions(ctx):
         more = f" 외 {len(single) - 1}개 제품" if len(single) > 1 else ""
         acts.append(_action(
             "comp_oos", "기회",
-            f"{top['line']} — {ch}에서 품절이에요{more}." + (" 지난 수집부터 계속 품절이에요." if top["again"] else ""),
+            f"{top['line']} — {ch}에서 품절이에요{more}." + (" 지난주에 이어 계속 품절이에요." if top["again"] else ""),
             f"{ch}에서 이 제품을 찾던 고객이 바로 살 수 있는 다른 제품을 찾아요. 이 채널에서 고객을 데려올 기회예요.",
             f"{ch}에서 경쟁 브랜드 키워드 입찰 상향을 검토하고, 소재에 '재고 있음 · 즉시 출고'를 넣으세요. "
             "이 기간에는 할인 쿠폰 없이도 팔릴 수 있으니 쿠폰 보류도 검토하세요. " + COMPLIANCE,
