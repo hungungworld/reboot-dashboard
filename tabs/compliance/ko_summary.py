@@ -13,6 +13,8 @@ from flask import current_app
 
 from server.envkeys import get as env
 
+from . import ai_usage
+
 MODEL = "claude-opus-5-5"
 BATCH = 40
 _lock = threading.Lock()
@@ -80,6 +82,9 @@ def _save_cache(cache):
 def _call(client, batch):
     payload = [{"id": str(i), "source": b.get("source", "")[:80], "title": b.get("title", "")[:300], "summary": b.get("summary", "")[:500]}
                for i, b in enumerate(batch)]
+    budget = ai_usage.over_budget()
+    if budget:
+        raise KoError(budget)
     try:
         res = client.beta.messages.create(
             model=MODEL,
@@ -98,6 +103,7 @@ def _call(client, batch):
         raise KoError(f"AI 서버 오류 ({e.status_code})")
     except anthropic.APIConnectionError:
         raise KoError("AI 서버에 연결하지 못했습니다")
+    ai_usage.record("compliance", "한글 요약 (모니터링)", res)
     if res.stop_reason in ("refusal", "max_tokens"):
         raise KoError(f"AI 응답 중단 ({res.stop_reason})")
     text = next((b.text for b in res.content if b.type == "text"), "")

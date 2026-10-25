@@ -338,3 +338,86 @@
 .part-cs .cs-need-go { font: inherit; color: var(--cs-ink); background: none; border: 0; padding: 2px 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--cs-orange); text-underline-offset: 3px; }
 .part-cs .cs-need-go span { color: var(--cs-link); text-decoration: none; }
 .part-cs .cs-need-go:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: 2px; }
+
+/* 답변 템플릿 → 답변 기본값 (빈칸 한 번에 채우기) */
+.part-cs .cs-defaults-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 10px 0; }
+.part-cs .cs-defaults-grid .cs-wide { grid-column: 1 / -1; }
+.part-cs .cs-defaults-grid textarea { resize: vertical; }
+@media (max-width: 720px) { .part-cs .cs-defaults-grid { grid-template-columns: 1fr; } }
+
+/* 고객 이력: 보낸 사람별 문의 수 · 주의 신호 · 담당자 분류 */
+.part-cs .cs-chip.cs-cust-vip { background: var(--cs-green-bg); color: var(--cs-green); }
+.part-cs .cs-chip.cs-cust-watch { background: var(--cs-orange-bg); color: var(--cs-orange); font-weight: 700; }
+.part-cs .cs-chip.cs-cust-limit { background: var(--cs-red-bg); color: var(--cs-red); font-weight: 700; }
+.part-cs .cs-input-sm { padding: 6px 8px; font-size: 12.5px; min-height: 0; margin-top: 4px; width: 100%; }
+.part-cs .cs-cust-by { display: block; font-size: 11.5px; margin-top: 2px; }
+.part-cs .cs-cust-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 12.5px; }
+.part-cs .cs-custfilter:not(:empty) { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.part-cs .cs-table td .cs-chip { margin: 2px 2px 2px 0; }
+
+/* 고객 이력 카드 (접고 펼치기) · 주고받은 메일 */
+.part-cs .cs-custs { display: grid; gap: 10px; }
+.part-cs .cs-cust > summary { gap: 10px; }
+.part-cs .cs-cust-email { font-weight: 400; font-size: 12.5px; margin-left: 6px; }
+.part-cs .cs-cust-tools { justify-content: flex-end; }
+.part-cs .cs-cust-signals { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 10px; font-size: 13px; }
+.part-cs .cs-cust-tagrow { align-items: flex-end; margin-bottom: 12px; }
+.part-cs .cs-thread-title { margin: 6px 0 8px; font-size: 14px; }
+.part-cs .cs-thread { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--cs-rule); display: grid; gap: 14px; }
+.part-cs .cs-thread-item { display: grid; gap: 6px; }
+.part-cs .cs-mail { border: 1px solid var(--cs-rule); border-radius: 10px; padding: 10px 12px; background: var(--cs-card); }
+.part-cs .cs-mail-in { border-left: 4px solid var(--cs-blue); }
+.part-cs .cs-mail-out { border-left: 4px solid var(--cs-green); margin-left: 24px; background: var(--cs-accent-soft); }
+.part-cs .cs-mail-draft { border-left: 4px solid var(--cs-rule-strong); margin-left: 24px; background: var(--cs-soft); }
+.part-cs .cs-mail-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; cursor: default; }
+.part-cs details.cs-mail-draft > summary { cursor: pointer; list-style: none; }
+.part-cs .cs-mail-head .cs-btn { margin-left: auto; }
+.part-cs .cs-mail-subject { margin: 6px 0 2px; font-weight: 700; font-size: 14px; }
+.part-cs .cs-mail-body { margin: 4px 0 0; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.65; max-height: 220px; overflow: auto; }
+
+/* 문의함: Gmail처럼 받은편지함 목록 → 메일을 누르면 검토 화면 (data-view) */
+.part-cs .cs-inbox[data-view="list"] { grid-template-columns: minmax(0, 1fr); }
+.part-cs .cs-inbox[data-view="list"] .cs-detail { display: none; }
+.part-cs .cs-inbox[data-view="list"] .cs-listcol { border-right: 0; }
+.part-cs .cs-inbox[data-view="list"] .cs-list { max-height: none; }
+.part-cs .cs-inbox[data-view="detail"] { grid-template-columns: minmax(0, 1fr); }
+.part-cs .cs-inbox[data-view="detail"] .cs-listcol { display: none; }
+.part-cs .cs-listhead { display: flex; align-items: baseline; gap: 8px; font-size: 14px; padding: 0 2px; }
+.part-cs .cs-mailrow { grid-template-columns: 36px minmax(120px, 190px) minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 8px; border-bottom: 1px solid var(--cs-rule); }
+.part-cs .cs-mailrow:hover { background: var(--cs-card); box-shadow: 0 1px 4px rgba(32, 32, 48, .08); }
+.part-cs .cs-row-from { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.part-cs .cs-row-from .cs-item-name { font-weight: 500; }
+.part-cs .cs-row-main { display: grid; gap: 5px; min-width: 0; }
+.part-cs .cs-row-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.part-cs .cs-row-subject { font-weight: 500; color: var(--cs-ink); }
+.part-cs .cs-row-snippet { color: var(--cs-muted); }
+.part-cs .cs-row-side { display: grid; justify-items: end; gap: 4px; font-size: 12px; white-space: nowrap; }
+.part-cs .cs-row-time { color: var(--cs-muted); }
+.part-cs .cs-mailrow.is-unread { background: var(--cs-card); }
+.part-cs .cs-mailrow.is-unread .cs-item-name, .part-cs .cs-mailrow.is-unread .cs-row-subject, .part-cs .cs-mailrow.is-unread .cs-row-time { font-weight: 750; color: var(--cs-ink); }
+.part-cs .cs-mailrow.is-new { box-shadow: inset 4px 0 0 var(--cs-accent); }
+.part-cs .cs-backbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--cs-rule); }
+.part-cs .cs-backbar .cs-btn:first-child { margin-right: auto; }
+@media (max-width: 720px) {
+  .part-cs .cs-mailrow { grid-template-columns: 32px minmax(0, 1fr) auto; }
+  .part-cs .cs-row-from { grid-column: 2; }
+  .part-cs .cs-row-main { grid-column: 1 / -1; }
+}
+
+/* 담당자에게 전달 · 담당자 연락처 */
+.part-cs .cs-share { display: grid; gap: 10px; }
+.part-cs .cs-share-body { font-family: inherit; font-size: 12.5px; line-height: 1.6; resize: vertical; }
+.part-cs .cs-share-wrap { margin-top: 10px; border-top: 1px dashed var(--cs-rule); padding-top: 8px; }
+.part-cs .cs-share-wrap > summary { cursor: pointer; font-weight: 650; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.part-cs .cs-share-wrap[open] > summary { margin-bottom: 10px; }
+.part-cs .cs-contacts { display: grid; gap: 8px; margin: 8px 0; }
+.part-cs .cs-contact { align-items: flex-end; }
+/* 받은편지함 목록 화면: 보기 · 정렬 · Gmail 불러오기를 한 줄로 */
+.part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; padding: 18px 16px; }
+.part-cs .cs-inbox[data-view="list"] .cs-listcol > :nth-child(n+4) { grid-column: 1 / -1; }
+/* 버튼은 보기·정렬 칸과 같은 줄·같은 높이, 불러오기 결과 문구는 그 아래 줄 오른쪽 */
+.part-cs .cs-inbox[data-view="list"] .cs-gmailbar { display: contents; }
+.part-cs .cs-inbox[data-view="list"] .cs-gmailbar .cs-btn { align-self: end; min-height: 0; padding-top: 0; padding-bottom: 0; height: 40px; }
+.part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"] { grid-column: 1 / -1; justify-self: end; margin-top: -6px; }
+.part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"]:empty { display: none; }
+@media (max-width: 720px) { .part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: 1fr; } }

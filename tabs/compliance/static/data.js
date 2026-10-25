@@ -6,10 +6,14 @@
   const NS = global.REBOOT_DATA = global.REBOOT_DATA || {};
 
   NS.compliance = {
-    version: '2026-10-22',
+    version: '2026-10-24',   // 규칙 버전 — 규칙을 바꾸면 날짜를 바꿈 (점검 기록에 같이 저장)
+
+    // 단건·일괄 심의에서 고르는 채널 (2026-10-24): CS 답변은 CS 파트가 'cs'로 자동 재점검하고, 아마존은 B2C와 판정이 같아 합침.
+    // amazon·cs 키는 그대로 둠 (콘텐츠 파트가 'amazon', CS 파트가 'cs'로 부름 · 옛 점검 기록 이름 표시)
+    pickChannels: ['b2c', 'b2b'],
 
     channels: {
-      b2c: 'B2C 광고·SNS',
+      b2c: 'B2C 광고·SNS·아마존 (Meta·Google·TikTok·Amazon 공통 기준)',
       amazon: '아마존 상세페이지',
       cs: 'CS 답변',
       b2b: 'B2B 바이어 자료'
@@ -26,7 +30,14 @@
         terms: ['cure', 'prevent', 'prevention', 'relief', 'relieve', 'remedy', 'detox', 'detoxify', 'toxin', 'heal',
           'alcohol withdrawal', 'withdrawal syndrome', 'intoxication', "alcohol's negative effects", 'negative effects of alcohol'],
         ko: ['치료', '예방', '완화', '해독', '금단'],
-        reason: '질병을 예방·치료·완화한다는 표현은 일반식품을 미승인 의약품처럼 보이게 함 (2020 숙취 제품 경고장). 알코올 금단·취기·음주의 해로운 영향을 줄인다는 말도 같음. detox·relief는 문맥 검토',
+        // 2026-10-24 (GPT 검토 ⑦): 금지 단어 없이 증상·혈중 알코올을 없앤다는 문장 · 술 깨게 한다는 문장
+        patterns: [
+          "\\b(?:eliminat|reduc|stop|eas|eras|banish|fight|beat|cure|treat|lower|decreas|block|neutraliz)\\w*\\s+(?:the\\s+|your\\s+)?(?:nausea|headaches?|vomiting|dizziness|blood[\\s-]*alcohol|BAC|alcohol\\s+absorption|alcohol\\s+levels?|acetaldehyde|toxins?)\\b",
+          "\\bsobers?\\s+(?:you\\s+)?up\\b"
+        ],
+        // 질병 예방이 아닌 '보관·안전' 문맥의 prevent는 R1에서 뺌 (GPT 검토 ⑧)
+        allow: ["\\bprevent(?:s|ed|ing)?\\s+(?:spoilage|melting|leaks?|leaking|freezing|sticking|clumping|damage|mold|contamination|choking)\\b"],
+        reason: '질병을 예방·치료·완화한다는 표현은 일반식품을 미승인 의약품처럼 보이게 함 (2020 숙취 제품 경고장). 알코올 금단·취기·음주의 해로운 영향을 줄인다는 말, 메스꺼움·두통·혈중 알코올을 없앤다는 말도 같음. detox·relief는 문맥 검토',
         alt: '섭취 시점·맛·포맷 등 사실 묘사',
         law: [
           { agency: 'FDA', cite: 'FD&C Act §201(g)(1)(B) · 21 U.S.C. 321(g)(1)(B)', note: '질병의 진단·치료·완화·예방에 쓰려는 제품은 의약품' },
@@ -35,10 +46,10 @@
       },
       {
         code: 'R2', name: "'hangover' 직접 언급", verdict: 'BLOCK', basis: ['official', 'internal'],
-        terms: ['hangover', 'hang-over'],
+        terms: ['hangover', 'hang-over', 'morning after', 'hungover'],
         ko: ['숙취'],
-        reason: 'FDA 경고장은 숙취 예방·완화 주장을 의약품 표현으로 봄. 단순 언급까지 막는 것은 팀 기준',
-        alt: 'After-Party, Morning-After Ritual',
+        reason: "FDA 경고장은 숙취 예방·완화 주장을 의약품 표현으로 봄. 단순 언급까지 막는 것은 팀 기준. 'the morning after'는 미국에서 숙취를 뜻하는 관용 표현(피임약 'morning-after pill'도 연상)이라 같이 막음",
+        alt: '한 단어 대안: After-Party · Reset · Refresh · Restart · Afterglow (Recovery·Revive·Bounce-back·Rehydrate는 회복 효과를 암시해 피함)',
         law: [
           { agency: 'FDA', cite: '숙취 제품 경고장 7통 (2020-07-23)', note: 'hangover 예방·완화 주장 = 의약품 주장 (공식)' },
           { agency: '팀', cite: '내부 기준', note: "주장 없이 'hangover'만 써도 막는 것은 팀 기준 (법 조항 아님)" }
@@ -131,7 +142,7 @@
         ]
       },
       {
-        code: 'R10', name: '후기·리뷰', verdict: 'REVIEW', basis: ['official'],
+        code: 'R10', name: '후기·리뷰', verdict: 'REVIEW', basis: ['official', 'platform', 'internal'],
         terms: ['testimonial', '5-star', 'five-star', 'customer review', 'rated #1', 'top-rated'],
         ko: ['후기', '리뷰', '별점'],
         // 1인칭 사용 경험 문장 = 후기 (경고장은 후기 문구도 의도된 용도의 증거로 인용)
@@ -140,18 +151,36 @@
         alt: '후기도 R1~R7로 심의, 대가 관계 표시',
         law: [
           { agency: 'FTC', cite: 'Endorsement Guides · 16 CFR Part 255 (2023 개정)', note: '대가 관계 표시 · 후기도 광고주 주장으로 봄' },
-          { agency: 'FTC', cite: 'Consumer Reviews and Testimonials Rule · 16 CFR Part 465 (2024-10-21 시행)', note: '가짜 후기 금지 · 좋은 후기를 조건으로 한 보상 금지' },
-          { agency: 'FDA', cite: '21 CFR 201.128', note: '경고장은 후기 문구도 의도된 용도의 증거로 인용' }
+          { agency: 'FTC', cite: 'Consumer Reviews and Testimonials Rule · 16 CFR Part 465 (2024-10-21 시행)', note: '가짜 후기 금지 · 긍정(또는 부정) 등 특정 내용의 후기를 조건으로 한 보상 금지 → BLOCK' },
+          { agency: 'FDA', cite: '21 CFR 201.128', note: '경고장은 후기 문구도 의도된 용도의 증거로 인용' },
+          { agency: 'Amazon', cite: 'Amazon 고객 리뷰 정책 (Community Guidelines)', note: '판매자가 대가를 주고 리뷰를 받는 것 금지 (Vine 등 공식 프로그램 제외)' },
+          { agency: '팀', cite: '내부 기준', note: '조건 없는 후기 보상은 법으로 일괄 금지는 아님 → 대가 표시 + 플랫폼 정책 때문에 REVISE (2026-10-24 · GPT 검토 ㉔로 BLOCK과 나눔)' }
         ],
-        // 긍정 후기를 조건으로 한 보상 → BLOCK
+        // 좋은 후기(별점 5점 등)를 조건으로 한 보상 → BLOCK (법)
         compensated: [
-          '(free|discount|coupon|gift|refund|cash)[^.!?]{0,40}(review|5[\\s-]*star|five[\\s-]*star)',
-          '(review|5[\\s-]*star|five[\\s-]*star)[^.!?]{0,40}(free|discount|coupon|gift|refund|cash)',
-          'in exchange for (a |an |your )?(honest |positive |good )?review',
+          '(free|discount|coupon|gift|refund|cash|reward|credit|points|% off|off your)[^.!?]{0,60}(5[\\s-]*star|five[\\s-]*star|positive review|good review|great review)',
+          '(5[\\s-]*star|five[\\s-]*star|positive review|good review|great review)[^.!?]{0,60}(free|discount|coupon|gift|refund|cash|reward|credit|points|% off|off your)',
+          'in exchange for (a |an |your )?(positive |good |great |5[\\s-]*star |five[\\s-]*star )review',
+          '(별점 ?5|5점|좋은 (리뷰|후기)|긍정)[^.!?]{0,20}(쿠폰|적립|증정|할인|환불)',
+          '(쿠폰|적립|증정|할인|환불)[^.!?]{0,20}(별점 ?5|5점|좋은 (리뷰|후기)|긍정)'
+        ],
+        compensatedReason: '좋은 후기(별점 5점 등)를 조건으로 한 보상은 FTC 소비자 리뷰 규칙(16 CFR Part 465) 위반',
+        // 조건 없는 후기 보상 (솔직한 후기면 무엇이든) → REVISE (대가 표시 · 플랫폼 정책 · 팀 기준)
+        incentive: [
+          '(free|discount|coupon|gift|refund|cash|reward|credit|points|% off)[^.!?]{0,40}(review|rating)',
+          '(review|rating)[^.!?]{0,40}(free|discount|coupon|gift|refund|cash|reward|credit|points|% off)',
+          'in exchange for (a |an |your )?(honest )?review',
           '(리뷰|후기)[^.!?]{0,20}(쿠폰|적립|증정|할인|환불)',
           '(쿠폰|적립|증정|할인|환불)[^.!?]{0,20}(리뷰|후기)'
         ],
-        compensatedReason: '긍정 후기를 조건으로 한 보상은 FTC 소비자 리뷰 규칙 위반 소지'
+        incentiveVerdict: 'REVISE',
+        incentiveReason: '조건 없는 후기 보상은 법으로 일괄 금지는 아니지만 대가 관계를 분명히 표시해야 함 (FTC 추천·후기 지침). Amazon 등 플랫폼은 보상 후기를 금지 → 팀 기준상 수정',
+        // 보상을 '주지 않는다'는 부정문은 R10에서 뺌 (GPT 검토 ⑧)
+        allow: [
+          "\\b(?:do|does|did|will|would|can)(?:n['’]t|\\s+not)\\s+(?:offer|give|provide|pay|send)[^.!?]{0,60}reviews?",
+          "\\bnever\\s+(?:offer|give|provide|pay|send)[^.!?]{0,60}reviews?",
+          '(리뷰|후기)[^.!?]{0,20}(쿠폰|적립|증정|할인|환불)[^.!?]{0,15}(않|없|안 )'
+        ]
       },
       // R11·R12: 저당 젤리·저당 음료 출시에 맞춘 당 함량 표시 규칙 (2026-10-23 초안)
       // off: true → 판정에 쓰지 않음. 2026-10-23 담당(소준희) 결정: 당류 함량 표시는 점검하지 않음 (정할 것 #2).
@@ -186,6 +215,19 @@
           { agency: 'FDA', cite: '21 CFR 101.18(b)', note: '일부 성분만 이름에 넣거나 암시하면 다른 성분을 다 적어도 오해를 줄 수 있음' },
           { agency: 'FDA', cite: '숙취 제품 경고장 (2020-07-23) · Purple Biosciences·Double Wood', note: "DHM(dihydromyricetin)을 '숙취 예방 성분'으로 광고한 문구를 인용" }
         ]
+      },
+      // R14: 정부 승인·인증 주장 (2026-10-24 · GPT 검토 ⑦ 'FDA approved jelly'가 PASS였음)
+      {
+        code: 'R14', name: '정부 승인·인증 주장', verdict: 'BLOCK', basis: ['official'],
+        terms: ['FDA approved', 'FDA certified', 'FDA cleared', 'FDA endorsed', 'government approved'],
+        ko: ['FDA 승인', 'FDA 인증', 'FDA 허가', 'FDA 공인'],
+        patterns: ["\\b(?:approved|certified|cleared|endorsed|recommended)\\s+by\\s+(?:the\\s+)?(?:FDA|U\\.?S\\.?\\s+government|USDA|FTC)\\b"],
+        reason: "FDA는 일반식품을 시판 전에 '승인'하지 않음 → 'FDA 승인·인증'은 사실이 아닌 표시. 정부가 보증한 것처럼 보이게 하는 말도 같음",
+        alt: '승인 대신 확인 가능한 사실 (예: 원산지 · 포장 · 성분)',
+        law: [
+          { agency: 'FDA', cite: 'FD&C Act §403(a)(1) · 21 U.S.C. 343(a)(1)', note: '라벨링이 거짓이거나 오해를 주면 부정표시(misbranded) 식품' },
+          { agency: 'FTC', cite: 'FTC Act §5 · §12 (15 U.S.C. 45, 52)', note: '정부 승인처럼 보이게 하는 거짓·기만 광고 금지' }
+        ]
       }
     ],
 
@@ -208,102 +250,103 @@
     // FDA 숙취 제품 경고장 원문 인용 문구 — 원문 그대로(대괄호·말줄임·굽은 따옴표 포함).
     // FDA 경고장 7통 (2020-07-23 발행 · 07-29 공개) · 87개 = FDA 광고 콘솔 seed.json 원문 (2026-10-22 수집, 2026-10-24 이관)
     // 예전 53개(시연본 DATA_CLAIMS)는 일부가 잘린 문장이라 원문 87개로 바꿈. kind: 'testimonial'은 경고장이 인용한 후기
+    // ko: 뜻 확인용 한국어 번역 (2026-10-24 Claude로 한 번 만들어 저장 · 판정은 영어 원문 기준)
     // '규칙 검증'의 목표는 이 문구 중 PASS 0개 — PASS가 나오면 규칙이 놓친 표현입니다
     warningQuotes: [
       // FDA-2020-HO-01 · Double Wood LLC · Dycetin — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/double-wood-llc-593766-07232020
-      { text: 'PREVENT HANGOVERS - No product is more proven or effective at preventing hangover symptoms including headaches, nausea, brain-fog, and anxiety.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'PROTECT YOUR LIVER AND BRAIN - Research shows Dycetin reduces alcohol induced damage to the liver and brain.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Dycetin is the most effective hangover preventing supplement currently available.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Not only does DHM [ingredient in Dycetin] enhance enzymes in the liver responsible for breaking down alcohol and its toxic by-products, but it also reduces the effect alcohol has on GABA receptors in the brain. This keeps you feeling more sober while drinking and greatly reduces hangover symptoms the next day.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Top Rated National Hangover Prevention Supplement', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'NEVER SUFFER ANOTHER HANGOVER', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Dycetin tablets protect your liver and brain from alcohol, prevent hangovers . . .', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'ADVANCED HANGOVER PREVENTION FORMULA', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'DYCETIN is a potent hangover prevention supplement which contains both Dihydromyricetin and a blend of electrolytes. It may reduce hangover symptoms by up to 99%.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'To reduce feelings of alcohol intoxication, take one tablet before you start drinking, and one additional tablet after finishing your first two drinks.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Dycetin can be used in three main ways - to prevent hangovers after a night of drinking, to reduce feelings of intoxication while drinking, or to raise the alcohol intoxication threshold so you can have a few drinks without becoming intoxicated.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'To prevent hangovers with Dycetin, take 2 tablets at the end of the night with a large glass of water.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'If you’ll be attending a social function where drinking is expected but you’d prefer not to become intoxicated, Dycetin can help. Simply take 2 tablets 30 minutes before drinking and you’ll be able to drink a 2-3 beers without noticing any intoxication.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Dycetin is a natural scientifically proven hangover prevention supplement that blocks the affect alcohol has on the brain and allows the liver to process alcohol more quickly. Taking Dycetin after a night on the town will allow you to wake up feeling normal rather than being stuck in bed with a crippling hangover.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'Dycetin’s main ingredient, Dihydromyricetin, is the only single ingredient scientifically proven to prevent hangovers. It does this both by blocking alcohol’s effect on the brain’s GABA receptors and by allowing the liver to clear alcohol and its toxic byproduct acetaldehyde from the body at a much faster rate than normal. Combined, these effects allow Dycetin to prevent hangovers and reduce feelings of alcohol intoxication.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'To prevent a hangover, take 2 tablets of Dycetin before bed with a large glass of water.', firm: 'Double Wood LLC', issued: '2020-07-23' },
-      { text: 'This stuff really works. Either before you imbibe, or after. If you have had too much to drink, it will stop the spins, and staggers, and you don\'t get a hangover the next morning. It will knock out an existing hangover as well.', firm: 'Double Wood LLC', issued: '2020-07-23', kind: 'testimonial' },
-      { text: 'I tried it before drinking once and it was like I was drinking non-alcoholic beer, I wasn\'t even phased. I take it at the end of a long night of partying on a weeknight and am up for work at 7 and even feel more tired than hungover at all. It also does well to take mid-drinking in order to keep from getting out of line.', firm: 'Double Wood LLC', issued: '2020-07-23', kind: 'testimonial' },
+      { text: 'PREVENT HANGOVERS - No product is more proven or effective at preventing hangover symptoms including headaches, nausea, brain-fog, and anxiety.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '숙취 예방 - 두통, 메스꺼움, 머리가 멍한 증상(브레인 포그), 불안 등 숙취 증상 예방에 이보다 더 입증되고 효과적인 제품은 없습니다.' },
+      { text: 'PROTECT YOUR LIVER AND BRAIN - Research shows Dycetin reduces alcohol induced damage to the liver and brain.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '간과 뇌를 보호하세요 - 연구에 따르면 Dycetin은 알코올로 인한 간과 뇌 손상을 줄여줍니다.' },
+      { text: 'Dycetin is the most effective hangover preventing supplement currently available.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'Dycetin은 현재 시중에 나와 있는 숙취 예방 보충제 중 가장 효과적입니다.' },
+      { text: 'Not only does DHM [ingredient in Dycetin] enhance enzymes in the liver responsible for breaking down alcohol and its toxic by-products, but it also reduces the effect alcohol has on GABA receptors in the brain. This keeps you feeling more sober while drinking and greatly reduces hangover symptoms the next day.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'DHM [Dycetin 성분]은 알코올과 그 독성 부산물을 분해하는 간 효소를 강화할 뿐 아니라, 알코올이 뇌의 GABA 수용체에 미치는 영향도 줄여줍니다. 그래서 술을 마시는 동안 덜 취한 느낌을 유지하고, 다음 날 숙취 증상을 크게 줄여줍니다.' },
+      { text: 'Top Rated National Hangover Prevention Supplement', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '전국 최고 평점의 숙취 예방 보충제' },
+      { text: 'NEVER SUFFER ANOTHER HANGOVER', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '다시는 숙취로 고생하지 마세요' },
+      { text: 'Dycetin tablets protect your liver and brain from alcohol, prevent hangovers . . .', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'Dycetin 정제는 알코올로부터 간과 뇌를 보호하고, 숙취를 예방하며 . . .' },
+      { text: 'ADVANCED HANGOVER PREVENTION FORMULA', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '고급 숙취 예방 포뮬러' },
+      { text: 'DYCETIN is a potent hangover prevention supplement which contains both Dihydromyricetin and a blend of electrolytes. It may reduce hangover symptoms by up to 99%.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'DYCETIN은 디하이드로미리세틴(Dihydromyricetin)과 전해질 혼합물을 함께 함유한 강력한 숙취 예방 보충제입니다. 숙취 증상을 최대 99%까지 줄일 수 있습니다.' },
+      { text: 'To reduce feelings of alcohol intoxication, take one tablet before you start drinking, and one additional tablet after finishing your first two drinks.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '취한 느낌을 줄이려면 술을 마시기 시작하기 전에 1정, 처음 두 잔을 마신 후에 1정을 추가로 복용하세요.' },
+      { text: 'Dycetin can be used in three main ways - to prevent hangovers after a night of drinking, to reduce feelings of intoxication while drinking, or to raise the alcohol intoxication threshold so you can have a few drinks without becoming intoxicated.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'Dycetin은 크게 세 가지 방법으로 사용할 수 있습니다. 밤새 술을 마신 후 숙취를 예방하거나, 음주 중 취한 느낌을 줄이거나, 알코올에 취하는 한계치를 높여 몇 잔 마셔도 취하지 않도록 하는 것입니다.' },
+      { text: 'To prevent hangovers with Dycetin, take 2 tablets at the end of the night with a large glass of water.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'Dycetin으로 숙취를 예방하려면 밤이 끝날 무렵 큰 컵의 물과 함께 2정을 복용하세요.' },
+      { text: 'If you’ll be attending a social function where drinking is expected but you’d prefer not to become intoxicated, Dycetin can help. Simply take 2 tablets 30 minutes before drinking and you’ll be able to drink a 2-3 beers without noticing any intoxication.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '술을 마셔야 하는 사교 모임에 참석하지만 취하고 싶지 않다면 Dycetin이 도움이 됩니다. 음주 30분 전에 2정만 복용하면 맥주 2~3잔을 마셔도 전혀 취기를 느끼지 않을 것입니다.' },
+      { text: 'Dycetin is a natural scientifically proven hangover prevention supplement that blocks the affect alcohol has on the brain and allows the liver to process alcohol more quickly. Taking Dycetin after a night on the town will allow you to wake up feeling normal rather than being stuck in bed with a crippling hangover.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'Dycetin은 과학적으로 입증된 천연 숙취 예방 보충제로, 알코올이 뇌에 미치는 영향을 차단하고 간이 알코올을 더 빨리 처리하도록 해줍니다. 밤새 놀고 난 뒤 Dycetin을 복용하면 극심한 숙취로 침대에 갇혀 있는 대신 평소처럼 개운하게 일어날 수 있습니다.' },
+      { text: 'Dycetin’s main ingredient, Dihydromyricetin, is the only single ingredient scientifically proven to prevent hangovers. It does this both by blocking alcohol’s effect on the brain’s GABA receptors and by allowing the liver to clear alcohol and its toxic byproduct acetaldehyde from the body at a much faster rate than normal. Combined, these effects allow Dycetin to prevent hangovers and reduce feelings of alcohol intoxication.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: 'Dycetin의 주성분인 디하이드로미리세틴(Dihydromyricetin)은 숙취 예방 효과가 과학적으로 입증된 유일한 단일 성분입니다. 이 성분은 알코올이 뇌의 GABA 수용체에 미치는 영향을 차단하고, 간이 알코올과 그 독성 부산물인 아세트알데히드를 평소보다 훨씬 빠른 속도로 체내에서 제거하도록 함으로써 작용합니다. 이러한 효과가 합쳐져 Dycetin은 숙취를 예방하고 취한 느낌을 줄여줍니다.' },
+      { text: 'To prevent a hangover, take 2 tablets of Dycetin before bed with a large glass of water.', firm: 'Double Wood LLC', issued: '2020-07-23', ko: '숙취를 예방하려면 잠자리에 들기 전 큰 컵의 물과 함께 Dycetin 2정을 복용하세요.' },
+      { text: 'This stuff really works. Either before you imbibe, or after. If you have had too much to drink, it will stop the spins, and staggers, and you don\'t get a hangover the next morning. It will knock out an existing hangover as well.', firm: 'Double Wood LLC', issued: '2020-07-23', kind: 'testimonial', ko: '이거 정말 효과 있어요. 마시기 전이든 후든요. 술을 너무 많이 마셨을 때 빙빙 도는 어지러움과 비틀거림을 멈춰주고, 다음 날 아침 숙취도 없어요. 이미 생긴 숙취도 싹 날려줍니다.' },
+      { text: 'I tried it before drinking once and it was like I was drinking non-alcoholic beer, I wasn\'t even phased. I take it at the end of a long night of partying on a weeknight and am up for work at 7 and even feel more tired than hungover at all. It also does well to take mid-drinking in order to keep from getting out of line.', firm: 'Double Wood LLC', issued: '2020-07-23', kind: 'testimonial', ko: '한 번은 술 마시기 전에 먹어봤는데 무알코올 맥주를 마시는 것 같았고, 전혀 끄떡없었어요. 평일 밤 늦게까지 파티한 후 마지막에 먹으면 아침 7시에 출근하려고 일어나도 숙취보다는 그냥 좀 피곤한 정도예요. 술 마시는 중간에 먹어도 선 넘지 않게 해줘서 좋아요.' },
       // FDA-2020-HO-02 · Ebnsol Inc. · PartyPal — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/ebnsol-inc-593771-07232020
-      { text: 'Understanding the history of alcohol consumption led us to believe that throughout the ages different cultures have traditionally applied a variety of natural remedies for hangover relief and prevention as well as to help nullify the toll nightlife could have on the body.', firm: 'Ebnsol Inc.', issued: '2020-07-23' },
-      { text: 'One tested combination of ingredients in unique concentrations proved uniquely effective against hangovers: Prickly Pear Cactus, Succinic Acid, and Oriental Raisin Tree.', firm: 'Ebnsol Inc.', issued: '2020-07-23' },
-      { text: 'We bring you 3ContRx [ingredient blend in PartyPal], the most effective hangover treatments from 3 different parts of the globe all combined into easy to use tablets that REALLY WORK!', firm: 'Ebnsol Inc.', issued: '2020-07-23' },
-      { text: 'THE SAFER WAY TO ENJOY CACTUS – Having a hangover can really ruin your day. Nausea, dry mouth, dizziness; all of these symptoms we know all too well. However, with Prickly Pear Cactus Extract [ingredient in PartyPal], you can say goodbye to the day-after woes! By reducing inflammation associated with a hangover and increasing the ability for your cells to repair themselves after a night of drinking debauchery, you can feel better right away!', firm: 'Ebnsol Inc.', issued: '2020-07-23' },
-      { text: 'Dihydromyricetin, or DHM [ingredient in PartyPal], is a truly scientific way to prevent the dreaded hangover.', firm: 'Ebnsol Inc.', issued: '2020-07-23' },
-      { text: 'GUARANTEED RELIEF – We take this product ourselves, and are proud to present it to you as a true hangover cure.', firm: 'Ebnsol Inc.', issued: '2020-07-23' },
+      { text: 'Understanding the history of alcohol consumption led us to believe that throughout the ages different cultures have traditionally applied a variety of natural remedies for hangover relief and prevention as well as to help nullify the toll nightlife could have on the body.', firm: 'Ebnsol Inc.', issued: '2020-07-23', ko: '음주의 역사를 이해하면서, 우리는 시대를 거쳐 여러 문화권에서 전통적으로 다양한 천연 요법을 숙취 해소와 예방, 그리고 밤 문화가 몸에 끼칠 수 있는 타격을 무효화하는 데 사용해 왔다고 믿게 되었습니다.' },
+      { text: 'One tested combination of ingredients in unique concentrations proved uniquely effective against hangovers: Prickly Pear Cactus, Succinic Acid, and Oriental Raisin Tree.', firm: 'Ebnsol Inc.', issued: '2020-07-23', ko: '독특한 농도로 배합해 시험한 한 성분 조합이 숙취에 유난히 뛰어난 효과를 보였습니다. 바로 백년초(Prickly Pear Cactus), 숙신산(Succinic Acid), 헛개나무(Oriental Raisin Tree)입니다.' },
+      { text: 'We bring you 3ContRx [ingredient blend in PartyPal], the most effective hangover treatments from 3 different parts of the globe all combined into easy to use tablets that REALLY WORK!', firm: 'Ebnsol Inc.', issued: '2020-07-23', ko: '전 세계 3개 지역에서 온 가장 효과적인 숙취 치료법을 모두 결합해 간편하게 복용할 수 있는 정제로 만든 3ContRx [PartyPal의 성분 혼합물]를 소개합니다. 정말로 효과가 있습니다!' },
+      { text: 'THE SAFER WAY TO ENJOY CACTUS – Having a hangover can really ruin your day. Nausea, dry mouth, dizziness; all of these symptoms we know all too well. However, with Prickly Pear Cactus Extract [ingredient in PartyPal], you can say goodbye to the day-after woes! By reducing inflammation associated with a hangover and increasing the ability for your cells to repair themselves after a night of drinking debauchery, you can feel better right away!', firm: 'Ebnsol Inc.', issued: '2020-07-23', ko: '선인장을 더 안전하게 즐기는 방법 – 숙취는 하루를 완전히 망칠 수 있습니다. 메스꺼움, 입마름, 어지러움 등 우리 모두 너무나 잘 아는 증상이죠. 하지만 백년초 추출물 [PartyPal의 성분]이 있다면 다음 날의 괴로움과 작별할 수 있습니다! 숙취와 관련된 염증을 줄이고, 방탕하게 술을 마신 밤 이후 세포의 자가 회복 능력을 높여 즉시 상태가 좋아지는 것을 느낄 수 있습니다!' },
+      { text: 'Dihydromyricetin, or DHM [ingredient in PartyPal], is a truly scientific way to prevent the dreaded hangover.', firm: 'Ebnsol Inc.', issued: '2020-07-23', ko: '디하이드로미리세틴, 즉 DHM [PartyPal의 성분]은 끔찍한 숙취를 예방하는 진정 과학적인 방법입니다.' },
+      { text: 'GUARANTEED RELIEF – We take this product ourselves, and are proud to present it to you as a true hangover cure.', firm: 'Ebnsol Inc.', issued: '2020-07-23', ko: '확실한 해소 보장 – 저희도 이 제품을 직접 복용하며, 진정한 숙취 치료제로 자신 있게 소개해 드립니다.' },
       // FDA-2020-HO-03 · Vita Heaven, LLC dba Hangover Heaven · Hangover Heaven Nightlife Prep Supplement — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/vita-heaven-llc-dba-hangover-heaven-593765-07232020
-      { text: 'Hangover Cure through Prevention', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
-      { text: 'If you take our supplements you will have much less of a hangover the next morning.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
-      { text: 'These supplements contain ingredients that help your body deal with the breakdown products of alcohol, which cause hangovers.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
-      { text: 'Hangover Heaven Nightlife Prep is a physician and PhD formulated hangover prevention product designed to be taken before drinking to reduce hangover symptoms the next day.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
-      { text: 'Dosing depends on how much you plan to drink and the severity of your hangovers.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
-      { text: 'Hangover Heaven IV Hydration is the first medical practice dedicated to the treatment, prevention, and cure of hangovers. With Hangover Heaven Nightlife Prep Supplements, you can significantly reduce your changes [sic] of having a hangover.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
-      { text: 'Best Hangover Pills to Prevent Hangovers', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23' },
+      { text: 'Hangover Cure through Prevention', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: '예방을 통한 숙취 치료' },
+      { text: 'If you take our supplements you will have much less of a hangover the next morning.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: '저희 보충제를 복용하시면 다음 날 아침 숙취가 훨씬 덜할 것입니다.' },
+      { text: 'These supplements contain ingredients that help your body deal with the breakdown products of alcohol, which cause hangovers.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: '이 보충제에는 숙취를 일으키는 알코올 분해 산물을 몸이 처리하도록 돕는 성분이 들어 있습니다.' },
+      { text: 'Hangover Heaven Nightlife Prep is a physician and PhD formulated hangover prevention product designed to be taken before drinking to reduce hangover symptoms the next day.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: 'Hangover Heaven Nightlife Prep은 의사와 박사(PhD)가 개발한 숙취 예방 제품으로, 음주 전에 복용하여 다음 날 숙취 증상을 줄이도록 고안되었습니다.' },
+      { text: 'Dosing depends on how much you plan to drink and the severity of your hangovers.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: '복용량은 마실 예정인 술의 양과 숙취의 심한 정도에 따라 달라집니다.' },
+      { text: 'Hangover Heaven IV Hydration is the first medical practice dedicated to the treatment, prevention, and cure of hangovers. With Hangover Heaven Nightlife Prep Supplements, you can significantly reduce your changes [sic] of having a hangover.', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: 'Hangover Heaven IV Hydration은 숙취의 치료, 예방, 완치를 전문으로 하는 최초의 의료기관입니다. Hangover Heaven Nightlife Prep 보충제와 함께라면 숙취가 생길 가능성을 크게 줄일 수 있습니다.' },
+      { text: 'Best Hangover Pills to Prevent Hangovers', firm: 'Vita Heaven, LLC dba Hangover Heaven', issued: '2020-07-23', ko: '숙취 예방을 위한 최고의 숙취 알약' },
       // FDA-2020-HO-04 · Happy Hour Vitamins · Happy Hour Vitamins (H2V) — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/happy-hour-vitamins-593770-07232020
-      { text: 'Multivitamin Specially Formulated to Help with Hangovers.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Specially formulated to help you Avoid Hangovers . . .', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'HELPS AVOID HANGOVERS!', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'MULTIVITAMIN SPECIALLY FORMULATED TO HELP YOU AVOID HANGOVERS', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Convenient individual packets makes hangover prevention easy by taking 1 dose (2 hangover pills) before/while drinking.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'KILL YOUR HANGOVER BEFORE IT EVEN STARTS with powerful vitamin, mineral, anti-oxidant, herbal blend. Preventing hangovers works better than a hangover cure or cures you can try.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'GET RID OF TOXIC ACETALDEHYDE POISONING that adds to your hangovers with N-acetyl Cysteine [ingredient in Happy Hour Vitamins (H2V)]. Protect your liver with milk thistle, kudzu flower powder, and artichoke leaf extract [ingredients in Happy Hour Vitamins (H2V)]. Paired with water makes the perfect hangover kit.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'These are the hangover cure pills you are looking for!', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Hangovers are much more than just dehydration . . . Headache often occurs when alcohol in the bloodstream absorbs all the vitamins and nutrients from the body’s organs. . . . Solution: Take in a healthy dose of vitamins & nutrients prior to drinking', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Hangovers are much more than just dehydration . . . Diarrhea, Nausea, and Vomiting all go hand in hand. . . . These are truly the hangover vitamins you need.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Antioxidants can help the body deal with toxins & other effects from alcohol', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Happy Hour Vitamins contains Thiamine which has been used to help calm the effects of alcohol withdrawal syndrome.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Avoid Hangovers . . . with Happy Hour Vitamins', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'I started thinking that it would be great if there was a multivitamin specifically formulated for the drinking population. One that would help support the bar industry lifestyle by focusing on . . . the reduction of hangover symptoms.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'HOW TO STOP THE STRUGGLE WITH HANGOVERS', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'With the H2V Partner Program, you can start making more money by selling the most effective hangover cure on the market.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'I struggled with hangovers while working as bartender for over a decade. Striving to find a hangover cure, I hired a PhD chemist and consulted medical professionals to create Happy Hour Vitamins, hangover vitamins. Now Happy Hour Vitamins allow me to avoid my hangovers . . .', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial' },
-      { text: 'I got these for my wedding ‘Emergency Hang-over Kits’. They work wonders; everyone was so excited to wake up the next morning and not feel sluggish or tired or have a major headache.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial' },
-      { text: 'I keep the packets in my purse and when I start drinking I just take them its [sic] as easy as that and bam no hangover!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial' },
-      { text: 'I am a bartender and always advise my customers to take a couple before beginning their shenanigans for the evening. They always come back and thank me for introducing them to Happy Hour Vitamins. I tell them that is easy to sell, no one wants a hangover!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial' },
-      { text: 'Happy Hour Vitamins Formulated for Hangovers . . .', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Forgot to take Happy Hour Vitamins and woke up Hungover? Take a pack of Happy Hour Vitamins as your hangover cure!', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'These are the hangover pills you need for the perfect wedding, bachelor, bachelorette, vacation, party or everyday hangover kit!', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'Avoiding hangovers is easy with Happy Hour Vitamins, just take 1 dose (2 capsules) before/while drinking to help you the next morning.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'We were tired of hangovers and figured there had to be a better way. So we hired a chemist, domestic manufacturer & consulted medical professionals.', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
-      { text: 'The Only Thing You Have To Lose Is Your Hangover!', firm: 'Happy Hour Vitamins', issued: '2020-07-23' },
+      { text: 'Multivitamin Specially Formulated to Help with Hangovers.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취 해소에 도움이 되도록 특별히 배합된 멀티비타민.' },
+      { text: 'Specially formulated to help you Avoid Hangovers . . .', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취를 피할 수 있도록 특별히 배합되었습니다 . . .' },
+      { text: 'HELPS AVOID HANGOVERS!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취를 피하는 데 도움을 줍니다!' },
+      { text: 'MULTIVITAMIN SPECIALLY FORMULATED TO HELP YOU AVOID HANGOVERS', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취를 피할 수 있도록 특별히 배합된 멀티비타민' },
+      { text: 'Convenient individual packets makes hangover prevention easy by taking 1 dose (2 hangover pills) before/while drinking.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '편리한 개별 포장으로, 음주 전/음주 중에 1회분(숙취 알약 2정)만 복용하면 숙취 예방이 쉬워집니다.' },
+      { text: 'KILL YOUR HANGOVER BEFORE IT EVEN STARTS with powerful vitamin, mineral, anti-oxidant, herbal blend. Preventing hangovers works better than a hangover cure or cures you can try.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '강력한 비타민, 미네랄, 항산화제, 허브 블렌드로 숙취가 시작되기도 전에 없애 버리세요. 숙취를 예방하는 것이 시도해 볼 수 있는 숙취 해소제나 해소법보다 더 효과적입니다.' },
+      { text: 'GET RID OF TOXIC ACETALDEHYDE POISONING that adds to your hangovers with N-acetyl Cysteine [ingredient in Happy Hour Vitamins (H2V)]. Protect your liver with milk thistle, kudzu flower powder, and artichoke leaf extract [ingredients in Happy Hour Vitamins (H2V)]. Paired with water makes the perfect hangover kit.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: 'N-아세틸시스테인[Happy Hour Vitamins (H2V)의 성분]으로 숙취를 악화시키는 독성 아세트알데히드 중독을 없애세요. 밀크시슬, 칡꽃 분말, 아티초크 잎 추출물[Happy Hour Vitamins (H2V)의 성분]로 간을 보호하세요. 물과 함께하면 완벽한 숙취 키트가 됩니다.' },
+      { text: 'These are the hangover cure pills you are looking for!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '바로 여러분이 찾던 숙취 해소 알약입니다!' },
+      { text: 'Hangovers are much more than just dehydration . . . Headache often occurs when alcohol in the bloodstream absorbs all the vitamins and nutrients from the body’s organs. . . . Solution: Take in a healthy dose of vitamins & nutrients prior to drinking', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취는 단순한 탈수 그 이상입니다 . . . 두통은 혈중 알코올이 신체 장기의 모든 비타민과 영양소를 흡수할 때 자주 발생합니다. . . . 해결책: 음주 전에 충분한 양의 비타민과 영양소를 섭취하세요' },
+      { text: 'Hangovers are much more than just dehydration . . . Diarrhea, Nausea, and Vomiting all go hand in hand. . . . These are truly the hangover vitamins you need.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취는 단순한 탈수 그 이상입니다 . . . 설사, 메스꺼움, 구토가 모두 함께 따라옵니다. . . . 이것이야말로 진정 여러분에게 필요한 숙취 비타민입니다.' },
+      { text: 'Antioxidants can help the body deal with toxins & other effects from alcohol', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '항산화제는 신체가 알코올로 인한 독소 및 기타 영향에 대처하도록 도울 수 있습니다' },
+      { text: 'Happy Hour Vitamins contains Thiamine which has been used to help calm the effects of alcohol withdrawal syndrome.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: 'Happy Hour Vitamins에는 알코올 금단 증후군의 영향을 진정시키는 데 사용되어 온 티아민이 함유되어 있습니다.' },
+      { text: 'Avoid Hangovers . . . with Happy Hour Vitamins', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취를 피하세요 . . . Happy Hour Vitamins와 함께' },
+      { text: 'I started thinking that it would be great if there was a multivitamin specifically formulated for the drinking population. One that would help support the bar industry lifestyle by focusing on . . . the reduction of hangover symptoms.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '음주하는 사람들을 위해 특별히 배합된 멀티비타민이 있다면 정말 좋겠다는 생각이 들기 시작했습니다. . . . 숙취 증상 감소에 초점을 맞춰 바 업계의 라이프스타일을 지원하는 제품 말이죠.' },
+      { text: 'HOW TO STOP THE STRUGGLE WITH HANGOVERS', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취와의 싸움을 끝내는 방법' },
+      { text: 'With the H2V Partner Program, you can start making more money by selling the most effective hangover cure on the market.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: 'H2V 파트너 프로그램으로 시중에서 가장 효과적인 숙취 해소제를 판매하여 더 많은 돈을 벌기 시작할 수 있습니다.' },
+      { text: 'I struggled with hangovers while working as bartender for over a decade. Striving to find a hangover cure, I hired a PhD chemist and consulted medical professionals to create Happy Hour Vitamins, hangover vitamins. Now Happy Hour Vitamins allow me to avoid my hangovers . . .', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial', ko: '저는 10년 넘게 바텐더로 일하며 숙취에 시달렸습니다. 숙취 해소제를 찾기 위해 애쓰던 끝에 박사 학위를 가진 화학자를 고용하고 의료 전문가들의 자문을 받아 숙취 비타민인 Happy Hour Vitamins를 만들었습니다. 이제 Happy Hour Vitamins 덕분에 숙취를 피할 수 있습니다 . . .' },
+      { text: 'I got these for my wedding ‘Emergency Hang-over Kits’. They work wonders; everyone was so excited to wake up the next morning and not feel sluggish or tired or have a major headache.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial', ko: '제 결혼식 \'응급 숙취 키트\'용으로 이걸 샀어요. 효과가 놀라워요. 다음 날 아침 일어났을 때 나른하거나 피곤하지 않고 심한 두통도 없어서 모두가 정말 신나 했어요.' },
+      { text: 'I keep the packets in my purse and when I start drinking I just take them its [sic] as easy as that and bam no hangover!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial', ko: '지갑에 포장 팩을 넣고 다니다가 술을 마시기 시작할 때 그냥 먹으면 돼요, 그렇게 간단해요, 그러면 짠, 숙취가 없어요!' },
+      { text: 'I am a bartender and always advise my customers to take a couple before beginning their shenanigans for the evening. They always come back and thank me for introducing them to Happy Hour Vitamins. I tell them that is easy to sell, no one wants a hangover!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', kind: 'testimonial', ko: '저는 바텐더인데, 손님들에게 늘 그날 밤 신나게 놀기 전에 두어 알 먹으라고 권해요. 손님들은 항상 다시 와서 Happy Hour Vitamins를 소개해 줘서 고맙다고 해요. 저는 이건 팔기 쉽다고 말해요, 숙취를 원하는 사람은 없으니까요!' },
+      { text: 'Happy Hour Vitamins Formulated for Hangovers . . .', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '숙취를 위해 배합된 Happy Hour Vitamins . . .' },
+      { text: 'Forgot to take Happy Hour Vitamins and woke up Hungover? Take a pack of Happy Hour Vitamins as your hangover cure!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: 'Happy Hour Vitamins 먹는 걸 잊어서 숙취와 함께 깨어났나요? Happy Hour Vitamins 한 팩을 숙취 해소제로 드세요!' },
+      { text: 'These are the hangover pills you need for the perfect wedding, bachelor, bachelorette, vacation, party or everyday hangover kit!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '완벽한 결혼식, 총각 파티, 처녀 파티, 휴가, 파티 또는 일상용 숙취 키트에 필요한 숙취 알약이 바로 이것입니다!' },
+      { text: 'Avoiding hangovers is easy with Happy Hour Vitamins, just take 1 dose (2 capsules) before/while drinking to help you the next morning.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: 'Happy Hour Vitamins로 숙취를 쉽게 피하세요. 음주 전/음주 중에 1회분(캡슐 2개)만 복용하면 다음 날 아침에 도움이 됩니다.' },
+      { text: 'We were tired of hangovers and figured there had to be a better way. So we hired a chemist, domestic manufacturer & consulted medical professionals.', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '우리는 숙취에 지쳤고 더 나은 방법이 분명 있을 거라고 생각했습니다. 그래서 화학자와 국내 제조업체를 고용하고 의료 전문가들의 자문을 받았습니다.' },
+      { text: 'The Only Thing You Have To Lose Is Your Hangover!', firm: 'Happy Hour Vitamins', issued: '2020-07-23', ko: '잃을 것은 숙취뿐입니다!' },
       // FDA-2020-HO-05 · LES Labs · DeToxx for Hangovers — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/les-labs-593764-07232020
-      { text: 'DETOXX FOR HANGOVERS', firm: 'LES Labs', issued: '2020-07-23' },
-      { text: 'DeToxx helps reduce hangover symptoms . . . Natural ingredients including milk thistle, prickly pear and cysteine work while you drink, helping to metabolize the toxins that cause hangover symptoms . . .', firm: 'LES Labs', issued: '2020-07-23' },
-      { text: 'Helps prevent hangover symptoms*', firm: 'LES Labs', issued: '2020-07-23' },
+      { text: 'DETOXX FOR HANGOVERS', firm: 'LES Labs', issued: '2020-07-23', ko: '숙취를 위한 DETOXX' },
+      { text: 'DeToxx helps reduce hangover symptoms . . . Natural ingredients including milk thistle, prickly pear and cysteine work while you drink, helping to metabolize the toxins that cause hangover symptoms . . .', firm: 'LES Labs', issued: '2020-07-23', ko: 'DeToxx는 숙취 증상 감소에 도움을 줍니다 . . . 밀크시슬, 백년초, 시스테인 등 천연 성분이 음주하는 동안 작용하여 숙취 증상을 일으키는 독소의 대사를 돕습니다 . . .' },
+      { text: 'Helps prevent hangover symptoms*', firm: 'LES Labs', issued: '2020-07-23', ko: '숙취 증상 예방에 도움을 줍니다*' },
       // FDA-2020-HO-06 · Mind, Body & Coal LLC · Miracoal - Ultimate Hangover Relief and Total Body Detox — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/mind-body-coal-llc-593774-07232020
-      { text: 'Ultimate Hangover Relief', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'PUT YOUR HANGOVER TO BED', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'Miracoal is the only product on the market that takes this healing process to the next level combining the purest form of organic coconut charcoal with electrolytes to flush away toxins and impurities in your digestive system and provide fast detoxifying rejuvenation, helping you wake up hangover-free.*', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'We know that hangovers don’t concede to a demanding schedule or life. . . . we have researched, created and patented an effective formula that detoxes impurities from your system and provides fast-acting relief the woes of a night well spent. So we invented our ‘Miracoal’ and set out to change the world, one hangover at a time.', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'I love using Miracoal! I don’t drink often but every time I do I use Miracoal and I’m back to business in the morning. No hangover feelings at all!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', kind: 'testimonial' },
-      { text: '. . . Then I found Miracoal! Now when I go out, if I have a few cocktails, I just take my Miracoal before I go to bed. I wake up the next morning hangover-free and ready to tackle my day!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', kind: 'testimonial' },
-      { text: 'Miracoal Hangover Prevention and Relief Pills', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'Each capsule offers much more than just hangover relief . . .', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'THE ULTIMATE HANGOVER PREVENTION', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'Activated charcoal [ingredient in Miracoal – Ultimate Hangover Relief & Total Body Detox] removes impurities from your digestive system, helping you recover from drinking and put your hangover to bed!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'We’ve harnessed its [charcoal’s] healing powers into an easy-to-use capsule, formulated specifically to provide easy hangover relief and prevention.', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'You’ll wake up feeling . . . hangover-free!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
-      { text: 'Since activated charcoal has long been considered a safe and effective treatment for acute toxic poisoning, we\'ve turned it into a powerful new hangover prevention pill.', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23' },
+      { text: 'Ultimate Hangover Relief', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '최고의 숙취 해소제' },
+      { text: 'PUT YOUR HANGOVER TO BED', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '숙취를 재워 버리세요' },
+      { text: 'Miracoal is the only product on the market that takes this healing process to the next level combining the purest form of organic coconut charcoal with electrolytes to flush away toxins and impurities in your digestive system and provide fast detoxifying rejuvenation, helping you wake up hangover-free.*', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: 'Miracoal은 가장 순수한 형태의 유기농 코코넛 숯과 전해질을 결합하여 소화기관 내 독소와 불순물을 씻어내고 빠른 해독 회복 효과를 제공함으로써 이 치유 과정을 한 단계 끌어올린 시장 유일의 제품으로, 숙취 없이 깨어나도록 도와줍니다.*' },
+      { text: 'We know that hangovers don’t concede to a demanding schedule or life. . . . we have researched, created and patented an effective formula that detoxes impurities from your system and provides fast-acting relief the woes of a night well spent. So we invented our ‘Miracoal’ and set out to change the world, one hangover at a time.', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '숙취는 바쁜 일정이나 삶을 봐주지 않는다는 것을 저희는 잘 압니다. . . . 저희는 체내 불순물을 해독하고 즐겁게 보낸 밤의 괴로움을 빠르게 덜어주는 효과적인 포뮬러를 연구하고 개발하여 특허를 받았습니다. 그래서 저희는 \'Miracoal\'을 발명했고, 숙취 하나하나씩 세상을 바꾸기 위해 나섰습니다.' },
+      { text: 'I love using Miracoal! I don’t drink often but every time I do I use Miracoal and I’m back to business in the morning. No hangover feelings at all!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', kind: 'testimonial', ko: 'Miracoal 정말 좋아요! 술을 자주 마시진 않지만 마실 때마다 Miracoal을 먹는데, 아침이면 바로 일상으로 복귀해요. 숙취 느낌이 전혀 없어요!' },
+      { text: '. . . Then I found Miracoal! Now when I go out, if I have a few cocktails, I just take my Miracoal before I go to bed. I wake up the next morning hangover-free and ready to tackle my day!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', kind: 'testimonial', ko: '. . . 그러다 Miracoal을 발견했어요! 이제는 외출해서 칵테일 몇 잔을 마시면 자기 전에 Miracoal만 먹으면 돼요. 다음 날 아침 숙취 없이 일어나서 하루를 거뜬히 시작해요!' },
+      { text: 'Miracoal Hangover Prevention and Relief Pills', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: 'Miracoal 숙취 예방 및 해소 알약' },
+      { text: 'Each capsule offers much more than just hangover relief . . .', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '캡슐 하나하나가 단순한 숙취 해소 이상의 것을 제공합니다 . . .' },
+      { text: 'THE ULTIMATE HANGOVER PREVENTION', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '최고의 숙취 예방제' },
+      { text: 'Activated charcoal [ingredient in Miracoal – Ultimate Hangover Relief & Total Body Detox] removes impurities from your digestive system, helping you recover from drinking and put your hangover to bed!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '활성탄[Miracoal – Ultimate Hangover Relief & Total Body Detox의 성분]은 소화기관의 불순물을 제거하여 음주 후 회복을 돕고 숙취를 재워 버립니다!' },
+      { text: 'We’ve harnessed its [charcoal’s] healing powers into an easy-to-use capsule, formulated specifically to provide easy hangover relief and prevention.', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '저희는 숯의 치유력을 간편하게 복용할 수 있는 캡슐에 담았으며, 손쉬운 숙취 해소와 예방을 위해 특별히 배합했습니다.' },
+      { text: 'You’ll wake up feeling . . . hangover-free!', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '숙취 없이 . . . 개운하게 깨어나실 거예요!' },
+      { text: 'Since activated charcoal has long been considered a safe and effective treatment for acute toxic poisoning, we\'ve turned it into a powerful new hangover prevention pill.', firm: 'Mind, Body & Coal LLC', issued: '2020-07-23', ko: '활성탄은 오랫동안 급성 독극물 중독에 안전하고 효과적인 치료제로 여겨져 왔기에, 저희는 이를 강력한 새로운 숙취 예방 알약으로 만들었습니다.' },
       // FDA-2020-HO-07 · Purple Biosciences LLC · Purple Tree — https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/warning-letters/purple-biosciences-llc-593772-07232020
-      { text: 'Purple Tree® is a natural multivitamin specifically designed to reduce alcohol\'s negative effects in the body . . . Hangovers hinder our work, fitness and family routines, so we embarked on a mission to help health-conscious adults who drink . . .', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Yes, Purple Tree is a hangover prevention pill that works.', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Although a hangover cure for heavy-drinking situations like this does not exist, Purple Tree surely helps to mitigate some of the hangover symptoms, if taken beforehand.', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Purple Tree’s key ingredient is called Dihydromyricetin (DHM), an extract from the Japanese Raisin Tree, which has been used for centuries as an anti-alcohol herb and hangover cure in Asia.', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Say Goodbye to Hangovers . . . SHOP NOW', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Purple Tree – Supplement for Hangover Prevention', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Our hangover prevention pills were crafted by Doctors and Scientists with vast experience in natural supplements.', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Purple Tree Hangover Cure & Prevention Pills', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'HELPS PREVENT HANGOVER SYMPTOMS', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Purple Tree’s science-backed formula includes Dihydromyricetin (DHM), a liver detox and hangover prevention ingredient. DHM is a natural extract that has been used as anti-alcohol herb and hangover cure since ancient medicine.*', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Purple Tree helps to prevent hangover symptoms . . .', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Key Benefits . . . helps to combat alcohol’s negative effects in the body, including hangover*', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'White Willow Bark, also called ‘Nature’s Aspirin’, acts as a natural anti-inflammatory agent in the human body.*', firm: 'Purple Biosciences LLC', issued: '2020-07-23' },
-      { text: 'Milk Thistle helps to protect the liver from damage.*', firm: 'Purple Biosciences LLC', issued: '2020-07-23' }
+      { text: 'Purple Tree® is a natural multivitamin specifically designed to reduce alcohol\'s negative effects in the body . . . Hangovers hinder our work, fitness and family routines, so we embarked on a mission to help health-conscious adults who drink . . .', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: 'Purple Tree®는 체내에서 알코올의 부정적 영향을 줄이도록 특별히 설계된 천연 종합비타민입니다 . . . 숙취는 우리의 일, 운동, 가족 일상을 방해하기에, 저희는 술을 마시는 건강을 생각하는 성인들을 돕기 위한 사명에 나섰습니다 . . .' },
+      { text: 'Yes, Purple Tree is a hangover prevention pill that works.', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '네, Purple Tree는 효과가 있는 숙취 예방 알약입니다.' },
+      { text: 'Although a hangover cure for heavy-drinking situations like this does not exist, Purple Tree surely helps to mitigate some of the hangover symptoms, if taken beforehand.', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '이처럼 과음하는 상황을 위한 숙취 치료제는 존재하지 않지만, Purple Tree를 미리 복용하면 일부 숙취 증상을 확실히 완화하는 데 도움이 됩니다.' },
+      { text: 'Purple Tree’s key ingredient is called Dihydromyricetin (DHM), an extract from the Japanese Raisin Tree, which has been used for centuries as an anti-alcohol herb and hangover cure in Asia.', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: 'Purple Tree의 핵심 성분은 디하이드로미리세틴(DHM)으로, 아시아에서 수 세기 동안 항알코올 약초이자 숙취 치료제로 사용되어 온 헛개나무(Japanese Raisin Tree) 추출물입니다.' },
+      { text: 'Say Goodbye to Hangovers . . . SHOP NOW', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '숙취여 안녕 . . . 지금 구매하기' },
+      { text: 'Purple Tree – Supplement for Hangover Prevention', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: 'Purple Tree – 숙취 예방 보충제' },
+      { text: 'Our hangover prevention pills were crafted by Doctors and Scientists with vast experience in natural supplements.', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '저희 숙취 예방 알약은 천연 보충제 분야에 풍부한 경험을 가진 의사와 과학자들이 만들었습니다.' },
+      { text: 'Purple Tree Hangover Cure & Prevention Pills', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: 'Purple Tree 숙취 치료 및 예방 알약' },
+      { text: 'HELPS PREVENT HANGOVER SYMPTOMS', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '숙취 증상 예방에 도움' },
+      { text: 'Purple Tree’s science-backed formula includes Dihydromyricetin (DHM), a liver detox and hangover prevention ingredient. DHM is a natural extract that has been used as anti-alcohol herb and hangover cure since ancient medicine.*', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: 'Purple Tree의 과학적으로 입증된 포뮬러에는 간 해독 및 숙취 예방 성분인 디하이드로미리세틴(DHM)이 들어 있습니다. DHM은 고대 의학 시대부터 항알코올 약초이자 숙취 치료제로 사용되어 온 천연 추출물입니다.*' },
+      { text: 'Purple Tree helps to prevent hangover symptoms . . .', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: 'Purple Tree는 숙취 증상 예방에 도움을 줍니다 . . .' },
+      { text: 'Key Benefits . . . helps to combat alcohol’s negative effects in the body, including hangover*', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '주요 효능 . . . 숙취를 포함해 체내에서 알코올의 부정적 영향에 대항하도록 도와줍니다*' },
+      { text: 'White Willow Bark, also called ‘Nature’s Aspirin’, acts as a natural anti-inflammatory agent in the human body.*', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '\'자연의 아스피린\'이라고도 불리는 화이트 윌로우 바크는 인체에서 천연 항염증제 역할을 합니다.*' },
+      { text: 'Milk Thistle helps to protect the liver from damage.*', firm: 'Purple Biosciences LLC', issued: '2020-07-23', ko: '밀크시슬은 간을 손상으로부터 보호하는 데 도움을 줍니다.*' }
     ],
 
     // 모두 PASS여야 하는 문구
@@ -352,6 +395,41 @@
       { text: '저당 젤리로 가볍게', expect: 'PASS', product: 'jelly-ls' }
     ],
 
+    // 처음 보는 문장 시험 (2026-10-24) — 규칙을 만들 때 쓰지 않은 문장으로 '진짜 실력'을 잼.
+    // src 'gpt': GPT 검토가 찾은 문제 문장 (이번에 규칙을 고친 대상) · src 'new': 새로 쓴 문장 (규칙을 이 문장에 맞춰 고치지 않음)
+    // 당 함량 표현(low sugar 등)은 점검하지 않기로 했으므로 넣지 않음. expect는 팀이 정한 정답 (B2C 채널 기준)
+    evalSet: [
+      { text: 'Our jelly eliminates nausea after drinking.', expect: 'BLOCK', src: 'gpt', note: '음주 후 증상 제거 = 의약품 주장' },
+      { text: 'Reduces blood alcohol concentration.', expect: 'BLOCK', src: 'gpt', note: '혈중 알코올을 낮춘다 = 의약품 주장' },
+      { text: 'FDA approved jelly.', expect: 'BLOCK', src: 'gpt', note: 'FDA는 일반식품을 승인하지 않음' },
+      { text: 'Store in a cool place to prevent spoilage.', expect: 'PASS', src: 'gpt', note: '보관 안내 (prevent가 질병 예방이 아님)' },
+      { text: 'We do not offer refunds in exchange for reviews.', expect: 'PASS', src: 'gpt', note: '부정문 · 보상을 거절하는 문장' },
+      { text: 'We send a free sample for an honest review, positive or negative.', expect: 'REVISE', src: 'gpt', note: '조건 없는 후기 보상: 법 위반은 아니지만 대가 표시 필요 · 플랫폼·팀 기준상 수정' },
+      { text: 'Wake up without the headache.', expect: 'BLOCK', src: 'new', note: '숙취 단어 없이 숙취 완화를 암시' },
+      { text: 'Helps your body process alcohol faster.', expect: 'BLOCK', src: 'new', note: '알코올 대사 = 의약품 주장' },
+      { text: 'Clinically proven to reduce hangover symptoms.', expect: 'BLOCK', src: 'new' },
+      { text: 'Get 20% off your next order when you leave a 5-star review!', expect: 'BLOCK', src: 'new', note: '좋은 후기를 조건으로 한 보상' },
+      { text: 'Leave us a review and get a free gift.', expect: 'REVISE', src: 'new', note: '조건 없는 후기 보상' },
+      { text: 'Approved by the FDA for daily use.', expect: 'BLOCK', src: 'new' },
+      { text: 'Tastes like lime and cherry.', expect: 'PASS', src: 'new' },
+      { text: 'Each stick is individually wrapped for on-the-go snacking.', expect: 'PASS', src: 'new' },
+      { text: 'Made in Korea with Hovenia dulcis extract.', expect: 'PASS', src: 'new', note: '성분 사실만' },
+      { text: 'Keep out of reach of children to prevent choking.', expect: 'PASS', src: 'new', note: '안전 안내' },
+      { text: 'Drink responsibly.', expect: 'PASS', src: 'new' },
+      { text: 'Party all night and feel fine tomorrow.', expect: 'BLOCK', src: 'new', note: '음주 조장 + 숙취 없음 암시' },
+      { text: 'Supports healthy liver function.', expect: 'REVISE', src: 'new', note: '구조·기능 표현' },
+      { text: 'Say goodbye to the morning-after struggle.', expect: 'BLOCK', src: 'new' },
+      { text: 'Doctors recommend our jelly.', expect: 'REVISE', src: 'new', note: '전문가 권위 = 의약품 오인' },
+      { text: 'No artificial colors or flavors.', expect: 'PASS', src: 'new' },
+      { text: 'Detoxifies your body after a night out.', expect: 'BLOCK', src: 'new' },
+      { text: 'We are sorry you felt nauseous. Please stop using the product and contact a doctor.', expect: 'PASS', src: 'new', note: 'CS 사과·안내 문장' },
+      { text: 'Absorbs alcohol so you stay sharp.', expect: 'BLOCK', src: 'new' },
+      { text: 'Try it risk-free with our 30-day money-back guarantee.', expect: 'PASS', src: 'new', note: '환불 보장은 효과 보장이 아님' },
+      { text: '저희 젤리는 숙취 해소에 도움을 줍니다.', expect: 'BLOCK', src: 'new' },
+      { text: '리뷰 남기면 쿠폰 드려요', expect: 'REVISE', src: 'new', note: '조건 없는 후기 보상' },
+      { text: '별점 5점 리뷰 남기시면 전액 환불해 드려요', expect: 'BLOCK', src: 'new', note: '좋은 후기를 조건으로 한 보상' }
+    ],
+
     // 일괄 심의 시연용 더미 문구 20개 (2026-10-24 · 팀이 지어낸 아마존·SNS 광고 문장, 실제 광고 아님)
     // ko: 마케터가 쓰는 한국어 문구 (화면 더미는 이걸 올림 → 서버 Claude가 영어로 번역 → 영어·한국어 둘 다 점검)
     // channel·product: 줄마다 다른 채널·제품 ('all' = 전체) · copy: 예시 영어 번역 (번역을 못 할 때 · 규칙 확인용)
@@ -386,7 +464,7 @@
     //   '다음 날 개운하게' → 'Own your morning' (R1 암시) · '아시아 전통 숙취 해소 비법' → 'Loved in Korea for decades' (R1·R2,
     //   Purple Tree 경고장의 'used for centuries … hangover cure in Asia'와 비슷 · 'for decades'는 사실 확인 필요)
     mappings: [
-      { ko: '숙취 해소', us: 'After-Party · Morning-After Ritual', code: 'R2', reviewer: '', reviewedAt: '' },
+      { ko: '숙취 해소', us: 'After-Party · Reset · Refresh', code: 'R2', reviewer: '', reviewedAt: '', note: "'Morning-After'는 미국에서 숙취·사후 피임약을 떠올려 쓰지 않음 (2026-10-24)" },
       { ko: '숙취 예방', us: 'Before the first toast.', code: 'R1', reviewer: '', reviewedAt: '', note: '예방·치료 효과 대신 섭취 시점만 말함' },
       { ko: '숙취 없는 아침', us: 'Start your morning fresh.', code: 'R2', reviewer: '', reviewedAt: '', note: '음주 이미지·해시태그와 함께 쓰지 않음 (AI 2차 판정 REVIEW 사례)' },
       { ko: '숙취해소제 · 숙취약', us: 'Korean after-party jelly stick', code: 'R7', reviewer: '', reviewedAt: '', note: '약이 아닌 식품 포맷 명칭' },
@@ -480,7 +558,7 @@
         ],
         forUs: [
           '한국산 제품에 붙는 관세율이 USTR 결정으로 바뀔 수 있고, 바뀌면 판매 가격과 마진에 영향을 줍니다.',
-          'README 7장 조사 기준: 2026-07-24부터 한국산 전 품목에 Section 301 관세 12.5% (KORUS 무관세와 함께 적용될 때의 계산은 관세사 확인 필요).',
+          '2026-07-24 이후 한국산 일반 상품의 추가 관세는 Section 301에 따라 기존 관세 포함 12.5% 상한으로 안내하는 자료가 많지만 10%로 적은 자료도 있고, 자동차·철강 등은 따로입니다 (2026-10-24 확인). 우리 제품의 확정 HTS 코드로 USTR 고시와 통관일·면제 여부를 관세사와 확인하세요.',
           'USTR 결정은 Federal Register에 공고되므로 규제 모니터링 탭에서 확인할 수 있습니다.'
         ],
         risk: '직접 제재는 없음 · 관세 변화로 가격·마진 영향',
@@ -488,6 +566,96 @@
         goto: [['monitor', 'USTR 공고 조회']],
         url: 'https://ustr.gov/'
       }
+    ],
+
+    // '기관 안내 → 광고 플랫폼': 정부 기관은 아니지만(사기업) 자기 광고 정책을 어기면 광고 거절·계정 제한 (2026-10-24 작성)
+    // 법은 아니므로 근거 구분은 📱 플랫폼 정책 · 정책은 자주 바뀌니 공식 페이지(url)로 확인
+    platforms: [
+      {
+        code: 'Meta', ko: '페이스북 · 인스타그램 광고', icon: '📱',
+        oneLine: '광고가 보는 사람의 특성(인종·건강 상태 등)을 단정하면 안 되고, 술을 언급하는 광고는 법과 업계 규약을 지켜야 합니다.',
+        forUs: [
+          "'Are you hungover?'처럼 보는 사람의 상태를 짚는 문구, 'Asian glow'처럼 인종·체질을 암시하는 문구는 '개인 특성' 정책에 걸릴 수 있습니다.",
+          '음주 장면·술을 언급하는 광고는 술 광고 기준(나이 제한 타기팅, 업계 자율 규약)을 따라야 합니다.'
+        ],
+        risk: '광고 거절 · 계정 제한', rules: 'R4 · R6',
+        url: 'https://transparency.meta.com/policies/ad-standards/'
+      },
+      {
+        code: 'Google', ko: '구글 검색 · 유튜브 광고', icon: '🔎',
+        oneLine: '과음·폭음·음주 시합을 좋게 보이게 하는 광고와, 술로 건강·사회적 이득이 있다는 광고를 거절합니다.',
+        forUs: ["'Drink all night'처럼 많이 마시는 것을 부추기는 표현은 '무책임한 음주 광고' 정책에 걸릴 수 있습니다."],
+        risk: '광고 거절 · 경고 후 계정 정지', rules: 'R6',
+        url: 'https://support.google.com/adspolicy/answer/16427712'
+      },
+      {
+        code: 'TikTok', ko: '틱톡 광고', icon: '🎵',
+        oneLine: '미국에서 술 광고는 받지만(25세 이상 타기팅), 숙취 해소 제품 광고는 받지 않는 것으로 알려져 있습니다 (2024 업계 보도 기준).',
+        forUs: [
+          '숙취 해소 제품으로 보이면 광고 자체가 거절될 수 있어, 틱톡에서는 숙취를 떠올리는 표현을 특히 피해야 합니다.',
+          '과음 장면, 술의 효능 주장, 숙취 언급도 금지로 보도됨 → 공식 광고 정책 원문으로 다시 확인 필요.'
+        ],
+        risk: '광고 거절 · 브랜드 콘텐츠 삭제', rules: 'R2 · R6',
+        url: 'https://ads.tiktok.com/help/'   // 광고 정책은 도움말 센터 › Advertising Policies
+      },
+      {
+        code: 'Amazon', ko: '아마존 상세페이지', icon: '🛒',
+        oneLine: '상세페이지에서 질병을 진단·치료·완화·예방한다는 주장을 금지하고, 성분 함량은 라벨과 같아야 합니다.',
+        forUs: [
+          '숙취 해소·간 보호 같은 표현은 상세페이지·검색 키워드 모두에서 빼야 합니다 (FDA 기준과 같음).',
+          '성분·함량을 쓰면 라벨(영양·성분 표시)과 똑같아야 합니다 (2026-03-31부터 강화된 것으로 보도 · 건강기능식품 기준).'
+        ],
+        risk: '상품 비활성화 · 판매 계정 경고', rules: 'R1 · R2 · R3 · R13',
+        url: 'https://sellercentral.amazon.com/help/hub/reference/external/G200164330'
+      }
+    ],
+
+    // 규제 모니터링 출처 안내 (2026-10-24): 기관 · 통로(어디서 받나) · 방식 · 가져오는 정보(입력) · 대시보드에서 쓰는 곳(출력) · 필요한 키
+    // id는 refresh.py SOURCES의 id와 같아야 함. agency가 'FDA·FTC'인 출처는 항목의 firm 앞부분(FDA/FTC)으로 기관을 나눔
+    monitorSources: [
+      { id: 'fda-warning-letters', range: '최근 1년 · 최대 80건 (본문 문구가 있는 경고장은 개수와 상관없이 남김)', agency: 'FDA', name: 'FDA 경고장', via: 'FDA Data Dashboard API (공식) · 직접 올리기', modes: ['auto', 'manual'],
+        key: 'FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY',
+        gets: '식품 분야 경고장 목록 (회사 · 발행일 · 담당 부서 · 나라). 직접 올리면 경고장 제목과 본문 속 광고 문구까지',
+        gives: '목록 · 🆕 새 경고장 표시 → 본문 문구는 사례집 후보 → 승인하면 경고장 사례·규칙 검증에 반영' },
+      { id: 'fda-import-refusals', range: '최근 순 · 최대 40건 (같은 회사·날짜·품목은 한 줄)', agency: 'FDA', name: 'FDA 수입 거부 (한국산 식품)', via: 'FDA Data Dashboard API (공식)', modes: ['auto'],
+        key: 'FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY',
+        gets: '한국산 식품이 미국 통관에서 거부된 기록 (회사 · 제품 · 거부일 · 사유 코드)',
+        gives: '목록 · 거부 사유 뜻(FDA 공식 코드표로 풀어 씀) → 라벨·통관 준비 참고' },
+      { id: 'openfda-food-recalls', range: '최근 1년 · 검색어 3개 × 30건 → 최대 40건', agency: 'FDA', name: '식품 리콜', via: 'openFDA API (FDA 공개 데이터 · food/enforcement)', modes: ['auto'],
+        key: '없음 (막히면 OPENFDA_API_KEY)',
+        gets: '젤리·곤약·숙취 + 한국산 음료 + 헛개 관련 식품 리콜 (제품 · 회사 · 리콜 등급 · 사유)',
+        gives: '목록 · 한글 요약 → 비슷한 제품이 왜 리콜됐는지 참고' },
+      { id: 'regulations-gov', range: '최근 1년 · 최대 30건 (FDA는 식품·표시 관련 제목만)', agency: 'FDA·FTC', name: '규칙 · 규칙안', via: 'Regulations.gov API', modes: ['auto'],
+        key: 'REGULATIONS_GOV_API_KEY',
+        gets: 'FDA(식품·표시·광고 관련)와 FTC가 낸 규칙·규칙안 (의견 접수 마감일)',
+        gives: '목록 · 한글 요약 → 규칙 R1~R14를 고칠지 검토' },
+      { id: 'federal-register', range: '최근 1년 · 기관별 40건 중 최대 30건 (FDA는 식품 관련 제목만)', agency: 'FDA·FTC', name: '관보 공고', via: 'Federal Register API', modes: ['auto'],
+        key: '없음',
+        gets: 'FTC 전체 공고 + FDA 식품 관련 공고 (제목 · 요약 · 종류)',
+        gives: '목록 · 한글 요약 → 단속·지침 변화 확인' },
+      { id: 'cbp-cross', range: '기간 제한 없음 · 검색어 6개 × 최신 10건 → 최대 30건', agency: 'CBP', name: '품목분류 결정', via: 'CBP CROSS API', modes: ['auto'],
+        key: '없음',
+        gets: '젤리(HS 2106.90 · 곤약) · 음료(HS 2202.10 · 2202.99 후보) · 헛개 관련 품목분류 결정 (HTS 코드)',
+        gives: '목록 → HS 코드·관세 판단 참고 (최종은 관세사 확인)' },
+      { id: 'courtlistener', range: '검색어 3개 × 15건 (2·3번째는 최근 1년) · 관련성은 사람이 확인', agency: '법원', name: '허위광고 판결', via: 'CourtListener API', modes: ['auto'],
+        key: 'COURTLISTENER_TOKEN',
+        gets: '숙취·건강식품·기능성 음료 · 저당 표시(low sugar·sugar free) 허위광고 판결 검색 결과',
+        gives: '참고 목록 (관련성은 사람이 확인)' }
+    ],
+    // range: 가져오는 범위 — 모든 결과가 아니라 '최근 최대 N건'임을 화면에 밝힘 (GPT 검토 ⑰ · 기간은 REFRESH_LOOKBACK_DAYS 기본 365일)
+    // 수집 항목에 붙이는 우리 제품군 태그 (2026-10-24). 제목·회사·요약·한글 요약에서 찾음 · 어느 것도 아니면 '공통'
+    // 동물 사료·음용수 같은 공고는 우리 제품이 아니므로 제품군 태그를 붙이지 않음
+    monitorTagSkip: 'animal|livestock|veterinar|pet food|\\bfeed\\b|동물|사료|가축',
+    monitorProductTags: [
+      { id: 'jelly', ko: '젤리', re: 'jelly|konjac|gumm|confection|candy|\\b2106\\.90|젤리|곤약|구미|사탕|과자' },
+      { id: 'drink', ko: '음료', re: 'beverage|drink|juice|\\b2202\\.|음료|주스|드링크' },
+      { id: 'sugar', ko: '당·저당', re: 'sugar|sweeten|nutrition|healthy|calorie|설탕|당류|저당|무설탕|감미|영양' },
+      { id: 'hangover', ko: '숙취·성분', re: 'hangover|hovenia|raisin tree|alcohol|dihydromyricetin|\\bDHM\\b|after[\\s-]party|숙취|헛개|알코올|음주' }
+    ],
+
+    monitorAgencies: [
+      { code: 'FDA', ko: '미국 식품의약국' }, { code: 'FTC', ko: '미국 연방거래위원회' },
+      { code: 'CBP', ko: '미국 관세국경보호청' }, { code: '법원', ko: '미국 법원 판결' }
     ],
 
     // 규제 모니터링: 서버가 자동으로 못 읽는 곳 (2026-10-24 확인) → 화면의 바로가기 버튼으로 사람이 확인
