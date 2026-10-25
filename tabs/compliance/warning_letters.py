@@ -20,6 +20,7 @@ import time
 from datetime import date, datetime, timedelta
 from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 from flask import current_app
@@ -27,7 +28,7 @@ from flask import current_app
 from server.envkeys import get as env
 
 SOURCE_ID = "fda-warning-letters"
-LABEL = "FDA 경고장 (식품·건강기능식품)"
+LABEL = "FDA 경고장 (식품 분야 전체 · 🍺 표시만 숙취·음주 관련)"
 BASE = "https://www.fda.gov"
 WL_XLSX = (BASE + "/inspections-compliance-enforcement-and-criminal-investigations/"
            "compliance-actions-and-activities/warning-letters/datatables-data?page&_format=xlsx")
@@ -114,6 +115,23 @@ def _iso(v):
     return s[:10]
 
 
+LETTER_HOST = "www.fda.gov"                              # 서버가 본문을 읽는 곳은 여기뿐
+LINK_HOSTS = {LETTER_HOST, "datadashboard.fda.gov"}      # 화면 링크로 저장해도 되는 곳
+
+
+def safe_url(url, hosts=LINK_HOSTS):
+    """FDA 주소만 통과 (업로드한 XLSX 속 임의 주소로 서버가 내부망을 읽는 SSRF 방지 · 2026-10-24).
+    https · 허용 호스트 · 기본 포트 · 사용자 정보 없음이 아니면 빈 문자열."""
+    url = str(url or "").strip()
+    try:
+        p = urlparse(url)
+        port = p.port
+    except ValueError:
+        return ""
+    ok = p.scheme == "https" and (p.hostname or "").lower() in hosts and port in (None, 443) and not p.username and not p.password
+    return url if ok else ""
+
+
 def marcs_from_url(url):
     m = re.search(r"-(\d{5,7})-\d{8}/?$", url or "")
     return m.group(1) if m else None
@@ -166,10 +184,11 @@ def parse_xlsx(content):
             continue
         if (posted or issued) and (posted or issued) < since:
             continue
+        url = safe_url(url)
         marcs = marcs_from_url(url)
         out.append({"id": marcs or "x-" + hashlib.sha1(f"{company}|{issued}".encode()).hexdigest()[:10],
                     "date": issued or posted, "title": subject or "Warning Letter", "firm": company,
-                    "url": url if url.startswith("https://") else "", "summary": _summary(subject, office, company),
+                    "url": url, "summary": _summary(subject, office, company),
                     "via": "xlsx"})
     return out, total
 
@@ -189,6 +208,8 @@ def import_xlsx(content):
 
 def _fetch(url, timeout=60):
     """fda.gov 요청 1회. 봇 차단(abuse-detection 이동 · 짧은 404)은 Blocked로."""
+    if not safe_url(url, {LETTER_HOST}):
+        raise LetterError("fda.gov 주소만 읽습니다.")
     r = requests.get(url, headers={"User-Agent": UA}, timeout=timeout, allow_redirects=False)
     if r.is_redirect or (r.status_code in (403, 404) and len(r.content) < 200):
         # 2026-10-24: 302 → /apology_objects/abuse-detection-apology.html, 목록 주소는 10바이트 'Not found'
@@ -226,7 +247,7 @@ def add_text(text, url="", firm="", issued="", subject=""):
     if len(text) > MAX_TEXT:
         raise LetterError("본문이 너무 깁니다 (20만 자 이하).")
     url = url.strip()
-    if url and not url.startswith("https://www.fda.gov/"):
+    if url and not safe_url(url, {LETTER_HOST}):
         raise LetterError("경고장 주소는 https://www.fda.gov/ 로 시작해야 합니다.")
     quotes = extract_claims(text)
     if not quotes:
@@ -267,7 +288,7 @@ def read_bodies(limit):
     except ValueError:
         delay = 30.0
     data = load()
-    todo = [x for x in items(data) if x.get("url") and not x.get("quotes") and not x.get("checked")][:limit]
+    todo = [x for x in items(data) if safe_url(x.get("url"), {LETTER_HOST}) and not x.get("quotes") and not x.get("checked")][:limit]
     read = 0
     try:
         for i, x in enumerate(todo):
@@ -306,8 +327,10 @@ def dashboard():
             continue
         _merge(data, {"id": "ca-" + cid, "date": _iso(x.get("ActionTakenDate")), "title": "Warning Letter · Food/Cosmetics",
                       "firm": str(x.get("LegalName") or "")[:160],
-                      "url": x.get("FirmProfile") if str(x.get("FirmProfile") or "").startswith("https://") else "",
-                      "summary": " · ".join(str(v) for v in (x.get("Center"), x.get("CountryName")) if v)[:400], "via": "dashboard"})
+                      "url": safe_url(x.get("FirmProfile")),
+                      "summary": " · ".join(str(v) for v in (x.get("Center"), x.get("CountryName"),
+                                                              "🍺 숙취·음주 관련 단어" if TOPIC.search(str(x.get("LegalName") or "")) else "",
+                                                              "제목·본문은 FDA 경고장 목록에서 회사 이름으로 확인") if v)[:400], "via": "dashboard"})
     data["updatedAt"] = datetime.now().isoformat(timespec="seconds")
     _save(data)
     return len(j.get("result") or [])
@@ -316,8 +339,9 @@ def dashboard():
 # ───────── 규제 모니터링 수집에서 부르는 곳 ─────────
 
 def collect(bodies=False):
-    """자동 경로를 모두 시도 → (항목, 경고 목록). 자동 경로가 다 막혀도 올려 둔 항목은 그대로 돌려줌."""
-    warns = []
+    """자동 경로를 모두 시도 → (항목, 실패 목록, 참고 안내). 자동 경로가 다 막혀도 올려 둔 항목은 그대로 돌려줌.
+    목록을 Data Dashboard로 받았으면 fda.gov 차단은 실패가 아니라 '참고 안내'(화면에 출처 아래 회색 글씨)."""
+    warns, note = [], ""
     n = None
     try:
         n = dashboard()
@@ -335,7 +359,10 @@ def collect(bodies=False):
             read_bodies(limit)
     except Blocked as e:
         # 목록은 Data Dashboard로 받았으면 실패가 아님 → 본문 문구만 직접 올리기로 넣으라는 안내
-        warns.append("참고: fda.gov 본문 자동 읽기는 봇 차단 · 경고장 목록은 Data Dashboard로 받음 · 문구는 '직접 올리기 ②'로" if n else str(e))
+        if n:
+            note = "경고장 목록은 FDA Data Dashboard로 정상 수집 · 본문 문구는 fda.gov 봇 차단으로 자동 수집 불가 → 필요한 경고장만 아래 '경고장 직접 올리기 ②'로"
+        else:
+            warns.append(str(e))
     except Exception as e:
         warns.append(f"fda.gov 경고장 목록 실패: {type(e).__name__}: {str(e)[:100]}")
-    return items(), warns
+    return items(), warns, note

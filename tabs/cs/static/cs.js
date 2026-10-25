@@ -9,7 +9,10 @@
   if (!REBOOT || !DATA) throw new Error('cs: REBOOT core와 tabs/cs/static/data.js를 먼저 불러와야 합니다');
 
   const store = REBOOT.store('cs');   // 저장 키: reboot:cs:*
-  const KEY = { inquiries: 'inquiries', adverse: 'adverse-events' };
+  const KEY = { inquiries: 'inquiries', adverse: 'adverse-events', defaults: 'reply-defaults', custTags: 'customer-tags' };
+  // 문의 1건 = 저장 키 1개 (inq.<id>). 예전처럼 문의함 전체를 키 하나에 두면 두 사람이 다른 문의를 동시에 고칠 때
+  // 나중에 저장한 사람의 목록이 앞사람 작업을 덮어씀 → 고친 문의만 저장 (2026-10-24)
+  const INQ = 'inq.';
   const HOUR = 3600 * 1000;
   const TYPES = {};
   DATA.types.forEach(t => { TYPES[t.code] = t; });
@@ -18,7 +21,8 @@
   const LABEL = { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '규칙 미탐지' };
   const PLACEHOLDER = {
     name: '고객 이름', orderNo: '주문번호', tracking: '운송장 번호', eta: '도착 예정일', brand: '브랜드명',
-    product: '제품명', flavor: '제품 팩트시트의 맛', ingredients: '제품 팩트시트의 성분', allergens: '제품 팩트시트의 알레르기 성분'
+    product: '제품명', flavor: '제품 팩트시트의 맛', ingredients: '제품 팩트시트의 성분', allergens: '제품 팩트시트의 알레르기 성분',
+    refundPolicy: '환불·교환 정책', qualityDue: '품질팀 회신 기한', salesDue: '영업 회신 기한', pricing: '현재 가격·프로모션'
   };
 
   /* ───────── 분류 ───────── */
@@ -59,6 +63,7 @@
 
   /** 템플릿 빈칸 값: 제품 사실(data.js products) → 설정 파트 팩트시트(값이 있으면 우선).
       확정 안 된 값(내부 제품명 미정 · 맛 임시)은 [확인 필요]로 남겨 최종 승인을 막음 */
+  const PRODUCT_FACTS = ['ingredients', 'allergens'];
   function facts(inq) {
     let s = {};
     try { s = REBOOT.use('settings').facts() || {}; } catch (e) { s = {}; }
@@ -72,7 +77,17 @@
       out.unit = p ? p.unit : null;
     }
     Object.keys(s).forEach(k => { if (s[k] != null && String(s[k]).trim() !== '') out[k] = s[k]; });
+    // 팀이 '답변 기본값'에 넣은 값이 가장 우선 (맛이 임시라 [확인 필요]였던 것도 여기 값이 있으면 채움)
+    const d = replyDefaults();
+    Object.keys(d).forEach(k => { if (String(d[k] || '').trim()) out[k] = String(d[k]).trim(); });
+    // 성분·알레르기는 제품마다 다를 수 있음 → 어떤 제품 문의인지 모르면 공통값으로 답하지 않음 (GPT 검토 ㉑)
+    if (inq && !p) PRODUCT_FACTS.forEach(k => { out[k] = `[확인 필요: 어떤 제품인지 확인한 뒤 ${k === 'allergens' ? '알레르기 성분' : '성분'}]`; });
     return out;
+  }
+
+  function replyDefaults() {
+    const v = store.get(KEY.defaults, null);
+    return v && typeof v === 'object' && v.values && typeof v.values === 'object' ? v.values : {};
   }
 
   function fill(template, inq) {
@@ -164,11 +179,21 @@
     });
   }
 
+  const inqKey = id => INQ + String(id).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 76);
+  function saveInq(inq) { store.set(inqKey(inq.id), inq); }
+
   function load() {
-    let list = store.get(KEY.inquiries, null);
-    if (!Array.isArray(list)) { list = seed(); store.set(KEY.inquiries, list); }
-    if (renameDummies(list)) store.set(KEY.inquiries, list);
-    return list.filter(i => TYPES[i.type]);
+    let keys = store.keys().filter(k => k.startsWith(INQ));
+    if (!keys.length) {
+      // 처음: 예전 목록(키 하나)이 있으면 1건씩 옮기고 지움, 없으면 더미 문의로 시작
+      const legacy = store.get(KEY.inquiries, null);
+      (Array.isArray(legacy) ? legacy : seed()).forEach(saveInq);
+      if (Array.isArray(legacy)) store.remove(KEY.inquiries);
+      keys = store.keys().filter(k => k.startsWith(INQ));
+    }
+    const list = keys.map(k => store.get(k, null)).filter(x => x && TYPES[x.type]);
+    renameDummies(list);
+    return list;
   }
 
   /** 예전 더미 문의(TEST-NN · 'Test Customer NN')를 새 이름·주문번호로 바꿈 (처리 상태·초안·기록은 그대로) */
@@ -181,19 +206,25 @@
         .split(inq.tracking || '\u0000').join(d.tracking || '');
       inq.draft = swap(inq.draft);
       (inq.log || []).forEach(l => { if (l && typeof l.msg === 'string') l.msg = swap(l.msg); });
+      store.remove(inqKey(inq.id));
       Object.assign(inq, { id: d.id, name: d.name, from: d.from, orderNo: d.orderNo || '', tracking: d.tracking || '' });
+      saveInq(inq);
       changed = true;
     });
     return changed;
   }
 
   function patch(id, fn) {
-    const list = load();
-    const inq = list.find(x => x.id === id);
+    const inq = store.get(inqKey(id), null);
     if (!inq) return null;
     fn(inq);
-    store.set(KEY.inquiries, list);
+    saveInq(inq);
     return inq;
+  }
+
+  /** 화면에서 승인이 풀리면 서버 승인 기록도 취소 (Gmail 문의만 · 실패해도 보내기 때 본문 지문이 달라 막힘) */
+  function revokeServer(inq) {
+    if (inq && inq.gmailId) api('/api/cs/unapprove', { message_id: inq.gmailId }).catch(() => {});
   }
 
   function logTo(inq, msg) { inq.log = (inq.log || []).concat({ at: Date.now(), msg }).slice(-50); }
@@ -265,6 +296,14 @@
     return data;
   }
 
+  async function apiPut(path, body) {
+    const res = await fetch(path, { method: 'PUT', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .catch(() => { throw new Error('서버에 연결하지 못했습니다.'); });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `서버 오류 (${res.status})`);
+    return data;
+  }
+
   /** Gmail 메일 → 문의. 보낸 사람 표시 이름은 테스트 계정 주인 이름이라 본문 끝 서명을 고객 이름으로 씀 */
   function fromGmail(m) {
     const lines = String(m.body || '').replace(/\r/g, '').split('\n').map(s => s.trim()).filter(Boolean);
@@ -292,6 +331,7 @@
     return `<div class="cs-ainotes">
   <p class="cs-ainotes-head">${icon('spark')} ${esc(PERSONA.name || 'AI')}가 다듬은 초안 · ${fmt(inq.aiDraftAt)} · 재검사·최종 승인 전 확인할 것</p>
   <ul>${(inq.aiNotes || []).map(n => `<li>${esc(n)}</li>`).join('')}</ul>
+  ${(inq.aiTruncated || []).length ? `<p class="cs-warn">${inq.aiTruncated.map(esc).join('<br>')}</p>` : ''}
   ${inq.prevDraft ? '<button type="button" class="cs-btn cs-btn-sm" data-act="ai-undo">이전 초안으로 되돌리기</button>' : ''}
 </div>`;
   }
@@ -318,13 +358,25 @@
           slogan: (DATA.brand || {}).slogan || ''
         })
       });
+      // AI가 쓰는 동안(10~30초) 담당자가 초안을 고쳤거나 처리 상태가 바뀌었으면 자동으로 덮어쓰지 않음 (GPT 검토 ⑪)
+      const now = load().find(x => x.id === inq.id);
+      if (!now || DONE.includes(now.status)) {
+        box.innerHTML = '<p class="cs-warn">AI가 쓰는 동안 이 문의가 처리 완료되어 초안을 바꾸지 않았습니다.</p>';
+        return;
+      }
+      if (now.draft !== inq.draft && !global.confirm('AI가 쓰는 동안 초안을 직접 고치셨습니다.\nAI 초안으로 바꿀까요? (지금 고친 초안은 [이전 초안으로 되돌리기]로 복구 가능)\n취소하면 지금 초안을 그대로 둡니다.')) {
+        box.innerHTML = '<p class="cs-muted">AI 초안을 적용하지 않았습니다 (직접 고친 초안 유지).</p>';
+        btn.disabled = false;
+        return;
+      }
       patch(inq.id, x => {
         x.prevDraft = x.draft;
         x.draft = res.draft;
         x.edited = true;
         x.aiDraftAt = Date.now();
         x.aiNotes = res.notes_ko || [];
-        if (x.status === '승인') { x.approval = null; }
+        x.aiTruncated = res.truncated || [];
+        if (x.status === '승인') { x.approval = null; revokeServer(x); }
         if (x.status === '답변 대기' || x.status === '승인') x.status = '검토 중';
         logTo(x, `AI 초안 다듬기 (${PERSONA.name || '페르소나'})`);
       });
@@ -350,7 +402,7 @@
     const p = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
   }
-  /* 한글 번역 (참고용): 번역 엔진은 컴플라이언스 파트의 translate()를 빌려 씀 (기기 안 번역, 없으면 Google 번역 링크).
+  /* 한글 번역 (참고용): 번역 엔진은 컴플라이언스 파트의 translate()를 빌려 씀 (크롬 내장 번역 → 안 되면 서버 AI → 그래도 안 되면 Google 번역 링크).
      data-tr-text = 고정 원문, data-tr-from = 지금 입력 칸의 값을 번역 (예: 수정 중인 초안) */
   function trBlock(text, label, from) {
     return `<div class="cs-trblock" ${from ? `data-tr-from="${esc(from)}"` : `data-tr-text="${esc(text)}"`}>
@@ -377,14 +429,14 @@
     });
     btn.disabled = false;
     if (r.ok) {
-      out.innerHTML = `<div class="cs-tr"><span class="cs-tr-tag">${r.engine === 'already-ko' ? '이미 한국어' : '기계 번역 · 참고용'}</span>
-  <p class="cs-tr-text">${esc(r.text)}</p>
+      out.innerHTML = `<div class="cs-tr"><span class="cs-tr-tag">${r.engine === 'already-ko' ? '이미 한국어' : r.engine === 'ai' ? 'AI 번역 · 참고용' : '기계 번역 · 참고용'}</span>
+  <p class="cs-tr-text">${esc(r.text)}</p>${r.note ? `<p class="cs-muted">${esc(r.note)}</p>` : ''}
   <p class="cs-muted">뜻 확인용입니다. 재검사·승인·발송은 영어 원문 기준입니다.</p></div>`;
     } else if (r.reason === 'empty') {
       out.innerHTML = '<p class="cs-muted">번역할 내용이 없습니다.</p>';
     } else {
       const url = /^https:\/\//.test(r.fallbackUrl || '') ? r.fallbackUrl : '';
-      out.innerHTML = `<p class="cs-warn">이 브라우저에서는 기기 안 번역을 쓸 수 없습니다 (Chrome 138 이상 데스크톱에서 지원).
+      out.innerHTML = `<p class="cs-warn">번역하지 못했습니다 (크롬 내장 번역·서버 AI 번역 모두 실패)${r.message ? ` · ${esc(r.message)}` : ''}.
   ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Google 번역에서 열기 ↗</a> <b>내용이 Google로 전송됩니다.</b> 실제 고객 이름·연락처·주소가 들어 있으면 열지 마세요.` : ''}</p>`;
     }
   }
@@ -410,11 +462,12 @@
 
   /* ───────── 화면 ───────── */
 
-  const TABS = [['inbox', '문의함'], ['outbox', '보내기'], ['adverse', '부작용 접수'], ['templates', '답변 템플릿']];
+  const TABS = [['inbox', '문의함'], ['outbox', '보내기'], ['customers', '고객 이력'], ['adverse', '부작용 접수'], ['templates', '답변 템플릿']];
   // 문의 상세의 처리 단계 기본 펼침 (자주 쓰는 답변 초안·최종 승인만 펼치고 나머지는 제목 줄 요약으로)
   const SEC_DEFAULT_OPEN = { classify: false, draft: true, check: false, approve: true, log: false };
   // 답변 템플릿·부작용 접수 기록의 펼침 상태 (화면을 다시 그려도 유지 · 새로고침하면 기본값)
   const TPL_OPEN = new Map();
+  const CUST_OPEN = new Map();   // 고객 이력 카드 펼침 (이메일 → 열림 · 새로고침하면 접힘)
   const REC_OPEN = new Map();
 
   function render(root) {
@@ -426,7 +479,7 @@
     ${TABS.map(([id, label], i) => `<button type="button" role="tab" class="cs-tab" data-tab="${id}" aria-selected="${i === 0}">${label}</button>`).join('')}
   </div>
   <section class="cs-panel" data-panel="inbox">
-    <div class="cs-inbox">
+    <div class="cs-inbox" data-view="list">
       <div class="cs-listcol">
         <label class="cs-field"><span>보기</span><select class="cs-input" data-el="filter">
           <option value="open">미처리</option><option value="urgent">긴급 (C1)</option><option value="overdue">기한 초과</option><option value="owner">담당 확인 대기</option><option value="all">전체</option></select></label>
@@ -436,13 +489,16 @@
           <button type="button" class="cs-btn" data-act="gmail-import" disabled>${icon('mail')} Gmail에서 불러오기</button>
           <span class="cs-muted" data-el="gmailmsg" aria-live="polite"></span>
         </div>
+        <div data-el="listhead" class="cs-listhead"></div>
+        <div data-el="custfilter" class="cs-custfilter"></div>
         <ul class="cs-list" data-el="list"></ul>
       </div>
-      <div class="cs-detail" data-el="detail"><p class="cs-muted">왼쪽에서 문의를 고르세요.</p></div>
+      <div class="cs-detail" data-el="detail"><p class="cs-muted">받은편지함에서 문의를 고르세요.</p></div>
     </div>
   </section>
   <section class="cs-panel" data-panel="adverse" hidden></section>
   <section class="cs-panel" data-panel="outbox" hidden></section>
+  <section class="cs-panel" data-panel="customers" hidden></section>
   <section class="cs-panel" data-panel="templates" hidden></section>
 </div>`;
 
@@ -455,19 +511,28 @@
       if (name === 'adverse') renderAdverse(ui, panel('adverse'));
       if (name === 'templates') renderTemplates(panel('templates'));
       if (name === 'outbox') renderOutbox(ui, panel('outbox'));
+      if (name === 'customers') renderCustomers(ui, panel('customers'));
     };
     root.querySelectorAll('.cs-tab').forEach(b => b.addEventListener('click', () => ui.showTab(b.dataset.tab)));
+    // 담당자에게 전달: 요청 종류·메모를 바꾸면 보낼 내용을 다시 만듦
+    const reshare = e => { if (['kind', 'memo'].includes(e.target.dataset.share)) fillShare(e.target.closest('.cs-share')); };
+    root.addEventListener('change', reshare);
+    root.addEventListener('input', e => { if (e.target.dataset.share === 'memo') reshare(e); });
+    loadContacts().then(() => { if (ui.view === 'detail' && ui.selected) renderDetail(ui); });
     root.addEventListener('click', e => {
       const tr = e.target.closest('[data-act="translate"]');
       if (tr && !tr.disabled) runTranslate(root, tr.closest('.cs-trblock'));
-      // 상단 카드를 누르면 문의함 '보기'를 그 조건으로 바꾸고 첫 문의를 엶
+      const sh = e.target.closest('[data-act^="share-"]');
+      if (sh && !sh.disabled) { runShare(ui, sh); return; }
+      if (e.target.closest('[data-act="cust-clear"]')) { ui.custFilter = null; renderList(ui); return; }
+      // 상단 카드를 누르면 받은편지함 '보기'를 그 조건으로 바꿈
       const kpi = e.target.closest('[data-act="kpi"]');
       if (kpi) {
+        ui.custFilter = null;
         ui.filter = kpi.dataset.filter;
         root.querySelector('[data-el="filter"]').value = ui.filter;
+        setView(ui, 'list');
         ui.showTab('inbox');
-        const shown = renderList(ui);
-        if (!shown.some(i => i.id === ui.selected)) { ui.selected = shown[0] ? shown[0].id : null; renderList(ui); renderDetail(ui); }
         root.querySelector('.cs-inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
@@ -487,7 +552,7 @@
         const list = load();
         const have = new Set(list.map(i => i.id));
         const fresh = (items || []).filter(m => !have.has(`GM-${m.id}`)).map(fromGmail);
-        if (fresh.length) store.set(KEY.inquiries, fresh.concat(list));
+        fresh.forEach(saveInq);
         gmailMsg.textContent = `${fmt(Date.now())} 확인 · 메일 ${(items || []).length}건 · 새 문의 ${fresh.length}건`;
         if (fresh.length || !auto) toast(fresh.length ? `Gmail에서 새 문의 ${fresh.length}건을 불러왔습니다.` : '새 문의가 없습니다.');
         if (fresh.length) {
@@ -499,8 +564,7 @@
             ui.filter = 'all';
             root.querySelector('[data-el="filter"]').value = 'all';
           }
-          ui.selected = newest.id;
-          renderDetail(ui);
+          ui.highlight = new Set(fresh.map(x => x.id));   // 새로 온 메일을 목록에서 잠깐 강조
         }
         renderList(ui);
       } catch (e) {
@@ -519,16 +583,32 @@
     gmailBtn.addEventListener('click', () => importGmail(false));
     root.querySelector('[data-el="list"]').addEventListener('click', e => {
       const btn = e.target.closest('[data-id]');
-      if (!btn) return;
-      ui.selected = btn.dataset.id;
-      renderList(ui);
-      renderDetail(ui);
+      if (btn) openInquiry(ui, btn.dataset.id);
     });
     wireDetail(ui);
 
-    // 처음 열 때는 맨 위 문의를 바로 보여 줌 (시안처럼 목록 + 상세가 함께 보이게)
-    const shown = renderList(ui);
-    if (shown[0]) { ui.selected = shown[0].id; renderList(ui); renderDetail(ui); }
+    // 처음에는 Gmail처럼 받은편지함 목록만 (메일을 누르면 검토 화면)
+    setView(ui, 'list');
+    renderList(ui);
+  }
+
+  /** 문의함 화면: 'list' = 받은편지함 목록 (Gmail처럼) · 'detail' = 문의 하나의 검토 화면 */
+  function setView(ui, view) {
+    ui.view = view;
+    const box = ui.root.querySelector('.cs-inbox');
+    if (box) box.dataset.view = view;
+  }
+
+  /** 메일 하나 열기: 읽음 표시 → 검토 화면 */
+  function openInquiry(ui, id) {
+    if (!id) return;
+    ui.selected = id;
+    patch(id, x => { if (!x.readAt) x.readAt = Date.now(); });
+    setView(ui, 'detail');
+    renderList(ui);
+    renderDetail(ui);
+    const box = ui.root.querySelector('.cs-inbox');
+    if (box && box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: 'start' });
   }
 
   /** 상단 KPI 카드 4장 · 누르면 문의함 '보기'가 그 조건으로 바뀜 (지금 보기와 같은 카드가 강조됨) */
@@ -558,7 +638,9 @@
     const now = Date.now();
     paintKpis(ui);
 
+    const custMap = new Map(customers().map(c => [c.email, c]));
     const shown = all.filter(i => {
+      if (ui.custFilter && emailOf(i.from) !== ui.custFilter) return false;   // 고객 이력 → '문의 보기'
       if (ui.filter === 'open') return isOpen(i);
       if (ui.filter === 'urgent') return isOpen(i) && i.type === 'C1';
       if (ui.filter === 'overdue') return isOpen(i) && now > due(i);
@@ -569,18 +651,24 @@
         : ui.sort === 'oldest' ? (a.receivedAt - b.receivedAt)
           : (isOpen(b) - isOpen(a)) || ((b.type === 'C1') - (a.type === 'C1')) || (due(a) - due(b)));   // priority: 미처리 → 긴급(C1) → 기한 빠른 순
 
+    ui.shownIds = shown.map(i => i.id);   // 검토 화면의 이전·다음 메일
+    const unread = i => !i.readAt && i.status === '답변 대기';
     ui.root.querySelector('[data-el="list"]').innerHTML = shown.length ? shown.map(i => {
       const late = isOpen(i) && now > due(i);
+      const snippet = String(i.body || '').replace(/\s+/g, ' ').trim().slice(0, 140);
       return `
-<li><button type="button" class="cs-item${i.id === ui.selected ? ' is-selected' : ''}" data-id="${esc(i.id)}">
-  <span class="cs-item-top"><span class="cs-avatar" aria-hidden="true">${initials(i.name)}</span>
-    <span class="cs-item-name">${esc(i.name)}</span>
-    <span class="cs-due${late ? ' is-late' : ''}">${dueText(i)}</span></span>
-  <span class="cs-item-subject">${esc(i.subject)}</span>
-  <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span><span class="cs-chip">${esc(i.status)}</span>${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}
-    <span class="cs-chip cs-chip-dim" title="받은 시간">${i.source === 'gmail' ? 'Gmail · ' : ''}${fmt(i.receivedAt)}</span></span>
+<li><button type="button" class="cs-item cs-mailrow${i.id === ui.selected ? ' is-selected' : ''}${unread(i) ? ' is-unread' : ''}${ui.highlight && ui.highlight.has(i.id) ? ' is-new' : ''}" data-id="${esc(i.id)}">
+  <span class="cs-avatar" aria-hidden="true">${initials(i.name)}</span>
+  <span class="cs-row-from"><span class="cs-item-name">${esc(i.name)}</span>${custMap.has(emailOf(i.from)) ? custChips(custMap.get(emailOf(i.from)), true) : ''}</span>
+  <span class="cs-row-main"><span class="cs-row-line"><b class="cs-row-subject">${esc(i.subject)}</b><span class="cs-row-snippet"> — ${esc(snippet)}</span></span>
+    <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span><span class="cs-chip">${esc(i.status)}</span>${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}${i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}</span></span>
+  <span class="cs-row-side"><span class="cs-row-time" title="받은 시간">${fmt(i.receivedAt)}</span><span class="cs-due${late ? ' is-late' : ''}">${dueText(i)}</span></span>
 </button></li>`;
     }).join('') : '<li class="cs-muted">해당하는 문의가 없습니다.</li>';
+    const head = ui.root.querySelector('[data-el="listhead"]');
+    if (head) head.innerHTML = `<b>받은편지함</b> <span class="cs-muted">${shown.length}건${shown.filter(unread).length ? ` · 안 읽음 <b>${shown.filter(unread).length}</b>` : ''}</span>`;
+    const cf = ui.root.querySelector('[data-el="custfilter"]');
+    if (cf) cf.innerHTML = ui.custFilter ? `<span class="cs-chip cs-chip-warn">${esc(ui.custFilter)} 고객 문의만</span> <button type="button" class="cs-btn cs-btn-sm" data-act="cust-clear">전체 보기</button>` : '';
     return shown;
   }
 
@@ -589,7 +677,7 @@
   function renderDetail(ui) {
     const box = ui.root.querySelector('[data-el="detail"]');
     const inq = ui.selected && load().find(x => x.id === ui.selected);
-    if (!inq) { box.innerHTML = '<p class="cs-muted">왼쪽에서 문의를 고르세요.</p>'; return; }
+    if (!inq) { box.innerHTML = '<p class="cs-muted">받은편지함에서 문의를 고르세요.</p>'; return; }
     const t = TYPES[inq.type];
     const locked = DONE.includes(inq.status);
 
@@ -597,7 +685,12 @@
     const open = id => (id in ui.secOpen ? ui.secOpen[id] : SEC_DEFAULT_OPEN[id]) ? ' open' : '';
     const prod = PRODUCTS.find(x => x.id === inq.product);
 
+    const pos = (ui.shownIds || []).indexOf(inq.id);
     box.innerHTML = `
+<div class="cs-backbar"><button type="button" class="cs-btn cs-btn-sm" data-act="back-list">← 받은편지함</button>
+  ${pos >= 0 ? `<span class="cs-muted">${pos + 1} / ${ui.shownIds.length}</span>
+  <button type="button" class="cs-btn cs-btn-sm" data-act="nav" data-step="-1" ${pos > 0 ? '' : 'disabled'}>‹ 이전 메일</button>
+  <button type="button" class="cs-btn cs-btn-sm" data-act="nav" data-step="1" ${pos < ui.shownIds.length - 1 ? '' : 'disabled'}>다음 메일 ›</button>` : ''}</div>
 <article class="cs-card" data-id="${esc(inq.id)}">
   <header class="cs-inq">
     <div class="cs-detail-head">
@@ -612,6 +705,11 @@
     <h3 class="cs-subject">${esc(inq.subject)}</h3>
     <div class="cs-from"><span class="cs-avatar" aria-hidden="true">${initials(inq.name)}</span>
       <span><b>${esc(inq.name)}</b><small>${esc(inq.from)} → REBOOT Support · ${fmt(inq.receivedAt)}</small></span></div>
+    ${(c => c && (c.list.length > 1 || c.signals.length || c.behavior.length || (c.tag && c.tag.tag)) ? `<div class="cs-cust-line">${custChips(c)}
+      ${c.signals.map(x => `<span class="cs-muted">${esc(x.label)}</span>`).concat(c.behavior.map(b => `<span class="cs-muted">${esc(b)}</span>`)).join(' · ')}
+      ${c.tag && c.tag.note ? `<span class="cs-muted">· 분류 이유: ${esc(c.tag.note)}</span>` : ''}
+      <button type="button" class="cs-btn cs-btn-sm" data-act="cust-history">고객 이력 보기</button></div>
+      ${inq.type === 'C1' && c.tag && ['watch', 'limit'].includes(c.tag.tag) ? '<p class="cs-note cs-note-block">주의 고객으로 분류돼 있어도 부작용 신고(C1)는 평소처럼 처리하세요 (FDA 보고 대상 판단).</p>' : ''}` : '')(customers().find(c => c.email === emailOf(inq.from)))}
     <blockquote class="cs-body">${esc(inq.body)}</blockquote>
     <div class="cs-meta"><span>응답 기한 <b>${fmt(due(inq))}</b> (${dueText(inq)})</span><span>${esc(t.mode)}</span><span>담당 <b>${esc(t.owner)}</b></span><span>팀 태그 ${esc(t.tag)}</span></div>
     ${trBlock(`${inq.subject}\n${inq.body}`, '문의 한글 번역')}
@@ -670,6 +768,10 @@
   </fieldset>
   </div></details>
 
+  <details class="cs-sec" data-sec="share"${open('share')}>
+  <summary><span class="cs-sec-title">⑤ 담당자에게 전달</span><span class="cs-sec-sum"><span class="cs-chip cs-chip-dim">담당 ${esc(String(t.owner || '').replace(/\s*\{.*\}\s*/, ''))}</span>${(() => { const c = defaultContact(t.owner); return c ? `<span class="cs-chip">${esc(c.name || c.email)}</span>` : ''; })()}</span></summary>
+  <div class="cs-sec-body">${shareBoxHTML(`inq:${inq.id}`, t.code === 'C1' ? 'adverse' : inq.status === '승인' ? 'info' : 'review', t.owner)}</div></details>
+
   <div class="cs-footbar">
     <p class="cs-muted">재검사·담당자 최종 승인을 거친 답장만 <b>보내기</b> 탭으로 넘어갑니다. 보내기 탭에서 받는 사람을 확인하고 Gmail로 바로 보냅니다.</p>
     <div class="cs-actions" data-el="actions"></div>
@@ -679,6 +781,7 @@
     <div class="cs-sec-body cs-log"><ol>${inq.log.slice().reverse().map(l => `<li><span class="cs-muted">${fmt(l.at)}</span> ${esc(l.msg)}</li>`).join('')}</ol></div>
   </details>` : ''}
 </article>`;
+    box.querySelectorAll('.cs-share').forEach(fillShare);
     // 펼침 상태 기억 + 모두 펼치기/접기
     box.querySelectorAll('details.cs-sec').forEach(d => d.addEventListener('toggle', () => { ui.secOpen[d.dataset.sec] = d.open; }));
     box.querySelectorAll('[data-act="sec-all"]').forEach(b => b.addEventListener('click', () => {
@@ -780,7 +883,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         patch(ui.selected, inq => {
           inq.draft = e.target.value;
           inq.edited = true;
-          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; logTo(inq, '승인 후 초안 수정 → 승인 취소'); }
+          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; logTo(inq, '승인 후 초안 수정 → 승인 취소'); revokeServer(inq); }
           else if (inq.status === '답변 대기') inq.status = '검토 중';
         });
         renderCheck(ui);
@@ -801,7 +904,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
           inq.type = e.target.value;
           inq.ownerChecked = false;
           if (!inq.edited) inq.draft = draftFor(inq);
-          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; }
+          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; revokeServer(inq); }
           logTo(inq, `유형 변경 → ${inq.type}`);
         });
         renderList(ui);
@@ -810,7 +913,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         patch(ui.selected, inq => {
           inq.product = e.target.value;
           if (!inq.edited) inq.draft = draftFor(inq);   // 직접 고친 초안은 그대로 (필요하면 '템플릿으로 다시 만들기')
-          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; }
+          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; revokeServer(inq); }
           logTo(inq, `제품 → ${productKo(inq.product)}`);
         });
         renderList(ui);
@@ -835,6 +938,9 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       if (act === 'todo-jump') return jumpToTodo(box.querySelector('[data-el="draft"]'), Number(btn.dataset.idx) || 0);
       if (act === 'go-outbox') { ui.outboxFocus = id; return ui.showTab('outbox'); }
       if (act === 'need-go') return goNeed(ui, btn.dataset.go);
+      if (act === 'back-list') { setView(ui, 'list'); renderList(ui); return; }
+      if (act === 'nav') { const ids = ui.shownIds || []; return openInquiry(ui, ids[ids.indexOf(id) + Number(btn.dataset.step)]); }
+      if (act === 'cust-history') { ui.custView = 'all'; ui.custSort = 'count'; return ui.showTab('customers'); }
       if (act === 'regen') {
         const cur = load().find(x => x.id === id);
         if (cur && cur.edited && !global.confirm('수정한 초안이 템플릿으로 바뀝니다. 계속할까요?')) return;
@@ -843,8 +949,9 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
           inq.edited = false;
           inq.aiDraftAt = null;
           inq.aiNotes = [];
+          inq.aiTruncated = [];
           inq.prevDraft = '';
-          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; }
+          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; revokeServer(inq); }
           logTo(inq, '템플릿으로 초안 다시 만들기');
         });
         renderDetail(ui);
@@ -853,13 +960,21 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         const cur = load().find(x => x.id === id);
         const r = recheck(cur.draft);
         if (!gates(cur, r).every(x => x.ok) || !ui.approver.trim()) { renderCheck(ui); return; }
-        patch(id, inq => {
-          inq.status = '승인';
-          inq.approval = { by: ui.approver.trim(), at: Date.now(), comment: (inq.pendingComment || '').trim(), verdict: r.verdict, codes: r.codes };
-          logTo(inq, `최종 승인 (${ui.approver.trim()})`);
-        });
-        renderDetail(ui);
-        renderList(ui);
+        const done = account => {
+          patch(id, inq => {
+            inq.status = '승인';
+            inq.approval = { by: ui.approver.trim(), account: account || '', at: Date.now(), comment: (inq.pendingComment || '').trim(), verdict: r.verdict, codes: r.codes };
+            logTo(inq, `최종 승인 (${ui.approver.trim()})`);
+          });
+          renderDetail(ui);
+          renderList(ui);
+        };
+        // Gmail 문의는 서버에도 승인 기록 (보내기 때 본문 지문을 대조) · 더미 문의는 화면에만
+        if (!cur.gmailId) return done('');
+        btn.disabled = true;
+        api('/api/cs/approve', { message_id: cur.gmailId, body: cur.draft, approver: ui.approver.trim(), verdict: r.verdict })
+          .then(res => done(res.account))
+          .catch(e => { toast(`승인 실패: ${e.message}`); btn.disabled = false; });
       } else if (act === 'copy') {
         // 승인된 초안만 복사 (승인 후 초안을 고치면 승인이 풀려 이 버튼이 사라짐)
         const cur = load().find(x => x.id === id);
@@ -877,8 +992,9 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
           inq.draft = inq.prevDraft;
           inq.prevDraft = '';
           inq.aiNotes = [];
+          inq.aiTruncated = [];
           inq.aiDraftAt = null;
-          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; }
+          if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; revokeServer(inq); }
           logTo(inq, 'AI 초안 되돌리기');
         });
         renderDetail(ui);
@@ -898,7 +1014,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
           btn.disabled = false;
         });
       } else if (act === 'unapprove') {
-        patch(id, inq => { inq.status = '검토 중'; inq.approval = null; logTo(inq, '승인 취소'); });
+        revokeServer(patch(id, inq => { inq.status = '검토 중'; inq.approval = null; logTo(inq, '승인 취소'); }));
         renderDetail(ui);
         renderList(ui);
       } else if (act === 'sent') {
@@ -915,6 +1031,325 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         ui.showTab('adverse');
       }
     });
+  }
+
+  /* 담당자에게 전달 — 문의 검토·승인 요청, 부작용 접수 공유를 팀 담당자에게 (2026-10-24)
+     ① Gmail로 보내기(등록된 담당자 주소로만 · 서버가 확인) ② 메신저용 복사 ③ 메일 앱으로 열기
+     연락처는 서버 보관(/api/cs/contacts) · 답변 템플릿 탭 → 담당자 연락처에서 등록 */
+
+  let CONTACTS = [];
+  let contactsP = null;
+  function loadContacts(force) {
+    if (!contactsP || force) {
+      contactsP = api('/api/cs/contacts').then(r => { CONTACTS = r.items || []; return CONTACTS; }).catch(() => CONTACTS);
+    }
+    return contactsP;
+  }
+  const SHARE_KIND = { review: '검토 요청', approve: '승인 요청', adverse: '부작용 접수 공유', info: '참고 공유' };
+
+  function defaultContact(role) {
+    const r = String(role || '').replace(/\s*\{.*\}\s*/, '').trim();
+    return CONTACTS.find(c => c.role && r && (c.role === r || r.includes(c.role) || c.role.includes(r))) || null;
+  }
+
+  function shareBoxHTML(key, kind, role) {
+    const pick = defaultContact(role);
+    return `
+<div class="cs-share" data-share-key="${esc(key)}">
+  <div class="cs-row">
+    <label class="cs-field cs-grow"><span>받는 담당자</span><select class="cs-input" data-share="to">
+      <option value="">(받는 사람 없이 복사만)</option>
+      ${CONTACTS.map(c => `<option value="${esc(c.email)}"${pick && pick.email === c.email ? ' selected' : ''}>${esc([c.role, c.name].filter(Boolean).join(' · '))} &lt;${esc(c.email)}&gt;</option>`).join('')}</select></label>
+    <label class="cs-field"><span>요청 종류</span><select class="cs-input" data-share="kind">
+      ${Object.entries(SHARE_KIND).map(([k, l]) => `<option value="${k}"${k === kind ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+  </div>
+  <label class="cs-field"><span>요청 메모 (선택)</span><input class="cs-input" data-share="memo" placeholder="예: 환불 정책 기준으로 답해도 될지 확인 부탁드립니다"></label>
+  <label class="cs-field"><span>보낼 내용 <span class="cs-muted">· 자동 작성 · 직접 고쳐도 됨</span></span><textarea class="cs-input cs-share-body" rows="12" data-share="body"></textarea></label>
+  <div class="cs-actions">
+    <button type="button" class="cs-btn cs-primary" data-act="share-gmail">${icon('mail')} Gmail로 담당자에게 보내기</button>
+    <button type="button" class="cs-btn" data-act="share-copy">메신저용 복사</button>
+    <button type="button" class="cs-btn" data-act="share-mailto">메일 앱으로 열기</button>
+  </div>
+  <p class="cs-muted">${CONTACTS.length ? `담당 '${esc(String(role || '').replace(/\s*\{.*\}\s*/, ''))}'에 맞는 연락처를 자동으로 골랐습니다.` : '등록된 담당자가 없습니다. <b>답변 템플릿 → 담당자 연락처</b>에서 이름·이메일을 넣으면 Gmail로 보낼 수 있습니다.'}
+    Gmail 보내기는 <b>등록된 담당자 주소로만</b> 됩니다. 고객 개인정보가 들어 있으니 팀 안에서만 쓰세요.</p>
+</div>`;
+  }
+
+  /** 전달 내용 만들기: key = 'inq:<문의 id>' 또는 'adv:<부작용 기록 id>' */
+  function shareContent(key, kind, memo) {
+    const [what, id] = [key.slice(0, 3), key.slice(4)];
+    const lines = [];
+    const add = (...x) => lines.push(...x);
+    const head = `[REBOOT CS · ${SHARE_KIND[kind] || '공유'}]`;
+    const link = `${global.location ? global.location.origin : ''}/dashboard/cs`;
+    if (what === 'inq') {
+      const inq = load().find(x => x.id === id);
+      if (!inq) return { subject: head, body: '' };
+      const t = TYPES[inq.type];
+      const r = recheck(inq.draft);
+      const todos = pendingTodos(inq.draft);
+      const adv = loadAdverse().find(x => x.linkedInquiry === inq.id);
+      add(`${SHARE_KIND[kind]} 드립니다.`);
+      if (memo) add(`요청: ${memo}`);
+      add('', '■ 문의', `- 고객: ${inq.name} (${inq.from})`, `- 받은 시각: ${fmt(inq.receivedAt)} · 응답 기한: ${fmt(due(inq))} (${dueText(inq)})`,
+        `- 유형: ${inq.type} ${t.name} · 제품: ${productKo(inq.product)} · 상태: ${inq.status}`, `- 제목: ${inq.subject}`, '- 내용:', String(inq.body || '').slice(0, 3000));
+      if (kind !== 'adverse' || inq.draft) {
+        add('', '■ 우리 답장 초안 (영문)', String(inq.draft || '(초안 없음)').slice(0, 4000));
+        add('', '■ 점검', `- 컴플라이언스 재검사: ${r ? `${r.verdict}${r.codes.length ? ` (${r.codes.join(', ')})` : ''}` : '불가'}`,
+          `- 남은 빈칸: ${todos.length ? todos.join(' / ') : '없음'}`,
+          t.ownerRequired ? `- 지정 담당(${t.owner}) 검토: ${inq.ownerChecked ? '완료' : '필요'}` : '- 지정 담당 검토: 해당 없음');
+        if (inq.approval) add(`- 최종 승인: ${inq.approval.by} · ${fmt(inq.approval.at)}`);
+      }
+      if (adv || kind === 'adverse') add('', '■ 부작용 접수', adv ? adverseLines(adv).join('\n') : '- 아직 부작용 접수 기록 없음 (C1이면 부작용 접수를 먼저 남기세요)');
+      add('', `대시보드: ${link} (문의 #${inq.id})`);
+      return { subject: `${head} ${inq.type} ${t.name} · ${inq.name} · 기한 ${fmt(due(inq))}`, body: lines.join('\n') };
+    }
+    const rec = loadAdverse().find(x => x.id === id);
+    if (!rec) return { subject: head, body: '' };
+    add(`${SHARE_KIND[kind]} 드립니다.`);
+    if (memo) add(`요청: ${memo}`);
+    add('', '■ 부작용 접수', ...adverseLines(rec), '', `대시보드: ${link} (부작용 접수)`);
+    return { subject: `${head} ${rec.serious ? '심각 · ' : ''}${rec.fields.product || '제품 미입력'} · 로트 ${rec.fields.lot || '—'}`, body: lines.join('\n') };
+  }
+
+  function adverseLines(rec) {
+    const f = rec.fields;
+    const s = rec.stages || {};
+    return [`- 판정: ${rec.serious ? '심각 (보고 대상 판단 필요)' : '일반'} · 접수 ${fmt(rec.createdAt)}`,
+      `- 고객: ${f.customer || '—'} (${f.contact || '—'}) · 제품: ${f.product || '—'} · 로트: ${f.lot || '—'}`,
+      `- 섭취일: ${f.intakeDate || '—'} · 진료: ${f.care || '—'} · 결과: ${f.outcome || '—'} · 식품 위해 가능성: ${f.hazard || '—'}`,
+      `- 증상: ${String(f.symptoms || '—').slice(0, 1500)}`,
+      rec.missing && rec.missing.length ? `- 빠진 항목: ${rec.missing.map(k => FIELD_LABEL[k]).join(', ')}` : '- 빠진 항목: 없음',
+      `- 단계: 긴급 검토 ${s.reviewAt ? fmt(s.reviewAt) : '전'} · 보고 대상 판단 ${s.judgedAt ? fmt(s.judgedAt) : '전'} · 보고 ${s.reportedAt ? fmt(s.reportedAt) : '전'}`];
+  }
+
+  function fillShare(box) {
+    const key = box.dataset.shareKey;
+    const c = shareContent(key, box.querySelector('[data-share="kind"]').value, box.querySelector('[data-share="memo"]').value.trim());
+    box.dataset.subject = c.subject;
+    box.querySelector('[data-share="body"]').value = c.body;
+  }
+
+  /** 전달 버튼 (문의함 상세 · 부작용 접수 공통 · render의 위임 처리에서 부름) */
+  async function runShare(ui, btn) {
+    const box = btn.closest('.cs-share');
+    const to = box.querySelector('[data-share="to"]').value;
+    const subject = box.dataset.subject || '[REBOOT CS]';
+    const body = box.querySelector('[data-share="body"]').value;
+    const who = (CONTACTS.find(c => c.email === to) || {}).name || to;
+    const logShare = how => {
+      const key = box.dataset.shareKey;
+      if (key.startsWith('inq:')) patch(key.slice(4), x => logTo(x, `담당자 전달 (${how})${who ? ` → ${who}` : ''}`));
+    };
+    if (btn.dataset.act === 'share-copy') {
+      const ok = await copyText(`${subject}\n\n${body}`);
+      if (ok) logShare('메신저용 복사');
+      return toast(ok ? '복사했습니다. 메신저(슬랙·카톡 등)에 붙여 넣으세요.' : '복사하지 못했습니다. 내용 칸에서 직접 복사하세요.');
+    }
+    if (btn.dataset.act === 'share-mailto') {
+      if (!to) return toast('받는 담당자를 고르세요.');
+      const max = 1800;   // 메일 앱 주소 길이 제한 → 길면 앞부분만
+      global.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body.length > max ? body.slice(0, max) + '\n…(내용이 길어 잘림 · 대시보드에서 확인)' : body)}`;
+      return logShare('메일 앱');
+    }
+    if (!to) return toast('받는 담당자를 고르세요.');
+    if (!ui.gmail) return toast('Gmail 로그인이 필요합니다 (설정 › 연결 › Google로 로그인).');
+    if (!global.confirm(`담당자에게 Gmail로 보냅니다.\n\n받는 사람: ${who} <${to}>\n제목: ${subject}`)) return;
+    btn.disabled = true;
+    try {
+      await api('/api/cs/notify', { to, subject, body });
+      logShare('Gmail');
+      toast(`${who}에게 보냈습니다.`);
+    } catch (e) {
+      toast(`보내기 실패: ${e.message}`);
+    }
+    btn.disabled = false;
+  }
+
+  function contactsHTML() {
+    const roles = [...new Set(DATA.types.map(t => String(t.owner || '').replace(/\s*\{.*\}\s*/, '').trim()).filter(Boolean).concat(['품질 담당', '규제 담당']))];
+    const rows = CONTACTS.length ? CONTACTS : [{ role: '', name: '', email: '' }];
+    return `
+<details class="cs-sec" data-tpl="contacts"${TPL_OPEN.get('contacts') ? ' open' : ''}>
+  <summary><span class="cs-sec-title">담당자 연락처 · 문의 전달용</span><span class="cs-sec-sum"><span class="cs-chip ${CONTACTS.length ? '' : 'cs-chip-warn'}">${CONTACTS.length}명</span></span></summary>
+  <div class="cs-sec-body">
+    <p class="cs-muted">문의 검토·승인 요청과 부작용 접수를 보낼 팀 담당자입니다. <b>역할</b>을 답변 템플릿의 담당 이름과 같게 쓰면(예: 품질·규제 담당) 문의를 열 때 자동으로 골라집니다. Gmail로 보내기는 여기 등록된 주소로만 됩니다.</p>
+    <datalist id="cs-roles">${roles.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
+    <div class="cs-contacts" data-el="contacts">${rows.map(contactRowHTML).join('')}</div>
+    <div class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="contact-add">+ 담당자 추가</button>
+      <button type="button" class="cs-btn cs-primary" data-act="contacts-save">저장</button></div>
+  </div>
+</details>`;
+  }
+  function contactRowHTML(c) {
+    return `<div class="cs-row cs-contact">
+      <label class="cs-field"><span>역할</span><input class="cs-input" list="cs-roles" data-c="role" value="${esc(c.role || '')}" placeholder="예: 품질·규제 담당"></label>
+      <label class="cs-field"><span>이름</span><input class="cs-input" data-c="name" value="${esc(c.name || '')}"></label>
+      <label class="cs-field cs-grow"><span>이메일</span><input class="cs-input" type="email" data-c="email" value="${esc(c.email || '')}" placeholder="name@example.com"></label>
+      <button type="button" class="cs-btn cs-btn-sm" data-act="contact-del" aria-label="이 담당자 지우기">지우기</button></div>`;
+  }
+
+  /* 고객 이력 — 보낸 사람(이메일)별로 문의를 묶어 누가 많이 보냈는지 · 사실에 근거한 '주의 신호' · 담당자 분류 (2026-10-24)
+     시스템은 '블랙컨슈머'를 단정하지 않습니다. 신호(문구·횟수)를 보여 주고, 분류는 담당자가 이유와 함께 정합니다.
+     분류는 내부 응대 참고용이며, 주의 고객이어도 C1 부작용 신고는 정상 처리합니다 (FDA 보고 대상 판단). */
+
+  const CUST_TAGS = [['', '분류 안 함'], ['vip', '단골'], ['watch', '주의 고객'], ['limit', '응대 제한 검토']];
+  const CUST_TAG_LABEL = Object.fromEntries(CUST_TAGS);
+  // 문의 본문에서 찾는 신호 (영어·한국어) · 신호가 있다고 악성인 것은 아님 → 담당자가 내용을 보고 판단
+  const SIGNALS = [
+    { id: 'review', label: '리뷰·별점으로 압박', re: /\b(1|one)[\s-]*star|\b(bad|negative|terrible) review|\bleave (a|an|my) (1|one|bad|honest|negative)?[\s-]*(star )?review|별점 ?1|리뷰 (남기|올리|쓰)|악플/i },
+    { id: 'legal', label: '법적 조치·신고 언급', re: /\b(lawyers?|attorneys?|sue|suing|lawsuit|legal action|small claims|BBB|better business bureau|report (you|this)|attorney general)\b|소송|변호사|고소|신고(할|하겠)/i },
+    { id: 'chargeback', label: '카드 결제 취소(차지백) 언급', re: /\b(charge ?back|dispute (the|this|my) (charge|payment)|call(ing)? my bank)\b|결제 취소|카드사에/i },
+    { id: 'abuse', label: '욕설·모욕', re: /\b(scam(mers?)?|idiots?|stupid|garbage|fraud|f+u+c+k\w*|shit\w*|wtf)\b|사기꾼|쓰레기|미친/i },
+    { id: 'freebie', label: '무료·추가 보상 요구', re: /\b(free (box|boxes|product|products)|compensat\w+|send me (another|more|extra)|refund and (a )?(free|another))\b|보상(해|을 요구)|공짜로/i }
+  ];
+
+  function emailOf(from) {
+    const s = String(from || '');
+    return ((s.match(/<([^>]+)>/) || [])[1] || s).trim().toLowerCase();
+  }
+  function custTags() { return store.get(KEY.custTags, {}) || {}; }
+
+  /** 보낸 사람별 묶음: [{ email, names, list(최신순), types, signals:[{id,label,count}], behavior:[...], tag }] */
+  function customers() {
+    const map = new Map();
+    load().forEach(i => {
+      const e = emailOf(i.from);
+      if (!e) return;
+      const c = map.get(e) || { email: e, names: new Set(), list: [] };
+      c.names.add(i.name);
+      c.list.push(i);
+      map.set(e, c);
+    });
+    const tags = custTags();
+    const now = Date.now();
+    return [...map.values()].map(c => {
+      c.list.sort((a, b) => b.receivedAt - a.receivedAt);
+      const types = {};
+      c.list.forEach(i => { types[i.type] = (types[i.type] || 0) + 1; });
+      const signals = SIGNALS.map(s => ({ id: s.id, label: s.label, count: c.list.filter(i => s.re.test(`${i.subject}\n${i.body}`)).length })).filter(s => s.count);
+      const behavior = [];
+      if ((types.C3 || 0) >= 2) behavior.push(`환불·교환 요청 ${types.C3}회`);
+      if ((types.C8 || 0) >= 2) behavior.push(`불만·리뷰 문의 ${types.C8}회`);
+      const week = c.list.filter(i => now - i.receivedAt < 7 * 24 * HOUR).length;
+      if (week >= 3) behavior.push(`7일 안에 ${week}건`);
+      return { email: c.email, names: [...c.names], list: c.list, types, signals, behavior, last: c.list[0] ? c.list[0].receivedAt : 0, tag: tags[c.email] || null };
+    });
+  }
+
+  function custChips(c, compact) {
+    const n = c.signals.length + c.behavior.length;
+    return `${c.list.length > 1 ? `<span class="cs-chip cs-chip-dim" title="이 고객이 보낸 문의">이 고객 ${c.list.length}건</span>` : ''}`
+      + (c.tag && c.tag.tag ? `<span class="cs-chip cs-cust-${esc(c.tag.tag)}">${esc(CUST_TAG_LABEL[c.tag.tag] || c.tag.tag)}</span>` : '')
+      + (n && !compact ? `<span class="cs-chip cs-chip-warn" title="${esc(c.signals.map(s => s.label).concat(c.behavior).join(' · '))}">주의 신호 ${n}</span>` : '');
+  }
+
+  function renderCustomers(ui, p) {
+    const all = customers();
+    const f = ui.custView || 'repeat';
+    const sort = ui.custSort || 'count';
+    const shown = all.filter(c => f === 'all' ? true : f === 'repeat' ? c.list.length > 1 || c.signals.length || c.behavior.length || (c.tag && c.tag.tag)
+      : f === 'signal' ? c.signals.length || c.behavior.length : f === 'tagged' ? c.tag && ['watch', 'limit'].includes(c.tag.tag) : true)
+      .sort((a, b) => sort === 'recent' ? b.last - a.last
+        : sort === 'signal' ? (b.signals.length + b.behavior.length) - (a.signals.length + a.behavior.length) || b.list.length - a.list.length
+          : b.list.length - a.list.length || b.last - a.last);
+    const count = fn => all.filter(fn).length;
+    const typeText = c => Object.entries(c.types).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}${n > 1 ? `×${n}` : ''}`).join(' ');
+    p.innerHTML = `
+<div class="cs-outbox">
+  <div class="cs-card-head"><h3>고객 이력 <span class="cs-chip">${all.length}명</span></h3>
+    <span class="cs-muted">2건 이상 ${count(c => c.list.length > 1)}명 · 주의 신호 ${count(c => c.signals.length || c.behavior.length)}명 · 주의·응대 제한 분류 ${count(c => c.tag && ['watch', 'limit'].includes(c.tag.tag))}명</span></div>
+  <p class="cs-note">보낸 사람(이메일)별로 문의를 묶었습니다. <b>주의 신호</b>는 문의 내용·횟수에서 찾은 사실이며, 신호가 있다고 악성 고객인 것은 아닙니다. 분류는 담당자가 내용을 보고 이유와 함께 정하세요.
+    분류는 <b>내부 응대 참고용</b>(고객에게 보이지 않음 · 외부 공유 금지)이며, 주의 고객이어도 <b>C1 부작용 신고는 정상 처리</b>합니다.</p>
+  <div class="cs-row">
+    <label class="cs-field"><span>보기</span><select class="cs-input" data-el="cust-view">
+      ${[['repeat', '여러 번 보냈거나 신호·분류가 있는 고객'], ['signal', '주의 신호가 있는 고객'], ['tagged', '주의·응대 제한으로 분류한 고객'], ['all', '전체 고객']].map(([v, l]) => `<option value="${v}"${v === f ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="cust-sort">
+      ${[['count', '문의 많은 순'], ['signal', '주의 신호 많은 순'], ['recent', '최근 문의 순']].map(([v, l]) => `<option value="${v}"${v === sort ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+  </div>
+  <div class="cs-actions cs-cust-tools"><button type="button" class="cs-btn cs-btn-sm" data-act="cust-all" data-open="1">모두 펼치기</button>
+    <button type="button" class="cs-btn cs-btn-sm" data-act="cust-all" data-open="">모두 접기</button></div>
+  ${shown.length ? `<div class="cs-custs">${shown.map(c => `
+  <details class="cs-sec cs-cust" data-email="${esc(c.email)}"${CUST_OPEN.get(c.email) ? ' open' : ''}>
+    <summary><span class="cs-avatar" aria-hidden="true">${initials(c.names[0])}</span>
+      <span class="cs-sec-title">${esc(c.names.join(' · '))} <span class="cs-muted cs-cust-email">${esc(c.email)}</span></span>
+      <span class="cs-sec-sum"><span class="cs-chip">문의 ${c.list.length}건</span><span class="cs-chip cs-chip-dim">${esc(typeText(c))}</span>
+        ${c.tag && c.tag.tag ? `<span class="cs-chip cs-cust-${esc(c.tag.tag)}">${esc(CUST_TAG_LABEL[c.tag.tag] || c.tag.tag)}</span>` : ''}
+        ${c.signals.length + c.behavior.length ? `<span class="cs-chip cs-chip-warn">주의 신호 ${c.signals.length + c.behavior.length}</span>` : ''}
+        <span class="cs-chip cs-chip-dim">마지막 ${fmt(c.last)}</span></span></summary>
+    <div class="cs-sec-body">
+      ${c.signals.length || c.behavior.length ? `<p class="cs-cust-signals"><b>주의 신호</b> ${c.signals.map(x => `<span class="cs-chip cs-chip-warn">${esc(x.label)}${x.count > 1 ? ` ×${x.count}` : ''}</span>`).join(' ')}
+        ${c.behavior.map(b => `<span class="cs-chip cs-chip-warn">${esc(b)}</span>`).join(' ')}</p>` : ''}
+      <div class="cs-row cs-cust-tagrow">
+        <label class="cs-field"><span>담당자 분류</span><select class="cs-input" data-el="cust-tag">${CUST_TAGS.map(([v, l]) => `<option value="${v}"${(c.tag && c.tag.tag || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="cs-field cs-grow"><span>분류 이유</span><input class="cs-input" data-el="cust-note" placeholder="예: 같은 환불 요청을 3번 반복" value="${esc(c.tag && c.tag.note || '')}"></label>
+        ${c.tag && c.tag.at ? `<span class="cs-muted cs-cust-by">${esc(c.tag.by || '')} · ${fmt(c.tag.at)}</span>` : ''}
+        <button type="button" class="cs-btn cs-btn-sm" data-act="cust-open">문의함에서 보기</button>
+      </div>
+      <h4 class="cs-thread-title">주고받은 메일 <span class="cs-muted">오래된 순 · ${c.list.length}건</span></h4>
+      <ol class="cs-thread">${c.list.slice().reverse().map(threadHTML).join('')}</ol>
+    </div>
+  </details>`).join('')}</div>` : '<p class="cs-muted">해당하는 고객이 없습니다. 보기를 \'전체 고객\'으로 바꿔 보세요.</p>'}
+</div>`;
+    p.querySelector('[data-el="cust-view"]').onchange = e => { ui.custView = e.target.value; renderCustomers(ui, p); };
+    p.querySelector('[data-el="cust-sort"]').onchange = e => { ui.custSort = e.target.value; renderCustomers(ui, p); };
+    const save = row => {
+      const email = row.dataset.email;
+      const tag = row.querySelector('[data-el="cust-tag"]').value;
+      const note = row.querySelector('[data-el="cust-note"]').value.trim().slice(0, 200);
+      const tags = custTags();
+      if (!tag && !note) delete tags[email];
+      else tags[email] = { tag, note, by: (REBOOT.user && REBOOT.user().name) || ui.approver || '', at: Date.now() };
+      store.set(KEY.custTags, tags);
+      CUST_OPEN.set(email, true);
+      renderCustomers(ui, p);
+      renderList(ui);
+      toast(tag ? `'${CUST_TAG_LABEL[tag]}'로 분류했습니다 (내부 참고용).` : '분류를 지웠습니다.');
+    };
+    const card = el => el.closest('[data-email]');
+    p.querySelectorAll('details.cs-cust').forEach(d => d.addEventListener('toggle', () => CUST_OPEN.set(d.dataset.email, d.open)));
+    p.onchange = e => { if (e.target.dataset.el === 'cust-tag') save(card(e.target)); };
+    p.onkeydown = e => { if (e.target.dataset.el === 'cust-note' && e.key === 'Enter') save(card(e.target)); };
+    p.onfocusout = e => { if (e.target.dataset.el === 'cust-note' && e.target.value.trim() !== ((custTags()[card(e.target).dataset.email] || {}).note || '')) save(card(e.target)); };
+    p.onclick = e => {
+      const all = e.target.closest('[data-act="cust-all"]');
+      if (all) {
+        p.querySelectorAll('details.cs-cust').forEach(d => { d.open = !!all.dataset.open; CUST_OPEN.set(d.dataset.email, d.open); });
+        return;
+      }
+      const one = e.target.closest('[data-act="thread-open"]');
+      const btn = e.target.closest('[data-act="cust-open"]');
+      if (!one && !btn) return;
+      ui.custFilter = card(e.target).dataset.email;
+      ui.filter = 'all';
+      ui.root.querySelector('[data-el="filter"]').value = 'all';
+      ui.showTab('inbox');
+      const shownNow = renderList(ui);
+      const pick = one ? shownNow.find(i => i.id === one.dataset.id) : shownNow[0];
+      if (pick && one) openInquiry(ui, pick.id); else setView(ui, 'list');   // '문의함에서 보기'는 이 고객 메일 목록
+    };
+  }
+
+  /** 고객 이력 → 주고받은 메일: 받은 문의 1건 + 우리 답장 (보냄 · 승인됨 · 작성 중) */
+  function threadHTML(i) {
+    const t = TYPES[i.type];
+    const reply = i.status === '발송 완료' || i.sentAt
+      ? `<div class="cs-mail cs-mail-out"><div class="cs-mail-head">📤 <b>보낸 답장</b> · ${fmt(i.sentAt)}${i.sentTo ? ` → ${esc(i.sentTo)}` : ''}${i.sentMode === 'demo' ? ' <span class="cs-chip cs-chip-dim">시연 표시 · 실제로 보내지 않음</span>' : ''}
+          ${i.approval && i.approval.by ? `<span class="cs-muted">승인 ${esc(i.approval.by)}</span>` : ''}</div><pre class="cs-mail-body">${esc(i.draft)}</pre></div>`
+      : i.status === '승인'
+        ? `<div class="cs-mail cs-mail-draft"><div class="cs-mail-head">✅ <b>승인됨 · 아직 안 보냄</b> <span class="cs-muted">보내기 탭에서 보냄</span></div><pre class="cs-mail-body">${esc(i.draft)}</pre></div>`
+        : `<details class="cs-mail cs-mail-draft"><summary class="cs-mail-head">✏️ <b>답장 아직 안 보냄</b> · ${esc(i.status)} <span class="cs-muted">초안 보기</span></summary><pre class="cs-mail-body">${esc(i.draft)}</pre></details>`;
+    return `
+<li class="cs-thread-item">
+  <div class="cs-mail cs-mail-in"><div class="cs-mail-head">📨 <b>받은 메일</b> · ${fmt(i.receivedAt)}
+    <span class="cs-type cs-type-${i.type}">${i.type} ${esc(t ? t.name : '')}</span><span class="cs-chip">${esc(i.status)}</span>
+    ${i.dummy ? '<span class="cs-chip cs-chip-dim">더미</span>' : i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}
+    <button type="button" class="cs-btn cs-btn-sm" data-act="thread-open" data-id="${esc(i.id)}">이 문의 열기</button></div>
+    <p class="cs-mail-subject">${esc(i.subject)}</p><pre class="cs-mail-body">${esc(i.body)}</pre>
+    ${trBlock(`${i.subject}
+${i.body}`, '받은 메일 한글 번역')}</div>
+  ${reply}
+</li>`;
   }
 
   /* 보내기 — 최종 승인된 답장만 모아 받는 사람을 확인하고 Gmail로 바로 보냄 (2026-10-24 담당 결정)
@@ -986,9 +1421,9 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       const act = btn.dataset.act;
       const redraw = () => { renderOutbox(ui, p); renderList(ui); };
 
-      if (act === 'open') { ui.selected = id; ui.showTab('inbox'); return; }
+      if (act === 'open') { ui.showTab('inbox'); openInquiry(ui, id); return; }
       if (act === 'unapprove') {
-        patch(id, x => { x.status = '검토 중'; x.approval = null; logTo(x, '승인 취소 (보내기 탭)'); });
+        revokeServer(patch(id, x => { x.status = '검토 중'; x.approval = null; logTo(x, '승인 취소 (보내기 탭)'); }));
         return redraw();
       }
       if (act === 'close') { patch(id, x => { x.status = '종결'; logTo(x, '종결'); }); return redraw(); }
@@ -1010,7 +1445,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
         if (act === 'send') {
           const pv = await api('/api/cs/gmail/preview', { message_id: inq.gmailId });
           if (!global.confirm(`이 답장을 바로 보냅니다. 보낸 메일은 되돌릴 수 없습니다.\n\n받는 사람: ${pv.to}\n제목: ${pv.subject}\n승인: ${inq.approval.by} · 재검사 ${c.r.verdict}\n\n보낼까요?`)) { btn.disabled = false; return; }
-          const res = await api('/api/cs/gmail/send', { message_id: inq.gmailId, body: inq.draft, approved_by: inq.approval.by, verdict: c.r.verdict });
+          const res = await api('/api/cs/gmail/send', { message_id: inq.gmailId, body: inq.draft });
           patch(id, x => { x.status = '발송 완료'; x.sentAt = Date.now(); x.sentId = res.sent_id; x.sentTo = res.to; x.sentMode = 'gmail'; logTo(x, `Gmail로 보냄 → ${res.to}`); });
           toast(`보냈습니다 → ${res.to}`);
           return redraw();
@@ -1041,8 +1476,13 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
     return seq.every((t, i) => i === 0 || t >= seq[i - 1]);
   }
 
+  // 심각 = 증상이 심함(결과·입원) 또는 식품 자체에 위해 가능성 (둘을 따로 봄 · GPT 검토 ⑤)
   function isSerious(f) {
-    return DATA.adverse.seriousOutcomes.includes(f.outcome) || f.care === '입원';
+    return DATA.adverse.seriousOutcomes.includes(f.outcome) || f.care === '입원' || hazardOf(f) !== '';
+  }
+  function hazardOf(f) {
+    const h = String(f.hazard || '');
+    return h && !(DATA.adverse.noHazard || []).includes(h) ? h : '';
   }
 
   function renderAdverse(ui, p) {
@@ -1063,7 +1503,9 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       <label class="cs-field"><span>섭취일</span><input class="cs-input" type="date" name="intakeDate"></label>
       <label class="cs-field"><span>진료 여부</span><select class="cs-input" name="care">${DATA.adverse.careOptions.map(o => `<option>${esc(o)}</option>`).join('')}</select></label>
       <label class="cs-field"><span>결과</span><select class="cs-input" name="outcome">${DATA.adverse.outcomeOptions.map(o => `<option>${esc(o)}</option>`).join('')}</select></label>
+      <label class="cs-field"><span>식품 자체 위해 가능성</span><select class="cs-input" name="hazard">${(DATA.adverse.hazardOptions || []).map(o => `<option>${esc(o)}</option>`).join('')}</select></label>
     </div>
+    <p class="cs-muted">증상이 가벼워도 표시 안 된 알레르기 성분·이물·오염·같은 로트 반복이면 '심각'으로 올려 규제 담당이 보고 대상 여부를 판단합니다 (FDA 보고 대상은 실제 피해가 없어도 위해 가능성으로 판단될 수 있음).</p>
     <label class="cs-field"><span>증상${req('symptoms')}</span><textarea class="cs-input" rows="4" name="symptoms">${esc(pre.symptoms || '')}</textarea></label>
     <div data-el="msg" aria-live="polite"></div>
     <div class="cs-actions"><button type="submit" class="cs-btn cs-primary">접수 저장</button></div>
@@ -1076,7 +1518,7 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
       e.preventDefault();
       const fd = new FormData(form);
       const fields = {};
-      ['customer', 'contact', 'product', 'lot', 'intakeDate', 'care', 'outcome', 'symptoms'].forEach(k => { fields[k] = String(fd.get(k) || '').trim(); });
+      ['customer', 'contact', 'product', 'lot', 'intakeDate', 'care', 'outcome', 'hazard', 'symptoms'].forEach(k => { fields[k] = String(fd.get(k) || '').trim(); });
       const missing = DATA.adverse.required.filter(k => !fields[k]);
       const record = {
         id: uid(), createdAt: Date.now(), linkedInquiry: pre.linkedInquiry || null, fields, missing,
@@ -1096,12 +1538,13 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
     renderRecords(p);
     p.querySelector('[data-el="records"]').onclick = e => {
       const btn = e.target.closest('[data-act]');
-      if (!btn) return;
+      if (!btn || btn.dataset.act.startsWith('share-') || btn.dataset.act === 'translate') return;   // 전달·번역은 render에서 처리
       const card = btn.closest('[data-id]');
       const list = loadAdverse();
       const rec = list.find(x => x.id === card.dataset.id);
       if (!rec) return;
       if (btn.dataset.act === 'review-now') rec.stages.reviewAt = Date.now();
+      if (btn.dataset.act === 'escalate') { rec.serious = true; rec.escalatedAt = Date.now(); }   // 일반 → 규제 담당 검토 (같은 로트 반복 등)
       if (btn.dataset.act === 'judge') {
         const by = card.querySelector('[data-el="judgedBy"]').value.trim();
         const val = card.querySelector('[data-el="reportable"]').value;
@@ -1155,6 +1598,9 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
   <p>${esc(f.symptoms || '증상 미입력')}</p>
   ${rec.missing.length ? `<p class="cs-warn">빠진 필수 항목: ${rec.missing.map(k => FIELD_LABEL[k]).join(', ')}</p>` : ''}
   ${repeated ? '<p class="cs-warn">같은 로트 신고가 반복되었습니다 → 품질 이슈로 올리세요.</p>' : ''}
+  ${hazardOf(f) ? `<p class="cs-warn">식품 자체 위해 가능성: <b>${esc(hazardOf(f))}</b> → 증상과 별개로 보고 대상 여부를 판단합니다.</p>` : ''}
+  ${!rec.serious ? `<p class="cs-muted">증상이 가벼워도 표시 안 된 알레르기 성분·이물·오염 의심이거나 같은 로트 신고가 반복되면 규제 담당이 봐야 합니다.
+    <button type="button" class="cs-btn cs-btn-sm" data-act="escalate">규제 담당 검토로 올리기</button></p>` : ''}
   ${rec.serious ? `
   <ol class="cs-stages">
     <li class="is-ok">① 접수 · ${fmt(rec.createdAt)} ${timeEdit('createdAt', rec.createdAt)}</li>
@@ -1179,10 +1625,12 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
   <span class="cs-warn-text" data-el="timeMsg" aria-live="polite"></span>
   <p class="cs-muted">24시간은 문의 접수가 아니라 보고 대상으로 판단한 시점부터 계산합니다. {확인 필요: RFR 보고 책임 주체(제조사·수입사)와 판단 권한자는 규제 담당과 확정}</p>` :
   '<p class="cs-muted">기록 보관. 같은 로트 신고가 반복되면 품질 이슈로 올립니다.</p>'}
+  <details class="cs-share-wrap"><summary>${icon('mail')} 담당자에게 전달 (접수 내용 공유)</summary>${shareBoxHTML(`adv:${rec.id}`, 'adverse', '품질·규제 담당')}</details>
   </div>
 </details>`;
     }).join('') : '<p class="cs-muted">아직 접수 기록이 없습니다.</p>');
     p.querySelectorAll('details.cs-record').forEach(d => d.addEventListener('toggle', () => REC_OPEN.set(d.dataset.id, d.open)));
+    p.querySelectorAll('.cs-share').forEach(fillShare);
   }
 
   /* 답변 템플릿 */
@@ -1199,7 +1647,25 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
 
     // 페르소나·템플릿은 길어서 접어 두고, 제목 줄에 유형·판정·빈칸 수를 보여 줌 (펼침 상태는 탭을 옮겨도 유지)
     const op = id => (TPL_OPEN.get(id) ? ' open' : '');
-    p.innerHTML = `
+    const dv = replyDefaults();
+    const dmeta = store.get(KEY.defaults, null) || {};
+    const dFields = DATA.replyDefaults || [];
+    const dFilled = dFields.filter(f => String(dv[f.key] || '').trim()).length;
+    const allTodos = rows.reduce((n, x) => n + x.todos.length, 0);
+    p.innerHTML = contactsHTML() + `
+<details class="cs-sec cs-defaults" data-tpl="defaults"${TPL_OPEN.has('defaults') ? op('defaults') : allTodos ? ' open' : ''}>
+  <summary><span class="cs-sec-title">답변 기본값 · 빈칸 한 번에 채우기</span>
+    <span class="cs-sec-sum"><span class="cs-chip ${dFilled < dFields.length ? 'cs-chip-warn' : ''}">${dFilled}/${dFields.length} 입력</span>${dmeta.at ? `<span class="cs-chip cs-chip-dim">${esc(dmeta.by || '')} · ${fmt(dmeta.at)}</span>` : ''}</span></summary>
+  <div class="cs-sec-body">
+    <p class="cs-muted">여기 값이 모든 답장 템플릿의 같은 빈칸을 채웁니다 (팀 공용 · 고객에게 가는 <b>영어</b>로). <b>팀이 정한 값만</b> 넣고, 정하지 않은 값은 비워 두면 그 답장은 [확인 필요]로 남아 승인이 막힙니다.
+      저장하면 아직 손대지 않은 초안(직접 고치지 않은 · 승인 전)은 새 값으로 다시 만들어집니다.</p>
+    <div class="cs-defaults-grid">${dFields.map(f => `
+      <label class="cs-field${f.long ? ' cs-wide' : ''}"><span>${esc(f.label)} <span class="cs-muted">· ${esc(f.where)}</span></span>
+        ${f.long ? `<textarea class="cs-input" rows="2" data-def="${esc(f.key)}" placeholder="${esc(f.placeholder)}">${esc(dv[f.key] || '')}</textarea>`
+          : `<input class="cs-input" data-def="${esc(f.key)}" value="${esc(dv[f.key] || '')}" placeholder="${esc(f.placeholder)}">`}</label>`).join('')}</div>
+    <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="defaults-save">저장하고 초안에 반영</button></div>
+  </div>
+</details>
 <details class="cs-sec" data-tpl="persona"${op('persona')}>
   <summary><span class="cs-avatar cs-persona-avatar cs-persona-mini" aria-hidden="true">${initials(PERSONA.name || 'AI')}</span>
     <span class="cs-sec-title">답장 페르소나 · ${esc(PERSONA.name || '없음')}</span>
@@ -1227,6 +1693,36 @@ ${need.length ? `<div class="cs-need" role="note"><b>최종 승인하려면 ${ne
     </div>
   </details>`).join('')}</div>`;
     p.querySelectorAll('details[data-tpl]').forEach(d => d.addEventListener('toggle', () => TPL_OPEN.set(d.dataset.tpl, d.open)));
+    const cbox = p.querySelector('[data-el="contacts"]');
+    p.querySelector('[data-act="contact-add"]').addEventListener('click', () => cbox.insertAdjacentHTML('beforeend', contactRowHTML({})));
+    cbox.addEventListener('click', e => { const b = e.target.closest('[data-act="contact-del"]'); if (b) b.closest('.cs-contact').remove(); });
+    p.querySelector('[data-act="contacts-save"]').addEventListener('click', async () => {
+      const items = [...cbox.querySelectorAll('.cs-contact')].map(r => ({
+        role: r.querySelector('[data-c="role"]').value.trim(), name: r.querySelector('[data-c="name"]').value.trim(), email: r.querySelector('[data-c="email"]').value.trim()
+      })).filter(c => c.role || c.name || c.email);
+      try {
+        const out = await apiPut('/api/cs/contacts', { items });
+        CONTACTS = out.items || [];
+        contactsP = Promise.resolve(CONTACTS);
+        TPL_OPEN.set('contacts', true);
+        renderTemplates(p);
+        toast(`담당자 ${CONTACTS.length}명을 저장했습니다.`);
+      } catch (e) { toast(`저장 실패: ${e.message}`); }
+    });
+    p.querySelector('[data-act="defaults-save"]').addEventListener('click', () => {
+      const values = {};
+      p.querySelectorAll('[data-def]').forEach(el => { const v = el.value.trim(); if (v) values[el.dataset.def] = v.slice(0, 600); });
+      store.set(KEY.defaults, { values, by: (REBOOT.user && REBOOT.user().name) || '', at: Date.now() });
+      // 손대지 않은 초안(직접 고치지 않음 · 승인·발송 전)만 새 값으로 다시 만듦
+      let n = 0;
+      load().filter(i => !i.edited && !['승인', '발송 완료', '종결'].includes(i.status)).forEach(i => {
+        const next = draftFor(i);
+        if (next !== i.draft) { patch(i.id, x => { x.draft = next; logTo(x, '답변 기본값으로 초안 다시 만듦'); }); n++; }
+      });
+      TPL_OPEN.set('defaults', true);
+      renderTemplates(p);
+      toast(`답변 기본값을 저장했습니다${n ? ` · 초안 ${n}건을 새 값으로 다시 만들었습니다` : ''}.`);
+    });
     p.querySelectorAll('[data-act="tpl-all"]').forEach(b => b.addEventListener('click', () => {
       p.querySelectorAll('.cs-templates details[data-tpl]').forEach(d => { d.open = !!b.dataset.open; });
     }));

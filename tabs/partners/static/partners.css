@@ -174,12 +174,13 @@
 .part-partners .ptn-rec-chk { width: 36px; }
 .part-partners .ptn-rec-chk input { width: 16px; height: 16px; accent-color: #9cc20e; margin: 0; }
 .part-partners .ptn-rec-edit { width: 84px; text-align: right; }
+.part-partners .ptn-rec-count { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 8px; background: var(--soft-2); font-size: 10px; color: var(--muted); vertical-align: 1px; }
 .part-partners .ptn-rec-sub { display: block; font-size: 10px; color: var(--faint); font-weight: 400; margin-top: 3px; }
 .part-partners .ptn-rec-replybtn { border-radius: 5px; }
 .part-partners .ptn-rec-replybtn .badge { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .part-partners .ptn-rec-replybtn:hover .badge { filter: brightness(.95); }
-.part-partners .ptn-rec-clip { max-width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.part-partners .ptn-rec-memo { min-width: 180px; max-width: 320px; white-space: pre-line; font-size: 11px; }
+.part-partners .ptn-rec-clip { min-width: 160px; white-space: normal; overflow-wrap: anywhere; }
+.part-partners .ptn-rec-memo { min-width: 180px; white-space: pre-line; overflow-wrap: anywhere; font-size: 11px; }
 .part-partners .ptn-rec-err { display: block; color: var(--red); margin-top: 4px; }
 .part-partners .ptn-rec-foot { padding: 12px 16px; }
 
@@ -271,3 +272,11 @@
 .part-partners .ptn-thread-item { border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 8px; padding: 10px 12px; max-width: 88%; }
 .part-partners .ptn-thread-item.out { justify-self: end; border-left-color: var(--ptn-chart, #637c13); }
 .part-partners .ptn-thread-item.in { justify-self: start; border-left-color: var(--blue); background: var(--surface-2); }
+
+/* 협업 이력 · 크리에이터별 실적 표: 머리글 끝을 끌어 칸 너비 조절 */
+.part-partners .ptn-col-grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
+.part-partners .ptn-col-grip::after { content: ''; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 2px; border-radius: 1px; background: var(--line); opacity: 0; transition: opacity .12s; }
+.part-partners .ptn-rec-table th[data-col]:hover .ptn-col-grip::after,
+.part-partners .ptn-rec-table th.resizing .ptn-col-grip::after,
+.part-partners .ptn-rec-salestable th[data-col]:hover .ptn-col-grip::after,
+.part-partners .ptn-rec-salestable th.resizing .ptn-col-grip::after { opacity: 1; background: var(--muted); }

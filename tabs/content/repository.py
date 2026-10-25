@@ -17,7 +17,7 @@ from server.extensions import db
 from server.models import iso, utcnow
 from . import brandkit
 from . import options as O
-from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
+from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentReference, ContentVersion
 
 EMPTY_SHEET = {"content_type": "", "channels": [], "brand_focus": False, "product_ids": [], "goal": "", "extra_request": ""}
 SHEET_FIELDS = tuple(EMPTY_SHEET)
@@ -115,8 +115,10 @@ def check_sheet(s):
         raise ValueError("만들 콘텐츠를 골라 주세요.")
     if not s.get("channels"):
         raise ValueError("게시 채널을 골라 주세요.")
-    if len(s["channels"]) > 1 and s["content_type"] != "plan":
-        raise ValueError("캠페인 기획서가 아니면 게시 채널은 하나만 고를 수 있어요.")
+    if len(s["channels"]) > 1:
+        raise ValueError("게시 채널은 하나만 고를 수 있어요.")
+    if (s["content_type"] == O.CRM_TYPE) != (s["channels"][0] == O.CRM_CHANNEL):
+        raise ValueError("CRM 메시지는 CRM 채널하고만, CRM 채널은 CRM 메시지하고만 만들 수 있어요.")
     if not s.get("brand_focus") and not s.get("product_ids"):
         raise ValueError("제작 대상을 하나 이상 골라 주세요 (Reboot 브랜드 자체 또는 제품).")
 
@@ -171,9 +173,7 @@ def norm_settings(data, base=None):
 
 def auto_title(sheet):
     today = catalog._today()
-    ch = sheet["channels"]
-    name = O.CHANNELS[ch[0]]["short"] + (f" 외 {len(ch) - 1}" if len(ch) > 1 else "")
-    return f"{name} {O.CONTENT_TYPES[sheet['content_type']]['label']} · {today:%m.%d}"
+    return f"{O.CHANNELS[sheet['channels'][0]]['short']} {O.CONTENT_TYPES[sheet['content_type']]['label']} · {today:%m.%d}"
 
 
 # ───────── 결정 ─────────
@@ -226,7 +226,7 @@ def plan_changes(sheet, decisions, changes, *, user, source, revision, vague=Fal
     sheet = copy.deepcopy(sheet)
     decisions = copy.deepcopy(decisions)
     applied, rejected, fact_requests, demoted = [], [], [], []
-    pending_sheet = {}  # 시트 변경은 모아서 한 번에 검사 (예: 기획서 → 이미지 + 채널 하나)
+    pending_sheet = {}  # 시트 변경은 모아서 한 번에 검사 (예: CRM → 이미지 + 채널 Instagram)
     now = iso(utcnow())
     for ch in list(changes or [])[:20]:
         if not isinstance(ch, dict):
@@ -483,6 +483,15 @@ def file_url(name):
     return f"/api/content/files/{name}" if name else None
 
 
+def reference_dict(r):
+    return {"id": r.id, "url": file_url(r.file), "width": r.width, "height": r.height, "note": r.note, "summary": r.summary,
+            "createdBy": r.created_by, "createdAt": iso(r.created_at)}
+
+
+def references_of(campaign_id):
+    return ContentReference.query.filter_by(campaign_id=campaign_id).order_by(ContentReference.id).all()
+
+
 def version_dict(v, cur_core=None, final_id=None, selected_id=None):
     snap = v.snapshot
     stale = stale_fields(snap.get("core"), cur_core) if cur_core is not None else []
@@ -530,6 +539,8 @@ def campaign_state(c, *, message_limit=200):
         "jobs": [job_dict(j) for j in jobs_],
         "recentChanges": [event_dict(e) for e in events],
         "facts": brandkit.product_facts(sheet["product_ids"]),
+        "references": [reference_dict(r) for r in references_of(c.id)],
+        "flow": O.flow_of(sheet),
         "currentHash": snapshot_hash(cur),
     }
 

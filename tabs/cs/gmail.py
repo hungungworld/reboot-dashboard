@@ -13,8 +13,10 @@ Flask 통합 (원본: JUNHEE/server/cs/gmail.py — 읽기·초안 로직은 같
 - OAuth 동의 화면이 '테스트'면 7일마다 다시 로그인합니다.
 """
 import base64
+import html
 import json
 import os
+import re
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -42,12 +44,19 @@ def token_path():
     return google_dir() / "token.json"
 
 
+def _off_path():
+    # '연결 해제' 표시: 환경변수 GMAIL_TOKEN_JSON으로 받은 로그인도 쓰지 않음 (GPT 검토 ⑳) · 다시 로그인하면 지워짐
+    return google_dir() / "disconnected"
+
+
 def credentials_path():
     return google_dir() / "credentials.json"
 
 
 def ready():
     """로그인 정보가 있는지만 빠르게 확인 (만료 여부는 실제 호출 때 확인)."""
+    if _off_path().exists():
+        return False
     return token_path().exists() or bool(os.environ.get("GMAIL_TOKEN_JSON", "").strip())
 
 
@@ -55,14 +64,18 @@ def save_credentials(creds):
     tmp = token_path().with_suffix(".tmp")
     tmp.write_text(creds.to_json(), encoding="utf-8")
     tmp.replace(token_path())
+    _off_path().unlink(missing_ok=True)   # 다시 로그인했으면 연결 해제 표시를 지움
 
 
 def disconnect():
     token_path().unlink(missing_ok=True)
+    _off_path().write_text("1", encoding="utf-8")
 
 
 def _load_credentials():
     from google.oauth2.credentials import Credentials
+    if _off_path().exists():
+        return None
     if token_path().exists():
         return Credentials.from_authorized_user_file(str(token_path()), SCOPES)
     raw = os.environ.get("GMAIL_TOKEN_JSON", "").strip()
@@ -102,23 +115,47 @@ def _headers(msg):
     return {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
 
 
-def _body_text(payload):
-    # text/plain 본문을 우선으로 찾음 (multipart 안까지)
-    if payload.get("mimeType") == "text/plain" and payload.get("body", {}).get("data"):
+def _find_part(payload, mime):
+    if payload.get("mimeType") == mime and payload.get("body", {}).get("data"):
         return base64.urlsafe_b64decode(payload["body"]["data"]).decode("utf-8", "replace")
     for part in payload.get("parts", []):
-        text = _body_text(part)
+        text = _find_part(part, mime)
         if text:
             return text
     return ""
 
 
+def html_to_text(raw):
+    """HTML 메일 → 읽을 수 있는 글 (스크립트·스타일 제거, 줄바꿈 유지, &amp; 등 풀기)."""
+    s = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", raw or "")
+    s = re.sub(r"(?i)<br\s*/?>|</(p|div|li|tr|h[1-6])>", "\n", s)
+    s = re.sub(r"<[^>]+>", " ", s)
+    s = html.unescape(s)
+    s = re.sub(r"[ \t\r\f\v]+", " ", s)
+    return re.sub(r"\n\s*\n+", "\n\n", s).strip()
+
+
+def _body_text(payload):
+    # text/plain 본문을 먼저 찾고, 없으면 HTML 본문을 글로 바꿈 (HTML만 있는 메일이 빈칸이 되던 문제 · GPT 검토 ⑱)
+    return _find_part(payload, "text/plain") or html_to_text(_find_part(payload, "text/html"))
+
+
+DEFAULT_QUERY = "in:inbox -from:me newer_than:30d"   # 받은편지함 · 내가 보낸 메일 제외 (GPT 검토 ⑲) · CS 전용 주소가 있으면 GMAIL_QUERY로 좁힘
+
+
 def list_inquiries(svc, query=None, limit=20):
-    """GMAIL_QUERY에 맞는 문의를 [{id, thread_id, from, subject, date, received_ms, body}]로 돌려줌."""
-    query = query if query is not None else env("GMAIL_QUERY", "newer_than:30d")
-    res = svc.users().messages().list(userId="me", q=query, maxResults=limit).execute()
+    """GMAIL_QUERY에 맞는 문의를 [{id, thread_id, from, subject, date, received_ms, body}]로 돌려줌 (다음 페이지까지 limit건)."""
+    query = query if query is not None else (env("GMAIL_QUERY", DEFAULT_QUERY) or DEFAULT_QUERY)
+    refs, token = [], None
+    while len(refs) < limit:
+        page = svc.users().messages().list(userId="me", q=query, maxResults=min(100, limit - len(refs)),
+                                           **({"pageToken": token} if token else {})).execute()
+        refs += page.get("messages", [])
+        token = page.get("nextPageToken")
+        if not token:
+            break
     out = []
-    for ref in res.get("messages", []):
+    for ref in refs[:limit]:
         msg = svc.users().messages().get(userId="me", id=ref["id"], format="full").execute()
         h = _headers(msg)
         out.append({
@@ -163,6 +200,16 @@ def create_reply_draft(svc, message_id, body):
     msg, _, _ = _reply(svc, message_id, body)
     draft = svc.users().drafts().create(userId="me", body={"message": msg}).execute()
     return draft["id"]
+
+
+def send_internal(svc, to, subject, body):
+    """팀 담당자에게 새 메일 (문의 전달 · 승인 요청 · 부작용 접수 공유). 받는 사람 확인은 routes.py가 연락처로."""
+    msg = EmailMessage()
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(body)
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    return svc.users().messages().send(userId="me", body={"raw": raw}).execute()["id"]
 
 
 def send_reply(svc, message_id, body):

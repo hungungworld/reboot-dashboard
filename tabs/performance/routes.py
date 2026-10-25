@@ -9,6 +9,7 @@
   GET    /api/performance/summary        기간 요약 (?start&end, 없으면 CSV 마지막 날짜 기준 최근 7일) — 홈 KPI
   GET    /api/performance/fx             USD 환율 (?refresh=1) {status: ok|no_key|error, rate, date, reason}
   POST   /api/performance/advice         {start, end} → AI 해석 · 다음 주 예산 · 실행 과제 (키 없으면 503)
+  POST   /api/performance/insight        {start, end} → 채널별 성과 표 위 AI 인사이트 {lines: 최대 3줄} (키 없으면 503)
 """
 from datetime import date
 
@@ -178,4 +179,22 @@ def advice():
     s = metrics.summarize(rows, start, end, rng, csvdata.channels(rows))
     out = adv.advise(s, d["source"])
     out.update(start=start, end=end, sample=d["source"] == "sample", compare=s["compare"])
+    return jsonify(out)
+
+
+@bp.post("/insight")
+def insight():
+    from . import advice as adv
+    body = json_body()
+    if not openai_ready():
+        raise ApiError(NO_AI, 503)
+    d = _current()
+    rows = d["rows"]
+    rng = csvdata.date_range(rows)
+    if not rng:
+        raise ApiError("성과 데이터가 아직 없어요. 매출 CSV를 먼저 올려 주세요.")
+    start, end = _period(rng, body.get("start"), body.get("end"))
+    s = metrics.summarize(rows, start, end, rng, csvdata.channels(rows))
+    out = adv.insight(s, d["source"])
+    out.update(start=start, end=end, sample=d["source"] == "sample")
     return jsonify(out)

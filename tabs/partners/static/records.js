@@ -21,6 +21,7 @@
     columns: `records.columns.u${me.id || 0}`,
     filters: `records.filters.u${me.id || 0}`,
     sales: `records.sales.u${me.id || 0}`,
+    widths: `records.widths.u${me.id || 0}`,
     awaiting: 'records.awaiting'
   };
   const PROG = {};
@@ -187,6 +188,26 @@
       (!f.partner || (h.partnerId || 'name:' + (h.partnerName || '').toLowerCase()) === f.partner));
   }
 
+  /* 협업 이력 표: 같은 업체는 한 줄로 — 줄의 값은 가장 최근 기록, 상태만 바뀜 (기록별 내역은 업체 이름 → 메일 히스토리) */
+  function partnerKey(h) { return h.partnerId || 'name:' + (h.partnerName || '').toLowerCase(); }
+  function groupItems(list) {
+    const map = new Map();
+    list.forEach(h => {
+      const k = partnerKey(h);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(h);
+    });
+    return Array.from(map.values()).map(recs => {
+      recs.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+      const latest = recs[0];
+      // 최근 기록 이후에 온 회신이 있으면(아직 답하지 않은 회신) 상태(메일)에 🟢 회신 받음을 계속 보여 줌
+      const replied = recs.filter(x => x.mailStatus === '회신 받음' && x.reply)
+        .sort((a, b) => String(b.reply.at || '').localeCompare(String(a.reply.at || '')))[0];
+      const open = replied && replied !== latest && String(replied.reply.at || '') > String(latest.at || '') ? replied : null;
+      return { latest, recs, ids: recs.map(x => x.id), open };
+    }).sort((a, b) => String(b.latest.at || '').localeCompare(String(a.latest.at || '')));
+  }
+
   function paintBody(st) {
     st.el.querySelectorAll('[data-rec-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.recView === (st.f.view === 'board' ? 'board' : 'table'))));
     const body = st.el.querySelector('[data-ref="body"]');
@@ -205,29 +226,86 @@
     }
     const cols = columnConfig().filter(c => c.on);
     const list = filteredItems(st);
+    const groups = groupItems(list);
     st.sel.forEach(id => { if (!list.some(h => h.id === id)) st.sel.delete(id); });
     host.innerHTML = `<section class="card flush ptn-rec-tablecard">
       <div class="table-wrap"><table class="data-table ptn-rec-table">
-        <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-ref="all" aria-label="보이는 기록 모두 선택"></th>${cols.map(c => `<th scope="col">${esc(c.label)}</th>`).join('')}<th class="ptn-rec-edit" scope="col">편집</th></tr></thead>
-        <tbody>${list.length ? list.map(h => row(h, cols, st)).join('') : `<tr><td colspan="${cols.length + 2}">${ui.empty('기록이 없습니다. 협업 메일을 보내거나 ➕ 수기 기록 추가로 남기세요.', 'clock')}</td></tr>`}</tbody>
+        <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-ref="all" aria-label="보이는 기록 모두 선택"></th>${cols.map(c => headCell(c)).join('')}<th class="ptn-rec-edit" scope="col">편집</th></tr></thead>
+        <tbody>${list.length ? groups.map(g => row(g, cols, st)).join('') : `<tr><td colspan="${cols.length + 2}">${ui.empty('기록이 없습니다. 협업 메일을 보내거나 ➕ 수기 기록 추가로 남기세요.', 'clock')}</td></tr>`}</tbody>
       </table></div>
-      <p class="panel-note ptn-rec-foot">${fmt.num(list.length)}건 · 표는 읽기 전용이며 수정은 ✏️ 편집에서 합니다. 🟢 회신 받음을 누르면 회신 창이 열립니다.</p>
+      <p class="panel-note ptn-rec-foot">업체 ${fmt.num(groups.length)}곳 · 기록 ${fmt.num(list.length)}건 · 같은 업체는 한 줄에 최근 상태로 보이고, 업체 이름을 누르면 주고받은 메일 전체가 열립니다 · 표는 읽기 전용이며 수정은 ✏️ 편집에서 합니다. 🟢 회신 받음을 누르면 회신 창이 열립니다.</p>
     </section>`;
     updateDeleteBtn(st);
+    bindResize(host);
   }
 
-  function row(h, cols, st) {
-    return `<tr data-hid="${h.id}"${st.sel.has(h.id) ? ' class="selected"' : ''}>
-      <td class="ptn-rec-chk"><input type="checkbox" data-rec-sel="${h.id}"${st.sel.has(h.id) ? ' checked' : ''} aria-label="${esc(h.partnerName)} 기록 선택"></td>
-      ${cols.map(c => cell(h, c.key)).join('')}
+  /* 표 칸 너비: 머리글 오른쪽 끝을 좌우로 끌어 조절 · 더블클릭하면 원래대로 (브라우저에 기억) */
+  const MIN_COL = 56;
+  // 크리에이터별 실적 표 머리글 (키에 sales. 을 붙여 협업 이력 표 너비와 섞이지 않게)
+  const SALES_COLS = [
+    { key: 'sales.name', label: '크리에이터' }, { key: 'sales.code', label: '할인코드' },
+    { key: 'sales.visits', label: '접속량', num: true }, { key: 'sales.orders', label: '주문 수', num: true },
+    { key: 'sales.units', label: '판매량', num: true }, { key: 'sales.revenue', label: '매출', num: true },
+    { key: 'sales.conversion', label: '전환율', num: true }
+  ];
+  function savedWidths() {
+    const w = store.get(K.widths, null);
+    return w && typeof w === 'object' ? w : {};
+  }
+  function headCell(c, cls) {
+    const w = savedWidths()[c.key];
+    return `<th${cls ? ` class="${cls}"` : ''} scope="col" data-col="${esc(c.key)}"${w ? ` style="width:${w}px;min-width:${w}px"` : ''}>${esc(c.label)}<span class="ptn-col-grip" data-grip="${esc(c.key)}" title="끌어서 너비 조절 · 더블클릭하면 원래대로" aria-hidden="true"></span></th>`;
+  }
+  function bindResize(host) {
+    host.querySelectorAll('[data-grip]').forEach(g => {
+      const th = g.parentElement;
+      const key = g.dataset.grip;
+      g.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        g.setPointerCapture(e.pointerId);
+        const x0 = e.clientX, w0 = th.getBoundingClientRect().width;
+        th.classList.add('resizing');
+        const move = ev => {
+          const w = Math.max(MIN_COL, Math.round(w0 + ev.clientX - x0));
+          th.style.width = th.style.minWidth = w + 'px';
+        };
+        const up = () => {
+          g.removeEventListener('pointermove', move);
+          th.classList.remove('resizing');
+          const all = savedWidths();
+          all[key] = Math.round(th.getBoundingClientRect().width);
+          store.set(K.widths, all);
+        };
+        g.addEventListener('pointermove', move);
+        g.addEventListener('pointerup', up, { once: true });
+        g.addEventListener('pointercancel', up, { once: true });
+      });
+      g.addEventListener('dblclick', () => {
+        const all = savedWidths();
+        delete all[key];
+        store.set(K.widths, all);
+        th.style.width = th.style.minWidth = '';
+      });
+      g.addEventListener('click', e => e.stopPropagation());
+    });
+  }
+
+  function row(g, cols, st) {
+    const h = g.latest;
+    const on = g.ids.every(id => st.sel.has(id));
+    return `<tr data-hid="${h.id}"${on ? ' class="selected"' : ''}>
+      <td class="ptn-rec-chk"><input type="checkbox" data-rec-sel="${g.ids.join(',')}"${on ? ' checked' : ''} aria-label="${esc(h.partnerName)} 기록 ${g.ids.length}건 선택"></td>
+      ${cols.map(c => cell(h, c.key, g)).join('')}
       <td class="ptn-rec-edit"><button type="button" class="btn small ghost" data-rec-edit="${h.id}" aria-label="${esc(h.partnerName)} 기록 편집">✏️ 편집</button></td>
     </tr>`;
   }
 
-  function cell(h, key) {
+  function cell(h, key, g) {
+    const n = g ? g.recs.length : 1;
+    if (key === 'mailStatus' && g && g.open) h = g.open;
     switch (key) {
       case 'at': return `<td class="nowrap">${esc(fmt.datetime(h.at))}</td>`;
-      case 'partner': return `<td><button type="button" class="ptn-rec-who" data-rec-thread="${h.id}" title="이 업체와 주고받은 메일 전체 보기"><strong>${esc(h.partnerName || '—')}</strong></button><small class="ptn-rec-sub">${esc(h.partnerType || '구분 없음')}${h.partnerId ? ' · ' + esc(h.partnerId) : ''}</small></td>`;
+      case 'partner': return `<td><button type="button" class="ptn-rec-who" data-rec-thread="${h.id}" title="이 업체와 주고받은 메일 전체 보기"><strong>${esc(h.partnerName || '—')}</strong></button>${n > 1 ? `<span class="ptn-rec-count">기록 ${fmt.num(n)}건</span>` : ''}<small class="ptn-rec-sub">${esc(h.partnerType || '구분 없음')}${h.partnerId ? ' · ' + esc(h.partnerId) : ''}</small></td>`;
       case 'kind': return `<td>${kindBadge(h.kind)}</td>`;
       case 'activity': return `<td class="nowrap">${esc(h.activity || '—')}</td>`;
       case 'mailStatus': return `<td class="nowrap">${h.mailStatus === '회신 받음' && h.reply
@@ -311,14 +389,13 @@
         saveFilters(st.f);
         paintBody(st);
       } else if (t.matches('[data-rec-sel]')) {
-        const id = Number(t.dataset.recSel);
-        if (t.checked) st.sel.add(id); else st.sel.delete(id);
+        t.dataset.recSel.split(',').map(Number).forEach(id => { if (t.checked) st.sel.add(id); else st.sel.delete(id); });
         const tr = t.closest('tr');
         if (tr) tr.classList.toggle('selected', t.checked);
         updateDeleteBtn(st);
       } else if (t.matches('[data-ref="all"]')) {
         filteredItems(st).forEach(h => { if (t.checked) st.sel.add(h.id); else st.sel.delete(h.id); });
-        el.querySelectorAll('[data-rec-sel]').forEach(c => { c.checked = st.sel.has(Number(c.dataset.recSel)); c.closest('tr').classList.toggle('selected', c.checked); });
+        el.querySelectorAll('[data-rec-sel]').forEach(c => { c.checked = c.dataset.recSel.split(',').every(id => st.sel.has(Number(id))); c.closest('tr').classList.toggle('selected', c.checked); });
         updateDeleteBtn(st);
       } else if (t.matches('[data-add="partner"]')) {
         const name = el.querySelector('[data-add="name"]');
@@ -468,7 +545,8 @@
   async function deleteSelected(st) {
     const ids = Array.from(st.sel);
     if (!ids.length) return;
-    const ok = await ui.confirm(`선택한 기록 ${ids.length}건을 삭제할까요? 삭제하면 되돌릴 수 없습니다.`, { title: '삭제 확인', ok: '삭제 확인', danger: true });
+    const firms = new Set(st.items.filter(h => st.sel.has(h.id)).map(partnerKey)).size;
+    const ok = await ui.confirm(`선택한 업체 ${firms}곳의 기록 ${ids.length}건을 삭제할까요? 삭제하면 되돌릴 수 없습니다.`, { title: '삭제 확인', ok: '삭제 확인', danger: true });
     if (!ok) return;
     try {
       const out = await REBOOT.api('/api/partners/history/delete', { ids });
@@ -906,12 +984,13 @@
       <details class="card mt-24 ptn-rec-salestable" data-ref="sales-table"${st.tableOpen === false ? '' : ' open'}>
         <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('🧪 더미 데이터', 'orange')}</summary>
         <div class="table-wrap"><table class="data-table">
-          <thead><tr><th scope="col">크리에이터</th><th scope="col">할인코드</th><th class="num" scope="col">접속량</th><th class="num" scope="col">주문 수</th><th class="num" scope="col">판매량</th><th class="num" scope="col">매출</th><th class="num" scope="col">전환율</th></tr></thead>
+          <thead><tr>${SALES_COLS.map(c => headCell(c, c.num ? 'num' : '')).join('')}</tr></thead>
           <tbody>${d.creators.map(c => `<tr><td>${esc(c.name)}</td><td><code>${esc(c.code)}</code></td><td class="num">${fmt.num(c.visits)}</td><td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${usd(c.revenue)}</td><td class="num">${fmt.pct(c.conversion, 2)}</td></tr>`).join('')}</tbody>
           <tfoot><tr><td>합계</td><td></td><td class="num">${fmt.num(t.visits)}</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${usd(t.revenue)}</td><td class="num">${fmt.pct(t.conversion, 2)}</td></tr></tfoot>
         </table></div>
         <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify Orders API(discount_codes) · UTM 집계로 바뀝니다.</p>
       </details>`;
+    bindResize(el.querySelector('[data-ref="sales-table"]'));
     el.querySelector('[data-ref="sales-table"]').addEventListener('toggle', ev => { st.tableOpen = ev.target.open; });
     st.picked = (st.picked || []).filter(n => d.creators.some(c => c.name === n));
     drawCharts(st);
