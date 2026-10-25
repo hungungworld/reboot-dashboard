@@ -340,8 +340,8 @@ GMAIL_QUERY=
 | CourtListener | 허위광고 소송 | API · 이메일 알림 | 무료 토큰 | ⚠️ 비권장 | 서버 또는 웹사이트 알림만 |
 | FDA 수입 거부 (Data Dashboard) | 실제 거부 사례·사유 | 파일 다운로드 (주간) · API는 인증키 신청 | 신청 | 수동 | 주 1회 파일 저장 |
 | CBP CROSS | 품목분류 결정 | 웹 검색 (API 없음) | — | 수동 | 월 1회 |
-| FTC 건강 광고 가이드 · NAD | 광고 근거·문제 표현 | 문서·결정 | — | 수동 | 월 1회, 근거 메모에 반영 |
-| 캘리포니아 Prop 65 | 납 등 경고 문구 | 목록 다운로드 · 60일 통지 검색 | — | 수동 | 월 1회 |
+| FTC 건강 광고 가이드 · NAD | 광고 근거·문제 표현 | 문서·결정 | — | NAD 결정 요약 · FTC 보도자료는 서버 Firecrawl 자동 (2026-10-26) | 가이드 문서는 월 1회, 근거 메모에 반영 |
+| 캘리포니아 Prop 65 | 납 등 경고 문구 | 목록 다운로드 · 60일 통지 검색 | — | 60일 통지는 서버 Firecrawl 자동 (주 1회 · 2026-10-26) · 물질 목록은 수동 | 물질 목록 월 1회 |
 
 **서버 결과를 HTML에서 보여 주는 구조 (권장)** 서버(또는 매일 스크립트)가 확인 → `tabs/compliance/static/monitor-data.js`(예: `window.REBOOT_MONITOR = {...}`)로 저장 → HTML은 `<script src>`로 읽기만 (더블클릭 실행 유지, 키 없음) → 첫 확인은 '기준 저장'만, 이후 🆕 새 항목 · 🔄 변경 표시. 키 발급·수동 확인 방법은 [부록 A](#부록-a-키-발급--신청--수동-확인).
 
@@ -505,6 +505,7 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-25 | **파트 검토 반영** — ① 규칙 빈틈: 일반어 'liver'(Good for your liver · keeps your liver happy)·음주 전후 시점(Take before drinking · after drinking · 음주 전/후·술 마시기 전)을 R8로 · ② **서버 재검사가 제품을 구분**: `server_rules.json`에 byProduct·products·제품별 golden · `server_review.review(text, channel, product)` ("all"=4종 중 가장 엄격) · CS 승인·발송이 문의 제품을 함께 보냄(모르면 가장 엄격 → Original 문의에 'Zero Sugar' 답장은 거절) · CS 화면 재점검도 같은 기준 · ③ 원료 표: 헛개·A-HAT 젤리·음료 판정을 ok → **조건부**(미국 원료 근거 확인 전) · 원료 문서 ✅ 표에서 ⚠️로 이동 · ④ 제품 시트: 원료 문구에서 '특허 조성물' 삭제(콘텐츠 AI가 patented를 쓰지 않게) · Balance `sugar_reduced` false(공용 서버가 '당류 저감 개발 목표'로 잘못 보여 줌 · Zero Sugar 조건부는 direction 칸) · ⑤ 옛 사실 시험 문장(망고·젤리 스틱) 교체 · ⑥ **AI 2차 판정 카드 접기**(처음엔 펼침) |
 | 2026-10-25 | **제품 최종 정보 반영** (노션 · 팀 확정) — 가격 젤리 $17.99·$19.99 / 음료 낱개 $4.99·$5.49 · 3병 박스 $12.99·$14.49 · 젤리 **봉지당 10개** · 한글 이름 Reboot 젤리·제로슈가 젤리·음료·제로슈가 음료 · Rebu 표기 · **Zero Sugar는 표기 조건 충족 가정 → Balance 제품 기준 R12 PASS**(Original·전체 제품 BLOCK · 제품 미지정 COND · 규칙 판정이 PASS면 결과 카드에 안 나옴 · 서버 재검사도 같음) · R15에서 '10 jellies per pouch'는 확정 사실로 제외 · CS: `zeroSugarFinal` true · 'one pouch of 10' · AI 초안 규칙 9에서 봉지당 개수 금지 뺌 · few-shot 3번 '10개' · AI 2차 판정 지시문 · 제품 시트(`data/products.json`: `pack_count`·`price_box` 새 칸 · 원료 칸은 'A-HAT + 헛개나무 열매'만, 특허 설명은 AI에 안 들어가는 notes 칸) · 로컬 DB 갱신 |
 | 2026-10-25 | **문구 검토 요청 (법무·인허가·품질)** — 단건 심의 [검토 요청] → 팀 선택 + 메모 → 서버가 규칙 재검사 후 저장(`DATA_DIR/compliance/review-requests.json` · 링크 토큰은 지문만) · Slack 채널 알림(`SLACK_WEBHOOK_URL` · 없으면 링크를 직접 전달) · 팀마다 **로그인 없는 1회용 회신 링크** `/review/<토큰>`(14일 · 분당 30회) → 승인·수정 필요·반려 + 의견(수정·반려는 이유 필수) → 단건 심의 문구 아래에 팀별 상태 · Slack 회신 알림 · `review_requests.py` · 테스트 2개 |
+| 2026-10-26 | **Firecrawl 자동 수집 4곳** (예전 '사람이 확인' 바로가기 → 수집 결과 · `FIRECRAWL_API_KEY` · 인사이트 Weee!와 월 1,000 크레딧 같이 씀) — **NAD 광고 심의 결정**(`nad-decisions` · 매일 · NAD·NARB만 · 식품·음료 결정의 따옴표 문구는 사례집 후보) · **FTC 보도자료**(`ftc-press` · 매일 · 제목에 광고·후기·건강·식품 · 합병 제외) · **Prop 65 60일 통지**(`prop65-notices` · 주 1회 · gummy·jelly·candy · 대마 제품·1년 넘은 통지 제외) · **올리브영 US 회원 정책**(`oliveyoung-policy` · 주 1회 · 갱신일이 바뀌면 🆕 · 기준·참고 › 기관·플랫폼 올리브영 카드에 갱신일). 주 1회 출처는 마지막 정상 수집 7일 안이면 다시 부르지 않음(한 달 약 80 크레딧). 기관에 NAD · CA · 플랫폼 추가 · '사람이 확인' 바로가기는 **Prop 65 물질 목록(OEHHA) 1곳**만 남김(원료와 맞춰 보는 기준을 정한 뒤 별도). 수집 결과로 규칙을 자동으로 바꾸지 않음(운영 원칙 그대로) · 테스트 `tests/test_compliance_monitor.py` 7개 |
 | 2026-10-24 | GPT 검토 반영 7차 (작은 버그) — ⑤ 부작용 접수에 **식품 자체 위해 가능성**(표시 안 된 알레르기·이물·오염·같은 로트 반복) 칸 → 증상이 가벼워도 '심각'(보고 대상 판단)으로 · 일반 건은 [규제 담당 검토로 올리기] · ⑰ 출처 안내에 수집 범위(최근 1년 · 최대 N건) · ⑱ HTML만 있는 메일 본문도 글로 바꿔 읽음 · ⑲ Gmail 기본 검색 `in:inbox -from:me newer_than:30d` + 다음 페이지(최대 100건) · ⑳ 연결 해제하면 환경변수 토큰(GMAIL_TOKEN_JSON)도 쓰지 않음(다시 로그인하면 풀림) · ㉑ 제품을 모르는 문의에는 성분·알레르기 공통값을 넣지 않고 [확인 필요] · ㉚ 제품 추정에 정식 제품명(Drink/Jelly Balance)·'저당 음료' 우선 · ㉛ 점검 기록에 규칙 버전·당시 걸린 표현 저장 |
 | 2026-10-24 | GPT 검토 반영 6차 — ㉒ 사례집 후보를 **문구 내용의 지문**으로 식별 (순번이 아니라서 재수집으로 순서가 바뀌어도 승인이 다른 문구로 옮겨 붙지 않음 · 승인한 문구와 글자가 다르면 다시 '후보') · README 정리: ㉖ 관세(‘한국산 전 품목 12.5%’ → 출처마다 10~12.5%, 자동차·철강 별도, 확정 HTS로 관세사 확인) · ㉕ 과즙 HACCP(젤리는 대상 아닐 가능성, 과즙 일부 음료는 원료 과즙만) · ㉙ 모조 총기 조문(15 CFR 1150 → CPSC 16 CFR Part 1272) · ㉜ R2 대체 표현에서 Morning-After 삭제 · 지난 상태 표 조각 삭제 · 규칙 표에 R13·R14 · 기관 안내의 관세 문장도 같게 |
 | 2026-10-24 | GPT 검토 반영 5차 (제출물) — AI 2차 판정 프롬프트 v3: **few-shot 예시 5개**(시험 문장과 겹치지 않음) · `checks`(AI가 확인한 것)·`uncertain`(확인 못 한 것) 출력 → 화면 표시 · **AI 사용량·예상 비용 기록**(`ai_usage.py`, 화면 '규칙·검증 › AI 사용량', 월 한도 `AI_MONTHLY_BUDGET_USD` 기본 30달러 넘으면 AI만 멈춤) · **프롬프트 로그** `docs/PROMPT_LOG.md` (버전 기록 · 할루시네이션 제어 · v2→v3 같은 문장 비교: 규칙이 놓친 위험 5개를 AI가 모두 잡음, 정답 일치 4/8 → 5/8 · 실험 비용 $0.53) |
@@ -548,7 +549,7 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 - [ ] AI 검토자 페르소나 문안 확정 (화면 '단건 심의 → AI 검토자 페르소나')
 - [ ] AI 지시문(`ai_review.py`)의 당류 기준을 R11·R12 끈 결정과 맞출지 결정
 - [x] 무료 키 발급 (Regulations.gov · CourtListener · FDA Data Dashboard) → `.env`
-- [x] 월 1회 수동 확인 → 자동 전환 (2026-10-24): CBP CROSS · FDA 수입 거부(Data Dashboard 키) · Federal Register(FTC 공고) 자동 수집. 자동으로 못 읽는 NAD · Prop 65 · FTC 보도자료 · 수입 경보 33-15는 규제 모니터링 '바로가기로 확인하는 곳' 버튼
+- [x] 월 1회 수동 확인 → 자동 전환 (2026-10-24): CBP CROSS · FDA 수입 거부(Data Dashboard 키) · Federal Register(FTC 공고) 자동 수집. 자동으로 못 읽는 NAD · Prop 65 · FTC 보도자료 · 수입 경보 33-15는 규제 모니터링 '바로가기로 확인하는 곳' 버튼 → 2026-10-26 NAD · FTC 보도자료 · Prop 65 60일 통지 · 올리브영 정책은 Firecrawl 자동 수집 (남은 바로가기: Prop 65 물질 목록)
 
 **CS**
 - [x] 컴플라이언스 재검사를 `REBOOT.use('compliance').review`로 연결
@@ -606,7 +607,8 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 🔑 무료 키 | Regulations.gov | 이메일로 키 받기 → `.env` | 5분 |
 | 🔑 무료 토큰 | CourtListener | 가입 → 토큰 복사 → `.env` | 10분 |
 | 📝 신청 | FDA Data Dashboard API | 계정·인증키 신청 (승인 필요) · 그 전에는 주 1회 파일 다운로드 | 며칠 이상 |
-| 👀 수동 | CBP CROSS · FTC 가이드 · NAD · Prop 65 | 월 1회 사람이 확인 | 월 30분 |
+| 🔑 키 (이미 있음) | Firecrawl (NAD · FTC 보도자료 · Prop 65 통지 · 올리브영 정책) | 설정 › 연결의 `FIRECRAWL_API_KEY` 그대로 사용 | — |
+| 👀 수동 | FTC 가이드 · Prop 65 물질 목록 | 월 1회 사람이 확인 | 월 15분 |
 
 - **A-1. Regulations.gov** (규칙 제정·의견 수렴) · https://api.data.gov/signup/ → 이름·이메일 → **Signup** → 이메일의 **API Key**를 `REGULATIONS_GOV_API_KEY=`에 · 공용 `DEMO_KEY`는 운영에 쓰지 않음 · 설명서 https://open.gsa.gov/api/regulationsgov/
 - **A-2. CourtListener** (미국 연방 법원 사건) · https://www.courtlistener.com → **Sign in / Register** → 이메일 인증 → 프로필 메뉴의 **API(Developer) 토큰** 복사 (메뉴 이름은 바뀔 수 있음 · https://www.courtlistener.com/help/api/rest/) → `COURTLISTENER_TOKEN=` · (선택) 웹사이트 **알림(Alert)**으로 새 사건 이메일 수신 (하루 평균 30건 넘는 넓은 검색어는 거절되니 좁게)

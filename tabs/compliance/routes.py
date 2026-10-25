@@ -155,7 +155,7 @@ def letters_text():
     return jsonify(dict(saved, letters=out))
 
 
-@jobs.daily("compliance-monitor", "규제 모니터링 수집 (FDA 경고장·수입 거부 · openFDA · Regulations.gov · CourtListener · CBP CROSS · Federal Register)")
+@jobs.daily("compliance-monitor", "규제 모니터링 수집 (FDA 경고장·수입 거부 · openFDA · Regulations.gov · CourtListener · CBP CROSS · Federal Register · Firecrawl: NAD·FTC 보도자료·Prop 65 통지·올리브영 정책)")
 def daily_monitor():
     current_app.logger.info("규제 모니터링 수집 시작")
     _collect_and_save(bodies=True)
