@@ -517,10 +517,43 @@ def monthly_view(month=None, t=None):
         "insights": data.get("insights") or rule_insights, "insightsAi": bool(data.get("insights")),
         "competitorTrends": data.get("competitor_trends") or rule_comp, "competitorAi": bool(data.get("competitor_trends")),
         "strategy": {k: data.get(k) for k in ("changes", "personas", "swot", "target", "positioning")} if row else None,
+        "priorities": review_priorities(rev),
         "prevStrategy": bool(prev_row),
         "sources": data.get("sources"),
         "questions": q, "expressions": ex,
     }
+
+
+# ───────── 개선 우선순위 (자사 불만 리뷰 · 규칙 계산) ─────────
+
+SEVERITY = {"부작용": 3, "효과": 2}   # 나머지 주제는 1
+CHECK_TOPICS = {"부작용"}              # 순위와 따로 CS · 컴플라이언스가 확인
+PRIORITY_BASIS = "자사 불만 리뷰 건수 × 심각도(부작용 3 · 효과 2 · 나머지 1) · 규칙 계산 · 참고용"
+
+
+def _recent_reviews():
+    return Review.query.order_by(Review.collected_at.desc()).limit(1000).all()
+
+
+def review_priorities(rows=None):
+    """자사 불만 주제 순위 (건수 × 심각도). 부작용은 check → CS · 컴플라이언스가 따로 확인."""
+    rows = _recent_reviews() if rows is None else rows
+    count, channels, total = Counter(), defaultdict(set), 0
+    for r in rows:
+        if not r.own or r.sentiment != "-":
+            continue
+        total += 1
+        for tp in r.topic_list():
+            count[tp] += 1
+            channels[tp].add(REVIEW_SOURCE_LABEL.get(r.source, r.source))
+    items = []
+    for tp, n in count.items():
+        ch = sorted(channels[tp])
+        w = SEVERITY.get(tp, 1)
+        items.append({"topic": tp, "count": n, "weight": w, "score": n * w, "channels": ch,
+                      "check": tp in CHECK_TOPICS})
+    items.sort(key=lambda x: (-x["score"], -x["count"]))
+    return {"items": items, "total": total, "basis": PRIORITY_BASIS}
 
 
 def monthly_payload(month, t=None):

@@ -6,7 +6,7 @@
    - 검색 수요 탭은 2026-10-25 삭제 → '다음 급등 예상'은 홈 › 콘텐츠 캘린더 맨 아래로 옮김
    - 판단은 규칙(서버 rules.py), AI는 문장 · 분류 · 요약만 (AI 배지 · 참고용)
    - 데이터 업데이트는 서버가 뒤에서 실행 → 이 화면은 진행 상황만 봄
-   - 다른 파트에는 REBOOT.use('insights')로 searchTrend · personas · weeklySignals · contentBrief 공개 (Promise · 없으면 빈 값)
+   - 다른 파트에는 REBOOT.use('insights')로 searchTrend · personas · weeklySignals · contentBrief · reviewPriorities 공개 (Promise · 없으면 빈 값)
    - 콘텐츠 브리프(월간 리뷰 맨 아래 카드 · 서버 brief.py): 사람이 승인한 것만 contentBrief()로 콘텐츠 탭에 넘김
    주소: #weekly · #market/brands · #customers/reviews 처럼 바로 열 수 있음 (옛 #data/… 주소는 새 주소로 넘김) */
 (function (global) {
@@ -86,7 +86,13 @@
   function contentBrief() {
     return api('/api/insights/brief').then(v => (v && Array.isArray(v.themes) ? copy(v) : null)).catch(() => null);
   }
-  REBOOT.expose('insights', { searchTrend, personas, weeklySignals, contentBrief });
+  // 자사 불만 주제 순위 (규칙 계산 · CS 답변 템플릿 참고용) — 오류면 null
+  let prioP = null;
+  function reviewPriorities() {
+    if (!prioP) prioP = api('/api/insights/priorities').catch(() => { prioP = null; return null; });
+    return prioP.then(v => (v && Array.isArray(v.items) ? copy(v) : null));
+  }
+  REBOOT.expose('insights', { searchTrend, personas, weeklySignals, contentBrief, reviewPriorities });
 
   /* ───────── 상태 ───────── */
   const S = {
@@ -742,6 +748,22 @@
       </span></button>`;
   }
 
+  // 개선 우선순위 카드 (서버 review_priorities · 규칙 계산): 자사 불만 건수 × 심각도. 부작용은 CS · 컴플라이언스 확인 표시
+  function prioritiesCard(p) {
+    const items = p && p.items ? p.items : [];
+    const rows = items.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.topic)}</b>
+        ${x.check ? ' ' + badge('CS · 컴플라이언스 확인', 'red') : ''}</td>
+        <td class="num">${esc(x.count)}건</td><td class="num">×${esc(x.weight)} = <b>${esc(x.score)}</b></td>
+        <td class="small">${esc(x.channels.join(' · '))}</td></tr>`).join('');
+    const body = items.length
+      ? `<div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>#</th><th>불만 주제</th><th class="num">건수</th><th class="num">점수</th><th>채널</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>
+        <p class="small muted mt-8">${esc(p.basis)} · 불만 리뷰 ${esc(p.total)}건 기준이에요.
+          <a class="link" href="#customers/reviews">리뷰 목록 보기</a></p>`
+      : '<p class="small muted">자사 불만 리뷰가 아직 없어요.</p>';
+    return `<section class="card"><div class="card-head"><h2>개선 우선순위</h2>${badge('규칙 계산')}</div>${body}</section>`;
+  }
+
   // 자료 출처 카드 (월간 리뷰 맨 아래, 가로형): 어떤 칸이 AI 분석인지 + AI가 읽은 자료 개수(월간 분석 실행 때 실제로 넘긴 값 · 0개는 뺌)
   function sourcesCard(m) {
     const ai = [m.summary.length && '이달의 요약', m.insightsAi && '고객 인사이트', m.competitorAi && '경쟁사 동향', m.strategy && '전략 업데이트'].filter(Boolean);
@@ -816,6 +838,7 @@
           ${m.competitorTrends.length ? `<ul class="ins-ul">${m.competitorTrends.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="small muted">경쟁사 데이터가 없어요.</p>'}
           <a class="link mt-8" href="#market/brands">브랜드 비교 보기 ${icon('arrow')}</a></section>
       </div>
+      ${prioritiesCard(m.priorities)}
       <section class="card"><div class="card-head"><h2>전략 업데이트</h2>${st ? badge('AI 분석', 'purple') : ''}</div>${strategy}</section>
       <section class="card ins-brief" data-ref="brief">${skel}</section>
       ${sourcesCard(m)}

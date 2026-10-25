@@ -29,6 +29,7 @@
 다른 파트 공개 (REBOOT.use('insights'))
   GET   /api/insights/trends                   {keywords:[{keyword, points:[{date, value}]}], updatedAt}
   GET   /api/insights/personas                 [{name, oneLine, needs, message}]
+  GET   /api/insights/priorities               자사 불만 주제 순위 {items:[{topic, count, weight, score, channels, check}], total, basis}
   GET   /api/insights/brief                    콘텐츠 브리프 승인본 (없으면 null) — brief.public()
 콘텐츠 브리프 (월간 리뷰 화면 · brief.py)
   GET   /api/insights/brief/draft?month=       이 달 초안 + 공개 중인 승인본 요약
@@ -414,6 +415,11 @@ def trends_expose():
 @bp.get("/personas")
 def personas_expose():
     return jsonify(service.personas_expose())
+
+
+@bp.get("/priorities")
+def priorities_expose():
+    return jsonify(service.review_priorities())
 
 
 @bp.get("/brief")
