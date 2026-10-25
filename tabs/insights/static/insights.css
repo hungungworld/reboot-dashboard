@@ -34,27 +34,56 @@
 .part-insights .ins-mark .icon { width: 15px; height: 15px; }
 .part-insights .ins-steps-list li.ok .ins-mark { color: var(--green); }
 
-/* 이번 주 액션 */
-.part-insights .ins-action { border: 1px solid var(--line); border-left: 4px solid var(--line-2); border-radius: 12px; padding: 16px 18px; background: var(--surface); }
-/* 등급 색은 월간 리뷰 SWOT 테두리와 같은 연한 색 */
-.part-insights .ins-action.urgent { border-left-color: #f9cccc; }
-.part-insights .ins-action.chance { border-left-color: #bfead2; }
-.part-insights .ins-action.info { border-left-color: #c7ddf8; }
-.part-insights .ins-action-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.part-insights .ins-fact { font-size: 15px; font-weight: 700; color: var(--ink); margin: 10px 0 14px; line-height: 1.55; }
-.part-insights .ins-steps { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.part-insights .ins-steps > div { padding: 12px 14px; border-radius: 10px; background: var(--surface-2); font-size: 12.5px; line-height: 1.65; }
-.part-insights .ins-steps > div.todo { background: var(--lime-wash); box-shadow: inset 0 0 0 1px var(--lime-soft-line); }
-.part-insights .ins-steps dt { color: var(--muted); font-size: 11px; font-weight: 700; margin-bottom: 4px; }
-.part-insights .ins-steps > div.todo dt { color: var(--lime-ink); }
-.part-insights .ins-steps dd { margin: 0; color: var(--ink); }
-.part-insights .ins-action-rule { margin: 10px 0 0; font-size: 12px; color: var(--muted-2); }
-/* 참고 액션: 접은 상자 안에 한 줄씩 */
-.part-insights .ins-ref { border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px; background: var(--surface); }
-.part-insights .ins-ref > summary { font-size: 13px; }
-.part-insights .ins-ref-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink); }
-.part-insights .ins-ref-row:first-of-type { margin-top: 10px; }
-.part-insights .ins-ref-row .link { flex: none; }
+/* 이번 주 액션: 한 줄 목록 (점 · 제목 · 회색 한 줄 · 오른쪽 숫자) → 누르면 근거 칩 · 할 일 단계 · 근거 보기 */
+.part-insights .ins-aw-seg { display: inline-flex; background: var(--soft); border-radius: 10px; padding: 3px; }
+.part-insights .ins-aw-seg button { border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+.part-insights .ins-aw-seg button.on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 3px rgba(21, 21, 36, .08); }
+.part-insights .ins-aw-seg b { font-weight: 650; margin-left: 3px; }
+.part-insights .ins-aw { margin: 0 -10px; }
+.part-insights .ins-aw-row { border-top: 1px solid var(--line-3); }
+.part-insights .ins-aw-row:first-child { border-top: 0; }
+.part-insights .ins-aw-btn { width: 100%; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 16px; gap: 16px; align-items: center;
+  padding: 15px 12px; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 12px; }
+.part-insights .ins-aw-btn:hover { background: var(--surface-2); }
+.part-insights .ins-aw-row.open .ins-aw-btn { background: var(--soft-2); border-radius: 12px 12px 0 0; }
+.part-insights .ins-aw-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+.part-insights .urgent .ins-aw-dot { background: #e0573c; }
+.part-insights .chance .ins-aw-dot { background: #8fa81a; }
+.part-insights .ins-aw-refrow .ins-aw-dot { background: #8f93c9; }
+.part-insights .ins-aw-text { min-width: 0; display: grid; gap: 3px; }
+.part-insights .ins-aw-t { font-size: 15px; font-weight: 650; color: var(--ink); letter-spacing: -.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-insights .ins-aw-s { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-insights .ins-aw-num { text-align: right; min-width: 72px; }
+.part-insights .ins-aw-num b { display: block; font-size: 20px; font-weight: 720; letter-spacing: -.5px; font-variant-numeric: tabular-nums; line-height: 1.15; color: var(--ink-2); }
+.part-insights .urgent .ins-aw-num b { color: var(--red); }
+.part-insights .chance .ins-aw-num b { color: var(--green); }
+.part-insights .ins-aw-num small { font-size: 11px; color: var(--muted-2); }
+.part-insights .ins-aw-chev { width: 16px; height: 16px; color: var(--faint); transition: transform .2s; }
+.part-insights .ins-aw-row.open .ins-aw-chev, .part-insights .ins-aw-ref[open] > summary .ins-aw-chev { transform: rotate(180deg); }
+.part-insights .ins-aw-detail { background: var(--soft-2); border-radius: 0 0 12px 12px; padding: 2px 20px 18px 38px; margin-bottom: 6px; }
+.part-insights .ins-aw-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.part-insights .ins-aw-chip { font-size: 12px; padding: 4px 9px; border-radius: 7px; background: var(--surface); border: 1px solid var(--line); color: var(--text); }
+.part-insights .ins-aw-chip a { color: inherit; text-decoration: none; }
+.part-insights .ins-aw-chip a:hover { text-decoration: underline; }
+.part-insights .ins-aw-subs { margin: 0 0 14px; padding: 0; list-style: none; display: grid; gap: 6px; }
+.part-insights .ins-aw-subs li { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px; }
+.part-insights .ins-aw-subs b { color: var(--green); font-variant-numeric: tabular-nums; }
+.part-insights .ins-aw-lbl { font-size: 11px; font-weight: 650; color: var(--muted-2); margin: 0 0 6px; }
+.part-insights .ins-aw-steps { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.85; color: var(--ink); }
+.part-insights .ins-aw-comp { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+.part-insights .ins-aw-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.part-insights .ins-aw-ref { border-top: 1px solid var(--line-3); }
+.part-insights .ins-aw-ref > summary { display: flex; align-items: center; gap: 8px; padding: 14px 12px; font-size: 13px; color: var(--muted); cursor: pointer; list-style: none; }
+.part-insights .ins-aw-ref > summary::-webkit-details-marker { display: none; }
+.part-insights .ins-aw-refrow { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 11px 12px; border-top: 1px solid var(--line-3); }
+.part-insights .ins-aw-refrow .ins-aw-t { font-size: 14px; font-weight: 500; }
+.part-insights .ins-aw-refrow a { color: inherit; text-decoration: none; }
+.part-insights .ins-aw-refrow a:hover { text-decoration: underline; }
+.part-insights .ins-aw-refrow small { font-size: 12px; color: var(--muted-2); white-space: nowrap; }
+@media (max-width: 640px) {
+  .part-insights .ins-aw-s { white-space: normal; }
+  .part-insights .ins-aw-detail { padding-left: 20px; }
+}
 .part-insights .ins-facts a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .part-insights .ins-facts a .icon { width: 11px; height: 11px; }
 .part-insights .ins-signal { padding: 12px 0; border-bottom: 1px solid var(--line-3); }
@@ -124,8 +153,6 @@
 .part-insights .ins-line-in { width: 100%; margin-bottom: 4px; }
 .part-insights .ins-warn { color: var(--orange); font-weight: 600; }
 @media (max-width: 900px) { .part-insights .ins-lines { grid-template-columns: 1fr; } }
-.part-insights .ins-big { font-size: 28px; font-weight: 720; letter-spacing: -1px; color: var(--ink); }
-.part-insights .ins-big span { font-size: 13px; font-weight: 500; margin-left: 3px; }
 .part-insights .ins-season-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line-3); }
 .part-insights .ins-season-row:last-of-type { border-bottom: 0; }
 .part-insights .ins-season-row b { font-size: 12px; }
@@ -646,14 +673,6 @@
 .part-insights .ins-tbl-q { max-width: 320px; }
 
 /* 데이터 › 뉴스 수집 (홈에서 보관한 기사) */
-.part-insights .ins-news { display: flex; gap: 12px; align-items: flex-start; }
-.part-insights .ins-news-main { flex: 1; min-width: 0; }
-.part-insights .ins-news-main b a { color: inherit; text-decoration: none; }
-.part-insights .ins-news-main b a:hover { text-decoration: underline; }
-.part-insights .ins-news-why { color: var(--ink-2); }
-.part-insights .ins-news-why b { color: var(--lime-deep); margin-right: 4px; }
-.part-insights .ins-news-unsave { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--lime-deep); border-color: var(--lime-deep); }
-.part-insights .ins-news-unsave .icon { width: 13px; height: 13px; fill: currentColor; }
 
 /* 유튜브 댓글: 사기 전에 묻는 것 (주제별 막대) */
 .part-insights .ins-aud-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
@@ -671,10 +690,6 @@
 .part-insights .ins-aud-cm:hover { background: var(--soft-2); }
 .part-insights .ins-aud-cm:hover small { color: var(--lime-deep); }
 .part-insights .ins-aud-cm .icon { width: 11px; height: 11px; vertical-align: -1px; }
-.part-insights .ins-news-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
-.part-insights .ins-news-tools .input { flex: 1; min-width: 220px; }
-.part-insights .ins-news-count { margin: 8px 0 0; }
-.part-insights .ins-news mark { background: color-mix(in srgb, var(--lime) 55%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 /* 리뷰 카드 › 슬랙으로 보내기: 미리 보기 + 한마디 + 보내기 (사람이 눌러야 보냄) */
 .part-insights .ins-slack { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--soft-2); }
 .part-insights .ins-slack-pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 12px; line-height: 1.6; color: var(--text); max-height: 220px; overflow: auto; }

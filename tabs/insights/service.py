@@ -339,10 +339,17 @@ def run_dict(r):
 
 def comp_changes(now, prev):
     """이번 주 경쟁사 변화 — 경쟁사 탭 · 주간 리뷰 요약이 같은 숫자를 쓰도록 여기서만 계산 → (변화 목록 또는 None, 예시 여부)."""
-    changes = competitors.weekly_changes(now, prev)
+    changes, demo = competitors.weekly_changes(now, prev), False
     if changes is None and any(not x["own"] for x in now):   # 지난주 수집이 없으면 시연용 예시 지난주와 비교 (화면에 '예시' 배지)
-        return competitors.weekly_changes(now, competitors.demo_prev(now)), True
-    return changes, False
+        changes, demo = competitors.weekly_changes(now, competitors.demo_prev(now)), True
+    # 곧 품절 (Amazon '몇 개 안 남음'이 LOW_STOCK 이하) → 기회 칸. 지난주와 비교 없이 이번 주 재고만 봄
+    low = [{"kind": "low", "group": "chance", "label": "곧 품절", "brand": (x.get("line") or {}).get("brand") or x["brand"],
+            "source": x["sourceLabel"], "title": x["title"][:120], "link": x.get("link") or "", "left": x["stockLeft"],
+            "impact": "품절되면 바로 켤 '즉시 출고' 소재와 경쟁 키워드 광고를 미리 준비하세요."}
+           for x in now if not x["own"] and x["in_stock"] is not False and x.get("stockLeft") is not None and x["stockLeft"] <= lines.LOW_STOCK]
+    if changes is None:
+        return (low or None), demo
+    return changes + low, demo
 
 
 def weekly_view(t=None):

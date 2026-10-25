@@ -11,11 +11,11 @@
   const store = REBOOT.store('compliance');   // 저장 키: reboot:compliance:*
   const KEY = { history: 'history', openfda: 'openfda-cache', fedreg: 'fedreg-cache', monitor: 'monitor', journey: 'journey', persona: 'persona' };
   const PERSONA_MAX = 600;
-  const ALL = 'all';   // 채널·제품 '전체' (모든 조합으로 점검 → 가장 엄격한 판정)
+  const ALL = 'all';   // 채널·제품 '전체' (모든 조합으로 심의 → 가장 엄격한 판정)
   const RULE_SPAN = `R1~R${DATA.rules.length}`;   // 화면 문구용 (규칙이 늘면 자동으로 바뀜)   // 서버(ai_review.py)도 600자에서 자름
   const RANK = { PASS: 0, COND: 1, REVIEW: 2, REVISE: 3, BLOCK: 4 };
-  const LABEL = { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '규칙 미탐지' };
-  const BASIS = { official: '⚖️ 공식 근거', platform: '📱 플랫폼 정책', internal: '🏢 내부 정책', context: '🔍 문맥 검토' };
+  const LABEL = { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '걸린 표현 없음' };
+  const BASIS = { official: '공식 근거', platform: '플랫폼 정책', internal: '내부 정책', context: '문맥 검토' };
   // 법적 신호 (2026-10-25 · 판정과 별도 축): 이 표현이 법으로 막히는지, 법무가 볼 회색지대인지, 팀·플랫폼 기준인지
   const LIGHT_RANK = { '': 0, green: 1, yellow: 2, red: 3 };
   const LIGHT = {
@@ -55,7 +55,7 @@
     _allow: (r.allow || []).map(s => new RegExp(s, 'gi'))
   }));
 
-  // 꺼 둔 규칙(당 함량 R11·R12): 판정은 하지 않지만, 해당 표현이 있으면 'PASS'가 아니라 '점검하지 않은 표현'이라고 알려 줌 (GPT 검토 ⑥)
+  // 꺼 둔 규칙(당 함량 R11·R12): 판정은 하지 않지만, 해당 표현이 있으면 'PASS'가 아니라 '심의하지 않은 표현'이라고 알려 줌 (GPT 검토 ⑥)
   const OFF_RULES = DATA.rules.filter(r => r.off).map(r => Object.assign({}, r, {
     _re: r.terms.map(t => new RegExp(termPattern(t), 'gi')).concat((r.patterns || []).map(s => new RegExp(s, 'gi')))
   }));
@@ -90,7 +90,7 @@
   }
 
   /**
-   * @param {string} text 점검할 문구
+   * @param {string} text 심의할 문구
    * @param {{channel?: 'b2c'|'amazon'|'cs'|'b2b', category?: 'FOOD'|'SUPPLEMENT'}} [opts]
    * @returns {{verdict: string, findings: object[], codes: string[], channel: string, category: string}}
    */
@@ -142,7 +142,7 @@
     return findings.reduce((l, f) => (LIGHT_RANK[f.legal] > LIGHT_RANK[l] ? f.legal : l), '');
   }
 
-  /** '전체 채널'·'전체 제품': 모든 조합으로 점검 → 가장 엄격한 판정 · 규칙마다 가장 엄격한 쪽을 남김.
+  /** '전체 채널'·'전체 제품': 모든 조합으로 심의 → 가장 엄격한 판정 · 규칙마다 가장 엄격한 쪽을 남김.
       variants에 조합별 판정을 담아, 채널·제품에 따라 판정이 다르면 화면에 따로 알려 줌 */
   function reviewAll(text, opts) {
     const channels = opts.channel === ALL ? (DATA.pickChannels || Object.keys(DATA.channels)) : [DATA.channels[opts.channel] ? opts.channel : 'b2c'];
@@ -169,7 +169,7 @@
       unchecked: uncheckedOf(String(text == null ? '' : text).replace(/\*/g, ' ')) };
   }
 
-  /** 전체로 점검했을 때 조합에 따라 판정이 갈리면 한 줄 안내 (예: 'B2B 바이어 자료에서는 REVIEW') */
+  /** 전체로 심의했을 때 조합에 따라 판정이 갈리면 한 줄 안내 (예: 'B2B 바이어 자료에서는 REVIEW') */
   function variantNote(r) {
     const vs = r.variants || [];
     if (vs.length < 2 || vs.every(x => x.verdict === r.verdict)) return '';
@@ -198,9 +198,9 @@
 
   function saveHistory(list) { store.set(KEY.history, list.slice(0, 500)); }
 
-  // 점검 기록: 마케터가 자기 대시보드에서 쓰므로 승인·반려 없이 점검할 때마다 저장합니다 (2026-10-25부터 입력하면 자동 점검).
-  // 같은 문구·채널·제품·기준을 연달아 점검하면 맨 위 한 줄만 갱신합니다. (예전 '검토 요청' 이력도 그대로 읽힘)
-  // 자동 점검이라 글을 쓰는 중간 문장이 쌓이지 않게, 2분 안에 같은 문장을 이어 쓰거나 지운 것도 같은 줄로 봄
+  // 심의 기록: 마케터가 자기 대시보드에서 쓰므로 승인·반려 없이 심의할 때마다 저장합니다 (2026-10-25부터 입력하면 자동 심의).
+  // 같은 문구·채널·제품·기준을 연달아 심의하면 맨 위 한 줄만 갱신합니다. (예전 '검토 요청' 이력도 그대로 읽힘)
+  // 자동 심의이라 글을 쓰는 중간 문장이 쌓이지 않게, 2분 안에 같은 문장을 이어 쓰거나 지운 것도 같은 줄로 봄
   function recordCheck(text, r) {
     const list = loadHistory();
     const top = list[0];
@@ -303,13 +303,24 @@
   }
   function badge(v) {
     if (!LABEL[v]) return `<span class="cmp-badge">${esc(v)}</span>`;   // 저장소에서 읽은 알 수 없는 값
-    return `<span class="cmp-badge cmp-v-${v}">${v} · ${LABEL[v]}</span>`;
+    return `<span class="cmp-badge cmp-v-${v}" title="${v}">${LABEL[v]}</span>`;   // 코드(BLOCK 등)는 마우스를 올리면
   }
   /** 법적 신호 칩 (뜻은 마우스를 올리면) */
   function light(l) {
     const x = LIGHT[l];
-    return x ? `<span class="cmp-light cmp-light-${l}" title="${esc(x.help)}">${x.icon} ${x.label}</span>` : '';
+    return x ? `<span class="cmp-light cmp-light-${l}" title="${esc(x.help)}">${ldot(l)}${x.label}</span>` : '';
   }
+  /* 화면 말 3층 (2026-10-26 · data.js plain): ① say 한 줄 결론 · ② todo 할 일 · ③ 근거(기존 글)는 접힘 */
+  const PLAIN = (DATA && DATA.plain) || {};
+  const plainOf = (kind, code) => ((PLAIN[kind] || {})[code]) || {};
+  function todoHTML(list) {
+    return list && list.length ? `<ul class="cmp-todo">${list.map(t => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
+  }
+  // 원료는 상태가 곧 결론 (새 문장을 쓰지 않음)
+  const ING_SAY = { confirmed: '이름은 써도 돼요 · 효과는 못 써요', candidate: '확정 전이라 문구에 못 써요', avoid: '넣지 않기로 한 원료예요', base: '배합용 원료예요 · 문구와 무관' };
+
+  /** 법적 신호 점 (이모지 대신 · 2026-10-26) */
+  function ldot(l) { return LIGHT[l] ? `<span class="cmp-ldot cmp-ldot-${l}" aria-hidden="true"></span>` : ''; }
   // 선 아이콘 (시안과 같은 1.65 두께 스트로크)
   const ICON_PATH = {
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -318,7 +329,10 @@
     list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="18" r=".6"/>',
     shield: '<path d="M12 3 5 6v5.5c0 4.4 2.9 8.3 7 9.5 4.1-1.2 7-5.1 7-9.5V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>',
     spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4"/><path d="m12 8 1.5 2.5L16 12l-2.5 1.5L12 16l-1.5-2.5L8 12l2.5-1.5L12 8Z"/>',
-    refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 20v-4h-4"/>'
+    refresh: '<path d="M20 11a8 8 0 0 0-14.6-4.5L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.6 4.5L20 16"/><path d="M20 20v-4h-4"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    x: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
+    alert: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/>'
   };
   function icon(name) {
     return `<svg class="cmp-icon" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATH[name] || ''}</svg>`;
@@ -354,14 +368,17 @@
   // 표처럼 좁은 칸에는 괄호 설명을 뺀 이름 ('B2C 광고·SNS')
   function channelShort(c) { return channelLabel(c).replace(/\s*\(.*\)$/, ''); }
   const PICK = DATA.pickChannels || Object.keys(DATA.channels);
-  function channelOptions(selected) {
-    return `<option value="${ALL}"${selected === ALL ? ' selected' : ''}>전체 채널 (B2C·B2B 모두 점검)</option>` + PICK.map(k => [k, DATA.channels[k]]).map(([k, v]) => `<option value="${k}"${k === selected ? ' selected' : ''}>${esc(v)}</option>`).join('');
+  // 단건 심의 알약에는 짧은 이름 (긴 설명은 목록을 펼치면 title로)
+  const CH_SHORT = { b2c: 'B2C 광고·SNS', amazon: '아마존 상세페이지', cs: 'CS 답변', b2b: 'B2B 바이어 자료' };
+  function channelOptions(selected, short) {
+    return `<option value="${ALL}"${selected === ALL ? ' selected' : ''}>${short ? '전체 채널' : '전체 채널 (B2C·B2B 모두 심의)'}</option>` + PICK.map(k => [k, DATA.channels[k]]).map(([k, v]) =>
+      `<option value="${k}"${k === selected ? ' selected' : ''}${short ? ` title="${esc(v)}"` : ''}>${esc(short ? CH_SHORT[k] || channelShort(k) : v)}</option>`).join('');
   }
   // 제품 4종 (data.js products)
   function productOf(id) { return (DATA.products || []).find(p => p.id === id) || null; }
   function productLabel(id) { if (id === ALL) return '전체 제품'; const p = productOf(id); return p ? p.ko : '제품 미지정'; }
-  function productOptions(selected) {
-    return `<option value="${ALL}"${selected === ALL ? ' selected' : ''}>전체 제품 (${(DATA.products || []).length}종 모두 점검)</option>` + (DATA.products || []).map(p => `<option value="${p.id}"${p.id === selected ? ' selected' : ''}>REBOOT ${esc(p.ko)}${p.name ? ` (${esc(p.name)})` : ''} · ${esc(p.form)}</option>`).join('');
+  function productOptions(selected, short) {
+    return `<option value="${ALL}"${selected === ALL ? ' selected' : ''}>${short ? '전체 제품' : `전체 제품 (${(DATA.products || []).length}종 모두 심의)`}</option>` + (DATA.products || []).map(p => `<option value="${p.id}"${p.id === selected ? ' selected' : ''}${short ? ` title="${esc(`${p.name} · ${p.form}`)}"` : ''}>${short ? esc(p.ko) : `REBOOT ${esc(p.ko)}${p.name ? ` (${esc(p.name)})` : ''} · ${esc(p.form)}`}</option>`).join('');
   }
   // AI 2차 판정에 넘기는 제품 설명 (영문)
   function productBrief(id) {
@@ -492,14 +509,61 @@
     return '\uFEFF' + rows.map(r => r.map(cell).join(',')).join('\r\n');
   }
 
+  /* ───────── 줄바꿈: 문장 · 반점 단위 (인사이트 탭과 같은 규칙 · 2026-10-26) ─────────
+     글 묶음(p · li · .cmp-note …) 속 글자를 문장 끝 · 연결 어미 반점 뒤에서 나눠 <span class="cmp-ph">로 감쌈
+     → 문장이 바뀌는 곳에서 먼저 줄이 바뀌고, 한 문장이 길면 그 안에서 줄 길이를 고르게 (compliance.css)
+     숫자(1,234 · 3.5)·약어(U.S.)·날짜(10. 25.)는 안 나뉨. 표 · 버튼 · 배지 · 입력칸 · 인용 · 한 줄 칸은 건드리지 않음 */
+  const PH_BLOCK = 'p, li, dd, small, figcaption, blockquote, .cmp-note';
+  const PH_SKIP = 'table, button, .cmp-btn, label, .cmp-badge, .cmp-chip, .cmp-tag, .cmp-light, input, textarea, select, code, pre, svg, [contenteditable], .cmp-ed, .cmp-quote, .cmp-ph';
+  const PH_CUT = /(?<=[가-힣][.!?]|[a-z)\]'"”’]\.|(?:고|며|면|서|지만|는데|은데|니|도|게|요|다|해|어|아|죠),)(\s+)/;
+  function phrase(el) {
+    const blocks = el.matches(PH_BLOCK) ? [el] : [];
+    blocks.push(...el.querySelectorAll(PH_BLOCK));
+    blocks.forEach(b => {
+      if (b.closest(PH_SKIP)) return;
+      const cs = global.getComputedStyle(b);
+      if (cs.whiteSpace === 'nowrap' || cs.textWrapMode === 'nowrap') return;
+      const walk = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+      const texts = [];
+      for (let t = walk.nextNode(); t; t = walk.nextNode()) {
+        if (PH_CUT.test(t.nodeValue) && !t.parentElement.closest(PH_SKIP)) texts.push(t);
+      }
+      texts.forEach(t => {
+        const frag = document.createDocumentFragment();
+        t.nodeValue.split(PH_CUT).forEach((s, i) => {
+          if (i % 2 || !s.trim()) { frag.append(s); return; }
+          const sp = document.createElement('span');
+          sp.className = 'cmp-ph';
+          sp.textContent = s;
+          frag.append(sp);
+        });
+        t.replaceWith(frag);
+      });
+    });
+  }
+  // 화면은 innerHTML로 자주 다시 그려지므로, 새로 붙은 노드를 모아 한 번에 처리 (자세히 창 포함)
+  function watchPhrases(root) {
+    if (!global.MutationObserver) return;
+    const run = nodes => {
+      const todo = new Set();
+      nodes.forEach(n => {
+        const el = n.nodeType === 3 ? n.parentElement : n;
+        if (el && el.nodeType === 1 && el.isConnected) todo.add(el.closest(PH_BLOCK) || el);
+      });
+      todo.forEach(phrase);
+    };
+    new global.MutationObserver(ms => run(ms.flatMap(m => [...m.addedNodes]))).observe(root, { childList: true, subtree: true });
+    run([root]);
+  }
+
   /* ───────── 화면 ───────── */
 
   /* 탭 4개 (2026-10-26 개편: 단건·일괄 → 문구 심의, 규칙·검증·기관 안내 → 기준·참고)
      세부 탭은 패널 안의 두 번째 탭 줄 → core가 왼쪽 메뉴에 들여 써서 보여 줌 */
-  const TABS = [['review', '문구 심의'], ['history', '점검 기록'], ['monitor', '규제 모니터링'], ['refs', '기준·참고']];
+  const TABS = [['review', '문구 심의'], ['history', '심의 기록'], ['monitor', '규제 모니터링'], ['refs', '심의 기준']];
   const SUBS = {
-    review: [['single', '한 문구', 'shield'], ['batch', 'CSV 여러 줄', 'doc']],
-    refs: [['rules', '규칙 표', 'edit'], ['map', '한↔미 매핑', 'link'], ['ingredients', '원료 표', 'grid'], ['agencies', '기관·플랫폼', 'globe'], ['admin', '관리', 'user']]
+    review: [['single', '단건 심의', 'shield'], ['batch', '일괄 심의', 'doc']],
+    refs: [['rules', '심의 규칙', 'edit'], ['map', '대체 표현', 'link'], ['ingredients', '원료', 'grid'], ['agencies', '기관·플랫폼', 'globe'], ['admin', '관리자 설정', 'user']]
   };
   // 예전 탭 이름(data.js 기관 카드 goto · 자세히 창 버튼) → [탭, 세부 탭]
   const GOTO = { single: ['review', 'single'], batch: ['review', 'batch'], rules: ['refs', 'rules'], agencies: ['refs', 'agencies'], admin: ['refs', 'admin'] };
@@ -542,6 +606,8 @@
     root.addEventListener('click', e => {
       const tr = e.target.closest('[data-act="translate"]');
       if (tr && !tr.disabled) { runTranslate(tr.closest('[data-tr-text]')); return; }
+      const row = !e.target.closest('button, a') && e.target.closest('.cmp-rule-row');   // 규칙 표: 행 아무 곳이나 누르면 자세히 창
+      if (row && row.querySelector('.cmp-rule-name')) { row.querySelector('.cmp-rule-name').click(); return; }
       const td = e.target.closest('[data-act="term-detail"]');
       if (td) { if (td.closest('summary')) e.preventDefault(); openDetail(root, td.dataset.code, td.dataset.term, ctxOf(td)); return; }   // 접힌 카드 제목줄의 [자세히]는 카드를 펼치지 않음
       const pd = e.target.closest('[data-act="pass-detail"]');
@@ -552,7 +618,7 @@
         return;
       }
       const kpi = e.target.closest('[data-act="kpi"]');
-      if (kpi) {   // 점검 기록 위 숫자 카드 = 판정 필터 (다시 누르면 전체)
+      if (kpi) {   // 심의 기록 위 숫자 카드 = 판정 필터 (다시 누르면 전체)
         const hp = root.querySelector('[data-panel="history"]');
         hp.dataset.filter = hp.dataset.filter === kpi.dataset.filter ? 'all' : kpi.dataset.filter;
         renderHistory(root);
@@ -564,7 +630,7 @@
       if (!btn) return;
       const tab = showTab(btn.dataset.goto);
       if (btn.dataset.agency) {
-        showSub(root, 'manual');   // Federal Register 조회는 '사람이 확인' 메뉴에 있음
+        showSub(root, 'manual');   // Federal Register 조회는 '직접 확인할 곳' 메뉴에 있음
         const sel = root.querySelector('[data-el="fra"]');
         if (sel) {
           sel.value = btn.dataset.agency;
@@ -581,14 +647,12 @@
     renderHistory(root);
     wireRules(root);
     wireMonitor(root);
+    watchPhrases(root);
   }
 
-  /* 단건 심의 — 로드맵: ① 문구 입력 → ② 자동 점검 → ③ 수정·재점검 → ④ 사용
-     마케터가 자기 대시보드에서 쓰므로 검토 요청·승인 단계는 없습니다. BLOCK 문구만 복사를 막습니다.
-     진행 상태(문구·채널·점검한 문구)는 reboot:compliance:journey에 저장해 탭을 옮겨도 이어집니다. */
-
-  const STEPS = [['input', '문구 입력'], ['check', '자동 점검'], ['fix', '수정·재점검'], ['use', '사용']];
-  const STEP_ICON = { done: '✓', skip: '–', blocked: '✗' };
+  /* 한 문구 (2026-10-26 편집기형): 카피 칸에 걸린 표현 밑줄 → 위 판정 한 줄 → 오른쪽 요약 카드(못 써요 / 걸린 표현 없음)
+     마케터가 묻는 세 가지 순서: 써도 되나 → 안 되면 뭐로 바꾸나(AI 제안 문장) → 왜(누르면 자세히 창)
+     BLOCK 문구만 복사를 막습니다. 진행 상태(문구·채널·심의한 문구)는 reboot:compliance:journey에 저장해 탭을 옮겨도 이어집니다. */
 
   function loadJourney() {
     const j = store.get(KEY.journey, {}) || {};
@@ -605,105 +669,104 @@
   function saveJourney(j) { store.set(KEY.journey, j); }
   function journeyKey(j) { return JSON.stringify([j.text.trim(), j.channel, j.category, j.product || '']); }
 
-  /** 지금 문구가 로드맵 어느 단계인지 계산 */
+  // 판정별 화면 말 (판정 줄 제목 · 한 줄 안내 · 요약 카드의 큰 말). PASS는 법적 승인이 아니므로 '써도 돼요'라고 하지 않음
+  const VIEW = {
+    BLOCK: ['사용 불가', '밑줄 친 표현을 바꾸면 바로 다시 심의해요', '못 써요'],
+    REVISE: ['수정 필요', '고쳐 쓰는 걸 권해요 · 그대로 쓰려면 이유를 확인하세요', '고쳐서 쓰세요'],
+    COND: ['조건부', '조건·문맥을 확인한 뒤 쓰세요', '확인 후 쓰세요'],
+    REVIEW: ['검토 필요', '사람이 한 번 확인한 뒤 쓰세요', '확인 후 쓰세요'],
+    PASS: ['걸린 표현 없음', '법적 승인은 아니에요 · 최종 사용은 직접 확인하세요', '걸린 표현 없음']
+  };
+
+  /** 지금 문구의 판정과 화면 상태 (title·sub·big = 판정 줄·요약 카드 문구, tone = 색) */
   function journeyState(j) {
     const text = j.text.trim();
     const r = text && j.checkedKey === journeyKey(j) ? review(text, { channel: j.channel, category: j.category, product: j.product }) : null;
-    const st = { input: 'todo', check: 'todo', fix: 'todo', use: 'todo' };
-    let msg = '';
-    let tone = 'info';
     let canCopy = false;
-
-    if (!text) {
-      st.input = 'current';
-      msg = '미국에 쓸 영어 문구를 입력하고, 쓰일 채널을 고르세요. 한국어로 먼저 써서 영어로 번역해 넣을 수도 있습니다.';
-    } else if (!r) {
-      st.input = 'done'; st.check = 'current';
-      msg = '입력을 멈추면 자동으로 규칙 점검을 합니다…';
-    } else {
-      st.input = st.check = 'done';
-      if (r.verdict === 'BLOCK') {
-        st.fix = 'current'; st.use = 'blocked'; tone = 'block';
-        msg = '사용 불가(BLOCK) 표현이 있습니다 → 아래 "대신 쓸 방향"을 참고해 문장을 바꾼 뒤 다시 점검하세요. BLOCK 문구는 복사할 수 없습니다.';
-      } else if (r.verdict === 'REVISE') {
-        st.fix = 'current'; tone = 'warn'; canCopy = true;
-        msg = '수정 필요(REVISE) 표현이 있습니다 → 고쳐서 다시 점검하는 것을 권장합니다. 그대로 쓰려면 아래 이유를 확인한 뒤 복사하세요.';
-      } else if (r.verdict === 'PASS') {
-        st.fix = 'skip'; st.use = 'current'; tone = 'ok'; canCopy = true;
-        msg = '걸린 표현이 없습니다. 다만 PASS는 규칙에서 찾지 못했다는 뜻이지 법적 승인이 아니므로, 최종 사용 여부는 직접 확인하세요.';
-      } else {
-        st.fix = 'skip'; st.use = 'current'; tone = 'warn'; canCopy = true;
-        msg = `${r.verdict} · ${LABEL[r.verdict]} 판정입니다. 아래 이유를 읽고 조건·문맥을 직접 확인한 뒤 사용하세요.`;
-      }
-      if ((r.unchecked || []).length && r.verdict !== 'BLOCK') {
-        tone = tone === 'ok' ? 'warn' : tone;
-        msg += ' 당 함량 표현은 규칙이 점검하지 않았습니다(당류 표시 미검토) → 실제 함량을 확인하세요.';
-      }
+    let tone = 'info';
+    let [title, sub, big] = ['', '', ''];
+    if (r) {
+      [title, sub, big] = VIEW[r.verdict] || VIEW.REVIEW;
+      tone = r.verdict;
+      canCopy = r.verdict !== 'BLOCK';
+      if ((r.unchecked || []).length && r.verdict !== 'BLOCK') sub += ' · 당 함량 표현은 심의하지 않았어요';
     }
     // AI 2차 판정이 BLOCK인데 규칙은 통과시킨 경우 → 복사 전에 한 번 더 확인 (GPT 검토 ⑨)
     const aiVerdict = r && j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : '';
     const needConfirm = canCopy && aiVerdict === 'BLOCK';
     if (needConfirm) {
-      tone = 'block';
-      st.use = 'current';
-      msg = `규칙 판정은 ${r.verdict}지만 <b>AI 2차 판정이 사용 불가(BLOCK)</b>로 봤습니다 → 아래 AI 이유를 확인하고 문장을 고치는 것을 권장합니다. 그래도 쓰려면 복사할 때 한 번 더 확인합니다.`;
+      tone = 'BLOCK';
+      title = 'AI가 사용 불가로 봤어요';
+      sub = `규칙 판정은 ${LABEL[r.verdict]} · 아래 AI 이유를 확인하고 고치는 걸 권해요`;
+      big = '확인 후 쓰세요';
     }
-    const action = canCopy
-      ? `<button type="button" class="cmp-btn ${needConfirm ? '' : 'cmp-primary'}" data-act="copy">${needConfirm ? 'AI 경고 확인 후 복사' : '문구 복사'}</button> <button type="button" class="cmp-btn" data-act="new">새 문구 시작</button>`
-      : '';
-    return { r, st, msg, tone, canCopy, needConfirm, action };
-  }
-
-  function roadHTML(st) {
-    const current = STEPS.findIndex(([id]) => st[id] === 'current');
-    return STEPS.map(([id, label], i) => `
-  <li class="cmp-road-step is-${st[id]}"${st[id] === 'current' ? ' aria-current="step"' : ''}>
-    <span class="cmp-road-dot" aria-hidden="true">${STEP_ICON[st[id]] || i + 1}</span>
-    <span class="cmp-road-label">${label}</span></li>`).join('') +
-      (current >= 0 ? `<li class="cmp-sr">현재 ${current + 1}단계 · ${STEPS[current][1]}</li>` : '');
+    return { r, canCopy, needConfirm, tone, title, sub, big };
   }
 
   function singleHTML() {
     return `
 <div class="cmp-bench">
-  <div class="cmp-card">
-    <div class="cmp-card-head"><h3>점검할 문구를 입력하세요</h3><span class="cmp-tag" data-el="cattag">일반식품 기준</span></div>
-    <div class="cmp-grid2">
-      <label class="cmp-field"><span>사용 채널</span><select class="cmp-input" data-el="channel">${channelOptions('b2c')}</select></label>
-      <label class="cmp-field"><span>제품</span><select class="cmp-input" data-el="product">${productOptions('jelly')}</select></label>
+  <section class="cmp-card cmp-editor" aria-label="광고 카피 심의">
+    <div class="cmp-toolbar">
+      <label class="cmp-pill-sel"><span class="cmp-sr">사용 채널</span><select class="cmp-pill" data-el="channel">${channelOptions('b2c', true)}</select></label>
+      <label class="cmp-pill-sel"><span class="cmp-sr">제품</span><select class="cmp-pill" data-el="product">${productOptions('jelly', true)}</select></label>
+      <button type="button" class="cmp-pill" data-act="ko-toggle" aria-expanded="false">한국어로 쓰기</button>
+      <span class="cmp-tag cmp-toolbar-end" data-el="cattag">일반식품 기준</span>
     </div>
-    <label class="cmp-field"><span>한국어로 쓰기 (선택 · 쓰고 나면 자동으로 영어로 옮겨 점검)</span>
-      <textarea class="cmp-input" rows="2" data-el="ko" placeholder="예: 파티 전에 가볍게 챙기는 상큼한 젤리"></textarea></label>
+    <div class="cmp-kobox" data-el="kobox" hidden>
+      <label class="cmp-field"><span>한국어로 쓰면 영어로 옮겨 아래 칸에 넣고 심의해요</span>
+        <textarea class="cmp-input" rows="2" data-el="ko" placeholder="파티 전에 가볍게 챙기는 상큼한 젤리"></textarea></label>
+    </div>
     <div data-el="trmsg" aria-live="polite"></div>
-    <label class="cmp-field"><span>광고 카피 (영어 · 점검 대상)</span>
-      <textarea class="cmp-input" rows="5" data-el="text" placeholder="예: Part of the Korean after-party tradition."></textarea></label>
-    <div class="cmp-road-msg" data-el="roadmsg" aria-live="polite"></div>
-    <div data-el="result"></div>
-    <div class="cmp-foot">   <!-- 판정을 본 다음에 누르는 버튼이라 결과 아래 (2026-10-26) -->
-      <div class="cmp-actions">
-        <button type="button" class="cmp-btn" data-act="rq-open" disabled title="먼저 문구를 입력하세요">검토 요청 (법무·인허가·품질)</button>
-        <button type="button" class="cmp-btn" data-act="ai" disabled title="먼저 문구를 입력하세요">${icon('spark')} AI 2차 판정</button>
-      </div>
+    <div class="cmp-verdict" data-el="verdict" aria-live="polite" hidden></div>
+    <div class="cmp-ed">
+      <div class="cmp-ed-hl" data-el="hl" aria-hidden="true"></div>
+      <textarea class="cmp-ed-input" rows="2" data-el="text" aria-label="광고 카피 (영어 · 심의 대상)" spellcheck="false"
+        placeholder="미국에 쓸 영어 카피를 입력하세요"></textarea>
     </div>
+    <div data-el="result"></div>
     <div data-el="ai" aria-live="polite"></div>
     <div data-el="reviews" aria-live="polite"></div>
-  </div>
+  </section>
   <aside class="cmp-side">
-    <div class="cmp-card"><div class="cmp-card-head"><h3>검토 흐름</h3></div>
-      <ol class="cmp-road" data-el="road" aria-label="문구 심의 진행 단계"></ol></div>
-    <details class="cmp-card cmp-notes cmp-notes-fold"><summary class="cmp-card-head"><h3>알아두세요</h3><span class="cmp-muted">4가지 · 눌러서 보기</span></summary>
-      <p><b>PASS</b>는 규칙에서 위험 표현을 찾지 못했다는 뜻이며 법적 승인을 의미하지 않습니다.</p>
-      <p><b>BLOCK</b> 문구는 복사할 수 없습니다. 표현을 바꾼 뒤 다시 점검하세요.</p>
-      <p>이 점검은 1차 참고용입니다. FDA 공식 판단이나 법률 자문이 아니며, 최종 사용 여부는 문구를 쓰는 사람이 확인합니다.</p>
-      <p>당류 표현: <b>Zero Sugar</b>는 Balance 제품을 고르면 사용 가능(PASS) · Original·전체 제품은 사용 불가 · low sugar·저당·reduced sugar 등은 사용 불가(BLOCK) (R11·R12).</p></details>
-    <p class="cmp-muted cmp-side-note">AI 검토자 페르소나: <span data-el="persona-now"></span>
-      <button type="button" class="cmp-btn cmp-btn-sm" data-act="goto" data-goto="admin">바꾸기</button></p>
+    <div class="cmp-card cmp-sum" data-el="sum"></div>
+    <p class="cmp-side-note">${icon('info')} 1차 참고용이에요. 걸린 표현이 없어도 법적 승인은 아니에요.</p>
+    <div class="cmp-side-acts">
+      <button type="button" class="cmp-btn" data-act="ai" disabled title="먼저 문구를 입력하세요">${icon('spark')} AI 2차 심의</button>
+      <button type="button" class="cmp-btn" data-act="rq-open" disabled title="먼저 문구를 입력하세요">검토 요청</button>
+    </div>
+    <p class="cmp-side-note">AI 페르소나: <span data-el="persona-now"></span>
+      <button type="button" class="cmp-btn cmp-btn-sm" data-act="goto" data-goto="admin">페르소나 바꾸기</button></p>
   </aside>
 </div>`;
   }
 
-  /** 상단 KPI 카드 5장 (판정 5단계: COND·REVIEW는 한 장으로) — 점검 기록을 지금 규칙으로 다시 판정한 개수. 누르면 점검 기록 탭에서 그 판정만 보여 줌 */
-  const HIST_FILTERS = [['all', '전체'], ['BLOCK', 'BLOCK · 사용 불가'], ['REVISE', 'REVISE · 수정 필요'], ['OTHER', 'COND·REVIEW · 조건부·검토 필요'], ['PASS', 'PASS · 규칙 미탐지']];
+  /** 오른쪽 요약 카드: 큰 말 하나 + 지금 할 일 버튼 하나 (막힌 문구 → 대신 쓸 문장, 그 밖 → 복사) */
+  function sumHTML(j, s, aiOk, busy) {
+    if (!j.text.trim()) return `<p class="cmp-sum-eyebrow">이 문구는</p><p class="cmp-sum-big is-empty">입력 전</p>
+<p class="cmp-sum-sub">카피를 넣으면 바로 심의해요</p>`;
+    if (!s.r) return `<p class="cmp-sum-eyebrow">이 문구는</p><p class="cmp-sum-big is-empty">심의 중…</p>
+<p class="cmp-sum-sub">입력을 멈추면 바로 심의해요</p>`;
+    const n = s.r.findings.length;
+    const fix = s.r.verdict === 'BLOCK' || s.r.verdict === 'REVISE';
+    const rw = j.ai && j.ai.key === journeyKey(j) && j.ai.result && j.ai.result.rewrite;
+    const preview = fix && rw ? `<div class="cmp-sum-rw"><p class="cmp-sum-eyebrow">대체 문장 (AI 제안)</p><p class="cmp-sum-rw-text" lang="en">${esc(rw)}</p></div>` : '';
+    const primary = busy && fix
+      ? `<button type="button" class="cmp-btn cmp-primary cmp-wide is-busy" disabled aria-busy="true">대체 문장 만드는 중… 보통 20초</button>`
+      : fix
+      ? (rw ? `<button type="button" class="cmp-btn cmp-primary cmp-wide" data-act="ai-apply">이 문장 적용</button>`
+        : `<button type="button" class="cmp-btn cmp-primary cmp-wide" data-act="ai"${aiOk ? '' : ' disabled title="AI 키가 없어 제안 문장을 받을 수 없어요 · 고칠 곳의 \'대체\'를 참고하세요"'}>대체 문장 받기</button>`)
+      : `<button type="button" class="cmp-btn cmp-primary cmp-wide" data-act="copy">${s.needConfirm ? 'AI 경고 확인하고 복사' : '문구 복사'}</button>`;
+    const copy = fix ? `<button type="button" class="cmp-btn cmp-wide" data-act="copy"${s.canCopy ? '' : ' disabled title="사용 불가 문구는 복사할 수 없어요"'}>문구 복사</button>` : '';
+    return `<p class="cmp-sum-eyebrow">이 문구는</p>
+<p class="cmp-sum-big cmp-tone-${s.tone}">${esc(s.big)}</p>
+<p class="cmp-sum-sub">${n ? `고칠 곳 ${n}개` : `규칙 ${RULE_SPAN} 통과`}${s.r.legal === 'red' ? ' · 법 위반 표현 포함' : ''}</p>
+${preview}${primary}${copy}
+<button type="button" class="cmp-btn cmp-btn-quiet cmp-wide" data-act="new">새 문구 쓰기</button>`;
+  }
+
+  /** 상단 KPI 카드 5장 (판정 5단계: COND·REVIEW는 한 장으로) — 심의 기록을 지금 규칙으로 다시 판정한 개수. 누르면 심의 기록 탭에서 그 판정만 보여 줌 */
+  const HIST_FILTERS = [['all', '전체'], ['BLOCK', '사용 불가'], ['REVISE', '수정 필요'], ['OTHER', '조건부·검토 필요'], ['PASS', '걸린 표현 없음']];
   function matchFilter(verdict, f) {
     if (!f || f === 'all') return true;
     if (f === 'OTHER') return verdict === 'COND' || verdict === 'REVIEW';
@@ -717,12 +780,12 @@
     const verdicts = list.map(x => recheck(x).verdict);
     const n = v => verdicts.filter(x => x === v).length;
     const cards = [
-      { label: '사용 불가', icon: 'shield', value: n('BLOCK'), sub: '<b>BLOCK</b>표현을 바꾼 뒤 다시 점검', featured: true, filter: 'BLOCK' },
-      { label: '수정 필요', icon: 'pencil', value: n('REVISE'), sub: '<b>REVISE</b>고쳐서 다시 점검 권장', filter: 'REVISE' },
-      { label: '조건부·검토 필요', icon: 'clock', value: n('COND') + n('REVIEW'), sub: '<b>COND·REVIEW</b>확인 후 사용', filter: 'OTHER',
+      { label: '사용 불가', icon: 'shield', value: n('BLOCK'), sub: '표현을 바꾼 뒤 다시 심의', featured: true, filter: 'BLOCK' },
+      { label: '수정 필요', icon: 'pencil', value: n('REVISE'), sub: '고쳐서 다시 심의 권장', filter: 'REVISE' },
+      { label: '조건부·검토 필요', icon: 'clock', value: n('COND') + n('REVIEW'), sub: '조건·문맥 확인 후 사용', filter: 'OTHER',
         tip: 'REVIEW: 후기·리뷰(R10) · 성분 강조(R13) · B2B 자료의 인체적용시험 인용(R9) / COND: 제품을 정하지 않은 Zero Sugar(R12) · 건강기능식품 기준으로 비교할 때' },
-      { label: '규칙 미탐지', icon: 'check', value: n('PASS'), sub: '<b>PASS</b>법적 승인은 아님', filter: 'PASS' },
-      { label: '전체 점검', icon: 'list', value: list.length, sub: '<b>누적</b>팀 공용 점검 기록', filter: 'all' }
+      { label: '걸린 표현 없음', icon: 'check', value: n('PASS'), sub: '법적 승인은 아님', filter: 'PASS' },
+      { label: '전체 심의', icon: 'list', value: list.length, sub: '팀 공용 심의 기록', filter: 'all' }
     ];
     const hp = root.querySelector('[data-panel="history"]');
     const cur = hp && hp.dataset.filter ? hp.dataset.filter : 'all';
@@ -734,26 +797,22 @@
 </button>`).join('');
   }
 
+  /** 한 문구 결과: 고칠 곳 목록 (줄마다 점 · 이름 · 걸린 표현 · 대신 쓸 방향 → 누르면 근거·조문이 있는 자세히 창) */
   function resultHTML(text, r) {
     return `
 <div class="cmp-result">
-  <div class="cmp-result-head">${badge(r.verdict)}${light(r.legal)}
-    <span class="cmp-muted">${esc(channelLabel(r.channel))} · ${esc(productLabel(r.product))} · ${r.category === 'FOOD' ? '일반식품' : '건강기능식품 기준 비교'}</span></div>
   ${variantNote(r)}
-  <p class="cmp-quote">${highlightHits(text, r.findings)}</p>
   ${uncheckedHTML(r)}
   ${r.verdict === 'PASS' ? passBoxHTML(text, r) : ''}
-  ${r.findings.map(f => `
-  <details class="cmp-finding cmp-finding-fold">
-    <summary class="cmp-finding-head"><span class="cmp-fold-arrow" aria-hidden="true">▸</span><b>${f.code} ${esc(f.name)}</b> ${badge(f.verdict)}${light(f.legal)}
-      <span class="cmp-finding-terms">${f.terms.slice(0, 3).map(t => `<code>${esc(t)}</code>`).join(' ')}${f.terms.length > 3 ? ` <span class="cmp-muted">외 ${f.terms.length - 3}개</span>` : ''}</span>
-      <button type="button" class="cmp-btn cmp-btn-sm cmp-more" data-act="term-detail" data-code="${f.code}" data-term="${esc(f.terms[0])}">자세히</button></summary>
-    <p><span class="cmp-label">근거</span> <span class="cmp-basis">${f.basis.map(b => BASIS[b]).join(' · ')}</span></p>
-    ${f.legalNote ? `<p><span class="cmp-label">법적 신호</span> ${light(f.legal)} ${esc(f.legalNote)}</p>` : ''}
-    <p><span class="cmp-label">걸린 표현</span> ${f.terms.map(t => hitButton(f, t, `<code>${esc(t)}</code>`)).join(' ')}</p>
-    <p><span class="cmp-label">이유</span> ${esc(f.reason)}</p>
-    <p><span class="cmp-label">대신 쓸 방향</span> ${esc(f.alt)}</p>
-  </details>`).join('')}
+  ${r.findings.length ? `<p class="cmp-hits-label">고칠 곳 ${r.findings.length}</p>
+  <ul class="cmp-hits">${r.findings.map(f => `
+    <li><button type="button" class="cmp-hitrow" data-act="term-detail" data-code="${f.code}" data-term="${esc(f.terms[0])}" aria-haspopup="dialog">
+      <span class="cmp-dot cmp-dot-${f.verdict}" aria-hidden="true"></span>
+      <span class="cmp-hitrow-main"><b>${esc(plainOf('rules', f.code).say || f.name)}</b> <span class="cmp-hitrow-terms">${f.terms.slice(0, 3).map(esc).join(' · ')}</span>
+        <span class="cmp-hitrow-alt">${(plainOf('rules', f.code).todo || []).length ? `할 일: ${esc(plainOf('rules', f.code).todo[0])}` : `대체: ${esc(f.alt)}`}</span></span>
+      <span class="cmp-vtext cmp-vt-${f.verdict}">${LABEL[f.verdict]}</span><span class="cmp-chev" aria-hidden="true">›</span>
+    </button></li>`).join('')}</ul>` : ''}
+  <div class="cmp-result-tr">${trBlock(text, '뜻 한글로 보기')}</div>
 </div>`;
   }
 
@@ -809,15 +868,15 @@
     return `
 <div class="cmp-dlg-head">
   <div>
-    <p class="cmp-dlg-eyebrow">규칙 미탐지 · 왜 통과했나요?</p>
-    <h3 id="cmp-dlg-title" class="cmp-dlg-title">${badge('PASS')} 걸린 표현 없음</h3>
+    <p class="cmp-dlg-eyebrow">걸린 표현 없음 · 왜 통과했나요?</p>
+    <h3 id="cmp-dlg-title" class="cmp-dlg-title">${badge('PASS')} 규칙 ${RULE_SPAN} 모두 통과</h3>
   </div>
   <button type="button" class="cmp-dlg-x" data-act="dlg-close" aria-label="닫기">×</button>
 </div>
 <div class="cmp-dlg-body">
-  <section><h4>점검한 문구</h4><p class="cmp-quote">${esc(text)}</p>
+  <section><h4>심의한 문구</h4><p class="cmp-quote">${esc(text)}</p>
     <p class="cmp-muted">${esc(channelLabel(r.channel))} · ${esc(productLabel(r.product))} · 일반식품 기준</p></section>
-  ${sig.ok.length ? `<section><h4>안심해도 되는 부분</h4><ul class="cmp-dlg-list">${sig.ok.map(x => `<li>✅ ${x}</li>`).join('')}</ul></section>` : ''}
+  ${sig.ok.length ? `<section><h4>안심해도 되는 부분</h4><ul class="cmp-dlg-list">${sig.ok.map(x => `<li>${x}</li>`).join('')}</ul></section>` : ''}
   <section><h4>규칙별 확인 결과 · ${checks.length}개 모두 통과</h4>
     <div class="cmp-table-wrap"><table class="cmp-table">
       <thead><tr><th>규칙</th><th>무엇을 찾나</th><th>이 문구</th></tr></thead>
@@ -825,22 +884,22 @@
         <td class="cmp-muted">${c.looks.map(t => `<code>${esc(t)}</code>`).join(' ')} …</td>
         <td>${c.excluded.length ? `문맥상 제외: ${c.excluded.map(t => `<code>${esc(t)}</code>`).join(' ')}<br><span class="cmp-muted">보관·안전 안내나 부정문처럼 이 규칙이 문제 삼지 않는 쓰임</span>` : '✓ 없음'}</td></tr>`).join('')}</tbody>
     </table></div>
-    ${off.length ? `<p class="cmp-muted">꺼 둔 규칙(${off.map(x => x.code).join('·')} ${esc(off[0].name)} 등)은 팀 결정으로 점검하지 않습니다.${(r.unchecked || []).length ? ' 이 문구에 당 함량 표현이 있어 위에 따로 표시했습니다.' : ''}</p>` : ''}</section>
-  ${sig.warn.length ? `<section><h4>그래도 사람이 볼 부분</h4><ul class="cmp-dlg-list">${sig.warn.map(x => `<li>⚠️ ${x}</li>`).join('')}</ul></section>` : ''}
-  <section><h4>PASS의 뜻</h4><p>규칙이 찾는 위험 단어·문장 모양이 <b>없다</b>는 뜻입니다. 법적 승인이 아니며, 단어 없이 뜻으로 숙취 회복을 암시하는 문장은 규칙이 놓칠 수 있습니다.
-    중요한 문구는 <b>AI 2차 판정</b>으로 한 번 더 확인하세요.</p></section>
+    ${off.length ? `<p class="cmp-muted">꺼 둔 규칙(${off.map(x => x.code).join('·')} ${esc(off[0].name)} 등)은 팀 결정으로 심의하지 않습니다.${(r.unchecked || []).length ? ' 이 문구에 당 함량 표현이 있어 위에 따로 표시했습니다.' : ''}</p>` : ''}</section>
+  ${sig.warn.length ? `<section><h4>그래도 사람이 볼 부분</h4><ul class="cmp-dlg-list">${sig.warn.map(x => `<li>${x}</li>`).join('')}</ul></section>` : ''}
+  <section><h4>'걸린 표현 없음'의 뜻</h4><p>규칙이 찾는 위험 단어·문장 모양이 <b>없다</b>는 뜻입니다. 법적 승인이 아니며, 단어 없이 뜻으로 숙취 회복을 암시하는 문장은 규칙이 놓칠 수 있습니다.
+    중요한 문구는 <b>AI 2차 심의</b>로 한 번 더 확인하세요.</p></section>
 </div>
 <div class="cmp-dlg-foot">
-  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">기준·참고에서 규칙 보기</button>
+  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">심의 규칙 보기</button>
 </div>`;
   }
 
-  // 당 함량 표현: 팀 결정으로 점검하지 않음 → 'PASS(규칙 미탐지)'와 구분해 보여 줌
+  // 당 함량 표현: 팀 결정으로 심의하지 않음 → 'PASS(규칙 미탐지)'와 구분해 보여 줌
   function uncheckedHTML(r) {
     const u = r.unchecked || [];
     if (!u.length) return '';
     return `<p class="cmp-note cmp-note-warn"><b>당류 표시 미검토</b> · ${u.map(x => x.terms.map(t => `<code>${esc(t)}</code>`).join(' ')).join(' ')}
-  — 당 함량 표현은 팀 결정(2026-10-23)으로 <b>규칙이 점검하지 않습니다</b>. 이 부분은 PASS가 아니라 '보지 않은 표현'이니,
+  — 당 함량 표현은 팀 결정(2026-10-23)으로 <b>규칙이 심의하지 않습니다</b>. 이 부분은 PASS가 아니라 '보지 않은 표현'이니,
   미국에서는 'low sugar' 정의가 없고 sugar free·reduced sugar는 수치 조건이 있으므로(21 CFR 101.60(c)) 실제 함량을 확인한 뒤 쓰세요.</p>`;
   }
 
@@ -851,7 +910,7 @@
       aria-haspopup="dialog" title="${esc(`${f.code} ${f.name} · ${LABEL[f.verdict]} — 눌러서 자세히 보기`)}">${inner}</button>`;
   }
 
-  // 단건 심의 밖(일괄 심의 표 · 점검 기록 · 규칙 표)에서 연 자세히 창이 어떤 문구 기준인지 알려 주는 속성
+  // 단건 심의 밖(일괄 심의 표 · 심의 기록 · 규칙 표)에서 연 자세히 창이 어떤 문구 기준인지 알려 주는 속성
   function ctxAttrs(text, opts) {
     opts = opts || {};
     return `data-ctx="1" data-ctx-text="${esc(text || '')}" data-ctx-channel="${esc(opts.channel || 'b2c')}"`
@@ -921,6 +980,7 @@
     const quotes = (DATA.warningQuotes || []).filter(q => String(q.text || '').toLowerCase().includes(String(term).toLowerCase())).slice(0, 3);
     const siblings = (rule.terms || []).concat(rule.ko || []).filter(t => t.toLowerCase() !== String(term).toLowerCase());
     const others = r ? r.findings.filter(x => x.code !== f.code && x.terms.some(t => t.toLowerCase() === String(term).toLowerCase())) : [];
+    const pl = plainOf('rules', f.code);
     return `
 <div class="cmp-dlg-head">
   <div>
@@ -930,7 +990,13 @@
   <button type="button" class="cmp-dlg-x" data-act="dlg-close" aria-label="닫기">×</button>
 </div>
 <div class="cmp-dlg-body">
-  ${ctx ? `<section><h4>문구 속 위치</h4><p class="cmp-quote">${ctx}</p></section>` : ''}
+  <section class="cmp-l1"><p class="cmp-say cmp-tone-${esc(f.verdict)}">${esc(pl.say || f.name)}</p>
+    ${ctx ? `<p class="cmp-quote">${ctx}</p>` : ''}
+    ${changed ? `<p class="cmp-muted">이 문구의 채널·제품에서는 판정이 ${badge(f.verdict)}예요 (규칙 기본은 ${badge(rule.verdict)}).</p>` : ''}</section>
+  <section><h4>할 일</h4>${todoHTML(pl.todo && pl.todo.length ? pl.todo : [f.alt])}
+    ${maps.length ? `<p class="cmp-todo-sub">이렇게 바꿔 보세요</p><ul class="cmp-dlg-list">${maps.map(m => `<li>${esc(m.ko)} → <b>${esc(m.us)}</b></li>`).join('')}</ul>` : ''}</section>
+  ${ai.length ? `<section><h4>${icon('spark')} AI 2차 심의 의견 <span class="cmp-muted">(참고용)</span></h4>${ai.map(x => `<p>${badge(LABEL[x.verdict] ? x.verdict : 'REVIEW')} ${esc(x.reason)}${x.suggestion ? `<br><span class="cmp-muted">제안: ${esc(x.suggestion)}</span>` : ''}</p>`).join('')}</section>` : ''}
+  <details class="cmp-why"><summary>근거 보기 · 조문 · 경고장 사례</summary>
   <section><h4>왜 문제인가요?</h4><p>${esc(f.reason)}</p>
     ${changed ? `<p class="cmp-note">이 규칙의 기본 판정은 ${badge(rule.verdict)}이고, 이 문구의 채널·제품·기준(${esc(channelLabel(c.channel))} · ${esc(productLabel(c.product))} · ${c.category === 'SUPPLEMENT' ? '건강기능식품 비교' : '일반식품'})에서는 ${badge(f.verdict)}입니다.</p>` : ''}
     ${others.length ? `<p class="cmp-muted">이 표현은 ${others.map(x => `${x.code} ${esc(x.name)}`).join(', ')}에도 걸립니다.</p>` : ''}</section>
@@ -938,23 +1004,23 @@
     ${f.legalNote ? `<p class="cmp-muted">${esc(f.legalNote)}</p>` : ''}</section>` : ''}
   <section><h4>근거 구분</h4><ul class="cmp-dlg-list">${f.basis.map(b => `<li><b>${BASIS[b]}</b> — ${BASIS_HELP[b] || ''}</li>`).join('')}</ul>
     ${(rule.law || []).length ? `<h4>근거 조문</h4><ul class="cmp-dlg-list">${rule.law.map(l => `<li><b>${esc(l.agency)}</b> ${esc(l.cite)}<br><span class="cmp-muted">${esc(l.note || '')}</span></li>`).join('')}</ul>` : ''}</section>
-  <section><h4>대신 이렇게 써 보세요</h4><p>${esc(f.alt)}</p>
-    ${maps.length ? `<ul class="cmp-dlg-list">${maps.map(m => `<li>${esc(m.ko)} → <b>${esc(m.us)}</b>${m.note ? ` <span class="cmp-muted">(${esc(m.note)})</span>` : ''}</li>`).join('')}</ul>` : ''}</section>
+  <section><h4>대체 방향 (원문)</h4><p>${esc(f.alt)}</p>
+    ${maps.some(m => m.note) ? `<ul class="cmp-dlg-list">${maps.filter(m => m.note).map(m => `<li>${esc(m.ko)} → ${esc(m.us)} <span class="cmp-muted">(${esc(m.note)})</span></li>`).join('')}</ul>` : ''}</section>
   ${siblings.length ? `<section><h4>같은 규칙에 걸리는 다른 표현</h4><p class="cmp-dlg-chips">${siblings.slice(0, 16).map(t => `<code>${esc(t)}</code>`).join(' ')}</p></section>` : ''}
   ${agencies.length ? `<section><h4>관련 기관</h4>${agencies.map(a => `<p><b>${esc(a.icon || '')} ${esc(a.code)} · ${esc(a.ko)}</b><br><span class="cmp-muted">${esc(a.oneLine || '')}</span>${a.risk ? `<br><span class="cmp-muted">어기면: ${esc(a.risk)}</span>` : ''}</p>`).join('')}</section>` : ''}
   ${quotes.length ? `<section><h4>FDA 경고장 사례</h4>${quotes.map(q => `<div class="cmp-quote">${esc(q.text)}${q.ko ? `<p class="cmp-quote-ko"><span class="cmp-b-tag">한국어</span>${esc(q.ko)}</p>` : '<br>'}<span class="cmp-muted">${esc(q.firm || '')} ${esc(q.issued || '')}${q.kind === 'testimonial' ? ' · 경고장이 인용한 후기' : ''}</span></div>`).join('')}</section>` : ''}
-  ${ai.length ? `<section><h4>${icon('spark')} AI 2차 판정 의견 <span class="cmp-muted">(참고용)</span></h4>${ai.map(x => `<p>${badge(LABEL[x.verdict] ? x.verdict : 'REVIEW')} ${esc(x.reason)}${x.suggestion ? `<br><span class="cmp-muted">제안: ${esc(x.suggestion)}</span>` : ''}</p>`).join('')}</section>` : ''}
+  </details>
 </div>
 <div class="cmp-dlg-foot">
-  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">기준·참고에서 규칙 보기</button>
-  ${agencies.length ? `<button type="button" class="cmp-btn" data-act="goto" data-goto="agencies">기관·플랫폼 안내 보기</button>` : ''}
-  ${fromSingle && f.legal === 'yellow' ? `<button type="button" class="cmp-btn" data-act="rq-open">법무 검토 요청</button>` : ''}
-  ${fromSingle ? `<button type="button" class="cmp-btn cmp-primary" data-act="select-term" data-term="${esc(term)}">문구 칸에서 이 표현 고치기</button>` : ''}
+  <button type="button" class="cmp-btn" data-act="goto" data-goto="rules">심의 규칙 보기</button>
+  ${agencies.length ? `<button type="button" class="cmp-btn" data-act="goto" data-goto="agencies">관련 기관 보기</button>` : ''}
+  ${fromSingle && f.legal === 'yellow' ? `<button type="button" class="cmp-btn" data-act="rq-open">검토 요청</button>` : ''}
+  ${fromSingle ? `<button type="button" class="cmp-btn cmp-primary" data-act="select-term" data-term="${esc(term)}">문구에서 이 표현 찾기</button>` : ''}
 </div>`;
   }
 
   /** 걸린 표현 자세히 보기 창 열기 (<dialog>: Esc·바깥 클릭·닫기 버튼으로 닫힘)
-      ctx가 없으면 단건 심의의 지금 문구 기준, 있으면 그 문구(일괄 심의·점검 기록) 또는 규칙 기본값(규칙 표) 기준 */
+      ctx가 없으면 단건 심의의 지금 문구 기준, 있으면 그 문구(일괄 심의·심의 기록) 또는 규칙 기본값(규칙 표) 기준 */
   function openDetail(root, code, term, ctx) {
     let c;
     let r;
@@ -1021,24 +1087,21 @@
     }
   }
 
-  /** 저장된 진행 상태로 로드맵·안내·결과를 다시 그림 */
+  /** 저장된 진행 상태로 판정 줄·밑줄·결과·요약 카드를 다시 그림 */
   function paintSingle(root) {
     const p = root.querySelector('[data-sub="single"]');
     const el = n => p.querySelector(`[data-el="${n}"]`);
     const j = loadJourney();
     const s = journeyState(j);
-    el('road').innerHTML = roadHTML(s.st);
-    // 규칙에 걸렸을 때(BLOCK·REVISE·COND·REVIEW)는 안내 문구 박스를 띄우지 않음 (2026-10-25 담당 요청 · 이유는 아래 결과에 있음)
-    // AI가 BLOCK으로 본 경고(needConfirm)와 PASS 안내는 그대로
-    const msg = s.r && s.r.verdict !== 'PASS' && !s.needConfirm ? '' : s.msg;
-    el('roadmsg').hidden = !msg && !s.action;
-    el('roadmsg').className = msg ? `cmp-road-msg cmp-road-${s.tone}` : '';
-    el('roadmsg').innerHTML = `${msg ? `<p>${msg}</p>` : ''}${s.action ? `<div class="cmp-actions">${s.action}</div>` : ''}`;
-    el('cattag').textContent = `REBOOT ${productLabel(j.product)} · ${j.category === 'SUPPLEMENT' ? '건강기능식품 기준 비교' : '일반식품 기준'}`;
+    const v = el('verdict');
+    v.hidden = !s.r;
+    v.className = `cmp-verdict cmp-tone-${s.tone}`;
+    v.innerHTML = s.r ? `${verdictIcon(s.tone)}<div><b>${esc(s.title)}</b><span>${esc(s.sub)}</span></div>` : '';
+    el('cattag').textContent = j.category === 'SUPPLEMENT' ? '건강기능식품 기준 비교' : '일반식품 기준';   // 제품은 왼쪽 알약에 이미 보임
+    paintUnderline(p, s.r);
     const key = s.r ? journeyKey(j) : '-';
     if (el('result').dataset.key !== key) {   // 결과가 같으면 다시 그리지 않음 (열어 둔 번역 유지)
-      el('result').innerHTML = s.r ? resultHTML(j.text.trim(), s.r)
-        : `<div class="cmp-empty">${icon('shield')}<span>점검 결과와 대신 쓸 표현이 여기에 표시됩니다.</span></div>`;
+      el('result').innerHTML = s.r ? resultHTML(j.text.trim(), s.r) : '';
       el('result').dataset.key = key;
     }
     // AI 2차 판정: 지금 문구·채널·기준으로 받은 결과만 보여 줌
@@ -1049,20 +1112,50 @@
       el('ai').innerHTML = ai ? aiHTML(ai, s.r.verdict) : '';
       el('ai').dataset.key = aiKey;
     }
-    const rqBtn = p.querySelector('[data-act="rq-open"]');
+    const rqBtn = p.querySelector('.cmp-side-acts [data-act="rq-open"]');
     rqBtn.disabled = !s.r;
     rqBtn.title = s.r ? 'Slack으로 법무·인허가·품질팀에 이 문구 검토를 요청하고, 팀마다 회신 링크를 만듭니다' : '먼저 문구를 입력하세요';
-    rqBtn.classList.toggle('cmp-primary', !!s.r && s.r.legal === 'yellow');   // 🟡 법무 확인이면 검토 요청을 눈에 띄게
     paintReviews(p, j);
-    const aiBtn = p.querySelector('[data-act="ai"]');
+    const aiBtn = p.querySelector('.cmp-side-acts [data-act="ai"]');
     serverHealth().then(h => {
       const busy = p.dataset.aiBusy === '1';
-      aiBtn.disabled = busy || !s.r || !(h && h.ai);
+      const aiOk = !!(h && h.ai);
+      el('sum').innerHTML = sumHTML(j, s, aiOk && !busy, busy);
+      aiBtn.disabled = busy || !s.r || !aiOk;
       aiBtn.title = !h ? '서버 상태를 확인하지 못했습니다. 새로고침해 주세요 (키는 서버에만 있음)'
         : !h.ai ? 'ANTHROPIC_API_KEY가 없습니다 (설정 › 연결에서 입력)'
-        : !s.r ? '먼저 문구를 입력하세요 (입력하면 자동 점검)' : 'Claude가 규칙이 놓친 위험과 더 안전한 문장을 참고용으로 제안합니다';
+        : !s.r ? '먼저 문구를 입력하세요 (입력하면 자동 심의)' : 'Claude가 규칙이 놓친 위험과 더 안전한 문장을 참고용으로 제안합니다';
     });
     paintKpis(root);
+  }
+
+  function verdictIcon(tone) {
+    return `<span class="cmp-verdict-ico" aria-hidden="true">${icon(tone === 'BLOCK' ? 'x' : tone === 'PASS' ? 'check' : 'alert')}</span>`;
+  }
+
+  /** 카피 칸 뒤에 같은 글자를 겹쳐 그려 걸린 표현에 물결 밑줄 (심의 전·입력 중에는 밑줄 없음) */
+  function paintUnderline(p, r) {
+    const ta = p.querySelector('[data-el="text"]');
+    const hl = p.querySelector('[data-el="hl"]');
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+    const text = ta.value;
+    if (!r || !r.findings.length) { hl.innerHTML = esc(text) + ' '; return; }
+    const byTerm = new Map();
+    r.findings.forEach(f => f.terms.filter(t => !t.startsWith('(')).forEach(t => {
+      const k = t.toLowerCase();
+      if (!byTerm.has(k) || RANK[f.verdict] > RANK[byTerm.get(k).verdict]) byTerm.set(k, f);
+    }));
+    if (!byTerm.size) { hl.innerHTML = esc(text) + ' '; return; }
+    const re = new RegExp([...byTerm.keys()].sort((a, b) => b.length - a.length).map(escapeRe).join('|'), 'gi');
+    let out = '';
+    let last = 0;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      out += esc(text.slice(last, m.index)) + `<mark class="cmp-ul cmp-ul-${byTerm.get(m[0].toLowerCase()).verdict}">${esc(m[0])}</mark>`;
+      last = m.index + m[0].length;
+    }
+    hl.innerHTML = out + esc(text.slice(last)) + ' ';
   }
 
   function aiHTML(ai, ruleVerdict) {
@@ -1076,7 +1169,7 @@
     const issues = Array.isArray(r.issues) ? r.issues : [];
     return `
 <details class="cmp-ai cmp-ai-fold" open>
-  <summary class="cmp-result-head"><span class="cmp-fold-arrow" aria-hidden="true">▸</span><b class="cmp-ai-title">${icon('spark')} AI 2차 판정</b>${badge(v)}
+  <summary class="cmp-result-head"><span class="cmp-fold-arrow" aria-hidden="true">▸</span><b class="cmp-ai-title">${icon('spark')} AI 2차 심의</b>${badge(v)}
     <span class="cmp-tag">확신 ${conf}</span><span class="cmp-muted">${esc(ai.model || '')} · ${fmt(ai.at)} · 참고용</span></summary>
   ${r.summary ? `<p class="cmp-ai-summary">${esc(r.summary)}</p>` : ''}
   ${Array.isArray(r.checks) && r.checks.length ? `<p class="cmp-muted"><span class="cmp-label">AI가 확인한 것</span> ${r.checks.map(esc).join(' · ')}</p>` : ''}
@@ -1090,11 +1183,11 @@
   </article>`).join('')}
   ${r.rewrite ? `
   <div class="cmp-ai-rewrite">
-    <span class="cmp-label">더 안전한 문장 (제안)</span>
+    <span class="cmp-label">대체 문장 (AI 제안)</span>
     <p class="cmp-quote">${esc(r.rewrite)}</p>
-    <div class="cmp-actions"><button type="button" class="cmp-btn" data-act="ai-apply">이 문장으로 바꾸고 다시 점검</button></div>
+    <div class="cmp-actions"><button type="button" class="cmp-btn" data-act="ai-apply">이 문장 적용</button></div>
   </div>` : ''}
-  <p class="cmp-muted">AI 판정은 규칙 판정을 대신하지 않으며 법률 자문이 아닙니다. 제안 문장도 규칙 점검을 다시 거쳐야 합니다.</p>
+  <p class="cmp-muted">AI 판정은 규칙 판정을 대신하지 않으며 법률 자문이 아닙니다. 제안 문장도 규칙 심의을 다시 거쳐야 합니다.</p>
 </details>`;
   }
 
@@ -1122,14 +1215,14 @@
     box.innerHTML = mine.length ? `<div class="cmp-rq">${mine.map(r => `
   <div class="cmp-rq-row"><span class="cmp-muted">검토 요청 ${esc(fmt(Date.parse(r.createdAt)))}${r.expired ? ' · 기한 지남' : ''}</span>
     ${RQ_TEAMS.filter(([k]) => r.teams[k]).map(([k]) => r.teams[k]).map(t => `<span class="cmp-rq-team" title="${esc(t.comment || '')}">${RQ_ICON[t.status] || ''} ${esc(t.label)} <b>${esc(t.status)}</b>${t.by ? ` · ${esc(t.by)}` : ''}${t.comment ? ` · ${esc(t.comment)}` : ''}</span>`).join('')}</div>`).join('')}
-  <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-refresh">회신 새로 보기</button></div>` : '';
+  <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-refresh">회신 새로고침</button></div>` : '';
   }
 
   function requestDialogHTML(j, r) {
     const ai = j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : '';
     return `
 <div class="cmp-dlg-head"><div><p class="cmp-dlg-eyebrow">문구 검토 요청</p>
-  <h3 id="cmp-dlg-title" class="cmp-dlg-title">법무 · 인허가 · 품질팀에 보내기</h3></div>
+  <h3 id="cmp-dlg-title" class="cmp-dlg-title">법무·인허가·품질팀에 검토 요청</h3></div>
   <button type="button" class="cmp-dlg-x" data-act="dlg-close" aria-label="닫기">×</button></div>
 <div class="cmp-dlg-body" data-el="rq-body">
   <section><h4>보낼 문구</h4><p class="cmp-quote">${esc(j.text.trim())}</p>
@@ -1188,6 +1281,11 @@
     el('channel').value = saved.channel;
     el('product').value = saved.product;
     el('ko').value = saved.ko;
+    const koBtn = p.querySelector('[data-act="ko-toggle"]');
+    const showKo = open => { el('kobox').hidden = !open; koBtn.setAttribute('aria-expanded', String(open)); koBtn.classList.toggle('is-on', open); };
+    showKo(!!saved.ko.trim());   // 한국어로 써 둔 문구가 있으면 펼친 채로
+    const hl = el('hl');
+    el('text').addEventListener('scroll', () => { hl.scrollTop = el('text').scrollTop; });
 
     // 입력값을 진행 상태에 반영
     const sync = () => {
@@ -1198,7 +1296,7 @@
       return next;
     };
 
-    // 점검: 결과를 보여 주고 점검 기록에 남김
+    // 심의: 결과를 보여 주고 심의 기록에 남김
     const run = () => {
       const j = sync();
       const text = j.text.trim();
@@ -1208,8 +1306,8 @@
       paintSingle(root);
     };
 
-    // 입력하면 자동 점검 (2026-10-25 · [문구 점검하기] 버튼 없앰): 영어 칸 입력을 멈추면 0.8초 뒤 · 칸을 벗어나면 바로 ·
-    // 채널·제품을 바꾸면 바로. 한국어 칸은 멈추면(1.2초) 자동 번역 → 번역이 끝나면 점검
+    // 입력하면 자동 심의 (2026-10-25 · [문구 심의하기] 버튼 없앰): 영어 칸 입력을 멈추면 0.8초 뒤 · 칸을 벗어나면 바로 ·
+    // 채널·제품을 바꾸면 바로. 한국어 칸은 멈추면(1.2초) 자동 번역 → 번역이 끝나면 심의
     let runTimer = 0;
     const autoRun = delay => { clearTimeout(runTimer); runTimer = setTimeout(() => { const j = loadJourney(); if (j.text.trim() && j.checkedKey !== journeyKey(j)) run(); }, delay); };
     el('text').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { clearTimeout(runTimer); run(); } });
@@ -1224,18 +1322,21 @@
     el('ko').addEventListener('blur', () => autoTr(0));
     el('channel').addEventListener('change', () => { sync(); autoRun(0); paintSingle(root); });
     el('product').addEventListener('change', () => { sync(); autoRun(0); paintSingle(root); });
-    autoRun(0);   // 저장돼 있던 문구가 아직 점검 전이면 열자마자 점검
+    autoRun(0);   // 저장돼 있던 문구가 아직 심의 전이면 열자마자 심의
     loadReviews(root);   // 이 문구로 보낸 검토 요청의 회신 상태
 
     p.addEventListener('click', e => {
       const btn = e.target.closest('[data-act]');
       if (!btn || btn.disabled) return;
       const j = loadJourney();
-      if (btn.dataset.act === 'copy') {
+      if (btn.dataset.act === 'ko-toggle') {
+        showKo(el('kobox').hidden);
+        if (!el('kobox').hidden) el('ko').focus();
+      } else if (btn.dataset.act === 'copy') {
         // BLOCK 문구는 복사 버튼이 나오지 않지만, 혹시 상태가 바뀌었으면 한 번 더 막음
         const s = journeyState(j);
-        if (!s.canCopy) return toast('BLOCK(사용 불가) 문구는 복사할 수 없습니다. 표현을 바꾼 뒤 다시 점검하세요.');
-        if (s.needConfirm && !global.confirm('AI 2차 판정이 이 문구를 사용 불가(BLOCK)로 봤습니다.\n규칙에는 걸리지 않았지만 AI가 위험하다고 본 이유를 확인했고, 그래도 복사할까요?')) return;
+        if (!s.canCopy) return toast('사용 불가 문구는 복사할 수 없습니다. 표현을 바꾼 뒤 다시 심의하세요.');
+        if (s.needConfirm && !global.confirm('AI 2차 심의가 이 문구를 사용 불가로 봤습니다.\n규칙에는 걸리지 않았지만 AI가 위험하다고 본 이유를 확인했고, 그래도 복사할까요?')) return;
         copyText(j.text.trim()).then(ok => toast(ok
           ? (s.r.verdict === 'PASS' ? '문구를 복사했습니다. PASS는 법적 승인이 아니니 최종 확인은 직접 해 주세요.' : `문구를 복사했습니다. ${s.r.verdict} 판정 이유를 확인하고 쓰세요.`)
           : '복사하지 못했습니다. 문구 칸에서 직접 복사하세요.'));
@@ -1256,7 +1357,11 @@
         const rw = j.ai && j.ai.result && j.ai.result.rewrite;
         if (!rw) return;
         el('text').value = rw;
-        run();   // 바꾼 문장은 규칙으로 다시 점검 (AI 결과는 문구가 바뀌어 자동으로 숨김)
+        if (el('ko').value.trim()) {   // 한국어 칸에 옛 문장이 남아 팀에 잘못 공유되지 않게
+          el('ko').value = '';
+          el('trmsg').innerHTML = '<p class="cmp-muted">영어 문장을 바꿔서 한국어 칸을 비웠어요. 바뀐 문장의 뜻은 아래 [뜻 한글로 보기]로 확인하세요.</p>';
+        }
+        run();   // 바꾼 문장은 규칙으로 다시 심의 (AI 결과는 문구가 바뀌어 자동으로 숨김)
         el('text').focus();
       }
     });
@@ -1264,7 +1369,7 @@
     paintSingle(root);
   }
 
-  /** 한→영 자동 번역 (Claude · 서버): 한국어 칸의 문구를 영어로 옮겨 광고 카피 칸에 넣고 바로 점검.
+  /** 한→영 자동 번역 (Claude · 서버): 한국어 칸의 문구를 영어로 옮겨 광고 카피 칸에 넣고 바로 심의.
       같은 한국어는 다시 번역하지 않고, 영어 칸을 직접 고쳐 두었으면 덮어쓰지 않음 (영어 칸을 비우면 다시 번역) */
   async function runTranslateEn(root, run) {
     const p = root.querySelector('[data-sub="single"]');
@@ -1331,7 +1436,7 @@
       store.set(KEY.persona, { text, by: (REBOOT.user() || {}).name || '', at: Date.now() });
       box.value = text;
       paint();
-      toast('페르소나를 저장했습니다. 다음 AI 2차 판정부터 적용됩니다.');
+      toast('페르소나를 저장했습니다. 다음 AI 2차 심의부터 적용됩니다.');
     });
     p.querySelector('[data-act="persona-reset"]').addEventListener('click', () => {
       if (!global.confirm('팀이 저장한 페르소나를 지우고 기본 문안으로 돌아갈까요?')) return;
@@ -1350,9 +1455,10 @@
     if (!s.r || p.dataset.aiBusy === '1') return;
     const key = journeyKey(j);
     p.dataset.aiBusy = '1';
-    p.querySelector('[data-act="ai"]').disabled = true;
-    box.innerHTML = `<div class="cmp-ai cmp-ai-wait"><p class="cmp-muted">${icon('spark')} AI가 문구를 검토하는 중입니다… (보통 10~40초)</p></div>`;
+    p.querySelectorAll('[data-act="ai"]').forEach(b => { b.disabled = true; });
+    box.innerHTML = `<div class="cmp-ai cmp-ai-wait"><p class="cmp-muted">${icon('spark')} AI가 문구를 검토하고 대체 문장을 만드는 중이에요… (보통 10~40초)</p></div>`;
     box.dataset.key = 'busy';
+    paintSingle(root);   // 요약 카드 버튼도 '만드는 중'으로
     try {
       const result = await api('/api/compliance/ai-review', {
         text: j.text.trim(), channel: j.channel === ALL ? 'all channels (B2C ads, social and Amazon listing; B2B buyer deck): flag anything that is a problem in any of them' : DATA.channels[j.channel] || j.channel, category: j.category, product: productBrief(j.product),
@@ -1370,7 +1476,7 @@
       paintSingle(root);
     } catch (e) {
       p.dataset.aiBusy = '';
-      box.innerHTML = `<p class="cmp-note cmp-note-block">AI 2차 판정 실패: ${esc(e.message)}</p>`;
+      box.innerHTML = `<p class="cmp-note cmp-note-block">AI 2차 심의 실패: ${esc(e.message)}</p>`;
       box.dataset.key = 'error';
       box.dataset.errFor = key;
       paintSingle(root);
@@ -1382,11 +1488,11 @@
   function batchHTML() {
     const n = (DATA.batchSample || []).length;
     return `
-<div class="cmp-card-head"><h3>CSV 일괄 심의</h3><span class="cmp-tag">일반식품 기준 · ${RULE_SPAN} · 1차 참고용</span></div>
-<p class="cmp-muted"><code>copy</code> 열이 있는 CSV를 올리면 한 줄씩 판정합니다 (최대 1MB · ${MAX_ROWS}행 · UTF-8 권장). <b>PASS(규칙 미탐지)는 법적 승인이 아닙니다.</b></p>
+<div class="cmp-card-head"><h3>일괄 심의</h3><span class="cmp-tag">일반식품 기준 · ${RULE_SPAN} · 1차 참고용</span></div>
+<p class="cmp-muted"><code>copy</code> 열이 있는 CSV를 올리면 한 줄씩 판정합니다 (최대 1MB · ${MAX_ROWS}행 · UTF-8 권장). <b>'걸린 표현 없음'은 법적 승인이 아닙니다.</b></p>
 <details class="cmp-more"><summary>CSV 열 안내 · 한국어 문구 · 건강기능식품 비교</summary><p class="cmp-muted">
-  <b>한국어 문구</b>는 서버 AI(Claude)가 영어로 옮긴 뒤 <b>영어와 한국어를 둘 다</b> 점검합니다 (뜻 그대로 번역 · 1회 소액 과금). 결과에는 한국어 원문 아래에 영어 번역과 걸린 표현이 함께 나옵니다.<br>
-  <code>channel</code>·<code>product</code> 열이 있으면 줄마다 그 채널·제품으로 점검합니다 (값: <code>${Object.keys(DATA.channels).join(' · ')} · all</code> / <code>${(DATA.products || []).map(p => p.id).join(' · ')} · all</code>, 한국어 이름도 됨). 없으면 아래 선택값을 씁니다.<br>
+  <b>한국어 문구</b>는 서버 AI(Claude)가 영어로 옮긴 뒤 <b>영어와 한국어를 둘 다</b> 심의합니다 (뜻 그대로 번역 · 1회 소액 과금). 결과에는 한국어 원문 아래에 영어 번역과 걸린 표현이 함께 나옵니다.<br>
+  <code>channel</code>·<code>product</code> 열이 있으면 줄마다 그 채널·제품으로 심의합니다 (값: <code>${Object.keys(DATA.channels).join(' · ')} · all</code> / <code>${(DATA.products || []).map(p => p.id).join(' · ')} · all</code>, 한국어 이름도 됨). 없으면 아래 선택값을 씁니다.<br>
   <code>category</code> 열(선택): <code>SUPPLEMENT</code>(또는 '건강기능식품')이면 그 줄만 <b>건강기능식품 기준으로 비교</b>합니다 → 같은 구조·기능 표현이 일반식품은 수정 필요, 건강기능식품은 <b>조건부(COND)</b>. 비우면 일반식품.</p></details>
 <div class="cmp-row">
   <label class="cmp-field"><span>CSV 파일</span><input type="file" accept=".csv,text/csv" class="cmp-input" data-el="file"></label>
@@ -1394,9 +1500,9 @@
   <label class="cmp-field"><span>제품 (열이 없을 때)</span><select class="cmp-input" data-el="product">${productOptions(ALL)}</select></label>
 </div>
 <div class="cmp-actions">
-  <button type="button" class="cmp-btn" data-act="sample">양식 CSV 받기</button>
-  <button type="button" class="cmp-btn" data-act="dummy-csv">더미 문구 ${n}개 CSV 받기 (한국어 · 채널·제품 전체 · 판정별 6개씩)</button>
-  <button type="button" class="cmp-btn" data-act="dummy-run">더미 ${n}개로 바로 심의</button>
+  <button type="button" class="cmp-btn" data-act="sample">CSV 양식 받기</button>
+  <button type="button" class="cmp-btn" data-act="dummy-csv" title="한국어 예시 ${n}개 · 채널·제품 전체 · 판정별 6개씩">예시 CSV 받기</button>
+  <button type="button" class="cmp-btn" data-act="dummy-run">예시 ${n}개로 심의해 보기</button>
   <button type="button" class="cmp-btn cmp-primary" data-act="download" disabled>결과 CSV 받기</button>
 </div>
 <div data-el="trmsg" aria-live="polite"></div>
@@ -1461,7 +1567,7 @@
     function textCell(x, j) {
       if (!x.ko) return highlightHits(x.src, j.r.findings);
       return `<div class="cmp-b-ko">${highlightHits(x.src, j.ko.findings)}</div>
-        <div class="cmp-b-en"><span class="cmp-b-tag">영어 번역</span>${x.en ? highlightHits(x.en, j.en.findings) : `<span class="cmp-muted">번역 안 됨 · 한국어 표현만 점검</span>`}
+        <div class="cmp-b-en"><span class="cmp-b-tag">영어 번역</span>${x.en ? highlightHits(x.en, j.en.findings) : `<span class="cmp-muted">번역 안 됨 · 한국어 표현만 심의</span>`}
         ${x.note ? `<span class="cmp-b-note">${esc(x.note)}</span>` : ''}</div>`;
     }
 
@@ -1481,14 +1587,14 @@
   <thead><tr><th>#</th><th>문구${rows.some(x => x.ko) ? ' (한국어 원문 · 아래 영어 번역)' : ''}</th><th>채널 · 제품</th><th>판정</th><th>규칙</th><th>걸린 표현</th></tr></thead>
   <tbody>${results.map((y, i) => `<tr ${ctxAttrs(y.x.en || y.x.src, { channel: y.x.channel, product: y.x.product, category: y.x.category })}><td>${i + 1}</td><td>${textCell(y.x, y)}</td>
     <td class="cmp-nowrap">${esc(channelShort(y.x.channel))}<br><span class="cmp-muted">${esc(productLabel(y.x.product))}</span>${y.x.category === 'SUPPLEMENT' ? '<br><span class="cmp-chip cmp-chip-manual" title="이 줄만 건강기능식품 기준으로 비교 (우리 제품은 일반식품)">건강기능식품 비교</span>' : ''}</td>
-    <td>${badge(y.r.verdict)}${y.r.legal ? `<br>${light(y.r.legal)}` : ''}${variantNote(y.r) ? '<br><span class="cmp-muted" title="채널·제품에 따라 판정이 다름">조합별 차이 있음</span>' : ''}${(y.r.unchecked || []).length ? '<br><span class="cmp-chip cmp-chip-manual" title="당 함량 표현은 팀 결정으로 규칙이 점검하지 않음 · 실제 함량 확인">당류 미검토</span>' : ''}</td>
+    <td>${badge(y.r.verdict)}${y.r.legal ? `<br>${light(y.r.legal)}` : ''}${variantNote(y.r) ? '<br><span class="cmp-muted" title="채널·제품에 따라 판정이 다름">조합별 차이 있음</span>' : ''}${(y.r.unchecked || []).length ? '<br><span class="cmp-chip cmp-chip-manual" title="당 함량 표현은 팀 결정으로 규칙이 심의하지 않음 · 실제 함량 확인">당류 미검토</span>' : ''}</td>
     <td>${y.r.codes.join(', ') || '—'}</td><td>${y.r.findings.flatMap(f => f.terms.map(t => t.startsWith('(') ? esc(t) : hitButton(f, t, `<code>${esc(t)}</code>`))).join(' ') || '—'}</td></tr>`).join('')}</tbody>
 </table></div>
-${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린 표현을 누르면 이유·대신 쓸 표현·관련 기관을 자세히 볼 수 있습니다.</p>' : ''}`;
+${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린 표현을 누르면 이유·대체 방향·관련 기관을 볼 수 있어요.</p>' : ''}`;
       dlBtn.disabled = false;
     }
 
-    /** 한국어 줄만 모아 서버에서 한 번에 번역 → 실패하면 fallback(더미의 예시 번역) 또는 한국어만 점검 */
+    /** 한국어 줄만 모아 서버에서 한 번에 번역 → 실패하면 fallback(더미의 예시 번역) 또는 한국어만 심의 */
     async function translateRows(fallback) {
       const need = rows.filter(x => x.ko && !x.en);
       if (!need.length) return;
@@ -1502,10 +1608,10 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
           res.items.forEach((t, k) => { part[k].en = t.text; part[k].note = t.note_ko; });
         }
         el('trmsg').innerHTML = `<div class="cmp-tr"><span class="cmp-tr-tag">기계 번역 · ${esc(model || 'Claude')}</span>
-  <p class="cmp-muted">한국어 ${need.length}줄을 뜻 그대로 영어로 옮겨 점검했습니다. 판정은 영어·한국어 중 더 엄격한 쪽입니다.</p></div>`;
+  <p class="cmp-muted">한국어 ${need.length}줄을 뜻 그대로 영어로 옮겨 심의했습니다. 판정은 영어·한국어 중 더 엄격한 쪽입니다.</p></div>`;
       } catch (e) {
         if (fallback) need.forEach(x => { x.en = fallback.get(x) || ''; });
-        el('trmsg').innerHTML = `<p class="cmp-note cmp-note-block">AI 번역 실패: ${esc(e.message)} · ${fallback ? '더미에 들어 있는 예시 번역으로 점검했습니다.' : '한국어 표현만 점검했습니다.'}</p>`;
+        el('trmsg').innerHTML = `<p class="cmp-note cmp-note-block">AI 번역 실패: ${esc(e.message)} · ${fallback ? '예시 문구에 들어 있는 번역으로 심의했습니다.' : '한국어 표현만 심의했습니다.'}</p>`;
       }
     }
 
@@ -1568,7 +1674,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
     });
   }
 
-  /* 점검 기록 (승인·반려 없음 · 단건 심의에서 입력하면 자동 점검·자동 저장) */
+  /* 심의 기록 (승인·반려 없음 · 단건 심의에서 입력하면 자동 심의·자동 저장) */
 
   function historyItemHTML(item) {
     const r = recheck(item);   // 지금 규칙 기준 판정 (걸린 표현을 누르면 자세히 창)
@@ -1576,7 +1682,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
     return `
 <article class="cmp-hist" data-id="${esc(item.id)}" ${ctxAttrs(item.text, r)}>
   <div class="cmp-finding-head">${badge(r.verdict)}
-    <span class="cmp-muted">${esc(channelLabel(r.channel))}${r.product ? ` · ${esc(productLabel(r.product))}` : ''} · 점검 ${fmt(item.checkedAt || item.requestedAt)}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}</span></div>
+    <span class="cmp-muted">${esc(channelLabel(r.channel))}${r.product ? ` · ${esc(productLabel(r.product))}` : ''} · 심의 ${fmt(item.checkedAt || item.requestedAt)}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}</span></div>
   <p class="cmp-quote">${highlightHits(item.text, r.findings)}</p>
   ${changed ? `<p class="cmp-muted">기록할 때 판정은 ${badge(item.verdict)}였습니다${item.rulesVersion ? ` (규칙 ${esc(item.rulesVersion)}${(item.hits || []).length ? ` · 당시 걸린 표현: ${item.hits.map(h => `${esc(h.code)} ${h.terms.map(esc).join(', ')}`).join(' / ')}` : ''})` : ''}. 규칙이 바뀌어 지금 기준으로 다시 판정해 보여 줍니다.</p>` : ''}
   ${trBlock(item.text)}
@@ -1589,11 +1695,11 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
     const filter = HIST_FILTERS.some(([id]) => id === p.dataset.filter) ? p.dataset.filter : 'all';
     const list = all.filter(x => matchFilter(recheck(x).verdict, filter));
     p.innerHTML = `
-<div class="cmp-kpis" data-el="kpis" aria-label="판정별 점검 기록 · 누르면 그 판정만"></div>
-<div class="cmp-card-head"><h3>점검 기록</h3><span class="cmp-tag">문구 심의에서 입력하면 자동 저장</span></div>
+<div class="cmp-kpis" data-el="kpis" aria-label="판정별 심의 기록 · 누르면 그 판정만"></div>
+<div class="cmp-card-head"><h3>심의 기록</h3><span class="cmp-tag">문구 심의에서 입력하면 자동 저장</span></div>
 <p class="cmp-muted">팀 공용 서버에 최근 500건까지 남습니다. 위 숫자 카드를 누르면 그 판정만 보고, 다시 누르면 전체로 돌아갑니다. 걸린 표현을 누르면 자세한 설명 창이 열립니다.</p>
 <p class="cmp-muted">${filter === 'all' ? `전체 ${all.length}건` : `${esc(HIST_FILTERS.find(([id]) => id === filter)[1])} ${list.length}건 / 전체 ${all.length}건`}</p>
-${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록이 없습니다.' : '아직 기록이 없습니다. 문구 심의에서 문구를 입력하면 자동으로 점검되어 여기에 쌓입니다.'}</p>`}
+${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록이 없습니다.' : '아직 기록이 없습니다. 문구 심의에서 문구를 입력하면 자동으로 심의되어 여기에 쌓입니다.'}</p>`}
 <div class="cmp-list">${list.map(historyItemHTML).join('')}</div>`;
     paintKpis(root);
   }
@@ -1604,65 +1710,50 @@ ${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록�
     const active = DATA.rules.filter(r => !r.off).length;
     const head = (title, sum) => `<div class="cmp-card-head"><h3>${title} <span class="cmp-muted cmp-h-sub">${sum}</span></h3></div>`;
     return `
-<div class="cmp-subpanel" data-sub="rules">${head(`규칙 ${RULE_SPAN}`, `사용 ${active}개 · 사용 안 함 ${DATA.rules.length - active}개`)}${rulesTableHTML()}</div>
-<div class="cmp-subpanel" data-sub="map" hidden>${head(`한국 → 미국 표현 매핑 · ${DATA.mappings.length}쌍`, '한국식 표현을 미국에서 쓸 대안으로')}${mappingHTML()}</div>
-<div class="cmp-subpanel" data-sub="ingredients" hidden>${head(`원료 표 · ${(DATA.ingredients || []).length}개`, `확정 ${(DATA.ingredients || []).filter(x => x.status === 'confirmed').length}개 · 후보·금지는 심의에서 걸림`)}${ingredientsHTML()}</div>
+<div class="cmp-subpanel" data-sub="rules">${head(`심의 규칙 ${RULE_SPAN}`, `사용 ${active}개 · 사용 안 함 ${DATA.rules.length - active}개`)}${rulesTableHTML()}</div>
+<div class="cmp-subpanel" data-sub="map" hidden>${head(`대체 표현 · ${DATA.mappings.length}쌍`, '한국식 표현을 미국에서 쓸 표현으로')}${mappingHTML()}</div>
+<div class="cmp-subpanel" data-sub="ingredients" hidden>${head(`원료 · ${(DATA.ingredients || []).length}개`, `확정 ${(DATA.ingredients || []).filter(x => x.status === 'confirmed').length}개 · 후보·금지는 심의에서 걸림`)}${ingredientsHTML()}</div>
 <div class="cmp-subpanel" data-sub="agencies" hidden>${head('기관·플랫폼 안내', `기관 ${(DATA.agencies || []).length}곳 · 플랫폼 ${(DATA.platforms || []).length}곳`)}${agenciesHTML()}</div>
-<div class="cmp-subpanel" data-sub="admin" hidden>${head('관리', '담당자용 · 규칙 시험 · AI 설정·비용 · 자동 수집 키')}${adminHTML()}</div>`;
+<div class="cmp-subpanel" data-sub="admin" hidden>${head('관리자 설정', '컴플라이언스 담당자만 바꿔요')}${adminHTML()}</div>`;
   }
 
   function adminHTML() {
     return `<div class="cmp-folds">` +
       fold('persona', 'AI 검토자 페르소나', '<span data-el="persona-sum"></span>', `
-<p class="cmp-muted">[AI 2차 판정]을 누를 때 AI가 이 관점으로 검토합니다. 관점·말투만 바뀌고, FDA·FTC 기준과 ${RULE_SPAN} 판정 단계는 그대로입니다. 저장하면 팀 모두에게 적용됩니다.</p>
+<p class="cmp-muted">[AI 2차 심의]를 누를 때 AI가 이 관점으로 검토합니다. 관점·말투만 바뀌고, FDA·FTC 기준과 ${RULE_SPAN} 판정 단계는 그대로입니다. 저장하면 팀 모두에게 적용됩니다.</p>
 <textarea class="cmp-input" rows="8" maxlength="${PERSONA_MAX}" data-el="persona"></textarea>
 <p class="cmp-muted" data-el="persona-count" aria-live="polite"></p>
 <div class="cmp-actions">
-  <button type="button" class="cmp-btn" data-act="persona-reset">기본값으로</button>
-  <button type="button" class="cmp-btn cmp-primary" data-act="persona-save">저장</button>
+  <button type="button" class="cmp-btn" data-act="persona-reset">기본값으로 되돌리기</button>
+  <button type="button" class="cmp-btn cmp-primary" data-act="persona-save">페르소나 저장</button>
 </div>`, true) +
-      fold('rules-validate', '규칙 검증 · 검사기 시험', 'FDA 문장을 놓치지 않는지 · 괜찮은 문장을 막지 않는지 · 처음 보는 문장 점수', validateHTML(), false) +
-      fold('setup', '자동 수집 키 신청 · FDA Data Dashboard', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', fdaKeyHTML(), false) +
-      fold('ai-usage', 'AI 사용량 · 예상 비용 (이번 달)', '컴플라이언스·CS의 Claude 호출 · 팀 API 예산 관리', `
-<p class="cmp-muted">AI를 부를 때마다 서버가 모델·토큰을 기록하고 예상 비용을 계산합니다 (단가: Claude API 공식 · 환율은 1달러 ≈ 1,400원으로 어림).
-  이번 달 합계가 한도를 넘으면 AI 기능만 멈추고 규칙 판정은 그대로 씁니다. 실제 청구액은 Claude Console의 Usage에서 확인하세요.</p>
-<div class="cmp-actions"><button type="button" class="cmp-btn" data-act="ai-usage">새로 보기</button></div>
+      fold('rules-validate', '규칙 정확도 시험', 'FDA 문장을 놓치지 않는지 · 괜찮은 문장을 막지 않는지 · 처음 보는 문장 점수', validateHTML(), false) +
+      fold('setup', 'FDA 데이터 키 신청', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', fdaKeyHTML(), false) +
+      fold('ai-usage', '이번 달 AI 사용량·비용', '컴플라이언스·CS의 Claude 호출 · 팀 API 예산 관리', `
+<p class="cmp-muted">AI를 부를 때마다 서버가 모델·토큰을 기록하고 예상 비용을 계산합니다 (단가: Claude API 공식 · 환율은 1달러 ≈ 1,400원으로 어림).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">이번 달 합계가 한도를 넘으면 AI 기능만 멈추고 규칙 판정은 그대로 씁니다. 실제 청구액은 Claude Console의 Usage에서 확인하세요.</p></details>
+<div class="cmp-actions"><button type="button" class="cmp-btn" data-act="ai-usage">사용량 새로고침</button></div>
 <div data-el="aiusage" aria-live="polite"></div>`, false) +
       `</div>`;
   }
 
-  /** 규칙 표의 근거 조문 칸: 기관 + 조문 한 줄씩 (설명은 마우스를 올리면) */
-  function lawHTML(law) {
-    return (law || []).map(l => `<span class="cmp-law-line" title="${esc(l.note || '')}"><b>${esc(l.agency)}</b> ${esc(l.cite)}</span>`).join('') || '<span class="cmp-muted">—</span>';
-  }
-
-  /** 규칙 표: 기본 신호와 다른 경우 (예: R12 Original → 🔴 · R10 좋은 후기 조건 보상 → 🔴) */
-  function lightOverrides(r) {
-    const out = Object.entries(r.legalByProduct || {}).map(([p, l]) => `<br><span class="cmp-muted">${esc(productLabel(p))} ${LIGHT[l] ? LIGHT[l].icon : ''}</span>`);
-    if (r.compensatedLegal) out.push(`<br><span class="cmp-muted">좋은 후기 조건 보상 ${LIGHT[r.compensatedLegal] ? LIGHT[r.compensatedLegal].icon : ''}</span>`);
-    return out.join('');
-  }
-
   function rulesTableHTML() {
     return `
-<p class="cmp-muted">근거 구분과 근거 조문은 FDA·FTC 공식 문서 기준으로 정리했습니다 (2026-10-24 · 참고용이며 법률 자문이 아님). '팀'으로 표시된 줄은 법 조항이 아니라 팀이 보수적으로 정한 기준입니다.
+<p class="cmp-muted">근거 구분과 근거 조문은 FDA·FTC 공식 문서 기준으로 정리했습니다 (2026-10-24 · 참고용이며 법률 자문이 아님).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">'팀'으로 표시된 줄은 법 조항이 아니라 팀이 보수적으로 정한 기준입니다.
   면책 별표(*)를 붙여도 판정은 바뀌지 않습니다. 걸리는 예를 누르면 자세한 설명 창이 열립니다.
   R11·R12(당류 표시)는 2026-10-23에 꺼 두었다가 브랜드 가이드 v1.1이 나와 2026-10-25에 다시 켰습니다.
-  법적 신호: ${light('red')} 근거가 있어도 못 씀 · ${light('yellow')} 근거·조건에 따라 가능 → 법무 검토 · ${light('green')} 법 위반은 아님 (규제 담당 확인 전 초안).</p>
+  법적 신호: ${light('red')} 근거가 있어도 못 씀 · ${light('yellow')} 근거·조건에 따라 가능 → 법무 검토 · ${light('green')} 법 위반은 아님 (규제 담당 확인 전 초안).</p></details>
 <div class="cmp-table-wrap"><table class="cmp-table">
-  <thead><tr><th>코드</th><th>이름</th><th>기본 판정</th><th>법적 신호</th><th>근거 구분</th><th>근거 조문</th><th>걸리는 예</th><th>대신 쓸 방향</th></tr></thead>
-  <tbody>${DATA.rules.map(r => `<tr ${ctxAttrs('')}><td class="cmp-nowrap"><b>${r.code}</b></td><td>${esc(r.name)}${r.off ? ' <span class="cmp-chip">사용 안 함</span>' : ''}</td>
+  <thead><tr><th>코드</th><th>이름</th><th>기본 판정</th><th>한 줄 결론</th><th><span class="cmp-sr">자세히</span></th></tr></thead>
+  <tbody>${DATA.rules.map(r => `<tr ${ctxAttrs('')} class="cmp-rule-row${r.off ? ' is-off' : ''}"><td class="cmp-nowrap"><b>${r.code}</b></td>
+    <td>${r.off ? esc(r.name) : `<button type="button" class="cmp-rule-name" data-act="term-detail" data-code="${r.code}" data-term="${esc(r.terms[0])}" aria-haspopup="dialog">${esc(r.name)}</button>`}${r.off ? ' <span class="cmp-chip">사용 안 함</span>' : ''}</td>
     <td class="cmp-nowrap">${r.off ? '<span class="cmp-muted">판정 안 함</span>' : badge(r.verdict)}</td>
-    <td class="cmp-nowrap" title="${esc(r.legalNote || '')}">${light(r.legal || 'yellow')}${lightOverrides(r)}</td>
-    <td class="cmp-nowrap">${r.basis.map(b => BASIS[b]).join('<br>')}</td>
-    <td class="cmp-law">${lawHTML(r.law)}</td>
-    <td>${r.terms.slice(0, 4).concat(r.ko.slice(0, 2)).map(t => r.off ? `<code>${esc(t)}</code>` : hitButton(r, t, `<code>${esc(t)}</code>`)).join(' ')}</td><td>${esc(r.alt)}</td></tr>`).join('')}</tbody>
+    <td>${esc(plainOf('rules', r.code).say || r.alt)}</td><td class="cmp-chev" aria-hidden="true">${r.off ? '' : '›'}</td></tr>`).join('')}</tbody>
 </table></div>`;
   }
 
   function mappingHTML() {
     return `
-<p class="cmp-muted">${RULE_SPAN} 기준 초안입니다 (영어 대안은 모두 규칙 점검 PASS 확인). 검토자·검토일이 빈 항목은 규제 담당 검토 전이며, <code>[확인 필요]</code>는 제품 팩트시트로 채웁니다.</p>
+<p class="cmp-muted">${RULE_SPAN} 기준 초안입니다 (영어 대안은 모두 규칙 심의 PASS 확인).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">검토자·검토일이 빈 항목은 규제 담당 검토 전이며, <code>[확인 필요]</code>는 제품 팩트시트로 채웁니다.</p></details>
 <div class="cmp-table-wrap"><table class="cmp-table">
   <thead><tr><th>한국 표현</th><th>미국 대안</th><th>규칙</th><th>검토자</th><th>검토일</th></tr></thead>
   <tbody>${DATA.mappings.map(m => `<tr><td>${esc(m.ko)}</td><td>${esc(m.us)}${m.note ? `<br><span class="cmp-muted">${esc(m.note)}</span>` : ''}</td>
@@ -1672,7 +1763,7 @@ ${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록�
 
   // 원료 표 (2026-10-25): 확정 원료는 이름·사실 문장이 PASS, 후보는 R15, 금지는 R13 (data.js ingredients · status만 바꾸면 됨)
   function ingredientsHTML() {
-    const ST = { confirmed: ['확정', 'PASS', '이름·"들어 있다"는 사실은 통과 · 강조·효과·특허 표현은 계속 점검'],
+    const ST = { confirmed: ['확정', 'PASS', '이름·"들어 있다"는 사실은 통과 · 강조·효과·특허 표현은 계속 심의'],
       candidate: ['후보', 'REVIEW', 'R15 미확정 정보 — 확정 전에는 문구에 쓰지 않음'],
       avoid: ['금지', 'REVIEW', 'R13 — 넣지 않기로 한 성분'],
       base: ['기본 원료', 'PASS', '배합용 (감미료·겔화제·색소) · 심의 규칙과 무관'] };
@@ -1686,22 +1777,24 @@ ${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록�
       const auto = !gras ? '<span class="cmp-muted">수집 전</span>'
         : !c ? '<span class="cmp-muted">검색 안 함</span>'
         : c.total ? `통과 ${c.ok} / 전체 ${c.total}건${links ? `<br>${links}` : ''}` : '<b>공개 통지 0건</b>';
-      return auto + (x.cfr ? `<br><span class="cmp-muted">규정: ${esc(x.cfr)}</span>` : '') + (x.gras ? `<br><span class="cmp-muted">⚠️ ${esc(x.gras)}</span>` : '');
+      return auto + (x.cfr ? `<br><span class="cmp-muted">규정: ${esc(x.cfr)}</span>` : '') + (x.gras ? `<br><span class="cmp-muted">주의 · ${esc(x.gras)}</span>` : '');
     };
     // 음료·젤리 원료 검토 (2026-10-25 · docs/drink-ingredients.md · docs/jelly-ingredients.md)
-    const USE = { ok: '✅ 바로 사용', cond: '⚠️ 조건부', no: '❌ 안 씀' };
+    const USE = { ok: `${ldot('green')}바로 사용`, cond: `${ldot('yellow')}조건부`, no: `${ldot('red')}안 씀` };
     const rows = (DATA.ingredients || []).map(x => {
       const s = ST[x.status] || ['?', 'REVIEW', ''];
-      return `<tr><td>${badge(s[1])} ${esc(s[0])}</td><td><b>${esc(x.name)}</b><br><span class="cmp-muted">${esc((x.en || []).slice(0, 3).join(' · '))}</span></td>
-        <td class="cmp-nowrap">${USE[x.jelly] || '—'}</td><td class="cmp-nowrap">${USE[x.drink] || '—'}</td><td>${grasCell(x)}</td>
-        <td>${esc(s[2])}</td><td class="cmp-muted">${esc([x.source, x.note].filter(Boolean).join(' · '))}</td></tr>`;
+      return `<tr><td class="cmp-nowrap"><span class="cmp-badge cmp-v-${s[1]}">${esc(s[0])}</span></td><td><b>${esc(x.name)}</b><br><span class="cmp-muted">${esc((x.en || []).slice(0, 3).join(' · '))}</span></td>
+        <td class="cmp-nowrap">${USE[x.jelly] || '—'}</td><td class="cmp-nowrap">${USE[x.drink] || '—'}</td>
+        <td>${esc(ING_SAY[x.status] || s[2])}</td>
+        <td><details class="cmp-why cmp-why-cell"><summary>보기</summary><p class="cmp-muted">${esc(s[2])}</p>
+          <p class="cmp-muted"><b>FDA GRAS 통지</b> ${grasCell(x)}</p>${[x.source, x.note].filter(Boolean).length ? `<p class="cmp-muted">${esc([x.source, x.note].filter(Boolean).join(' · '))}</p>` : ''}</details></td></tr>`;
     }).join('');
     return `
-<p class="cmp-muted">단건·일괄 심의가 원료 문장을 판정하는 기준입니다. 원료가 확정되면 <code>tabs/compliance/static/data.js</code>의 <code>ingredients</code>에서 해당 원료의 <code>status</code>를
-  <code>'confirmed'</code>로 바꾸고 <code>node tabs/compliance/tools/export_server_rules.js</code>를 실행하세요 (CS 재점검도 같은 기준).
-  확정이어도 <b>함량·효과·특허</b>를 말하면 다른 규칙(R5·R8·R13·R15)이 그대로 잡습니다. 미국 원료 근거(GRAS)는 문구 규칙과 별개로 알디콤 확인이 필요합니다.</p>
+<p class="cmp-muted">단건·일괄 심의가 원료 문장을 판정하는 기준입니다.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">원료가 확정되면 <code>tabs/compliance/static/data.js</code>의 <code>ingredients</code>에서 해당 원료의 <code>status</code>를
+  <code>'confirmed'</code>로 바꾸고 <code>node tabs/compliance/tools/export_server_rules.js</code>를 실행하세요 (CS 재심의도 같은 기준).
+  확정이어도 <b>함량·효과·특허</b>를 말하면 다른 규칙(R5·R8·R13·R15)이 그대로 잡습니다. 미국 원료 근거(GRAS)는 문구 규칙과 별개로 알디콤 확인이 필요합니다.</p></details>
 <div class="cmp-table-wrap"><table class="cmp-table">
-  <thead><tr><th>상태</th><th>원료</th><th>젤리</th><th>음료</th><th title="FDA GRAS 통지 공개 목록 (주 1회 자동) · 통지가 없어도 자체 GRAS일 수 있음">FDA GRAS 통지</th><th>심의에서</th><th>근거·메모</th></tr></thead>
+  <thead><tr><th>상태</th><th>원료</th><th>젤리</th><th>음료</th><th>한 줄 결론</th><th title="심의 기준 · FDA GRAS 통지(주 1회 자동 · 통지가 없어도 자체 GRAS일 수 있음) · 출처·메모">근거</th></tr></thead>
   <tbody>${rows}</tbody>
 </table></div>`;
   }
@@ -1710,7 +1803,7 @@ ${list.length ? '' : `<p class="cmp-muted">${all.length ? '이 판정의 기록�
     return `
 <p class="cmp-muted"><b>검사기 시험 보기.</b> 위 세 줄은 규칙을 만들 때 본 문장이라 <b>규칙을 고치다 망가뜨리지 않았는지</b> 확인하는 용도입니다 (모두 0이어야 통과).
   마지막 줄 <b>처음 보는 문장 시험</b>은 규칙을 만들 때 쓰지 않은 문장으로 본 <b>진짜 실력 점수</b>입니다.</p>
-<div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="validate">시험 다시 보기</button></div>
+<div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="validate">규칙 시험 실행</button></div>
 <div data-el="validation" aria-live="polite"></div>`;
   }
 
@@ -1792,22 +1885,22 @@ ${v.gpt.wrong.length ? `<h4 class="cmp-h4">GPT가 찾은 문장 중 아직 틀�
 ${v.quotesPass.concat(v.safeBad).length ? `<h4 class="cmp-h4">확인할 문구</h4><ul class="cmp-dlg-list">${v.quotesPass.map(x => `<li>경고장 문구가 PASS: ${esc(x.q.text)}</li>`).join('')}
   ${v.safeBad.map(x => `<li>안전 문구가 ${x.r.verdict}: ${esc(x.s.text)} (${x.r.codes.join(', ')})</li>`).join('')}</ul>` : ''}
 ${v.selfBad.length ? `<h4 class="cmp-h4">기대와 다른 예문</h4><ul class="cmp-dlg-list">${v.selfBad.map(x => `<li>${esc(x.t.text)} → 기대 ${x.t.expect}, 결과 ${x.r.verdict}</li>`).join('')}</ul>` : ''}
-<p class="cmp-muted">CS 답변 템플릿 C1~C10 점검은 '고객 응대 → 답변 템플릿'에서 확인합니다.</p>`;
+<p class="cmp-muted">CS 답변 템플릿 C1~C10 심의은 '고객 응대 → 답변 템플릿'에서 확인합니다.</p>`;
     });
   }
 
   /* ───────── 규제 모니터링 ─────────
      ① 서버 수집 결과: tabs/compliance/가 만든 tabs/compliance/static/monitor-data.js(window.REBOOT_MONITOR)를 읽기만 함
-        첫 확인은 '기준 저장'만, 이후 🆕 새 항목 · 🔄 변경 표시. 경고장 문구는 '사례집 후보' → 사람이 승인
+        첫 확인은 '모두 읽음 표시'만, 이후 새 항목 · 변경 표시. 경고장 문구는 '사례집 후보' → 사람이 승인
      ② Federal Register: 키 없이 브라우저에서 바로 (CORS 허용 확인 2026-10-23)
      ③ openFDA 식품 리콜: 키 없이 브라우저에서 바로 (404는 0건) */
 
   /* 세부 메뉴 (2026-10-26: 출처 안내·직접 올리기 → 수집 결과 안 접힘, 사례집 후보는 따로)
      이 탭 줄은 core가 왼쪽 메뉴 '규제 모니터링' 아래에 들여 써서 보여 줌 */
   const MON_TABS = [
-    ['auto', '수집 결과', 'filter', '서버가 하루 1회 기관 공식 데이터에서 가져옴 · 직접 올린 경고장도 여기에 합쳐짐'],
-    ['cands', '사례집 후보', 'edit', '경고장·NAD 결정에서 뽑은 문구 · 사람이 승인한 것만 사례집·규칙 검증에 씀'],
-    ['manual', '사람이 확인', 'user', '서버가 자동으로 못 읽는 사이트 바로가기 · 저장되지 않는 즉석 조회']
+    ['auto', '새 소식', 'filter', '서버가 하루 1회 기관 공식 데이터에서 가져옴 · 직접 올린 경고장도 여기에 합쳐짐'],
+    ['cands', '위반 사례 후보', 'edit', '경고장·NAD 결정에서 뽑은 문구 · 사람이 승인한 것만 사례집·규칙 검증에 씀'],
+    ['manual', '직접 확인할 곳', 'user', '서버가 자동으로 못 읽는 사이트 바로가기 · 저장되지 않는 즉석 조회']
   ];
   SUBS.monitor = MON_TABS;
 
@@ -1829,17 +1922,17 @@ ${v.selfBad.length ? `<h4 class="cmp-h4">기대와 다른 예문</h4><ul class="
   /** FDA Data Dashboard 키 신청 순서 (관리 › 자동 수집 키 신청) */
   function fdaKeyHTML() {
     return `
-<p class="cmp-muted">FDA 공식 Data Dashboard API 키가 있으면 <b>식품 경고장 목록</b>과 <b>한국산 식품 수입 거부</b>를 매일 자동으로 모읍니다 (키 1개로 둘 다). 무료이며 이메일로 받습니다.</p>
+<p class="cmp-muted">FDA 공식 Data Dashboard API 키가 있으면 <b>식품 경고장 목록</b>과 <b>한국산 식품 수입 거부</b>를 매일 자동으로 모읍니다 (키 1개로 둘 다).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">무료이며 이메일로 받습니다.</p></details>
 <ol class="cmp-steps">
   <li>${link('https://www.accessdata.fda.gov/scripts/oul', 'OII Unified Logon 열기 ↗')} → 오른쪽 <b>New User</b>의 <b>Create Account</b> 버튼 (이미 계정이 있으면 왼쪽 Email·Password로 Login)</li>
   <li>계정 정보 입력: 이메일 · 이름(First Name) · 성(Last Name) · 소속(Organization, 없으면 <code>Self</code>) · 비밀번호</li>
   <li>신청할 프로그램 목록에서 <b>Data Dashboard API</b>를 골라 접근 요청 (계정을 만든 뒤 로그인해서 요청해도 됨)</li>
   <li>FDA 메일 기다리기: 요청 접수 → 승인·안내 메일. 키는 메일로 오고, 로그인 후 <b>Data Dashboard API 옆 돋보기</b>를 눌러도 보임 · 신청한 이메일이 사용자 이름(Authorization-User)</li>
   <li><code>.env</code>에 <code>FDA_DASHBOARD_USER=신청한 이메일</code> · <code>FDA_DASHBOARD_KEY=받은 키</code>를 넣고 서버를 껐다 켜기</li>
-  <li>규제 모니터링 › 수집 결과의 [지금 수집]을 눌러 'FDA 경고장' · 'FDA 수입 거부'에 항목이 생기는지 확인</li>
+  <li>규제 모니터링 › 새 소식의 [지금 수집]을 눌러 'FDA 경고장' · 'FDA 수입 거부'에 항목이 생기는지 확인</li>
 </ol>
 <p class="cmp-muted">안내 문서: ${link('https://datadashboard.fda.gov/oii/api/index.htm', 'Data Dashboard API 사용 안내 ↗')} · 문의 <code>FDADataDashboard@fda.hhs.gov</code>.
-  이 API는 경고장 <b>본문 문구는 주지 않으므로</b> 사례집 후보는 '규제 모니터링 › 수집 결과'의 [FDA 경고장 직접 올리기]에서 넣습니다.</p>`;
+  이 API는 경고장 <b>본문 문구는 주지 않으므로</b> 위반 사례 후보는 '규제 모니터링 › 새 소식'의 [FDA 경고장 직접 올리기]에서 넣습니다.</p>`;
   }
   function monitorHTML() {
     const auto = (DATA.monitorSources || []).filter(s => s.modes.includes('auto')).length;
@@ -1850,7 +1943,7 @@ ${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refre
 <div data-el="refreshmsg" aria-live="polite"></div>
 <div data-el="server"></div>
 <div class="cmp-folds">` + fold('letters', 'FDA 경고장 직접 올리기', 'fda.gov가 자동 수집을 막을 때 · XLSX 목록 · 본문 붙여넣기', `
-<p class="cmp-muted">fda.gov는 서버의 자동 요청을 봇 차단으로 막습니다 (2026-10-24 확인). 사람이 브라우저로 여는 것은 됩니다. 올린 경고장은 위 수집 결과의 FDA 묶음에 <b>직접 올림</b>으로 합쳐지고, 본문에서 뽑은 인용 문구는 '사례집 후보' 세부 탭으로만 들어갑니다 (사람이 승인).</p>
+<p class="cmp-muted">fda.gov는 서버의 자동 요청을 봇 차단으로 막습니다 (2026-10-24 확인).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">사람이 브라우저로 여는 것은 됩니다. 올린 경고장은 위 새 소식의 FDA 묶음에 <b>직접 올림</b>으로 합쳐지고, 본문에서 뽑은 인용 문구는 '위반 사례 후보'로만 들어갑니다 (사람이 승인).</p></details>
 <h4 class="cmp-h4">① 경고장 목록 XLSX</h4>
 <ol class="cmp-steps">
   <li>${link('https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/compliance-actions-and-activities/warning-letters', 'FDA 경고장 목록 페이지 열기 ↗')}
@@ -1861,11 +1954,11 @@ ${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refre
 </ol>
 <div class="cmp-row">
   <label class="cmp-field cmp-grow"><span>XLSX 파일</span><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="cmp-input" data-el="wlfile"></label>
-  <div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="wl-xlsx" disabled>XLSX 올리기</button></div>
+  <div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="wl-xlsx" disabled>목록 올리기</button></div>
 </div>
 <h4 class="cmp-h4">② 경고장 본문 붙여넣기 → 인용 문구 추출</h4>
 <ol class="cmp-steps">
-  <li>위 수집 결과의 FDA 경고장 목록에서 제목 링크를 누르거나, 경고장 목록 페이지 표에서 회사 이름을 눌러 경고장을 엶</li>
+  <li>위 새 소식의 FDA 경고장 목록에서 제목 링크를 누르거나, 경고장 목록 페이지 표에서 회사 이름을 눌러 경고장을 엶</li>
   <li>주소창의 주소를 복사해 아래 '경고장 주소'에 붙여 넣음 (같은 경고장과 자동으로 묶임)</li>
   <li>경고장 화면에서 <b>Ctrl+A → Ctrl+C</b>로 전체 복사 → '경고장 본문'에 붙여 넣고 [본문에서 문구 뽑기]</li>
 </ol>
@@ -1877,8 +1970,8 @@ ${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refre
   <label class="cmp-field"><span>제목 (선택)</span><input class="cmp-input" data-el="wlsubject" placeholder="예: Unapproved New Drugs/Misbranded"></label>
 </div>
 <label class="cmp-field"><span>경고장 본문</span><textarea class="cmp-input" rows="6" data-el="wltext"></textarea></label>
-<div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="wl-text" disabled>본문에서 문구 뽑기</button></div>
-<div data-el="wlmsg" aria-live="polite"></div>`, false) + fold('guide', '출처 안내', `자동 수집 ${auto}곳 · 어디서 무엇을 가져와 어디에 쓰나 · 필요한 키 · 지금 상태`, `
+<div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="wl-text" disabled>인용 문구 추출</button></div>
+<div data-el="wlmsg" aria-live="polite"></div>`, false) + fold('guide', '수집 출처', `자동 수집 ${auto}곳 · 어디서 무엇을 가져와 어디에 쓰나 · 필요한 키 · 지금 상태`, `
 <div data-el="mon-guide">${monGuideHTML(null, [])}</div>`, false) + `</div>
 </div>
 <div class="cmp-subpanel" data-sub="cands" hidden>
@@ -1887,21 +1980,21 @@ ${monHead('cands')}
 </div>
 <div class="cmp-subpanel" data-sub="manual" hidden>
 ${monHead('manual')}
-<div class="cmp-folds">` + fold('manual', '바로가기로 확인하는 곳', `${(DATA.manualChecks || []).length}곳 · 서버가 자동으로 못 읽는 사이트`, `
-<p class="cmp-muted">아래 사이트는 아직 자동 수집하지 않아 버튼으로 열어 확인합니다. 나머지 출처(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)와 Firecrawl로 읽는 곳(NAD · FTC 보도자료 · Prop 65 60일 통지 · 올리브영 회원 정책, 2026-10-26부터)은 '수집 결과' 메뉴에서 [지금 수집]과 하루 1회 작업으로 모읍니다. Prop 65 통지·올리브영 정책은 Firecrawl 크레딧을 아끼려고 주 1회만 새로 읽습니다.</p>
+<div class="cmp-folds">` + fold('manual', '직접 열어 볼 사이트', `${(DATA.manualChecks || []).length}곳 · 서버가 자동으로 못 읽는 사이트`, `
+<p class="cmp-muted">아래 사이트는 아직 자동 수집하지 않아 버튼으로 열어 확인합니다.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">나머지 출처(FDA 경고장·수입 거부·리콜, CBP CROSS, Federal Register, Regulations.gov, CourtListener)와 Firecrawl로 읽는 곳(NAD · FTC 보도자료 · Prop 65 60일 통지 · 올리브영 회원 정책, 2026-10-26부터)은 '새 소식' 메뉴에서 [지금 수집]과 하루 1회 작업으로 모읍니다. Prop 65 통지·올리브영 정책은 Firecrawl 크레딧을 아끼려고 주 1회만 새로 읽습니다.</p></details>
 <div class="cmp-table-wrap"><table class="cmp-table">
   <thead><tr><th>사이트</th><th>무엇을 보나</th><th>자동으로 못 읽는 이유</th></tr></thead>
   <tbody>${(DATA.manualChecks || []).map(m => `<tr><td class="cmp-nowrap">${link(m.url, m.name + ' ↗')}</td><td>${esc(m.what)}</td><td class="cmp-muted">${esc(m.why)}</td></tr>`).join('')}</tbody>
-</table></div>`, false) + fold('fr', 'Federal Register 새 공고 조회', 'FDA·FTC·CBP·USTR 공고 검색 (키 없음)', `
+</table></div>`, false) + fold('fr', 'Federal Register 공고 검색', 'FDA·FTC·CBP·USTR 공고 검색 (키 없음)', `
 <p class="cmp-muted">FDA·FTC·CBP·USTR 공고를 최신순으로 조회합니다. 키 없이 조회하며 결과는 1분 동안 캐시합니다.
-  <button type="button" class="cmp-btn cmp-btn-sm" data-act="goto" data-goto="agencies">각 기관이 하는 일 보기</button></p>
+  <button type="button" class="cmp-btn cmp-btn-sm" data-act="goto" data-goto="agencies">기관 안내 보기</button></p>
 <div class="cmp-row">
   <label class="cmp-field cmp-grow"><span>검색어</span><input class="cmp-input" data-el="frq" value="food labeling"></label>
   <label class="cmp-field"><span>기관</span><select class="cmp-input" data-el="fra">
     <option value="">4개 기관 전체</option>${Object.entries(FR_AGENCIES).map(([slug, name]) => `<option value="${slug}">${name}</option>`).join('')}</select></label>
   <div class="cmp-actions"><button type="button" class="cmp-btn cmp-primary" data-act="fr-search">조회</button></div>
 </div>
-<div data-el="frout" aria-live="polite"></div>`, false) + fold('openfda', 'openFDA 식품 리콜 조회', '리콜 사유로 검색 (키 없음)', `
+<div data-el="frout" aria-live="polite"></div>`, false) + fold('openfda', 'openFDA 식품 리콜 검색', '리콜 사유로 검색 (키 없음)', `
 <p class="cmp-muted">openFDA 식품 리콜(<code>food/enforcement</code>)을 리콜 사유로 조회합니다. 키 없이 조회하며 결과는 1분 동안 캐시합니다.</p>
 <div class="cmp-row">
   <label class="cmp-field cmp-grow"><span>리콜 사유 검색어</span><input class="cmp-input" data-el="q" value="undeclared"></label>
@@ -1972,7 +2065,7 @@ ${monHead('manual')}
     return list;
   }
 
-  const MARK = { new: '🆕 새 항목', changed: '🔄 변경', same: '', null: '' };
+  const MARK = { new: '<span class="cmp-new">새 항목</span>', changed: '<span class="cmp-new is-changed">변경</span>', same: '', null: '' };
   // 한글 제목·요약 (서버가 Claude로 만든 참고용 · 원문이 기준)
   function koLine(s) { return s ? `<span class="cmp-ko" lang="ko">${esc(s)}</span>` : ''; }
 
@@ -2043,20 +2136,26 @@ ${monHead('manual')}
   <tbody>${rows}</tbody></table></div>`;
   }
 
+  /** 수집 결과 필터 (2026-10-26): 검색칸 · 기관 알약 · 새 항목만 → 제품군·방식·기간은 [필터 더 보기] 안에 */
   function monFilterHTML() {
     const ag = (DATA.monitorAgencies || []);
+    const more = MON_F.product !== 'all' || MON_F.mode !== 'all' || MON_F.days !== 'all';
     return `
-<div class="cmp-row cmp-mon-filter">
-  <label class="cmp-field"><span>기관</span><select class="cmp-input" data-monf="agency">
-    <option value="all">전체 기관</option>${ag.map(a => `<option value="${esc(a.code)}"${MON_F.agency === a.code ? ' selected' : ''}>${esc(a.code)} · ${esc(a.ko)}</option>`).join('')}</select></label>
-  <label class="cmp-field"><span>제품군</span><select class="cmp-input" data-monf="product">
-    ${[['all', '전체 제품군']].concat(PTAGS.map(t => [t.id, t.ko]), [['common', '공통 (제품군 표시 없음)']]).map(([v, l]) => `<option value="${v}"${MON_F.product === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
-  <label class="cmp-field"><span>방식</span><select class="cmp-input" data-monf="mode">
-    ${[['all', '전체'], ['auto', '자동 수집'], ['manual', '직접 올림']].map(([v, l]) => `<option value="${v}"${MON_F.mode === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-  <label class="cmp-field"><span>기간</span><select class="cmp-input" data-monf="days">
-    ${[['all', '전체'], ['7', '최근 7일'], ['30', '최근 30일'], ['90', '최근 90일'], ['365', '최근 1년']].map(([v, l]) => `<option value="${v}"${MON_F.days === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-  <label class="cmp-field cmp-grow"><span>검색어 (제목·회사·요약·한글 요약)</span><input class="cmp-input" data-monf="q" value="${esc(MON_F.q)}" placeholder="예: jelly · hangover · 젤리 · Korea"></label>
-  <label class="cmp-check cmp-mon-hot"><input type="checkbox" data-monf="hot"${MON_F.hot ? ' checked' : ''}> 🆕·🔄 새 항목만</label>
+<div class="cmp-mon-filter2">
+  <label class="cmp-mon-search"><span class="cmp-sr">검색어 (제목·회사·요약·한글 요약)</span><input class="cmp-input" type="search" data-monf="q" value="${esc(MON_F.q)}" placeholder="검색 · jelly · hangover · 젤리 · Korea"></label>
+  <div class="cmp-seg" role="group" aria-label="기관">
+    ${[['all', '전체']].concat(ag.map(a => [a.code, a.code])).map(([v, l]) => `<button type="button" class="cmp-pill${MON_F.agency === v ? ' is-on' : ''}" data-act="mon-agency" data-v="${esc(v)}" aria-pressed="${MON_F.agency === v}"${v === 'all' ? '' : ` title="${esc((ag.find(a => a.code === v) || {}).ko || '')}"`}>${esc(l)}</button>`).join('')}
+  </div>
+  <label class="cmp-check cmp-mon-hot"><input type="checkbox" data-monf="hot"${MON_F.hot ? ' checked' : ''}> 새 항목·변경만</label>
+  <details class="cmp-more cmp-mon-more"${more ? ' open' : ''}><summary>필터 더 보기${more ? ' · 적용 중' : ''}</summary>
+  <div class="cmp-row cmp-mon-filter">
+    <label class="cmp-field"><span>제품군</span><select class="cmp-input" data-monf="product">
+      ${[['all', '전체 제품군']].concat(PTAGS.map(t => [t.id, t.ko]), [['common', '공통 (제품군 표시 없음)']]).map(([v, l]) => `<option value="${v}"${MON_F.product === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    <label class="cmp-field"><span>방식</span><select class="cmp-input" data-monf="mode">
+      ${[['all', '전체'], ['auto', '자동 수집'], ['manual', '직접 올림']].map(([v, l]) => `<option value="${v}"${MON_F.mode === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="cmp-field"><span>기간</span><select class="cmp-input" data-monf="days">
+      ${[['all', '전체'], ['7', '최근 7일'], ['30', '최근 30일'], ['90', '최근 90일'], ['365', '최근 1년']].map(([v, l]) => `<option value="${v}"${MON_F.days === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+  </div></details>
 </div>`;
   }
 
@@ -2095,7 +2194,7 @@ ${monHead('manual')}
       return `
 <details class="cmp-fold" data-src="${esc(key)}"${open ? ' open' : ''}>
   <summary><span class="cmp-agency-chip cmp-ag-${esc(g.code)}">${esc(g.code)}</span><span class="cmp-fold-title">${esc(ag.ko)}</span>
-    <span class="cmp-tag">${g.rows.length}개</span>${hot ? `<span class="cmp-chip">🆕·🔄 ${hot}</span>` : ''}
+    <span class="cmp-tag">${g.rows.length}개</span>${hot ? `<span class="cmp-chip">새·변경 ${hot}</span>` : ''}
     <span class="cmp-fold-latest cmp-muted">${bySrc.map(id => esc(monMeta(id).name)).join(' · ')}</span></summary>
   ${bySrc.map(id => {
         const meta = monMeta(id);
@@ -2111,7 +2210,7 @@ ${monHead('manual')}
       <tbody>${list.map(({ item: i, mode, tags }) => `<tr${i.mark === 'new' || i.mark === 'changed' ? ' class="cmp-row-hot"' : ''}>
         <td class="cmp-nowrap">${MARK[i.mark]}</td><td class="cmp-nowrap">${esc(i.date || '—')}</td>
         <td>${link(i.url, i.title || i.id)}${koLine(i.title_ko)}${i.firm ? `<span class="cmp-firm cmp-muted">${esc(i.firm)}</span>` : ''}<span class="cmp-ptags">${tagChips(tags)}</span></td>
-        <td>${esc(String(i.summary || '').slice(0, 240))}${koLine(i.summary_ko)}${(i.quotes || []).length ? `<br><span class="cmp-chip">인용 문구 ${i.quotes.length}개 → 사례집 후보</span>` : ''}</td>
+        <td>${esc(String(i.summary || '').slice(0, 240))}${koLine(i.summary_ko)}${(i.quotes || []).length ? `<br><span class="cmp-chip">인용 문구 ${i.quotes.length}개 → 위반 사례 후보</span>` : ''}</td>
         <td class="cmp-nowrap"><span class="cmp-chip ${mode === 'manual' ? 'cmp-chip-manual' : ''}">${MODE_LABEL[mode]}</span></td></tr>`).join('')}</tbody>
     </table></div>
   </div>`;
@@ -2128,9 +2227,9 @@ ${monHead('manual')}
     const data = monitorData();
     if (!data) {
       guide.innerHTML = monGuideHTML(null, []);
-      cbox.innerHTML = '<p class="cmp-muted">아직 서버 수집 결과가 없습니다. 수집 결과의 경고장 인용 문구가 여기에 후보로 들어옵니다.</p>';
-      candTab.textContent = '사례집 후보';
-      box.innerHTML = `<p class="cmp-note">아직 서버 수집 결과가 없습니다. 위의 [지금 수집]을 누르면(30초~1분) 서버에 저장되어 여기에 표시됩니다. 하루 1회 자동 수집을 켜 두었다면 매일 08:00에도 모읍니다. 그 전에는 '사람이 확인' 메뉴의 Federal Register·openFDA 즉석 조회를 쓰세요.</p>`;
+      cbox.innerHTML = '<p class="cmp-muted">아직 서버 수집 결과가 없습니다. 새 소식의 경고장 인용 문구가 여기에 후보로 들어옵니다.</p>';
+      candTab.textContent = '위반 사례 후보';
+      box.innerHTML = `<p class="cmp-note">아직 서버 수집 결과가 없습니다. 위의 [지금 수집]을 누르면(30초~1분) 서버에 저장되어 여기에 표시됩니다. 하루 1회 자동 수집을 켜 두었다면 매일 08:00에도 모읍니다. 그 전에는 '직접 확인할 곳' 메뉴의 Federal Register·openFDA 즉석 조회를 쓰세요.</p>`;
       return;
     }
     const m = loadMonitor();
@@ -2145,14 +2244,14 @@ ${monHead('manual')}
     const approved = cands.filter(c => c.status === '승인');
     const reviewer = cbox.dataset.reviewer || '';
     const nCand = cands.filter(c => c.status === '후보').length;
-    candTab.innerHTML = `사례집 후보${nCand ? ` <span class="count">${nCand}</span>` : ''}`;   // 승인 대기 수 → 왼쪽 메뉴 숫자
+    candTab.innerHTML = `위반 사례 후보${nCand ? ` <span class="count">${nCand}</span>` : ''}`;   // 승인 대기 수 → 왼쪽 메뉴 숫자
 
     box.innerHTML = `
 <p class="cmp-summary">서버 수집 ${isNaN(gen) ? '시각 미상' : fmt(gen)}${stale ? ` <span class="cmp-fail">· ${STALE_HOURS}시간 넘게 갱신 안 됨</span>` : ''}
-  · 항목 ${all.length}개${m.baseline ? ` · 🆕 ${nNew} · 🔄 ${nChanged} <span class="cmp-muted">(기준 ${fmt(m.baselineAt)})</span>` : ''}</p>
-${m.baseline ? '' : '<p class="cmp-note">첫 확인입니다. 지금 목록을 기준으로 저장하면 다음부터 새 항목·변경 항목이 표시됩니다.</p>'}
+  · 항목 ${all.length}개${m.baseline ? ` · 새 항목 ${nNew} · 변경 ${nChanged} <span class="cmp-muted">(기준 ${fmt(m.baselineAt)})</span>` : ''}</p>
+${m.baseline ? '' : '<p class="cmp-note">처음 보는 목록이에요. [모두 읽음 표시]를 누르면 다음부터 새로 들어온 항목·바뀐 항목에 파란 점이 붙어요.</p>'}
 <div class="cmp-actions">
-  <button type="button" class="cmp-btn${m.baseline ? '' : ' cmp-primary'}" data-act="baseline">${m.baseline ? '확인 완료 · 기준 다시 저장' : '기준 저장'}</button>
+  <button type="button" class="cmp-btn${m.baseline ? '' : ' cmp-primary'}" data-act="baseline">모두 읽음 표시</button>
   <button type="button" class="cmp-btn" data-act="fold-all" data-open="1">모두 펼치기</button>
   <button type="button" class="cmp-btn" data-act="fold-all" data-open="">모두 접기</button>
 </div>
@@ -2161,11 +2260,11 @@ ${monFilterHTML()}
 
     cbox.innerHTML = `
 <p class="cmp-summary">후보 ${cands.length}개 · 승인 대기 ${nCand}개 · 승인 ${approved.length}개</p>
-<p class="cmp-muted">수집한 경고장·NAD 결정 문구(NAD는 식품·음료·건강 결정만)는 자동으로 사례집이나 규칙에 들어가지 않습니다. 사람이 승인한 문구만 내려받아 <code>data.js</code>의 <code>warningQuotes</code>에 옮기고 규칙 검증을 다시 실행합니다. <b>PASS로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요합니다.</p>
+<p class="cmp-muted">수집한 경고장·NAD 결정 문구(NAD는 식품·음료·건강 결정만)는 자동으로 사례집이나 규칙에 들어가지 않습니다.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">사람이 승인한 문구만 내려받아 <code>data.js</code>의 <code>warningQuotes</code>에 옮기고 규칙 검증을 다시 실행합니다. <b>PASS로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요합니다.</p></details>
 ${cands.length ? `
 <div class="cmp-row">
   <label class="cmp-field"><span>검토자</span><input class="cmp-input" data-el="reviewer" value="${esc(reviewer)}" placeholder="이름"></label>
-  <div class="cmp-actions"><button type="button" class="cmp-btn" data-act="export-cands" ${approved.length ? '' : 'disabled'}>승인된 후보 CSV 받기</button></div>
+  <div class="cmp-actions"><button type="button" class="cmp-btn" data-act="export-cands" ${approved.length ? '' : 'disabled'}>승인한 문구 CSV 받기</button></div>
 </div>
 <p data-el="cmsg" aria-live="polite"></p>
 <div class="cmp-list">${cands.map(c => `
@@ -2176,10 +2275,10 @@ ${cands.length ? `
     <p class="cmp-quote">${highlight(c.text, c.r.findings.flatMap(f => f.terms))}</p>
     ${trBlock(c.text)}
     ${c.status === '후보' ? `<div class="cmp-actions">
-      <button type="button" class="cmp-btn cmp-primary" data-act="cand-approve">사례집 후보 승인</button>
+      <button type="button" class="cmp-btn cmp-primary" data-act="cand-approve">승인</button>
       <button type="button" class="cmp-btn" data-act="cand-reject">제외</button></div>` :
       `<p class="cmp-muted">${esc(c.status)} · ${esc(c.by)} · ${fmt(c.at)} <button type="button" class="cmp-btn cmp-btn-sm" data-act="cand-reset">되돌리기</button></p>`}
-  </article>`).join('')}</div>` : '<p class="cmp-muted">이번 수집 결과에 경고장 원문 문구(quotes)가 없습니다. 수집 결과의 [FDA 경고장 직접 올리기]로 본문을 넣으면 인용 문구가 여기에 들어옵니다.</p>'}`;
+  </article>`).join('')}</div>` : '<p class="cmp-muted">이번 수집 결과에 경고장 원문 문구(quotes)가 없습니다. 새 소식의 [FDA 경고장 직접 올리기]로 본문을 넣으면 인용 문구가 여기에 들어옵니다.</p>'}`;
 
     const keepFolds = () => box.querySelectorAll('details.cmp-fold').forEach(d => d.addEventListener('toggle', () => FOLD_OPEN.set(d.dataset.src, d.open)));
     // 필터를 바꾸면 결과만 다시 그림 (출처 안내·사례집 후보는 그대로)
@@ -2202,6 +2301,11 @@ ${cands.length ? `
       const btn = e.target.closest('[data-act]');
       if (!btn || btn.disabled || btn.dataset.act === 'translate') return;   // 번역 버튼은 render에서 처리
       const act = btn.dataset.act;
+      if (act === 'mon-agency') {
+        MON_F.agency = btn.dataset.v;
+        box.querySelectorAll('[data-act="mon-agency"]').forEach(b => { const on = b === btn; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); });
+        return refilter();
+      }
       if (act === 'fold-all') {
         box.querySelectorAll('details.cmp-fold').forEach(d => { d.open = !!btn.dataset.open; });
         return;
@@ -2212,7 +2316,7 @@ ${cands.length ? `
         cur.baseline = baselineOf(data);
         cur.baselineAt = Date.now();
         saveMonitor(cur);
-        toast('지금 목록을 기준으로 저장했습니다');
+        toast('모두 읽음으로 표시했어요. 다음부터 새 항목에 파란 점이 붙어요');
         return renderServer(root);
       }
       if (act === 'export-cands') {
@@ -2376,7 +2480,7 @@ ${cands.length ? `
           text: el('wltext').value, url: el('wlurl').value.trim(), firm: el('wlfirm').value.trim(),
           issued: el('wldate').value, subject: el('wlsubject').value.trim()
         });
-        wlDone(data, `인용 문구 ${(data.letters || {}).quotes}개를 '사례집 후보'에 넣었습니다. 규제 모니터링 › 사례집 후보에서 판정을 확인하고 승인·제외하세요.`);
+        wlDone(data, `인용 문구 ${(data.letters || {}).quotes}개를 '위반 사례 후보'에 넣었습니다. 규제 모니터링 › 위반 사례 후보에서 판정을 확인하고 승인·제외하세요.`);
         el('wltext').value = '';
       } catch (e) { wlFail(e); }
       wlText.disabled = false;
@@ -2412,7 +2516,7 @@ ${cands.length ? `
     const chip = code => `<span class="cmp-agency-chip cmp-ag-${esc(code)}">${esc(code)}</span>`;
 
     return `
-<p class="cmp-muted">미국에 제품을 팔 때 만나는 기관 4곳과 광고·판매 플랫폼 ${(DATA.platforms || []).length}곳을 쉬운 말로 정리했습니다 (2026-10-23 작성 · 플랫폼 2026-10-24 추가 · 올리브영 US 2026-10-25 추가). 참고용 요약이며 법률 자문이 아닙니다. 정확한 기준은 각 기관 공식 사이트와 관세사·규제 전문가에게 확인하세요.</p>
+<p class="cmp-muted">미국에 제품을 팔 때 만나는 기관 4곳과 광고·판매 플랫폼 ${(DATA.platforms || []).length}곳을 쉬운 말로 정리했습니다 (2026-10-23 작성 · 플랫폼 2026-10-24 추가 · 올리브영 US 2026-10-25 추가).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">참고용 요약이며 법률 자문이 아닙니다. 정확한 기준은 각 기관 공식 사이트와 관세사·규제 전문가에게 확인하세요.</p></details>
 <div class="cmp-folds">` + fold('ag-summary', '한눈에 보기', `기관 ${list.length}곳`, `
 <div class="cmp-table-wrap"><table class="cmp-table">
   <thead><tr><th>기관</th><th>한 줄 요약</th><th>어기면</th><th>대시보드 규칙</th></tr></thead>
@@ -2427,7 +2531,10 @@ ${cands.length ? `
   <article class="cmp-agency cmp-ag-border-${esc(a.code)}">
     <header class="cmp-agency-head"><span class="cmp-agency-icon" aria-hidden="true">${esc(a.icon)}</span>
       <div><h4>${esc(a.code)} · ${esc(a.ko)}</h4><p class="cmp-muted">${esc(a.en)}</p></div></header>
-    <p class="cmp-agency-one">${esc(a.oneLine)}</p>
+    <p class="cmp-agency-one">${esc(plainOf('agencies', a.code).say || a.oneLine)}</p>
+    ${todoHTML(plainOf('agencies', a.code).todo)}
+    <details class="cmp-why"><summary>자세히 · 하는 일 · 어기면</summary>
+    <p class="cmp-muted">${esc(a.oneLine)}</p>
     <h5>이 기관이 하는 일</h5>
     <ul>${a.role.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
     <h5>REBOOT에 해당하는 것</h5>
@@ -2435,39 +2542,31 @@ ${cands.length ? `
     ${a.bad ? `<h5>문구 예시</h5>
     <p class="cmp-ex"><span class="cmp-badge cmp-v-BLOCK">피할 문구</span> <code>${esc(a.bad)}</code></p>
     <p class="cmp-ex"><span class="cmp-badge cmp-v-PASS">쓸 수 있는 방향</span> <code>${esc(a.good)}</code></p>` : ''}
-    <p class="cmp-muted"><b>어기면</b> ${esc(a.risk)}</p>
+    <p class="cmp-muted"><b>어기면</b> ${esc(a.risk)}</p></details>
     <div class="cmp-actions">
       ${(a.goto || []).map(([tab, label]) => `<button type="button" class="cmp-btn" data-act="goto" data-goto="${esc(tab)}"${tab === 'monitor' && FR_SLUG[a.code] ? ` data-agency="${FR_SLUG[a.code]}"` : ''}>${esc(label)}</button>`).join('')}
       ${link(a.url, '공식 사이트 ↗')}
     </div>
   </article>`).join('')}</div>`, false) + fold('ag-platforms', '광고·판매 플랫폼 (정부 기관 아님 · 회사 정책)', (DATA.platforms || []).map(x => x.code).join(' · '), `
-<p class="cmp-muted">Meta·Google·TikTok·Amazon·올리브영은 법을 만드는 기관이 아니라 회사입니다. 하지만 자기 광고 정책을 어기면 <b>광고가 거절되거나 계정이 제한</b>되므로 FDA·FTC와 함께 봐야 합니다.
-  정책은 자주 바뀌니 실제 집행 전에는 각 공식 페이지로 확인하세요. 규칙 표에서는 '📱 플랫폼 정책'으로 표시합니다.<br>
-  <b>판정에서는 플랫폼을 따로 나누지 않습니다.</b> Meta·Google·TikTok·Amazon·올리브영 US 정책은 'B2C 광고·SNS·아마존·올리브영' 채널 하나에 공통 기준으로 들어가 있습니다 (2026-10-24 결정). CS 답변은 고객 응대 파트가 보내기 전에 자동으로 다시 점검합니다. TikTok의 '숙취 해소 제품 광고 거절'처럼 한 플랫폼만의 기준은 아래 카드를 보고 사람이 확인합니다.</p>
+<p class="cmp-muted">Meta·Google·TikTok·Amazon·올리브영은 법을 만드는 기관이 아니라 회사입니다.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">하지만 자기 광고 정책을 어기면 <b>광고가 거절되거나 계정이 제한</b>되므로 FDA·FTC와 함께 봐야 합니다.
+  정책은 자주 바뀌니 실제 집행 전에는 각 공식 페이지로 확인하세요. 심의 규칙에서는 '플랫폼 정책'으로 표시합니다.<br>
+  <b>판정에서는 플랫폼을 따로 나누지 않습니다.</b> Meta·Google·TikTok·Amazon·올리브영 US 정책은 'B2C 광고·SNS·아마존·올리브영' 채널 하나에 공통 기준으로 들어가 있습니다 (2026-10-24 결정). CS 답변은 고객 응대 파트가 보내기 전에 자동으로 다시 심의합니다. TikTok의 '숙취 해소 제품 광고 거절'처럼 한 플랫폼만의 기준은 아래 카드를 보고 사람이 확인합니다.</p></details>
 <div class="cmp-agencies">${(DATA.platforms || []).map(a => `
   <article class="cmp-agency">
     <header class="cmp-agency-head"><span class="cmp-agency-icon" aria-hidden="true">${esc(a.icon)}</span>
       <div><h4>${esc(a.code)} · ${esc(a.ko)}</h4><p class="cmp-muted">플랫폼 정책</p></div></header>
-    <p class="cmp-agency-one">${esc(a.oneLine)}</p>
+    <p class="cmp-agency-one">${esc(plainOf('platforms', a.code).say || a.oneLine)}</p>
+    ${todoHTML(plainOf('platforms', a.code).todo)}
+    <details class="cmp-why"><summary>자세히 · 어기면</summary>
+    <p class="cmp-muted">${esc(a.oneLine)}</p>
     <h5>REBOOT에 해당하는 것</h5>
     <ul>${a.forUs.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
-    <p class="cmp-muted"><b>어기면</b> ${esc(a.risk)} · <b>관련 규칙</b> ${esc(a.rules)}</p>${policyLine(a)}
+    <p class="cmp-muted"><b>어기면</b> ${esc(a.risk)} · <b>관련 규칙</b> ${esc(a.rules)}</p></details>${policyLine(a)}
     <div class="cmp-actions">${link(a.url, '공식 정책 ↗')}</div>
   </article>`).join('')}</div>`, false) + fold('ag-terms', '자주 나오는 용어', `${(DATA.agencyTerms || []).length}개`, `
 <dl class="cmp-terms">${(DATA.agencyTerms || []).map(t => `<div><dt>${esc(t.term)}</dt><dd>${esc(t.desc)}</dd></div>`).join('')}</dl>`, false) + `</div>`;
   }
 
-  /* ───────── 등록 ───────── */
-
-  // summary(검토 대기 카피 수)는 승인 절차를 없애면서 뺐습니다 → 홈 '검토가 필요한 업무'에는 CS만 표시됩니다.
-  REBOOT.register({
-    id: 'compliance', icon: '🛡️', label: '컴플라이언스', priority: 'P0', order: 30,
-    title: '좋은 카피의 시작, 안전한 표현.',
-    subtitle: '광고 문구를 점검하고 미국 시장에 맞는 표현을 준비하세요.',
-    render
-  });
-  REBOOT.expose('compliance', { review, bannedTerms, rules, translate });
-})(typeof window !== 'undefined' ? window : globalThis);
   // 플랫폼 약관 갱신일 (규제 모니터링 'oliveyoung-policy' 출처가 주 1회 채움 · 2026-10-26) — 지금은 올리브영만
   const POLICY_SOURCE = { 'Olive Young': 'oliveyoung-policy' };
   function policyLine(a) {
@@ -2480,3 +2579,14 @@ ${cands.length ? `
     return `<p class="cmp-muted"><b>회원 정책 갱신일</b> ${esc(it.date || '—')} · ${link(it.url, '약관 원문 ↗')}${src.updatedAt ? ` · 마지막 확인 ${fmt(Date.parse(src.updatedAt))}` : ''}${src.stale ? ' · <span class="cmp-fail">이번 수집 실패</span>' : ''}</p>`;
   }
 
+  /* ───────── 등록 ───────── */
+
+  // summary(검토 대기 카피 수)는 승인 절차를 없애면서 뺐습니다 → 홈 '검토가 필요한 업무'에는 CS만 표시됩니다.
+  REBOOT.register({
+    id: 'compliance', icon: '🛡️', label: '컴플라이언스', priority: 'P0', order: 30,
+    title: '미국 광고 문구 심의',
+    subtitle: 'FDA·FTC 기준에 걸리는 표현을 찾고, 쓸 수 있는 문장으로 바꿔요.',
+    render
+  });
+  REBOOT.expose('compliance', { review, bannedTerms, rules, translate });
+})(typeof window !== 'undefined' ? window : globalThis);

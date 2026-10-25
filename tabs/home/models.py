@@ -60,7 +60,7 @@ class HomeNewsRun(db.Model):
 
 
 class HomeNewsSaved(db.Model):
-    """보관한 기사 (책갈피). 원래 기사는 90일 뒤 지워지므로 화면에 보인 내용을 그대로 복사해 둠. 시장·고객 인사이트 › 데이터 › 뉴스 수집에서 봄."""
+    """보관한 기사 (책갈피). 원래 기사는 90일 뒤 지워지므로 화면에 보인 내용을 그대로 복사해 둠. 홈 › 미국 시장 브리핑 보관함 창에서 봄."""
     __tablename__ = "home_news_saved"
 
     id = db.Column(db.Integer, primary_key=True)

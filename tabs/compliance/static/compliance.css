@@ -1,75 +1,75 @@
 /* 컴플라이언스 파트 스타일: .part-compliance 안에서만, cmp- 접두사
    디자인 기준: REBOOT Marketing Workspace 시안 (라임 포인트 · 흰 카드 · 15px 모서리) */
 .part-compliance {
-  --cmp-ink: #191A1D; --cmp-muted: #74757E; --cmp-faint: #A3A4AD; --cmp-card: #FFFFFF; --cmp-bg: #F5F5F8; --cmp-soft: #F7F7FA;
+  --cmp-ink: #191A1D; --cmp-muted: #6F7079; --cmp-faint: #74757E; --cmp-card: #FFFFFF; --cmp-bg: #F5F5F8; --cmp-soft: #F7F7FA;
   --cmp-rule: #E8E8ED; --cmp-rule-strong: #E3E3EB;
   --cmp-accent: #E4FA18; --cmp-accent-ink: #25270E; --cmp-accent-soft: #F3F5DC; --cmp-accent-line: #EBEFBD;
   --cmp-link: #5F6B00; --cmp-dark: #1B1C20; --cmp-dark-ink: #FFFFFF; --cmp-focus: #9EBF00;
   --cmp-mark: #EEF77A; --cmp-code: #F3F3F7;
-  --cmp-BLOCK-bg: #FCEEEA; --cmp-BLOCK-ink: #A5432E;
+  --cmp-BLOCK-bg: #FDECEC; --cmp-BLOCK-ink: #B42318;
   --cmp-REVISE-bg: #FFF3E5; --cmp-REVISE-ink: #8A5A1F;
-  --cmp-COND-bg: #F3EFFA; --cmp-COND-ink: #6A4F9C;
-  --cmp-REVIEW-bg: #EFF0FC; --cmp-REVIEW-ink: #4A5190;
-  --cmp-PASS-bg: #F2F5D9; --cmp-PASS-ink: #5A6320;
+  --cmp-COND-bg: #EAF1FB; --cmp-COND-ink: #2A5A9E;
+  --cmp-REVIEW-bg: #EAF1FB; --cmp-REVIEW-ink: #2A5A9E;
+  --cmp-PASS-bg: #E8F3EA; --cmp-PASS-ink: #2E6B34;
   --cmp-FDA: #3F6FA8; --cmp-FTC: #8A5A1F; --cmp-CBP: #4F7A2E; --cmp-USTR: #6A4F9C;
   --cmp-NAD: #9A4F6E; --cmp-CA: #2F7F86; --cmp-PLAT: #6B6B6B;
   color: var(--cmp-ink); font-size: 14px; letter-spacing: -0.025em;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .part-compliance {
-    --cmp-ink: #ECECF0; --cmp-muted: #A0A1AB; --cmp-faint: #7C7D86; --cmp-card: #1C1D21; --cmp-bg: #141518; --cmp-soft: #232428;
+    --cmp-ink: #ECECF0; --cmp-muted: #A0A1AB; --cmp-faint: #8E8F99; --cmp-card: #1C1D21; --cmp-bg: #141518; --cmp-soft: #232428;
     --cmp-rule: #2E2F36; --cmp-rule-strong: #393A42;
     --cmp-accent: #E4FA18; --cmp-accent-ink: #25270E; --cmp-accent-soft: #2B2F13; --cmp-accent-line: #444B17;
     --cmp-link: #D4EA2A; --cmp-dark: #ECECF0; --cmp-dark-ink: #141518; --cmp-focus: #C8DC31;
     --cmp-mark: #4D5512; --cmp-code: #2A2B30;
-    --cmp-BLOCK-bg: #3A2320; --cmp-BLOCK-ink: #F3B3A5;
+    --cmp-BLOCK-bg: #3D2222; --cmp-BLOCK-ink: #F5A8A0;
     --cmp-REVISE-bg: #3A2C1B; --cmp-REVISE-ink: #F1C48E;
-    --cmp-COND-bg: #2E2840; --cmp-COND-ink: #CDBBF2;
-    --cmp-REVIEW-bg: #23263D; --cmp-REVIEW-ink: #B6BCF0;
-    --cmp-PASS-bg: #2B3018; --cmp-PASS-ink: #D6E48A;
+    --cmp-COND-bg: #1F2A3D; --cmp-COND-ink: #A9C8F2;
+    --cmp-REVIEW-bg: #1F2A3D; --cmp-REVIEW-ink: #A9C8F2;
+    --cmp-PASS-bg: #1E3123; --cmp-PASS-ink: #9FD8A8;
     --cmp-FDA: #8EC3F0; --cmp-FTC: #F1C48E; --cmp-CBP: #A6E3BC; --cmp-USTR: #CDBBF2;
     --cmp-NAD: #F0B3CC; --cmp-CA: #9CDDE2; --cmp-PLAT: #C4C4C4;
   }
 }
 :root[data-theme="dark"] .part-compliance {
-  --cmp-ink: #ECECF0; --cmp-muted: #A0A1AB; --cmp-faint: #7C7D86; --cmp-card: #1C1D21; --cmp-bg: #141518; --cmp-soft: #232428;
+  --cmp-ink: #ECECF0; --cmp-muted: #A0A1AB; --cmp-faint: #8E8F99; --cmp-card: #1C1D21; --cmp-bg: #141518; --cmp-soft: #232428;
   --cmp-rule: #2E2F36; --cmp-rule-strong: #393A42;
   --cmp-accent: #E4FA18; --cmp-accent-ink: #25270E; --cmp-accent-soft: #2B2F13; --cmp-accent-line: #444B17;
   --cmp-link: #D4EA2A; --cmp-dark: #ECECF0; --cmp-dark-ink: #141518; --cmp-focus: #C8DC31;
   --cmp-mark: #4D5512; --cmp-code: #2A2B30;
-  --cmp-BLOCK-bg: #3A2320; --cmp-BLOCK-ink: #F3B3A5;
+  --cmp-BLOCK-bg: #3D2222; --cmp-BLOCK-ink: #F5A8A0;
   --cmp-REVISE-bg: #3A2C1B; --cmp-REVISE-ink: #F1C48E;
-  --cmp-COND-bg: #2E2840; --cmp-COND-ink: #CDBBF2;
-  --cmp-REVIEW-bg: #23263D; --cmp-REVIEW-ink: #B6BCF0;
-  --cmp-PASS-bg: #2B3018; --cmp-PASS-ink: #D6E48A;
+  --cmp-COND-bg: #1F2A3D; --cmp-COND-ink: #A9C8F2;
+  --cmp-REVIEW-bg: #1F2A3D; --cmp-REVIEW-ink: #A9C8F2;
+  --cmp-PASS-bg: #1E3123; --cmp-PASS-ink: #9FD8A8;
   --cmp-FDA: #8EC3F0; --cmp-FTC: #F1C48E; --cmp-CBP: #A6E3BC; --cmp-USTR: #CDBBF2;
   --cmp-NAD: #F0B3CC; --cmp-CA: #9CDDE2; --cmp-PLAT: #C4C4C4;
 }
 
 .part-compliance .cmp-wrap { display: grid; gap: 20px; }
-.part-compliance .cmp-sub, .part-compliance .cmp-muted { color: var(--cmp-muted); font-size: 12.5px; margin: 0; line-height: 1.7; }
+.part-compliance .cmp-sub, .part-compliance .cmp-muted { color: var(--cmp-muted); font-size: 13.5px; margin: 0; line-height: 1.7; }
 .part-compliance .cmp-h3 { font-size: 15px; font-weight: 650; margin: 8px 0 0; }
 .part-compliance .cmp-icon { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 
 /* KPI 카드 (시안 .kpi) */
 .part-compliance .cmp-kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
 .part-compliance .cmp-kpi { background: var(--cmp-card); border: 1px solid var(--cmp-rule); border-radius: 14px; padding: 20px 21px; min-height: 132px; display: grid; align-content: start; }
-.part-compliance .cmp-kpi.is-featured { background: var(--cmp-accent); border-color: var(--cmp-accent); color: var(--cmp-accent-ink); }
+.part-compliance .cmp-kpi.is-featured { background: var(--cmp-BLOCK-bg); border-color: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); }
 /* 카드는 버튼 (누르면 점검 기록에서 그 판정만 보기) — 모양은 카드 그대로 */
 .part-compliance button.cmp-kpi { font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-.part-compliance button.cmp-kpi.is-featured { color: var(--cmp-accent-ink); }
+.part-compliance button.cmp-kpi.is-featured { color: var(--cmp-BLOCK-ink); }
 .part-compliance button.cmp-kpi:hover { border-color: var(--cmp-rule-strong); box-shadow: 0 6px 18px rgba(32, 32, 48, .06); }
 .part-compliance button.cmp-kpi:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: 2px; }
 .part-compliance .cmp-kpi > span { display: block; }
 .part-compliance .cmp-kpi > .cmp-kpi-top { display: flex; }
 .part-compliance .cmp-kpi-top { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--cmp-muted); }
-.part-compliance .cmp-kpi.is-featured .cmp-kpi-top, .part-compliance .cmp-kpi.is-featured .cmp-kpi-sub { color: #4F5A12; }
+.part-compliance .cmp-kpi.is-featured .cmp-kpi-top, .part-compliance .cmp-kpi.is-featured .cmp-kpi-sub { color: var(--cmp-BLOCK-ink); }
 .part-compliance .cmp-kpi-icon { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--cmp-rule-strong); display: grid; place-items: center; }
-.part-compliance .cmp-kpi.is-featured .cmp-kpi-icon { border-color: #C8DA1C; }
+.part-compliance .cmp-kpi.is-featured .cmp-kpi-icon { border-color: currentColor; }
 .part-compliance .cmp-kpi-icon .cmp-icon { width: 13px; height: 13px; }
 .part-compliance .cmp-kpi-num { font-size: 29px; font-weight: 720; letter-spacing: -1px; margin: 14px 0 8px; line-height: 1.1; }
 .part-compliance .cmp-kpi-num small { font-size: 13px; font-weight: 500; letter-spacing: 0; margin-left: 3px; }
-.part-compliance .cmp-kpi-sub { font-size: 11px; color: var(--cmp-faint); }
+.part-compliance .cmp-kpi-sub { font-size: 12.5px; color: var(--cmp-muted); }
 .part-compliance .cmp-kpi-sub b { font-weight: 600; color: inherit; margin-right: 6px; }
 
 /* 하위 탭 (시안 .subtabs) */
@@ -91,7 +91,7 @@
 .part-compliance .cmp-card-head h3 { margin: 0; font-size: 15px; font-weight: 680; }
 .part-compliance .cmp-bench { display: grid; grid-template-columns: minmax(0, 1fr) 315px; gap: 20px; align-items: start; }
 .part-compliance .cmp-side { display: grid; gap: 20px; }
-.part-compliance .cmp-tag { font-size: 10.5px; font-weight: 550; padding: 4px 8px; border-radius: 5px; background: var(--cmp-code); color: var(--cmp-muted); white-space: nowrap; }
+.part-compliance .cmp-tag { font-size: 12px; font-weight: 550; padding: 4px 8px; border-radius: 5px; background: var(--cmp-code); color: var(--cmp-muted); white-space: nowrap; }
 .part-compliance .cmp-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .part-compliance .cmp-grid3 { grid-template-columns: 1.1fr 1fr 1fr; }
 .part-compliance .cmp-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
@@ -141,7 +141,7 @@
 
 /* 판정 배지 (시안 .badge) */
 .part-compliance .cmp-badge {
-  display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 5px; white-space: nowrap;
+  display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 5px; white-space: nowrap;
   background: var(--cmp-code); color: var(--cmp-muted); letter-spacing: 0;
 }
 .part-compliance .cmp-v-BLOCK { background: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); }
@@ -151,14 +151,14 @@
 .part-compliance .cmp-v-PASS { background: var(--cmp-PASS-bg); color: var(--cmp-PASS-ink); }
 /* 법적 신호 (판정 배지 옆 · 2026-10-25) */
 .part-compliance .cmp-light {
-  display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 3px 7px; margin-left: 4px; border-radius: 999px; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; padding: 3px 7px; margin-left: 4px; border-radius: 999px; white-space: nowrap;
   border: 1px solid currentColor; background: transparent; letter-spacing: 0; cursor: help;
 }
 .part-compliance .cmp-light-red { color: var(--cmp-BLOCK-ink); }
 .part-compliance .cmp-light-yellow { color: var(--cmp-REVISE-ink); }
 .part-compliance .cmp-light-green { color: var(--cmp-PASS-ink); }
 .part-compliance .cmp-table td > .cmp-light:first-child { margin-left: 0; }
-.part-compliance .cmp-chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 5px; background: var(--cmp-accent-soft); color: var(--cmp-link); white-space: nowrap; }
+.part-compliance .cmp-chip { display: inline-flex; align-items: center; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 5px; background: var(--cmp-accent-soft); color: var(--cmp-link); white-space: nowrap; }
 
 /* 결과 · 이력 */
 .part-compliance .cmp-result, .part-compliance .cmp-hist {
@@ -177,7 +177,7 @@
 .part-compliance details.cmp-finding-fold > summary { list-style: none; cursor: pointer; }
 .part-compliance details.cmp-finding-fold > summary::-webkit-details-marker { display: none; }
 .part-compliance details.cmp-finding-fold > p { margin-top: 6px; }
-.part-compliance .cmp-fold-arrow { display: inline-block; color: var(--cmp-faint); font-size: 11px; transition: transform .15s; }
+.part-compliance .cmp-fold-arrow { display: inline-block; color: var(--cmp-faint); font-size: 12px; transition: transform .15s; }
 .part-compliance details.cmp-finding-fold[open] .cmp-fold-arrow { transform: rotate(90deg); }
 /* AI 2차 판정 카드 접기 (2026-10-25 · 처음에는 펼친 상태) */
 .part-compliance details.cmp-ai-fold { display: block; }
@@ -196,8 +196,8 @@
 .part-compliance .cmp-pass { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--cmp-soft); border-radius: 8px; }
 .part-compliance .cmp-pass p { margin: 0; font-size: 12.5px; line-height: 1.7; flex: 1 1 320px; }
 .part-compliance .cmp-pass-warn { color: var(--cmp-faint); }
-.part-compliance .cmp-label { display: inline-block; min-width: 88px; color: var(--cmp-faint); font-size: 11.5px; }
-.part-compliance .cmp-basis { color: var(--cmp-muted); font-size: 11.5px; }
+.part-compliance .cmp-label { display: inline-block; min-width: 88px; color: var(--cmp-faint); font-size: 12.5px; }
+.part-compliance .cmp-basis { color: var(--cmp-muted); font-size: 12.5px; }
 .part-compliance code { font-family: "D2Coding", Consolas, Menlo, monospace; background: var(--cmp-code); padding: 1px 5px; border-radius: 4px; font-size: .92em; letter-spacing: 0; }
 
 .part-compliance .cmp-note { margin: 0; padding: 12px 14px; border-radius: 9px; background: var(--cmp-REVIEW-bg); color: var(--cmp-REVIEW-ink); font-size: 12.5px; line-height: 1.7; display: block; }
@@ -210,7 +210,7 @@
 .part-compliance .cmp-table-wrap { overflow-x: auto; border: 1px solid var(--cmp-rule); border-radius: 12px; }
 .part-compliance .cmp-table { width: 100%; border-collapse: collapse; background: var(--cmp-card); font-size: 12px; }
 .part-compliance .cmp-table th, .part-compliance .cmp-table td { padding: 13px 15px; border-bottom: 1px solid var(--cmp-rule); text-align: left; vertical-align: top; }
-.part-compliance .cmp-table th { background: var(--cmp-soft); white-space: nowrap; font-size: 11px; font-weight: 500; color: var(--cmp-muted); }
+.part-compliance .cmp-table th { background: var(--cmp-soft); white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--cmp-muted); }
 .part-compliance .cmp-table td { color: var(--cmp-ink); }
 .part-compliance .cmp-table tr:last-child td { border-bottom: 0; }
 .part-compliance .cmp-table tbody tr:hover td { background: var(--cmp-soft); }
@@ -228,11 +228,11 @@
 .part-compliance .cmp-nowrap { white-space: nowrap; }
 .part-compliance .cmp-row-hot td { background: var(--cmp-accent-soft); }
 .part-compliance .cmp-table tbody tr.cmp-row-hot:hover td { background: var(--cmp-accent-soft); }
-.part-compliance .cmp-btn.cmp-btn-sm { font-size: 11px; padding: 6px 10px; border-radius: 7px; margin-left: 6px; }
+.part-compliance .cmp-btn.cmp-btn-sm { font-size: 12.5px; padding: 6px 12px; min-height: 32px; border-radius: 8px; margin-left: 6px; }
 .part-compliance .cmp-table a { color: var(--cmp-link); }
 
 /* 기관 안내 */
-.part-compliance .cmp-agency-chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 5px; border: 1px solid currentColor; background: var(--cmp-card); }
+.part-compliance .cmp-agency-chip { display: inline-flex; align-items: center; font-size: 12px; font-weight: 650; padding: 3px 8px; border-radius: 5px; border: 1px solid currentColor; background: var(--cmp-card); }
 .part-compliance .cmp-ag-FDA { color: var(--cmp-FDA); }
 .part-compliance .cmp-ag-FTC { color: var(--cmp-FTC); }
 .part-compliance .cmp-ag-CBP { color: var(--cmp-CBP); }
@@ -242,7 +242,7 @@
 .part-compliance .cmp-ag-플랫폼 { color: var(--cmp-PLAT); }
 .part-compliance .cmp-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .part-compliance .cmp-flow-step { background: var(--cmp-soft); border: 1px solid var(--cmp-rule); border-radius: 12px; padding: 14px; display: grid; gap: 6px; align-content: start; font-size: 12.5px; }
-.part-compliance .cmp-flow-no { width: 22px; height: 22px; border-radius: 50%; background: var(--cmp-accent); color: var(--cmp-accent-ink); font-size: 10.5px; font-weight: 650; display: grid; place-items: center; }
+.part-compliance .cmp-flow-no { width: 22px; height: 22px; border-radius: 50%; background: var(--cmp-accent); color: var(--cmp-accent-ink); font-size: 12px; font-weight: 650; display: grid; place-items: center; }
 .part-compliance .cmp-flow-who { display: flex; flex-wrap: wrap; gap: 4px; }
 .part-compliance .cmp-agencies { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 .part-compliance .cmp-agency { background: var(--cmp-card); border: 1px solid var(--cmp-rule); border-top-width: 3px; border-radius: 13px; padding: 18px 20px; display: grid; gap: 8px; align-content: start; }
@@ -255,7 +255,7 @@
 .part-compliance .cmp-agency-head p { margin: 0; }
 .part-compliance .cmp-agency-icon { font-size: 22px; width: 37px; height: 37px; border-radius: 10px; background: var(--cmp-soft); display: grid; place-items: center; }
 .part-compliance .cmp-agency-one { margin: 0; font-weight: 600; font-size: 13px; }
-.part-compliance .cmp-agency h5 { margin: 6px 0 0; font-size: 11px; font-weight: 550; color: var(--cmp-faint); letter-spacing: .2px; }
+.part-compliance .cmp-agency h5 { margin: 6px 0 0; font-size: 12px; font-weight: 550; color: var(--cmp-faint); letter-spacing: .2px; }
 .part-compliance .cmp-agency ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12.5px; line-height: 1.65; }
 .part-compliance .cmp-agency a, .part-compliance .cmp-terms a { color: var(--cmp-link); }
 .part-compliance .cmp-ex { margin: 0; font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -264,28 +264,7 @@
 .part-compliance .cmp-terms dt { font-weight: 650; font-size: 13px; }
 .part-compliance .cmp-terms dd { margin: 6px 0 0; color: var(--cmp-muted); font-size: 12px; line-height: 1.7; }
 
-/* 단건 심의 로드맵 — 오른쪽 '검토 흐름' 카드 안 세로 단계 (시안 .workflow-step) */
-.part-compliance .cmp-road { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
-.part-compliance .cmp-road-step { position: relative; display: flex; align-items: center; gap: 10px; padding: 0 0 15px; font-size: 12px; }
-.part-compliance .cmp-road-step:last-of-type { padding-bottom: 0; }
-.part-compliance .cmp-road-step + .cmp-road-step::before { content: ""; position: absolute; left: 11px; top: -15px; height: 15px; width: 1px; background: var(--cmp-rule-strong); }
-.part-compliance .cmp-road-step.is-done::before, .part-compliance .cmp-road-step.is-current::before, .part-compliance .cmp-road-step.is-skip::before { background: #C8DA1C; }
-.part-compliance .cmp-road-dot {
-  position: relative; z-index: 1; width: 23px; height: 23px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
-  font-size: 10.5px; font-weight: 600; background: var(--cmp-accent-soft); color: var(--cmp-link);
-}
-.part-compliance .cmp-road-label { color: var(--cmp-faint); line-height: 1.3; }
-.part-compliance .is-done .cmp-road-dot { background: var(--cmp-accent); color: var(--cmp-accent-ink); }
-.part-compliance .is-done .cmp-road-label { color: var(--cmp-muted); }
-.part-compliance .is-skip .cmp-road-dot { background: var(--cmp-soft); color: var(--cmp-faint); border: 1px dashed var(--cmp-rule-strong); }
-.part-compliance .is-current .cmp-road-dot { background: var(--cmp-dark); color: var(--cmp-accent); box-shadow: 0 0 0 4px var(--cmp-accent-soft); }
-.part-compliance .is-current .cmp-road-label { color: var(--cmp-ink); font-weight: 650; }
-.part-compliance .is-blocked .cmp-road-dot { background: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); }
-.part-compliance .cmp-road-msg { border-radius: 10px; padding: 13px 16px; display: grid; gap: 10px; background: var(--cmp-soft); color: var(--cmp-muted); }
-.part-compliance .cmp-road-msg p { margin: 0; font-size: 12.5px; line-height: 1.7; }
-.part-compliance .cmp-road-msg.cmp-road-ok { background: var(--cmp-PASS-bg); color: var(--cmp-PASS-ink); }
-.part-compliance .cmp-road-msg.cmp-road-warn { background: var(--cmp-REVISE-bg); color: var(--cmp-REVISE-ink); }
-.part-compliance .cmp-road-msg.cmp-road-block { background: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); }
+/* 스크린리더 전용 글자 */
 .part-compliance .cmp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* 걸린 표현 — 눌러서 자세히 보기 */
@@ -302,7 +281,7 @@
 .part-compliance .cmp-hit-REVIEW { background: var(--cmp-REVIEW-bg); color: var(--cmp-REVIEW-ink); }
 .part-compliance .cmp-hit code { background: transparent; padding: 0; color: inherit; }
 .part-compliance .cmp-finding p .cmp-hit { padding: 1px 6px; border-radius: 4px; text-decoration: none; }
-.part-compliance .cmp-hint { font-size: 11.5px; }
+.part-compliance .cmp-hint { font-size: 12.5px; }
 .part-compliance .cmp-btn.cmp-more { margin-left: auto; }
 
 /* 자세히 보기 창 (시안 .modal) */
@@ -313,7 +292,7 @@
 .part-compliance .cmp-dialog[open] { display: flex; flex-direction: column; }
 .part-compliance .cmp-dialog::backdrop { background: rgba(23, 24, 30, .38); backdrop-filter: blur(3px); }
 .part-compliance .cmp-dlg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 24px 26px 16px; border-bottom: 1px solid var(--cmp-rule); }
-.part-compliance .cmp-dlg-eyebrow { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .3px; color: var(--cmp-muted); }
+.part-compliance .cmp-dlg-eyebrow { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .3px; color: var(--cmp-muted); }
 .part-compliance .cmp-dlg-title { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; }
 .part-compliance .cmp-dlg-title code { font-size: 17px; padding: 3px 8px; }
 .part-compliance .cmp-dlg-x {
@@ -325,7 +304,7 @@
 .part-compliance .cmp-dlg-body { padding: 6px 26px 8px; overflow-y: auto; display: grid; }
 .part-compliance .cmp-dlg-body section { padding: 16px 0; border-bottom: 1px solid var(--cmp-rule); display: grid; gap: 8px; }
 .part-compliance .cmp-dlg-body section:last-child { border-bottom: 0; }
-.part-compliance .cmp-dlg-body h4 { margin: 0; font-size: 11.5px; font-weight: 650; color: var(--cmp-muted); display: flex; align-items: center; gap: 6px; letter-spacing: .2px; }
+.part-compliance .cmp-dlg-body h4 { margin: 0; font-size: 12.5px; font-weight: 650; color: var(--cmp-muted); display: flex; align-items: center; gap: 6px; letter-spacing: .2px; }
 .part-compliance .cmp-dlg-body p { margin: 0; font-size: 13px; line-height: 1.75; }
 .part-compliance .cmp-dlg-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; line-height: 1.7; }
 .part-compliance .cmp-dlg-chips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -346,7 +325,7 @@
 .part-compliance .cmp-fold > summary:hover { background: var(--cmp-soft); }
 .part-compliance .cmp-fold > summary:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: -3px; }
 .part-compliance .cmp-fold-title { font-weight: 650; }
-.part-compliance .cmp-fold-latest { margin-left: auto; font-size: 11px; }
+.part-compliance .cmp-fold-latest { margin-left: auto; font-size: 12px; }
 .part-compliance .cmp-fold[open] > summary { border-bottom: 1px solid var(--cmp-rule); }
 .part-compliance .cmp-fold .cmp-table-wrap { border: 0; border-radius: 0; }
 
@@ -365,14 +344,14 @@
   border-right: 1.6px solid var(--cmp-muted); border-bottom: 1.6px solid var(--cmp-muted); transform: rotate(-45deg); transition: transform .15s;
 }
 .part-compliance .cmp-notes-fold[open] > summary h3::before { transform: rotate(45deg); }
-.part-compliance .cmp-notes-fold > summary .cmp-muted { font-size: 11.5px; }
+.part-compliance .cmp-notes-fold > summary .cmp-muted { font-size: 12.5px; }
 .part-compliance .cmp-notes-fold[open] > summary .cmp-muted { display: none; }
 .part-compliance .cmp-notes-fold > summary:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: 2px; border-radius: 6px; }
 
 /* 한글 제목·요약 (참고용) — 원문 바로 아래 */
-.part-compliance .cmp-ko { display: block; margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--cmp-accent); color: var(--cmp-muted); font-size: 11.5px; line-height: 1.6; letter-spacing: -0.02em; }
+.part-compliance .cmp-ko { display: block; margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--cmp-accent); color: var(--cmp-muted); font-size: 12.5px; line-height: 1.6; letter-spacing: -0.02em; }
 .part-compliance .cmp-ko:empty { display: none; }
-.part-compliance .cmp-firm { display: block; margin-top: 6px; font-size: 11.5px; }
+.part-compliance .cmp-firm { display: block; margin-top: 6px; font-size: 12.5px; }
 
 /* AI 2차 판정 (참고용) */
 .part-compliance .cmp-ai { border: 1px solid var(--cmp-accent-line); background: var(--cmp-accent-soft); border-radius: 12px; padding: 18px 20px; display: grid; gap: 10px; }
@@ -389,7 +368,7 @@
 .part-compliance .cmp-btn.cmp-btn-tr { margin-left: 0; }
 .part-compliance .cmp-btn.cmp-btn-tr::before { content: "가A"; font-weight: 700; color: var(--cmp-link); }
 .part-compliance .cmp-tr { border-left: 2px solid var(--cmp-accent); padding: 4px 12px; display: grid; gap: 4px; }
-.part-compliance .cmp-tr-tag { font-size: 10.5px; font-weight: 650; color: var(--cmp-link); letter-spacing: .3px; }
+.part-compliance .cmp-tr-tag { font-size: 12px; font-weight: 650; color: var(--cmp-link); letter-spacing: .3px; }
 .part-compliance .cmp-tr-text { margin: 0; white-space: pre-wrap; font-size: 12.5px; line-height: 1.7; }
 .part-compliance .cmp-tr a, .part-compliance .cmp-note a { color: inherit; font-weight: 700; }
 
@@ -417,9 +396,6 @@
 .part-compliance .cmp-persona .cmp-actions { justify-content: flex-end; }
 
 /* 규칙 표 '근거 조문' 칸: 기관 + 조문 한 줄씩 */
-.part-compliance .cmp-law { min-width: 220px; font-size: 12.5px; line-height: 1.5; }
-.part-compliance .cmp-law-line { display: block; }
-.part-compliance .cmp-law-line + .cmp-law-line { margin-top: 4px; }
 
 /* 규제 모니터링 안내 단계 (키 신청 · 경고장 올리기) */
 .part-compliance .cmp-steps { margin: 6px 0 12px; padding-left: 20px; line-height: 1.7; font-size: 13.5px; }
@@ -428,7 +404,7 @@
 /* 일괄 심의: 한국어 원문 + 아래 영어 번역 (걸린 표현 표시) */
 .part-compliance .cmp-b-ko { font-weight: 600; line-height: 1.6; }
 .part-compliance .cmp-b-en { margin-top: 6px; padding: 6px 10px; border-left: 3px solid var(--cmp-rule-strong); background: var(--cmp-soft, rgba(0, 0, 0, .03)); border-radius: 0 6px 6px 0; line-height: 1.6; font-size: 13px; }
-.part-compliance .cmp-b-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--cmp-rule); color: var(--cmp-muted); }
+.part-compliance .cmp-b-tag { display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 12px; font-weight: 700; background: var(--cmp-rule); color: var(--cmp-muted); }
 .part-compliance .cmp-b-note { display: block; margin-top: 4px; font-size: 12px; color: var(--cmp-muted); }
 
 /* 규제 모니터링 출처 아래 참고 안내 (실패 아님) */
@@ -448,7 +424,7 @@
 .part-compliance .cmp-mon-src + .cmp-mon-src { border-top: 1px dashed var(--cmp-rule-strong); }
 .part-compliance .cmp-mon-io { margin: 4px 0 8px; font-size: 12px; line-height: 1.6; }
 .part-compliance .cmp-mon-guide td { font-size: 12.5px; vertical-align: top; }
-.part-compliance .cmp-mon-guide code { font-size: 11px; }
+.part-compliance .cmp-mon-guide code { font-size: 12px; }
 
 /* 세부 메뉴 (문구 심의 · 규제 모니터링 · 기준·참고): 보통은 core가 왼쪽 메뉴로 옮기고 숨김. 옮기지 못했을 때만 보이는 모양 */
 .part-compliance .cmp-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
@@ -457,7 +433,7 @@
 
 /* 수집 항목의 제품군 태그 (젤리 · 음료 · 당·저당 · 숙취·성분 · 공통) */
 .part-compliance .cmp-ptags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
-.part-compliance .cmp-ptag { font-size: 10.5px; padding: 2px 7px; background: var(--cmp-card); color: var(--cmp-muted); border: 1px solid var(--cmp-rule-strong); }
+.part-compliance .cmp-ptag { font-size: 12px; padding: 2px 7px; background: var(--cmp-card); color: var(--cmp-muted); border: 1px solid var(--cmp-rule-strong); }
 .part-compliance .cmp-ptag-jelly, .part-compliance .cmp-ptag-drink, .part-compliance .cmp-ptag-sugar, .part-compliance .cmp-ptag-hangover { background: var(--cmp-accent-soft); color: var(--cmp-link); border-color: transparent; }
 .part-compliance .cmp-ptag-hangover { background: var(--cmp-REVISE-bg); color: var(--cmp-REVISE-ink); }
 
@@ -467,4 +443,137 @@
 .part-compliance .cmp-kpis + .cmp-card-head { margin-top: 6px; }
 .part-compliance button.cmp-kpi.is-on { border-color: var(--cmp-ink); box-shadow: 0 0 0 1px var(--cmp-ink); }
 .part-compliance .cmp-more > summary { cursor: pointer; font-size: 12.5px; color: var(--cmp-link); margin-bottom: 4px; }
-.part-compliance .cmp-side-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 4px; }
+.part-compliance .cmp-side-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 0 4px; margin: 0; font-size: 13px; color: var(--cmp-muted); line-height: 1.6; }
+
+/* 한 문구 편집기형 (2026-10-26): 툴바 알약 · 판정 줄 · 밑줄 카피 · 고칠 곳 목록 · 요약 카드 */
+.part-compliance .cmp-editor { padding: 0; overflow: hidden; display: grid; gap: 0; }
+.part-compliance .cmp-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 18px 22px 0; }
+.part-compliance .cmp-toolbar-end { margin-left: auto; }
+.part-compliance .cmp-pill { font: inherit; font-size: 13.5px; color: var(--cmp-ink); background: var(--cmp-card); border: 1px solid var(--cmp-rule-strong); border-radius: 999px; padding: 8px 14px; min-height: 36px; cursor: pointer; max-width: 260px; text-overflow: ellipsis; }
+.part-compliance select.cmp-pill { appearance: none; padding-right: 30px; background-image: linear-gradient(45deg, transparent 50%, var(--cmp-muted) 50%), linear-gradient(135deg, var(--cmp-muted) 50%, transparent 50%); background-position: right 15px top 16px, right 10px top 16px; background-size: 5px 5px; background-repeat: no-repeat; }
+.part-compliance .cmp-pill:hover { border-color: var(--cmp-faint); }
+.part-compliance .cmp-pill.is-on { background: var(--cmp-code); border-color: var(--cmp-faint); }
+.part-compliance .cmp-pill:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: 2px; }
+.part-compliance .cmp-kobox { padding: 14px 22px 0; }
+.part-compliance .cmp-kobox[hidden] { display: none; }
+.part-compliance .cmp-editor > [data-el="trmsg"]:not(:empty) { padding: 10px 22px 0; }
+.part-compliance .cmp-verdict { display: flex; align-items: center; gap: 12px; margin: 16px 22px 0; padding: 14px 16px; border-radius: 12px; }
+.part-compliance .cmp-verdict[hidden] { display: none; }
+.part-compliance .cmp-verdict b { display: block; font-size: 16px; font-weight: 700; }
+.part-compliance .cmp-verdict span { font-size: 13.5px; }
+.part-compliance .cmp-verdict-ico { display: inline-flex; }
+.part-compliance .cmp-verdict-ico .cmp-icon { width: 26px; height: 26px; stroke-width: 1.8; }
+.part-compliance .cmp-tone-BLOCK { background: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); }
+.part-compliance .cmp-tone-REVISE { background: var(--cmp-REVISE-bg); color: var(--cmp-REVISE-ink); }
+.part-compliance .cmp-tone-COND, .part-compliance .cmp-tone-REVIEW { background: var(--cmp-REVIEW-bg); color: var(--cmp-REVIEW-ink); }
+.part-compliance .cmp-tone-PASS { background: var(--cmp-PASS-bg); color: var(--cmp-PASS-ink); }
+.part-compliance .cmp-ed { position: relative; margin: 8px 22px 4px; }
+.part-compliance .cmp-ed-hl, .part-compliance .cmp-ed-input { font: inherit; font-size: 26px; line-height: 1.55; letter-spacing: -0.02em; padding: 14px 0; margin: 0; border: 0; white-space: pre-wrap; overflow-wrap: break-word; word-break: keep-all; }
+.part-compliance .cmp-ed-hl { position: absolute; inset: 0; color: transparent; pointer-events: none; overflow: hidden; }
+.part-compliance .cmp-ed-input { position: relative; display: block; width: 100%; min-height: 96px; resize: none; overflow: hidden; background: transparent; color: var(--cmp-ink); outline: none; }
+.part-compliance .cmp-ed-input::placeholder { color: var(--cmp-faint); }
+.part-compliance .cmp-ed:focus-within { box-shadow: 0 2px 0 0 var(--cmp-accent); }
+.part-compliance .cmp-ul { background: none; color: transparent; text-decoration: underline wavy; text-decoration-thickness: 2px; text-underline-offset: 7px; }
+.part-compliance .cmp-ul-BLOCK { text-decoration-color: var(--cmp-BLOCK-ink); }
+.part-compliance .cmp-ul-REVISE { text-decoration-color: #E59A00; }
+.part-compliance .cmp-ul-COND, .part-compliance .cmp-ul-REVIEW { text-decoration-color: var(--cmp-REVIEW-ink); }
+.part-compliance .cmp-editor .cmp-result { display: grid; gap: 10px; padding: 0 0 6px; }
+.part-compliance .cmp-editor .cmp-result > .cmp-note, .part-compliance .cmp-editor .cmp-result > .cmp-pass { margin: 0 22px; }
+.part-compliance .cmp-hits-label { margin: 12px 22px 0; font-size: 12.5px; color: var(--cmp-muted); }
+.part-compliance .cmp-hits { list-style: none; margin: 0; padding: 0; }
+.part-compliance .cmp-hitrow { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 22px; font: inherit; text-align: left; color: inherit; background: none; border: 0; border-top: 1px solid var(--cmp-rule); cursor: pointer; }
+.part-compliance .cmp-hitrow:hover { background: var(--cmp-soft); }
+.part-compliance .cmp-hitrow:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: -3px; }
+.part-compliance .cmp-hitrow-main { flex: 1; min-width: 0; font-size: 15px; }
+.part-compliance .cmp-hitrow-terms { color: var(--cmp-muted); font-size: 13.5px; margin-left: 4px; }
+.part-compliance .cmp-hitrow-alt { display: block; color: var(--cmp-muted); font-size: 13px; margin-top: 3px; }
+.part-compliance .cmp-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--cmp-faint); }
+.part-compliance .cmp-dot-BLOCK { background: var(--cmp-BLOCK-ink); }
+.part-compliance .cmp-dot-REVISE { background: #E59A00; }
+.part-compliance .cmp-dot-COND, .part-compliance .cmp-dot-REVIEW { background: var(--cmp-REVIEW-ink); }
+.part-compliance .cmp-dot-PASS { background: var(--cmp-PASS-ink); }
+.part-compliance .cmp-vtext { font-size: 13.5px; white-space: nowrap; }
+.part-compliance .cmp-vt-BLOCK { color: var(--cmp-BLOCK-ink); }
+.part-compliance .cmp-vt-REVISE { color: var(--cmp-REVISE-ink); }
+.part-compliance .cmp-vt-COND, .part-compliance .cmp-vt-REVIEW { color: var(--cmp-REVIEW-ink); }
+.part-compliance .cmp-vt-PASS { color: var(--cmp-PASS-ink); }
+.part-compliance .cmp-chev { color: var(--cmp-faint); font-size: 18px; }
+.part-compliance .cmp-editor > [data-el="ai"]:not(:empty), .part-compliance .cmp-editor > [data-el="reviews"]:not(:empty) { padding: 0 22px 18px; }
+.part-compliance .cmp-sum { padding: 22px; display: grid; gap: 8px; position: sticky; top: 16px; }
+.part-compliance .cmp-sum-eyebrow { margin: 0; font-size: 12.5px; color: var(--cmp-muted); }
+.part-compliance .cmp-sum-big { margin: 0; font-size: 32px; font-weight: 750; letter-spacing: -0.03em; line-height: 1.2; }
+.part-compliance .cmp-sum-big[class*="cmp-tone-"] { background: none; }
+.part-compliance .cmp-sum-big.is-empty { color: var(--cmp-faint); }
+.part-compliance .cmp-sum-sub { margin: 0 0 10px; font-size: 14px; color: var(--cmp-muted); }
+.part-compliance .cmp-btn.cmp-wide { width: 100%; justify-content: center; min-height: 46px; font-size: 14.5px; border-radius: 12px; }
+.part-compliance .cmp-btn.cmp-btn-quiet { border-color: transparent; background: transparent; color: var(--cmp-muted); min-height: 36px; }
+.part-compliance .cmp-side-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.part-compliance .cmp-side-acts .cmp-btn { justify-content: center; min-height: 42px; }
+.part-compliance .cmp-side-note .cmp-icon { width: 14px; height: 14px; vertical-align: -2px; }
+@media (max-width: 720px) {
+  .part-compliance .cmp-ed-hl, .part-compliance .cmp-ed-input { font-size: 20px; }
+  .part-compliance .cmp-toolbar, .part-compliance .cmp-hitrow { padding-left: 16px; padding-right: 16px; }
+  .part-compliance .cmp-ed, .part-compliance .cmp-verdict { margin-left: 16px; margin-right: 16px; }
+  .part-compliance .cmp-sum { position: static; }
+}
+/* 법적 신호 점 · 새 항목 표시 (이모지 대신 · 2026-10-26) */
+.part-compliance .cmp-ldot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+.part-compliance .cmp-ldot-red { background: var(--cmp-BLOCK-ink); }
+.part-compliance .cmp-ldot-yellow { background: #E59A00; }
+.part-compliance .cmp-ldot-green { background: var(--cmp-PASS-ink); }
+.part-compliance .cmp-new { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--cmp-REVIEW-ink); }
+.part-compliance .cmp-new::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #2F7CF6; }
+.part-compliance .cmp-new.is-changed::before { background: var(--cmp-faint); }
+/* 규칙 표 4칸 (2026-10-26): 행을 누르면 근거·조문·예시가 있는 자세히 창 */
+.part-compliance .cmp-rule-row:not(.is-off) { cursor: pointer; }
+.part-compliance .cmp-rule-row:not(.is-off):hover td { background: var(--cmp-soft); }
+.part-compliance .cmp-rule-row.is-off td { color: var(--cmp-faint); }
+.part-compliance .cmp-rule-name { font: inherit; font-weight: 600; color: var(--cmp-ink); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
+.part-compliance .cmp-rule-name:hover { text-decoration: underline; }
+.part-compliance .cmp-rule-name:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: 2px; border-radius: 4px; }
+/* 수집 결과 필터 (2026-10-26): 검색칸 · 기관 알약 · 새 항목만 · 필터 더 보기 */
+.part-compliance .cmp-mon-filter2 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 8px; }
+.part-compliance .cmp-mon-search { flex: 1 1 260px; }
+.part-compliance .cmp-mon-search .cmp-input { width: 100%; border-radius: 999px; padding-left: 16px; }
+.part-compliance .cmp-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.part-compliance .cmp-seg .cmp-pill { padding: 6px 12px; min-height: 32px; font-size: 13px; }
+.part-compliance .cmp-mon-hot { padding-bottom: 0; }
+.part-compliance .cmp-mon-more { flex-basis: 100%; }
+.part-compliance .cmp-mon-more .cmp-mon-filter { margin: 8px 0 0; }
+/* 단건 심의 다듬기 (2026-10-26): 한국어 칸은 2줄 · 빈 카피 칸에도 입력 자리 보이기 · 대체 문장 미리 보기 · 만드는 중 */
+.part-compliance .cmp-kobox textarea.cmp-input { min-height: 0; font-size: 14px; line-height: 1.6; }
+.part-compliance .cmp-ed { border: 1px solid var(--cmp-rule); border-radius: 12px; padding: 0 16px; background: var(--cmp-card); }
+.part-compliance .cmp-ed-hl { inset: 0 16px; }
+.part-compliance .cmp-ed:focus-within { box-shadow: none; border-color: var(--cmp-focus); outline: 2px solid var(--cmp-accent-soft); }
+.part-compliance .cmp-sum-rw { margin: 2px 0 6px; padding: 12px 14px; border-radius: 10px; background: var(--cmp-soft); }
+.part-compliance .cmp-sum-rw-text { margin: 4px 0 0; font-size: 14px; line-height: 1.55; letter-spacing: -0.01em; }
+.part-compliance .cmp-btn.is-busy { opacity: 1; cursor: progress; background: var(--cmp-accent-soft); border-color: var(--cmp-accent-line); color: var(--cmp-link); }
+.part-compliance .cmp-result-tr { padding: 4px 22px 0; }
+/* 줄바꿈 (인사이트 탭과 같은 규칙 · 2026-10-26): 어절 단위(base.css keep-all) + 마지막 줄에 한두 단어만 남지 않게(pretty)
+   제목 · 짧은 글은 줄 길이를 고르게(balance) · 문장 한 조각(compliance.js phrase)은 한 줄에 들어가면 통째로 다음 줄로 */
+.part-compliance { text-wrap-style: pretty; word-break: keep-all; overflow-wrap: anywhere; }
+.part-compliance :is(h1, h2, h3, h4, h5, summary, th, .cmp-fold-title, .cmp-verdict b, .cmp-sum-big) { text-wrap-style: balance; }
+.part-compliance .cmp-ph { display: inline-block; max-width: 100%; text-wrap-style: balance; }
+/* 접힘 칸 안의 표·긴 글이 칸을 밀어내 화면 밖으로 넘치지 않게 (그리드 칸 최소 너비 0 · 표는 cmp-table-wrap 안에서만 가로 스크롤) */
+.part-compliance .cmp-fold-body { grid-template-columns: minmax(0, 1fr); }
+.part-compliance .cmp-fold-body > *, .part-compliance .cmp-subpanel > *, .part-compliance .cmp-panel > * { min-width: 0; }
+.part-compliance .cmp-table-wrap { max-width: 100%; overflow-x: auto; }
+/* 화면 말 3층 (2026-10-26): ① 한 줄 결론 · ② 할 일 체크리스트 · ③ [근거 보기] 접힘 */
+.part-compliance .cmp-say { margin: 0; padding: 12px 14px; border-radius: 10px; font-size: 16px; font-weight: 700; line-height: 1.45; }
+.part-compliance .cmp-l1 { display: grid; gap: 10px; }
+.part-compliance .cmp-todo { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.part-compliance .cmp-todo li { position: relative; padding-left: 24px; font-size: 14px; line-height: 1.55; color: var(--cmp-ink); }
+.part-compliance .cmp-todo li::before { content: ""; position: absolute; left: 2px; top: 4px; width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid var(--cmp-faint); }
+.part-compliance .cmp-why { border-top: 1px solid var(--cmp-rule); padding-top: 10px; }
+.part-compliance .cmp-why > summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--cmp-muted); list-style: none; display: flex; align-items: center; gap: 6px; }
+.part-compliance .cmp-why > summary::-webkit-details-marker { display: none; }
+.part-compliance .cmp-why > summary::before { content: "›"; display: inline-block; font-size: 16px; transition: transform .15s; }
+.part-compliance .cmp-why[open] > summary::before { transform: rotate(90deg); }
+.part-compliance .cmp-why[open] > summary { margin-bottom: 10px; }
+.part-compliance .cmp-dlg-body .cmp-why > section + section { margin-top: 14px; }
+.part-compliance .cmp-agency .cmp-agency-one { font-size: 15px; font-weight: 650; }
+.part-compliance .cmp-agency .cmp-why { margin-top: 4px; }
+.part-compliance .cmp-why-cell { border-top: 0; padding-top: 0; min-width: 72px; }
+.part-compliance .cmp-why-cell[open] { min-width: 240px; }
+.part-compliance .cmp-why-cell p { margin: 0 0 6px; }
+.part-compliance .cmp-todo-sub { margin: 14px 0 0; font-size: 12.5px; font-weight: 600; color: var(--cmp-muted); }

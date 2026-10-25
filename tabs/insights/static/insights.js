@@ -1,8 +1,8 @@
 /* 시장 · 고객 인사이트 (담당: 이현경) — tabs/insights/docs/README.md '3번째 대시보드'.
    왼쪽 메뉴 (마케터의 한 주 순서): 이번 주 · 시장 · 고객 · 이번 달 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
    - 시장: 변화 · 가격 위치 · 브랜드 비교 / 고객: 구매자 리뷰 · 유튜브 댓글
-   - 메뉴 밖: 데이터 관리(진열대 수집 · 고치기 · AI 정확도 검증, 머리글 버튼) · 보관한 기사(홈 › 미국 시장 브리핑 보관함 링크)
-   - 보관한 기사: 홈 › 미국 시장 브리핑에서 '보관'한 기사 (홈 API /api/home/news/saved를 읽기만 · 보관 해제)
+   - 메뉴 밖: 데이터 관리(마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증, 머리글 버튼)
+   - 보관한 기사는 2026-10-26 홈 › 미국 시장 브리핑 보관함 창으로 옮김 (옛 주소는 홈으로 넘김)
    - 검색 수요 탭은 2026-10-25 삭제 → '다음 급등 예상'은 홈 › 콘텐츠 캘린더 맨 아래로 옮김
    - 판단은 규칙(서버 rules.py), AI는 문장 · 분류 · 요약만 (AI 배지 · 참고용)
    - 데이터 업데이트는 서버가 뒤에서 실행 → 이 화면은 진행 상황만 봄
@@ -20,23 +20,23 @@
   const store = REBOOT.store('insights');   // 저장 키: reboot:insights:summary (메뉴 숫자용)
 
   const TABS = [['weekly', '이번 주'], ['market', '시장'], ['customers', '고객'], ['monthly', '이번 달']];
-  // 화면 안 탭. manage(데이터 관리) · saved(보관한 기사)는 왼쪽 메뉴에 없고 버튼 · 링크로만 열림
+  // 화면 안 탭. manage(데이터 관리)는 왼쪽 메뉴에 없고 머리글 버튼으로만 열림
   const SUBS = {
     market: [['changes', '변화'], ['price', '가격 위치'], ['brands', '브랜드 비교']],
     customers: [['reviews', '구매자 리뷰'], ['audience', '유튜브 댓글']],
-    manage: [['edit', '진열대 수집 · 고치기'], ['accuracy', 'AI 정확도 검증']],
-    saved: [['news', '보관한 기사']]
+    manage: [['edit', '진열대 수집 · 고치기'], ['accuracy', 'AI 정확도 검증']]
   };
-  const HIDDEN = ['manage', 'saved'];
-  // 화면 안 탭 → 읽어야 할 데이터 (/api/insights/data/<이름>, news만 홈 API)
+  const HIDDEN = ['manage'];
+  // 화면 안 탭 → 읽어야 할 데이터 (/api/insights/data/<이름>)
   const NEEDS = { changes: ['shelf', 'competitors'], price: ['shelf', 'competitors'], brands: ['shelf', 'competitors'], edit: ['shelf'],
-    reviews: ['reviews'], audience: ['audience'], accuracy: ['accuracy'], news: ['news'] };
-  // 옛 주소 → 새 주소 (홈 할 일 · 보관함 · 즐겨찾기 링크가 깨지지 않게)
+    reviews: ['reviews'], audience: ['audience'], accuracy: ['accuracy'] };
+  // 옛 주소 → 새 주소 (홈 할 일 · 즐겨찾기 링크가 깨지지 않게). 보관한 기사는 홈으로 (NEWS_HASH)
   const OLD_HASH = { data: 'market/changes', 'data/shelf': 'market/price', 'data/competitors': 'market/brands', 'data/reviews': 'customers/reviews',
-    'data/audience': 'customers/audience', 'data/accuracy': 'manage/accuracy', 'data/news': 'saved/news' };
+    'data/audience': 'customers/audience', 'data/accuracy': 'manage/accuracy' };
+  const NEWS_HASH = ['data/news', 'saved', 'saved/news'];
   const QUESTIONS = {
     market: '경쟁 제품은 이번 주 뭘 했고, REBOOT는 어디쯤 있나', reviews: '고객은 무엇에 만족하고, 무엇에 실망하나',
-    audience: '사기 전에 무엇을 궁금해하나', news: '눈여겨본 업계 소식은 무엇인가', accuracy: 'AI 분류를 믿어도 되나', edit: '수집한 진열대가 맞게 읽혔나'
+    audience: '사기 전에 무엇을 궁금해하나', accuracy: 'AI 분류를 믿어도 되나', edit: '수집한 진열대가 맞게 읽혔나'
   };
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
@@ -69,15 +69,15 @@
     if (!personaP) personaP = api('/api/insights/personas').catch(() => null);
     return personaP.then(v => (Array.isArray(v) ? copy(v) : []));
   }
-  // 이번 주 액션 중 긴급 · 기회만 (홈 이번 주 할 일 맨 위) — 읽기 전용, 근거 화면 주소 포함
+  // 이번 주 액션 중 긴급 · 기회만 (홈 이번 주 할 일 맨 위) — 읽기 전용, 근거 화면 주소 포함 · 화면과 같은 한 줄(actionRows) 기준
   let weeklyP = null;
   function weeklySignals() {
     if (!weeklyP) weeklyP = api('/api/insights/weekly').catch(() => { weeklyP = null; return null; });
     return weeklyP.then(w => (w && Array.isArray(w.actions) ? {
       week: w.week,
-      items: w.actions.filter(a => a.grade !== '참고').map(a => {
-        const src = ACTION_SRC[a.rule];
-        return { id: a.id, grade: a.grade, title: firstSentence(a.fact), todo: a.todo,
+      items: actionRows(w.actions).filter(r => r.grade !== '참고').map(r => {
+        const src = ACTION_SRC[r.rule];
+        return { id: r.key, grade: r.grade, title: r.title, todo: r.steps.join(' → '),
           href: `/dashboard/insights${src ? src[0] : '#weekly'}`, src: src ? src[1] : '주간 리뷰' };
       })
     } : null));
@@ -96,9 +96,9 @@
 
   /* ───────── 상태 ───────── */
   const S = {
-    root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit', saved: 'news' }, weekly: null, monthly: null, month: null, data: {}, open: {},
+    root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit' }, weekly: null, monthly: null, month: null, data: {}, open: {},
     poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1 }, chg: 'all',
-    rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, news: { q: '', kind: '' }, pf: 'all',
+    rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, pf: 'all',
     mk: Object.assign({ sort: 'signal', dir: 1, page: 1, more: false, open: {}, items: {}, focus: '', cache: null }, MK_F_EMPTY)
   };
   const panel = id => $(S.root, `[data-panel="${id}"]`);
@@ -137,7 +137,6 @@
     if (x.stockLeft != null && x.stockLeft <= limit) return 'low';
     return x.in_stock === true ? 'in' : 'unknown';
   }
-  function topicsText(list) { return (list || []).map(x => `${x.topic} ${x.count}`).join(' · ') || '없음'; }
 
   /* ───────── 줄바꿈: 문장 · 반점 단위 ─────────
      글 묶음(p · li · .note …) 속 글자를 문장 끝 · 반점 뒤에서 나눠 <span class="ins-ph">로 감쌈
@@ -218,7 +217,6 @@
       if (ref === 'tbl-q') { S.tbl.q = e.target.value; S.tbl.page = 1; drawShelfTable(); }
       if (ref === 'mk-q') { S.mk.q = e.target.value; S.mk.page = 1; drawBrandTable(); }
       if (ref === 'rv-q') { S.rv.q = e.target.value; S.rv.page = 1; drawRvTable(); }
-      if (ref === 'news-q') { S.news.q = e.target.value; drawNewsList(); }
     });
     root.addEventListener('mouseover', swarmTip);
     root.addEventListener('mousedown', colResize);
@@ -243,6 +241,7 @@
 
   function parseHash() {
     let h = String(global.location ? global.location.hash : '').replace(/^#/, '');
+    if (NEWS_HASH.includes(h)) { global.location.replace('/dashboard#briefing'); return { tab: '', sub: '' }; }
     if (OLD_HASH[h]) { h = OLD_HASH[h]; setHash(h); }
     const [tab, sub] = h.split('/');
     const ok = TABS.some(t => t[0] === tab) || HIDDEN.includes(tab);
@@ -286,7 +285,7 @@
   function paintTitle() {
     const page = REBOOT.page;
     const w = S.weekly;
-    const n = g => w.actions.filter(a => a.grade === g).length;
+    const n = g => rowCount(actionRows(w.actions), g);
     if (S.tab === 'weekly') {
       page.title(!w ? '이번 주 시장 신호' : w.actions.length ? `이번 주 긴급 ${n('긴급')} · 기회 ${n('기회')}` : '이번 주는 특이사항 없음');
       page.subtitle(w ? `${w.week} · ${w.weekLabel} · 진열대 · 고객 반응 · 검색 수요에서 고른 할 일` : '진열대 · 고객 반응 · 검색 수요를 모아 할 일을 정리해요.');
@@ -302,9 +301,6 @@
     } else if (S.tab === 'manage') {
       page.title('데이터 관리');
       page.subtitle('수집한 진열대를 고치고, AI 분류가 맞는지 확인해요. 매주 볼 화면은 아니에요.');
-    } else {
-      page.title('보관한 기사');
-      page.subtitle('홈 › 미국 시장 브리핑에서 보관한 기사예요.');
     }
   }
 
@@ -347,6 +343,8 @@
         break;
       case 'ins-goto-chg':
         // 이번 주 변화 요약 › 경쟁사 변화 → 시장 › 변화
+      case 'act-row': S.actOpen = S.actOpen === d.key || (S.actOpen === undefined && b.getAttribute('aria-expanded') === 'true') ? null : d.key; drawWeekly(); break;
+      case 'act-f': S.actF = d.f; drawWeekly(); break;
         e.preventDefault();
         S.chg = 'all';
         S.focusChg = true;
@@ -407,8 +405,6 @@
       case 'weee-raw': openWeeeRaw(); break;
       case 'lines-confirm': confirmLines(b); break;
       case 'reload-sub': NEEDS[curSub()].forEach(k => loadData(k)); break;
-      case 'news-unsave': unsaveNews(b, d.id); break;
-      case 'news-kind': S.news.kind = d.kind; drawNewsList(); break;
       default: break;
     }
   }
@@ -436,7 +432,8 @@
     drawKpis();
     paintTitle();
     if (S.tab === 'weekly') drawWeekly();
-    const urgent = S.weekly.actions.filter(a => a.grade === '긴급').length;
+    else if (S.tab === 'manage' && curSub() === 'edit') drawSub('edit');   // 마지막 업데이트 카드
+    const urgent = rowCount(actionRows(S.weekly.actions), '긴급');
     const prev = store.get('summary', null);
     if (!prev || prev.urgent !== urgent || prev.week !== S.weekly.week) {
       store.set('summary', { urgent, week: S.weekly.week });
@@ -448,7 +445,8 @@
     const box = $(S.root, '[data-ref="kpis"]');
     const w = S.weekly;
     if (!box || !w) return;
-    const n = g => w.actions.filter(a => a.grade === g).length;
+    const rows = actionRows(w.actions);
+    const n = g => rowCount(rows, g);
     // 시즌 검색 기회: 작년 같은 시기 검색이 늘었던 가장 가까운 시즌 (없으면 가장 가까운 시즌) — 이번 주 액션의 시즌과 같은 곳
     const next = w.seasons.find(x => x.lastYear && x.lastYear.pct > 0) || w.seasons[0];
     const lift = next && next.lastYear && next.lastYear.pct > 0 ? next.lastYear : null;
@@ -456,8 +454,8 @@
     // 첫 카드는 같은 화면의 이번 주 액션으로 스크롤
     const links = ['#weekly', '#market/price', '#customers/reviews', '#monthly'];
     box.innerHTML = [
-      ui.kpi({ label: '이번 주 액션', value: w.actions.length, unit: '개', featured: true, icon: 'spark',
-        change: n('긴급') ? `긴급 ${n('긴급')}` : '', foot: w.actions.length ? `기회 ${n('기회')} · 참고 ${n('참고')}` : (w.hasData ? '특이사항 없음' : '데이터 업데이트 필요') }),
+      ui.kpi({ label: '이번 주 액션', value: rows.length, unit: '개', featured: true, icon: 'spark',
+        change: n('긴급') ? `긴급 ${n('긴급')}` : '', foot: rows.length ? `기회 ${n('기회')} · 참고 ${n('참고')}` : (w.hasData ? '특이사항 없음' : '데이터 업데이트 필요') }),
       ui.kpi({ label: '진열대 상품', value: s.total, unit: '개', icon: 'grid', tone: s.oosAll || s.oosSome ? 'down' : '',
         change: s.oosAll ? `모든 판매처 품절 ${s.oosAll}` : s.oosSome ? `일부 판매처 품절 ${s.oosSome}` : '',
         foot: s.compare && s.compChanges ? `가격 변동 ${s.compChanges.price} · 새 상품 ${s.compChanges.new}` : (s.total ? '변화 비교는 2주차부터' : '아직 수집 전') }),
@@ -508,38 +506,94 @@
   // 사실 문장의 첫 문장만 (참고 한 줄 · 홈 할 일 제목)
   const firstSentence = t => { const m = String(t || '').match(/^.+?[.!?](?=\s|$)/); return m ? m[0] : String(t || ''); };
 
-  function actionCard(a) {
-    const src = ACTION_SRC[a.rule];
-    return `<article class="ins-action ${GRADE_CLASS[a.grade] || ''}">
-      <div class="ins-action-head"><div class="flex">${badge(a.grade, GRADE_TONE[a.grade])}${a.ai ? badge('AI 문장', 'purple') : ''}</div>
-        ${src ? `<a class="link small" href="${src[0]}">${esc(src[1])}에서 근거 보기 ${icon('arrow')}</a>` : ''}</div>
-      <p class="ins-fact">${esc(a.fact)}</p>
-      <dl class="ins-steps">
-        <div><dt>영향</dt><dd>${esc(a.why)}</dd></div>
-        <div class="todo"><dt>할 일</dt><dd>${esc(a.todo)}</dd></div>
-      </dl>
-      <p class="ins-action-rule">${esc(a.ruleLabel)}</p>
-    </article>`;
+  // 할 일을 맡을 탭 (펼친 칸의 'OO 열기')
+  const ACTION_GO = {
+    own_complaint: ['/dashboard/cs', '고객 응대 열기'], season_search: ['/dashboard/content', '콘텐츠 제작 열기'], top_question: ['/dashboard/content', '콘텐츠 제작 열기'],
+    comp_oos: ['/dashboard/performance', '성과분석 열기'], comp_oos_multi: ['/dashboard/performance', '성과분석 열기']
+  };
+  const ACT_CHEV = '<svg class="ins-aw-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+
+  // 이번 주 액션 → 한 줄 목록. 같은 규칙(시즌 검색 여러 개)은 한 줄로 합침 — 제목 · 숫자 · 개수 모두 이 줄 기준
+  function actionRows(acts) {
+    const by = {}, rows = [];
+    (acts || []).forEach(a => {
+      if (!by[a.rule]) rows.push(by[a.rule] = { key: a.id, rule: a.rule, grade: a.grade, acts: [] });
+      by[a.rule].acts.push(a);
+    });
+    return rows.map(r => {
+      const a = r.acts[0];
+      const season = r.rule === 'season_search';
+      return Object.assign(r, {
+        title: a.title || firstSentence(a.fact), metric: a.metric || '', metricLabel: a.metricLabel || '',
+        sub: season ? r.acts.map(x => `${x.facts['시즌']} D-${x.facts['남은 날']}`).join(' · ') : a.why,
+        steps: a.steps && a.steps.length ? a.steps : [a.todo]
+      });
+    });
+  }
+  const rowCount = (rows, g) => rows.filter(r => r.grade === g).length;
+
+  // 펼친 칸의 근거 칩 (수집한 값 그대로 · 상품은 판매처 링크)
+  function actionChips(a) {
+    const f = a.facts || {};
+    const src = x => SRC_LABEL[x.source] || x.source || '';
+    const short = t => { t = String(t || ''); return t.length > 30 ? t.slice(0, 29) + '…' : t; };
+    const item = (x, text) => { const u = safeUrl(x.link); return `<span class="ins-aw-chip">${u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(text)} ↗</a>` : esc(text)}</span>`; };
+    const out = [];
+    (f['변동 상품'] || []).slice(0, 3).forEach(x => out.push(item(x, `${short(x.title)} (${src(x)}) ${money(x.before)} → ${money(x.after)}`)));
+    (f['품절 상품'] || []).slice(0, 3).forEach(x => out.push(item(x, `${short(x.title)} (${src(x)})`)));
+    (f['새 상품'] || []).slice(0, 3).forEach(x => out.push(item(x, `${short(x.title)} (${src(x)})${x.price != null ? ' ' + money(x.price) : ''}`)));
+    (f['재입고'] || []).slice(0, 3).forEach(x => out.push(item(x, `${short(x.title)} (${src(x)})`)));
+    (f['재고 임박'] || []).slice(0, 3).forEach((x, i) => out.push(item(x, `${short(x.title)} (${src(x)}) ${(f['남은 개수'] || [])[i]}개 남음`)));
+    (f['품절 제품'] || []).slice(0, 2).forEach(x => out.push(`<span class="ins-aw-chip">${esc(`${x.line} · 판매 ${x.channels.join(' · ')} · 품절 ${x.oos.join(' · ')}`)}</span>`));
+    (f['예시'] || []).slice(0, 3).forEach(t => out.push(`<span class="ins-aw-chip">"${esc(short(t))}"</span>`));
+    return out.length ? `<div class="ins-aw-chips">${out.join('')}</div>` : '';
+  }
+
+  function actionRow(r, open) {
+    const src = ACTION_SRC[r.rule], go = ACTION_GO[r.rule];
+    const comp = r.acts.some(a => /컴플라이언스/.test(a.todo));
+    const seasons = r.rule === 'season_search' ? `<ul class="ins-aw-subs">${r.acts.map(a => `<li><span>${esc(a.facts['시즌'])} · D-${esc(a.facts['남은 날'])}</span>
+      <b>'${esc(a.facts['키워드'])}' ${esc(a.metric || '')}</b></li>`).join('')}</ul>` : '';
+    return `<div class="ins-aw-row ${GRADE_CLASS[r.grade] || ''}${open ? ' open' : ''}">
+      <button type="button" class="ins-aw-btn" data-act="act-row" data-key="${esc(r.key)}" aria-expanded="${open}">
+        <span class="ins-aw-dot" aria-hidden="true"></span>
+        <span class="ins-aw-text"><span class="ins-aw-t">${esc(r.title)}</span><span class="ins-aw-s">${esc(r.sub)}</span></span>
+        <span class="ins-aw-num"><b>${esc(r.metric)}</b><small>${esc(r.metricLabel)}</small></span>${ACT_CHEV}</button>
+      ${open ? `<div class="ins-aw-detail">${seasons || actionChips(r.acts[0])}
+        <p class="ins-aw-lbl">할 일</p><ol class="ins-aw-steps">${r.steps.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
+        ${comp ? '<p class="ins-aw-comp">ⓘ 광고 문구에 효능 표현이나 경쟁 브랜드 이름을 넣을 때는 컴플라이언스 검토를 거쳐요.</p>' : ''}
+        <div class="ins-aw-foot">${src ? `<a class="link small" href="${src[0]}">${esc(src[1])}에서 근거 보기 ${icon('arrow')}</a>` : '<span></span>'}
+          ${go ? `<a class="btn small" href="${go[0]}">${esc(go[1])}</a>` : ''}</div></div>` : ''}
+    </div>`;
+  }
+
+  // 참고: 맨 아래 접은 상자 안에 제목 + 숫자 한 줄씩
+  function actionRefs(refs) {
+    if (!refs.length) return '';
+    return `<details class="ins-aw-ref" data-fold="refs"${S.open.refs ? ' open' : ''}><summary>참고 ${refs.length}개 더 보기 ${ACT_CHEV}</summary>
+      ${refs.map(r => { const src = ACTION_SRC[r.rule]; return `<div class="ins-aw-refrow"><span class="ins-aw-dot" aria-hidden="true"></span>
+        <span class="ins-aw-t">${src ? `<a href="${src[0]}">${esc(r.title)}</a>` : esc(r.title)}</span><small>${esc(r.metric)}${r.metricLabel ? ' ' + esc(r.metricLabel) : ''}</small></div>`; }).join('')}</details>`;
   }
 
   function drawWeekly() {
     const el = panel('weekly');
     if (!el) return;
     const w = S.weekly;
-    if (!w) { el.innerHTML = `<div class="workbench"><div class="stack">${skel}</div><aside class="stack">${skel}</aside></div>`; return; }
+    if (!w) { el.innerHTML = `<div class="stack">${skel}${skel}</div>`; return; }
     const acts = w.actions;
     const s = w.shelf;
-    const r = w.reviews;
-    const head = `<div class="card-head"><h2>이번 주 액션 <span class="muted small">${esc(w.week)} · ${esc(w.weekLabel)}</span></h2>
-      <div class="flex">${w.aiUsed ? badge('AI 문장', 'purple') : badge('규칙 문장')}</div></div>`;
+    // 긴급 · 기회는 한 줄 목록(누르면 펼침, 처음엔 맨 위 한 줄만), 참고는 맨 아래 접기 · 위 칸으로 등급 고르기
+    const rows = actionRows(acts);
+    const main = rows.filter(r => r.grade !== '참고'), refs = rows.filter(r => r.grade === '참고');
+    const f = S.actF || 'all';
+    const openKey = S.actOpen === undefined ? (main[0] && main[0].key) : S.actOpen;
+    const seg = main.length ? `<div class="ins-aw-seg" role="group" aria-label="등급 고르기">${[['all', '전체', main.length], ['긴급', '긴급', rowCount(main, '긴급')], ['기회', '기회', rowCount(main, '기회')]]
+      .map(([k, l, n]) => `<button type="button" data-act="act-f" data-f="${k}" aria-pressed="${f === k}"${f === k ? ' class="on"' : ''}>${l}<b>${n}</b></button>`).join('')}</div>` : '';
+    const head = `<div class="card-head"><h2>이번 주 액션 <span class="muted small">${esc(w.weekLabel)}</span></h2>
+      <div class="flex">${w.aiUsed ? badge('AI 문장', 'purple') : ''}${seg}</div></div>`;
     let list;
-    // 긴급 · 기회는 카드로, 참고는 접은 상자 안에 한 줄씩
-    const main = acts.filter(a => a.grade !== '참고'), refs = acts.filter(a => a.grade === '참고');
-    const refList = refs.length ? `<details class="ins-fold ins-ref" data-fold="refs"${S.open.refs ? ' open' : ''}>
-      <summary>${badge('참고', GRADE_TONE['참고'])} 참고 ${refs.length}개</summary>
-      ${refs.map(a => { const src = ACTION_SRC[a.rule]; return `<div class="ins-ref-row"><span>${esc(firstSentence(a.fact))}</span>
-        ${src ? `<a class="link small" href="${src[0]}">${esc(src[1])} ${icon('arrow')}</a>` : ''}</div>`; }).join('')}</details>` : '';
-    if (acts.length) list = `<div class="stack tight">${main.map(actionCard).join('')}${refList}</div>`;
+    const shown = main.filter(r => f === 'all' || r.grade === f);
+    if (acts.length) list = `<div class="ins-aw">${shown.map(r => actionRow(r, r.key === openKey)).join('')}${f === 'all' ? actionRefs(refs) : ''}</div>`;
     else if (w.hasData) list = `<div class="empty-art">${icon('check')}<span><b>특이사항 없음</b><br>이번 주에는 규칙에 걸린 신호가 없어요. 데이터 › 진열대에서 흐름을 확인하세요.</span></div>`;
     else list = `<div class="empty-art">${icon('refresh')}<span><b>특이사항 없음</b><br>아직 모은 데이터가 없어서 걸린 신호가 없어요. 오른쪽 위 <b>데이터 업데이트</b>로 진열대 · 리뷰 · 검색 트렌드를 모으면 이번 주 액션이 계산돼요.</span>
       <button type="button" class="btn lime small" data-act="ins-update">${icon('refresh')}데이터 업데이트</button></div>`;
@@ -550,7 +604,6 @@
         ${a.ai ? `<p class="small muted mt-8">규칙 문장 · ${esc(a.base.fact)} ${esc(a.base.why)} ${esc(a.base.todo)}</p>` : ''}</div>`).join('')}
       <p class="panel-note mt-8">등급은 규칙이 정하고, AI는 문장만 다듬어요.${w.aiReady ? '' : ' 지금은 OpenAI 키가 없어 규칙 문장 그대로예요.'}</p>
     </details>` : '';
-    const weeks = Object.keys(s.weeks || {}).map(src => `${SRC_LABEL[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
     const own = s.ownRank;   // 모든 판매처 · 같은 제품은 한 줄 (진열대 탭과 같은 기준)
     // 재고 주의 제품: 한 줄 설명 (품절 채널 · 옵션 품절 · 남은 개수)
     const watchLines = s.watchLines || [];
@@ -578,28 +631,25 @@
       <div class="card-head"><h2>이번 주 변화 요약</h2><a class="link" href="#market/changes">시장 보기 ${icon('arrow')}</a></div>
       ${summary}
     </section>`;
-    // 수집 상태 (수집 기준 주차 · 데이터가 부족한 곳) → 마지막 업데이트 카드 안
+    // 새 리뷰는 위 숫자 칸, 마지막 업데이트는 데이터 관리 › 진열대 수집 · 고치기 (runStatus)
+    el.innerHTML = `${demoNote(w.demo)}
+      <div class="stack">
+        ${shelfCard}
+        <section class="card" data-ref="actions">${head}${stale}${list}${signals}</section>
+      </div>`;
+  }
+
+  // 마지막 업데이트 + 수집 상태 (수집 기준 주차 · 데이터가 부족한 곳) — 데이터 관리 › 진열대 수집 · 고치기 맨 위
+  function runStatus() {
+    const w = S.weekly;
+    if (!w) return '';
+    const s = w.shelf;
+    const weeks = Object.keys(s.weeks || {}).map(src => `${SRC_LABEL[src] || src} ${s.weeks[src].now}${s.weeks[src].prev ? ` (지난 ${s.weeks[src].prev})` : ''}`).join(' · ');
     const reasons = shelfReasons(s);
     const collect = `${weeks ? `<p class="panel-note mt-8">${s.compare ? '지난 수집 대비' : '이번 수집 기준'} · ${esc(weeks)}</p>` : ''}
       ${reasons.length ? `<details class="ins-fold mt-16" data-fold="shelfWhy"${S.open.shelfWhy ? ' open' : ''}><summary>데이터가 부족한 곳 (${reasons.length})</summary>
         <div class="ins-why-list">${reasons.map(r => `<div class="ins-why"><b>${esc(r.label)}</b><div>${esc(r.text)}<small>할 일 · ${esc(r.todo)}</small></div></div>`).join('')}</div></details>` : ''}`;
-    el.innerHTML = `${demoNote(w.demo)}
-      <div class="workbench">
-        <div class="stack">
-          ${shelfCard}
-          <section class="card" data-ref="actions">${head}${stale}${list}${signals}</section>
-        </div>
-        <aside class="stack">
-          <section class="card">
-            <div class="card-head"><h2>새 리뷰</h2><span class="small muted">지난 7일 새로 모은 리뷰</span></div>
-            ${r.count ? `<div class="ins-big">${esc(r.count)}<span>개</span></div><p class="small muted">자사 ${esc(r.own)} · 경쟁사 ${esc(r.other)}</p>
-              <div class="mt-8">${ui.row('칭찬 상위', esc(topicsText(r.praise)))}${ui.row('불만 상위', esc(topicsText(r.complaint)))}</div>`
-              : '<p class="small muted">지난 7일 새로 모은 리뷰가 없어요.</p>'}
-            <a class="link mt-8" href="#customers/reviews">구매자 리뷰 보기 ${icon('arrow')}</a>
-          </section>
-          ${lastRunCard(w.lastRun, collect)}
-        </aside>
-      </div>`;
+    return `<div class="mt-24">${lastRunCard(w.lastRun, collect)}</div>`;
   }
 
   // 진열대 변화 카드가 비어 보이는 이유 + 할 일 (판매처 수집 결과 · 첫 수집 · 재고 미확인 · 자사 · 묶음 확인)
@@ -958,8 +1008,7 @@
       b.setAttribute('aria-selected', String(on));
     });
     setHash(`${tab}/${sub}`);
-    // 보관한 기사는 홈에서 새로 보관했을 수 있어 매번 다시 읽음
-    const need = NEEDS[sub].filter(k => !S.data[k] || k === 'news');
+    const need = NEEDS[sub].filter(k => !S.data[k]);
     if (!need.length) drawSub(sub);
     else need.forEach(k => loadData(k));
   }
@@ -970,7 +1019,7 @@
     if (body && shows() && !S.data[key]) body.innerHTML = skel;
     S.loading[key] = true;
     try {
-      S.data[key] = await api(key === 'news' ? '/api/home/news/saved' : `/api/insights/data/${key}` + (month ? `?month=${encodeURIComponent(month)}` : ''));
+      S.data[key] = await api(`/api/insights/data/${key}` + (month ? `?month=${encodeURIComponent(month)}` : ''));
     } catch (e) {
       if (curBody() && shows()) curBody().innerHTML = `<div class="note error">불러오지 못했어요: ${esc(e.message)}</div>`;
       return;
@@ -987,9 +1036,8 @@
     body.innerHTML = {
       changes: () => marketHtml('changes'), price: () => marketHtml('price'), brands: () => marketHtml('brands'),
       edit: () => editHtml(D.shelf), reviews: () => reviewsHtml(D.reviews), audience: () => audienceHtml(D.audience),
-      accuracy: () => accuracyHtml(D.accuracy), news: () => newsHtml(D.news)
+      accuracy: () => accuracyHtml(D.accuracy)
     }[sub]();
-    if (sub === 'news') drawNewsList();
     if (sub === 'price') { fitSwarm(); initSwarm(); initPantryFlow(); }
     if (sub === 'brands') focusBrand();
     if (sub === 'changes' && S.focusChg) {
@@ -1297,7 +1345,7 @@
     const unserved = d.items.filter(x => x.servingsSource === 'default').length;
     const unchecked = d.items.filter(x => x.line && !x.line.confirmed).length;
     const one = d.items.length ? `상품 ${d.items.length}개 · 회분 확인 필요 ${unserved}개 · 묶음 확인 필요 ${unchecked}개` : '';
-    return qHead('edit', one) + `<section class="card mt-24">
+    return qHead('edit', one) + runStatus() + `<section class="card mt-24">
       <div class="flex wrap mb-16">
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 수집</button>
         <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 수집</button>
@@ -1834,18 +1882,8 @@
   const MK_COL_SORTS = { name: ['브랜드', 1], price: ['최저가', 1], ps: ['1회분', 1], signal: ['신호 순', 1], stock: ['재고 (품절 먼저)', 1], reviews: ['리뷰 · 판매', -1] };
   const CHG_RANK = { threat: 0, chance: 1, watch: 2 };
 
-  // 곧 품절 (Amazon '몇 개 안 남음'이 기준 이하) → 변화 카드 모양으로
-  function lowStockChanges(sh) {
-    return sh.items.filter(x => !x.own && x.in_stock !== false && x.stockLeft != null && x.stockLeft <= sh.lowStock).map(x => ({
-      kind: 'low', group: 'watch', label: '곧 품절', brand: (x.line && x.line.brand) || x.brand, source: x.sourceLabel, title: x.title, link: x.link,
-      left: x.stockLeft, impact: "품절되면 바로 켤 '즉시 출고' 소재와 경쟁 키워드 광고를 미리 준비하세요."
-    }));
-  }
-  function mkChanges() {
-    const sh = S.data.shelf, cp = S.data.competitors;
-    const low = lowStockChanges(sh);
-    return cp.changes == null ? (low.length ? low : null) : cp.changes.concat(low);
-  }
+  // 이번 주 변화 (곧 품절 포함) — 서버가 한 번만 계산해 주간 리뷰 요약과 같은 숫자
+  function mkChanges() { return S.data.competitors.changes; }
 
   // 브랜드 재고: 모든 판매처 품절 → 일부 판매처 품절 → 곧 품절 순으로 하나만 (나머지는 '외 N')
   // 품절은 제품(묶음 = 브랜드 · 제형)마다 판매처별로 봄 — 이번 주 리뷰 '재고 주의 제품'과 같은 기준
@@ -2665,58 +2703,6 @@
       : x.examples.map(e => `<li><p>${esc(e)}</p></li>`);
     const body = `<div class="part-insights ins-modal"><p>${esc(x.label)} · 질문 ${esc(x.count)}건</p><ul class="ins-reviews">${list.join('')}</ul></div>`;
     ui.modal({ title: x.label, body, wide: true });
-  }
-
-  /* 뉴스 수집: 홈 › 미국 시장 브리핑에서 보관(책갈피)한 기사. 화면에 보인 내용을 보관할 때 그대로 복사해 둔 것 */
-  const BOOKMARK = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg>';
-  function newsHtml(d) {
-    const items = (d && d.items) || [];
-    const one = items.length ? `보관한 기사 ${items.length}건 · 최근 보관 ${fmt.relative(items[0].savedAt)}` : '';
-    const head = qHead('news', one, '<a class="btn small" href="/dashboard#briefing">홈 › 미국 시장 브리핑</a>');
-    if (!items.length) {
-      return head.replace('오른쪽 위 데이터 업데이트를 눌러 주세요.', '홈 › 미국 시장 브리핑의 기사 카드에서 보관을 눌러 주세요.');
-    }
-    const ai = items.some(x => x.summaryKo || x.whyKo);
-    return head + `<section class="card mt-24"><div class="card-head"><h2>보관한 기사</h2>${ai ? badge('AI 요약', 'purple') : ''}</div>
-      <div class="ins-news-tools"><input class="input" type="search" data-ref="news-q" value="${esc(S.news.q)}" placeholder="제목 · 요약 · 마케터의 시선 · 매체 · 분야 검색" aria-label="보관한 기사 검색">
-        <div class="chips" data-ref="news-kinds"></div></div>
-      <div data-ref="news-list"></div>
-      ${ai ? '<p class="panel-note mt-8">제목 · 요약 · 마케터의 시선은 AI가 정리했어요. 사실은 원문으로 확인해 주세요.</p>' : ''}</section>`;
-  }
-  // 보관한 기사 검색: 띄어쓰기로 나눈 낱말이 모두 들어간 기사만 (대소문자 무시) + 업계 뉴스 / 트렌드 고르기
-  const NEWS_KINDS = [['', '전체'], ['flow', '업계 뉴스'], ['trend', '트렌드']];
-  const newsText = x => [x.titleKo, x.title, x.summaryKo, x.whyKo, x.domain, x.areaLabel, x.savedBy].join(' ').toLowerCase();
-  function drawNewsList() {
-    const box = $(panel(S.tab), '[data-ref="news-list"]');
-    if (!box) return;
-    const items = (S.data.news && S.data.news.items) || [];
-    const f = S.news;
-    const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
-    const byKind = items.filter(x => !f.kind || x.kind === f.kind);
-    const rows = byKind.filter(x => { const t = newsText(x); return words.every(w => t.includes(w)); });
-    $(panel(S.tab), '[data-ref="news-kinds"]').innerHTML = NEWS_KINDS.map(([k, l]) =>
-      `<button type="button" class="chip${f.kind === k ? ' selected' : ''}" aria-pressed="${f.kind === k}" data-act="news-kind" data-kind="${k}">${esc(l)}<span class="n">${k ? items.filter(x => x.kind === k).length : items.length}</span></button>`).join('');
-    // 찾은 낱말 강조: 원문을 낱말로 나눠 조각마다 esc (HTML 엔티티가 깨지지 않게)
-    const re = words.length ? new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi') : null;
-    const mark = text => (re ? String(text == null ? '' : text).split(re).map((p, i) => (i % 2 ? `<mark>${esc(p)}</mark>` : esc(p))).join('') : esc(text));
-    const li = x => `<li class="ins-news"><div class="ins-news-main">
-        <b>${safeUrl(x.url) ? `<a href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener noreferrer">${mark(x.titleKo || x.title)}</a>` : mark(x.titleKo || x.title)}</b>
-        ${x.summaryKo ? `<small>${mark(x.summaryKo)}</small>` : ''}
-        ${x.whyKo ? `<small class="ins-news-why"><b>${x.kind === 'trend' ? '적용점' : '마케터의 시선'}</b> ${mark(x.whyKo)}</small>` : ''}
-        <small>${[x.kind === 'trend' ? '트렌드' : '업계 뉴스', x.areaLabel, x.domain, x.date ? fmt.relative(x.date) : ''].filter(Boolean).map(mark).join(' · ')}</small>
-        ${x.titleKo && x.title ? `<small lang="en">${mark(x.title)}</small>` : ''}
-        <small class="muted">${esc(x.savedBy || '')} · ${esc(fmt.datetime(x.savedAt))} 보관</small></div>
-      <button type="button" class="btn small ins-news-unsave" data-act="news-unsave" data-id="${esc(x.id)}" title="보관 해제">${BOOKMARK} 보관됨</button></li>`;
-    box.innerHTML = (words.length || f.kind ? `<p class="small muted ins-news-count">${byKind.length}건 중 ${rows.length}건</p>` : '') +
-      (rows.length ? `<ul class="ins-list">${rows.map(li).join('')}</ul>` : `<p class="small muted mt-16">${words.length ? `'${esc(f.q)}'에 맞는 보관 기사가 없어요. 다른 낱말로 찾아보세요.` : '이 종류로 보관한 기사가 없어요.'}</p>`);
-  }
-  async function unsaveNews(btn, id) {
-    btn.disabled = true;
-    try {
-      await api(`/api/home/news/saved/${encodeURIComponent(id)}`, undefined, { method: 'DELETE' });
-      toast('보관을 해제했어요.');
-      loadData('news');
-    } catch (e) { toast(e.message, 'error'); btn.disabled = false; }
   }
 
   /* 정확도 검증: 유튜브 댓글 VOC 분류를 사람 정답 76건으로 채점 (README '정확도 검증') */
