@@ -1,5 +1,5 @@
 {
-  "_note": "Reboot 브랜드 자산 목록 (사용자 제공 2026-10-24 · 최종 패키지). 긴 쪽 2000px JPG. ref=true만 이미지 생성 참고 사진으로 자동 선택됩니다. priority가 작을수록 먼저 고릅니다. 리볼버 모양 젤리가 보이는 사진과 글자가 많은 캐릭터 시트는 ref=false (화면에서 보기만).",
+  "_note": "Reboot 브랜드 자산 목록 (사용자 제공 2026-10-24 · 최종 패키지 · 2026-10-25 리볼버 뺀 젤리 사진 교체·추가). 긴 쪽 2000px JPG. ref=true만 이미지 생성 참고 사진으로 자동 선택됩니다. priority가 작을수록 먼저 고릅니다. 글자가 많은 캐릭터 시트는 ref=false (화면에서 보기만). 리볼버가 보이던 봉지 장면 사진은 2026-10-25에 리볼버를 뺀 사진으로 교체.",
   "version": "2026-10-24",
   "assets": [
     {"id": "logo-black-on-white", "file": "logo/logo-black-on-white.jpg", "type": "logo", "ref": false, "priority": 1, "desc": "로고 · 흰 배경 검정 글자 + 네온 라임 OO"},
@@ -30,7 +30,8 @@
 
     {"id": "jelly-original-pouch-front", "file": "jelly/jelly-original-pouch-front.jpg", "type": "product", "product_id": "jelly_original", "flavor": null, "view": "pouch", "ref": true, "priority": 1, "desc": "Jelly Original 봉지 정면 (LIME · LEMON · CHERRY)"},
     {"id": "jelly-original-pouch-scene-2", "file": "jelly/jelly-original-pouch-scene-2.jpg", "type": "product", "product_id": "jelly_original", "flavor": null, "view": "scene", "ref": true, "priority": 4, "desc": "Jelly Original 봉지 + 낱개 포장 모자·올가미"},
-    {"id": "jelly-original-pouch-scene", "file": "jelly/jelly-original-pouch-scene.jpg", "type": "product", "product_id": "jelly_original", "flavor": null, "view": "scene", "ref": false, "priority": 9, "desc": "Jelly Original 봉지 + 낱개 젤리 (리볼버 모양 포함 — 참고 사진으로 쓰지 않음)"},
+    {"id": "jelly-original-pouch-scene", "file": "jelly/jelly-original-pouch-scene.jpg", "type": "product", "product_id": "jelly_original", "flavor": null, "view": "scene", "ref": true, "priority": 4, "desc": "Jelly Original 봉지 + 낱개 젤리 부츠·모자 (리볼버 뺀 사진 · 2026-10-25 교체)"},
+    {"id": "jelly-original-pieces", "file": "jelly/jelly-original-pieces.jpg", "type": "product", "product_id": "jelly_original", "flavor": null, "view": "pieces", "ref": true, "priority": 4, "desc": "Jelly Original 포장 없는 젤리 · 모자·부츠·올가미 (2026-10-25)"},
     {"id": "jelly-original-cherry-hat-wrapped", "file": "jelly/jelly-original-cherry-hat-wrapped.jpg", "type": "product", "product_id": "jelly_original", "flavor": "cherry", "view": "wrapped", "ref": true, "priority": 2, "desc": "Jelly Original 체리 · 카우보이 모자 · 낱개 포장"},
     {"id": "jelly-original-lemon-lasso-wrapped", "file": "jelly/jelly-original-lemon-lasso-wrapped.jpg", "type": "product", "product_id": "jelly_original", "flavor": "lemon", "view": "wrapped", "ref": true, "priority": 2, "desc": "Jelly Original 레몬 · 올가미 · 낱개 포장"},
     {"id": "jelly-original-lime-boot-wrapped", "file": "jelly/jelly-original-lime-boot-wrapped.jpg", "type": "product", "product_id": "jelly_original", "flavor": "lime", "view": "wrapped", "ref": true, "priority": 2, "desc": "Jelly Original 라임 · 카우보이 부츠 · 낱개 포장"},
@@ -39,7 +40,8 @@
     {"id": "jelly-original-lime-boot-spec", "file": "jelly/jelly-original-lime-boot-spec.jpg", "type": "product", "product_id": "jelly_original", "flavor": "lime", "view": "spec", "ref": true, "priority": 5, "desc": "Jelly Original 라임 부츠 · 규격도 (포장 없음)"},
 
     {"id": "jelly-balance-pouch-front", "file": "jelly/jelly-balance-pouch-front.jpg", "type": "product", "product_id": "jelly_balance", "flavor": null, "view": "pouch", "ref": true, "priority": 1, "desc": "Jelly Balance 봉지 정면 (ZERO SUGAR · BALANCE · CHERRY · LIME · LEMON)"},
-    {"id": "jelly-balance-pouch-scene", "file": "jelly/jelly-balance-pouch-scene.jpg", "type": "product", "product_id": "jelly_balance", "flavor": null, "view": "scene", "ref": false, "priority": 9, "desc": "Jelly Balance 봉지 + 낱개 젤리 (리볼버 모양 포함 — 참고 사진으로 쓰지 않음)"},
+    {"id": "jelly-balance-pouch-scene", "file": "jelly/jelly-balance-pouch-scene.jpg", "type": "product", "product_id": "jelly_balance", "flavor": null, "view": "scene", "ref": true, "priority": 4, "desc": "Jelly Balance 봉지 + 낱개 젤리 부츠·모자 (리볼버 뺀 사진 · 2026-10-25 교체)"},
+    {"id": "jelly-balance-pieces", "file": "jelly/jelly-balance-pieces.jpg", "type": "product", "product_id": "jelly_balance", "flavor": null, "view": "pieces", "ref": true, "priority": 4, "desc": "Jelly Balance 포장 없는 젤리 · 모자·부츠·올가미 (연한 색 · 2026-10-25)"},
     {"id": "jelly-balance-cherry-hat-wrapped", "file": "jelly/jelly-balance-cherry-hat-wrapped.jpg", "type": "product", "product_id": "jelly_balance", "flavor": "cherry", "view": "wrapped", "ref": true, "priority": 2, "desc": "Jelly Balance 체리 · 카우보이 모자 · 낱개 포장"},
     {"id": "jelly-balance-lemon-lasso-wrapped", "file": "jelly/jelly-balance-lemon-lasso-wrapped.jpg", "type": "product", "product_id": "jelly_balance", "flavor": "lemon", "view": "wrapped", "ref": true, "priority": 2, "desc": "Jelly Balance 레몬 · 올가미 · 낱개 포장"},
     {"id": "jelly-balance-lime-boot-wrapped", "file": "jelly/jelly-balance-lime-boot-wrapped.jpg", "type": "product", "product_id": "jelly_balance", "flavor": "lime", "view": "wrapped", "ref": true, "priority": 2, "desc": "Jelly Balance 라임 · 카우보이 부츠 · 낱개 포장"},

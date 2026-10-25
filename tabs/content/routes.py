@@ -165,6 +165,8 @@ def campaigns_create():
         sheet = repository.build_sheet(data, products)
         character = (assets.norm_character(data["use_character"])
                      if data.get("use_character") and sheet["content_type"] in assets.CHARACTER_TYPES else None)
+        flavors = (assets.norm_product_flavors(data["product_flavors"], sheet["product_ids"], products)
+                   if data.get("product_flavors") is not None and sheet["product_ids"] else None)
     except ValueError as e:
         raise ApiError(str(e))
     try:  # 브라우저에 저장된 새 캠페인 기본값 — 이상하면 기본값으로
@@ -194,6 +196,9 @@ def campaigns_create():
     if character is not None:  # 시트에서 고른 캐릭터 Rebu 사용 여부 → 확정 결정
         c.decisions = dict(c.decisions, use_character={"value": character, "status": "confirmed", "source": "sheet",
                                                        "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
+    if flavors:  # 시트에서 제품마다 고른 맛 → 확정 결정 (참고 사진도 그 맛으로)
+        c.decisions = dict(c.decisions, product_flavors={"value": flavors, "status": "confirmed", "source": "sheet",
+                                                         "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
     db.session.add(c)
     db.session.flush()
     lab = repository.labels_of(sheet, products)
@@ -236,6 +241,16 @@ def campaigns_patch(cid):
                                 "status": "confirmed"})
             except ValueError as e:
                 raise ApiError(str(e))
+        if "product_flavors" in sheet_in:  # 제품별 맛도 결정 사항으로 (제품을 다 빼면 지움)
+            products = repository.products_index()
+            try:
+                pids = (repository.norm_sheet_value("product_ids", sheet_in["product_ids"], products)
+                        if "product_ids" in sheet_in else c.product_ids)
+                value = assets.norm_product_flavors(sheet_in["product_flavors"], pids, products)
+            except ValueError as e:
+                raise ApiError(str(e))
+            changes.append({"field": "decisions.product_flavors", "value": value,
+                            "status": "confirmed" if value else "undecided"})
         plan = repository.plan_changes(repository.sheet_of(c), c.decisions, changes, user=user, source="sheet",
                                        revision=c.revision)
         if plan["rejected"]:

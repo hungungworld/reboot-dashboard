@@ -42,8 +42,13 @@
 
   function emptySheet() {
     return { content_type: '', channels: [], brand_focus: false, product_ids: [], goal: '', extra_request: '', reference_text: '',
-      use_character: 'AI 판단', language: '영어' };
+      use_character: 'AI 판단', language: '영어', product_flavors: {} };
   }
+  // 제품별 맛 (시트 칩 순서 · 서버 assets.FLAVOR_ORDER와 같음). 처음엔 셋 다 켜짐, 하나씩 끌 수 있음
+  const FLAVORS = [['cherry', '체리'], ['lime', '라임'], ['lemon', '레몬']];
+  const ALL_FLAVORS = FLAVORS.map(f => f[0]);
+  const flavorsOf = (s, id) => { const f = s.product_flavors && s.product_flavors[id]; return Array.isArray(f) && f.length ? f : ALL_FLAVORS.slice(); };
+  const flavorMap = s => Object.fromEntries((s.product_ids || []).map(id => [id, flavorsOf(s, id)]));
   const SHEET_LANGUAGES = ['한국어', '영어'];  // 새 시트의 콘텐츠 언어 (서버 routes.SHEET_LANGUAGES와 같은 이름)
   const rid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   function lsGet(k, d) { try { const v = global.localStorage.getItem(LS + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
@@ -80,7 +85,11 @@
   const textReady = () => !!(S.meta ? S.meta.textReady : S.health && S.health.openai);
   const textModel = () => (S.meta && S.meta.textModel) || (S.health && S.health.openaiModel) || '—';
   function targetLabel(s) {
-    const names = (s.product_ids || []).map(id => { const p = productById(id); return p ? (p.ko || p.name) : id; });
+    const names = (s.product_ids || []).map(id => {
+      const p = productById(id), f = flavorsOf(s, id);
+      const fl = f.length < ALL_FLAVORS.length ? `(${FLAVORS.filter(x => f.includes(x[0])).map(x => x[1]).join('·')})` : '';
+      return (p ? (p.ko || p.name) : id) + fl;
+    });
     return (s.brand_focus ? ['Reboot 브랜드 자체'] : []).concat(names).join(' + ') || '미선택';
   }
   function sheetMissing(s) {
@@ -94,6 +103,7 @@
     const out = { content_type: s.content_type, channels: s.channels.slice(), brand_focus: !!s.brand_focus,
       product_ids: s.product_ids.slice(), goal: s.goal || '', extra_request: s.extra_request || '' };
     if (usesCharacter(s.content_type)) out.use_character = s.use_character || 'AI 판단';
+    if (s.product_ids.length) out.product_flavors = flavorMap(s);
     if (SHEET_LANGUAGES.includes(s.language)) out.language = s.language;
     return out;
   }
@@ -101,6 +111,7 @@
   function fitSheet(s) {
     if (!typeOf(s.content_type)) s.content_type = '';
     s.channels = (s.channels || []).filter(id => DATA.channels.some(c => c.id === id)).slice(0, 1);
+    if (!s.product_flavors || typeof s.product_flavors !== 'object') s.product_flavors = {};
     if (s.content_type && s.channels.length && (s.content_type === DATA.crm.type) !== (s.channels[0] === DATA.crm.channel)) s.channels = [];
     return s;
   }
@@ -136,6 +147,7 @@
     renderTabs();
     renderMain();
     loadMeta();
+    loadAssets();
     loadList();
     loadPersonas();
     if (hash.campaign) openCampaign(hash.campaign, { silent: true });
@@ -329,9 +341,10 @@
       <div class="cnt-targets">
         <label class="cnt-target${s.brand_focus ? ' on' : ''}"><input type="checkbox" data-sheet-check="brand" ${s.brand_focus ? 'checked' : ''}>
           <span><b>Reboot 브랜드 자체</b><small>브랜드가 주제 · 제품 자동 선택 아님</small></span></label>
-        ${products().map(p => { const on = s.product_ids.includes(p.id); return `<label class="cnt-target${on ? ' on' : ''}"><input type="checkbox" data-sheet-check="product" value="${esc(p.id)}" ${on ? 'checked' : ''}>
-          <span><b>${esc(p.ko || p.name)}</b><small>${esc(p.name)} · ${esc(productForm(p))}</small></span></label>`; }).join('')}
+        ${products().map(p => { const on = s.product_ids.includes(p.id); return `<div class="cnt-target cnt-prod${on ? ' on' : ''}"><label class="cnt-prod-main"><input type="checkbox" data-sheet-check="product" value="${esc(p.id)}" ${on ? 'checked' : ''}>
+          <span><b>${esc(p.ko || p.name)}</b><small>${esc(p.name)} · ${esc(productForm(p))}</small></span></label>${on ? flavorChipsHtml(s, p.id) : ''}</div>`; }).join('')}
       </div>
+      ${usesCharacter(s.content_type) && s.product_ids.length ? `<div class="cnt-prod-refs" data-ref-preview="${ctx}">${refPreviewHtml(s)}</div>` : ''}
       ${usesCharacter(s.content_type) ? characterFieldHtml(s) : ''}
       ${isNew ? `<div class="field-label cnt-q">04 &nbsp; 콘텐츠 언어 <span class="cnt-req">필수 · 하나</span><span class="cnt-opt">소비자에게 보일 문구의 언어</span></div>
       <div class="chips">${SHEET_LANGUAGES.map(x => `<button type="button" class="chip" data-act="sheet-language" data-value="${esc(x)}" aria-pressed="${(s.language || '영어') === x}">${esc(x)}</button>`).join('')}</div>` : ''}
@@ -347,6 +360,38 @@
       </details>
       ${ctx === 'edit' ? '<div class="cnt-edit-foot"><span class="panel-note">저장하면 다음 대화부터 새 값이 반영돼요.</span></div>' : ''}
     </div>`;
+  }
+
+  function flavorChipsHtml(s, id) {
+    const cur = flavorsOf(s, id);
+    return `<div class="chips cnt-flavors" role="group" aria-label="맛">${FLAVORS.map(([f, ko]) => `<button type="button" class="chip" data-act="sheet-flavor" data-id="${esc(id)}" data-value="${f}" aria-pressed="${cur.includes(f)}">${ko}</button>`).join('')}</div>`;
+  }
+
+  // 이미지·영상 만들 때 참고로 넣을 제품 사진 미리보기 — 서버 assets.pick_refs와 같은 규칙 (제품 번갈아 · 최대 16장)
+  function productRefs(s) {
+    const all = (S.assets || []).filter(a => a.type === 'product' && a.ref);
+    const lists = s.product_ids.map(id => {
+      const f = flavorsOf(s, id), subset = f.length < ALL_FLAVORS.length;
+      const c = all.filter(a => a.productId === id).sort((a, b) => (a.priority - b.priority) || ((a.flavor != null) - (b.flavor != null)));
+      return subset ? c.filter(a => f.includes(a.flavor)).concat(c.filter(a => a.flavor == null && a.view !== 'trio')) : c;
+    });
+    const out = [];
+    for (let i = 0; lists.some(l => i < l.length); i++) lists.forEach(l => { if (l[i]) out.push(l[i]); });
+    return out.slice(0, 16);  // 서버 assets.MAX_REFS
+  }
+  function refPreviewHtml(s) {
+    if (!S.assets) return '<span class="panel-note">제품 사진을 불러오는 중…</span>';
+    const refs = productRefs(s);
+    if (!refs.length) return '<span class="panel-note">고른 제품의 참고 사진이 없어요.</span>';
+    return `<span class="panel-note">참고로 넣을 제품 사진 ${refs.length}장 · 이미지·영상을 만들 때 함께 보내요</span>
+      <div class="cnt-ref-thumbs">${refs.map(a => `<a href="${esc(a.url)}" target="_blank" rel="noopener" title="${esc(a.desc)}"><img src="${esc(a.url)}" alt="${esc(a.desc)}" loading="lazy"></a>`).join('')}</div>`;
+  }
+  async function loadAssets() {
+    try { S.assets = (await REBOOT.api(`${API}/assets`)).items || []; } catch (e) { S.assets = []; }
+    global.document.querySelectorAll('[data-ref-preview]').forEach(el => {
+      const s = el.dataset.refPreview === 'edit' ? S.edit : S.sheet;
+      if (s) el.innerHTML = refPreviewHtml(s);
+    });
   }
 
   function characterFieldHtml(s) {
@@ -385,7 +430,7 @@
     let sel = null;
     if (a && container.contains(a)) {
       const v = s => (global.CSS && global.CSS.escape ? global.CSS.escape(s) : String(s).replace(/["\\]/g, '\\$&'));
-      if (a.dataset.act) sel = `[data-act="${v(a.dataset.act)}"]` + (a.dataset.value ? `[data-value="${v(a.dataset.value)}"]` : '') + (a.dataset.field ? `[data-field="${v(a.dataset.field)}"]` : '');
+      if (a.dataset.act) sel = `[data-act="${v(a.dataset.act)}"]` + (a.dataset.value ? `[data-value="${v(a.dataset.value)}"]` : '') + (a.dataset.id ? `[data-id="${v(a.dataset.id)}"]` : '') + (a.dataset.field ? `[data-field="${v(a.dataset.field)}"]` : '');
       else if (a.dataset.sheetCheck) sel = `[data-sheet-check="${v(a.dataset.sheetCheck)}"]` + (a.dataset.sheetCheck === 'product' ? `[value="${v(a.value)}"]` : '');
     }
     container.innerHTML = html;
@@ -434,6 +479,11 @@
       else if (id !== DATA.crm.channel && s.content_type === DATA.crm.type) s.content_type = '';
     } else if (act === 'sheet-character') {
       s.use_character = b.dataset.value;
+    } else if (act === 'sheet-flavor') {  // 맛 켜기·끄기 — 제품마다 하나는 남김
+      const id = b.dataset.id, f = b.dataset.value, cur = flavorsOf(s, id);
+      if (cur.includes(f) && cur.length === 1) { toast('맛을 하나 이상 골라 주세요.', 'error'); return true; }
+      const next = cur.includes(f) ? cur.filter(x => x !== f) : cur.concat(f);
+      s.product_flavors = Object.assign({}, s.product_flavors, { [id]: ALL_FLAVORS.filter(x => next.includes(x)) });
     } else if (act === 'sheet-language') {
       s.language = b.dataset.value;
     } else if (act === 'goal-pick') {  // 고른 것을 다시 누르면 해제 → 비우면 챗봇과 논의
@@ -464,6 +514,8 @@
       const set = new Set(c.s.product_ids);
       if (el.checked) set.add(id); else set.delete(id);
       c.s.product_ids = products().map(p => p.id).filter(x => set.has(x));
+      c.s.product_flavors = Object.assign({}, c.s.product_flavors);
+      if (el.checked) c.s.product_flavors[id] = ALL_FLAVORS.slice(); else delete c.s.product_flavors[id];  // 새로 고르면 셋 다 켜짐
     }
     afterSheetChange(c.ctx, true);
   }
@@ -506,7 +558,7 @@
   function editCopy(c) {
     const ch = c.decisions && c.decisions.use_character;
     return fitSheet(Object.assign(emptySheet(), JSON.parse(JSON.stringify(c.sheet)), { reference_text: c.referenceText || '',
-      use_character: (ch && ch.value) || 'AI 판단' }));
+      use_character: (ch && ch.value) || 'AI 판단', product_flavors: JSON.parse(JSON.stringify(c.productFlavors || {})) }));
   }
 
   async function openCampaign(id, opts) {
@@ -2033,6 +2085,8 @@
     ['channels', 'product_ids'].forEach(k => { if (e[k].join(',') !== cur[k].join(',')) sheet[k] = e[k].slice(); });
     const curChar = (c.decisions.use_character && c.decisions.use_character.value) || 'AI 판단';
     if (usesCharacter(e.content_type) && e.use_character !== curChar) sheet.use_character = e.use_character;
+    const curFlavors = Object.fromEntries(cur.product_ids.map(id => [id, (c.productFlavors && c.productFlavors[id]) || ALL_FLAVORS]));
+    if (sheet.product_ids || JSON.stringify(flavorMap(e)) !== JSON.stringify(curFlavors)) sheet.product_flavors = flavorMap(e);
     const body = { expected_revision: c.revision };
     if (Object.keys(sheet).length) body.sheet = sheet;
     if ((e.reference_text || '') !== (c.referenceText || '')) body.reference_text = e.reference_text || '';

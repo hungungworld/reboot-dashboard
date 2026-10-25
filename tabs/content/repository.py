@@ -15,7 +15,7 @@ from sqlalchemy import func, update
 from server.catalog import service as catalog
 from server.extensions import db
 from server.models import iso, utcnow
-from . import brandkit
+from . import assets, brandkit
 from . import options as O
 from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentReference, ContentVersion
 
@@ -540,6 +540,7 @@ def campaign_state(c, *, message_limit=200):
         "jobs": [job_dict(j) for j in jobs_],
         "recentChanges": [event_dict(e) for e in events],
         "facts": brandkit.product_facts(sheet["product_ids"]),
+        "productFlavors": assets.product_flavors_of(decisions, sheet["product_ids"], products),
         "references": [reference_dict(r) for r in references_of(c.id)],
         "flow": O.flow_of(sheet),
         "currentHash": snapshot_hash(cur),

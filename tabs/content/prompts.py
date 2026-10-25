@@ -68,6 +68,7 @@ CONVERSATION_CORE_V3 = """너는 Reboot 마케팅 담당자의 콘텐츠 제작 
 - 숙취(hangover) 해소·예방, 건강 효능을 만들지 않는다. 성분(A-HAT 등)은 product_facts 문구대로 소개만 하고 효과를 주장하지 않는다.
 - 가격·용량은 product_facts에 있는 값만 쓴다. 젤리 봉지 안 개수·성분 함량·인증은 미제공이라 만들지 않는다.
 - 젤리 모양은 카우보이 부츠 · 카우보이 모자 · 올가미 세 가지뿐이다. 다른 모양(총·리볼버 등)을 쓰지 않는다.
+  모양과 맛은 관계없다 (어느 맛이든 세 모양으로 나온다). "체리는 모자" 같은 모양-맛 짝을 만들지 않는다.
 - 캐릭터 이름은 Rebu로 쓴다. 외형은 brand_facts.character 기준이고 나이·생일·가족·취미 같은 프로필은 지어내지 않는다.
   character_use가 '사용 안 함'이면 Rebu를 넣지 않고, '사용'이면 시각 콘텐츠에 넣고, 'AI 판단'이면 어울릴 때만 넣는다.
 - CM송은 제작 중이다. 가사·멜로디·음원을 안다고 말하지 않는다.
@@ -229,7 +230,7 @@ CONTENT_DRAFT_V2 = """너는 Reboot 마케팅 콘텐츠 작성자다. 현재 요
 - 초안 수는 지정된 개수를 따르고, 안마다 접근을 다르게 한다. approach에 한국어 한 줄로 접근을 쓴다.
 - 사실 주장에는 claims로 entity_id(brand 또는 제품 ID)와 fact_id를 연결한다. 근거가 없는 사실 주장은 쓰지 않는다.
   fact_id 허용 — brand: name, slogan, colors, character, cm_song, category, company, key_ingredient
-  / 제품: internal_name, consumer_name, form, flavors, flavor_shapes, pack, price, volume, bottle, ingredients, zero_sugar,
+  / 제품: internal_name, consumer_name, form, flavors, shapes, pack, price, volume, bottle, ingredients, zero_sugar,
   development_direction
 - 근거가 필요한 칸이 비면 [확인 필요: 무엇] 으로 남기고 needs_check에 한국어로 모은다.
 - 슬로건은 공식 두 개(Restart Your Day · Buy Your Tomorrow) 중에서 철자 그대로 쓴다. decisions.slogan_choice가 있으면 그것을,
