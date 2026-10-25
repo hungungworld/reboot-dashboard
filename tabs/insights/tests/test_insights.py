@@ -325,6 +325,28 @@ def test_insights_requires_login(client):
     assert client.get("/api/insights/weekly").status_code == 401
 
 
+def test_rules_actions_have_short_title_metric_and_steps():
+    # 한 줄 목록용: 모든 규칙에 짧은 제목 · 핵심 숫자 · 할 일 단계, 숫자는 사실 문장과 같은 값
+    prev = [_lined("amazon:A", "Flyby · 캡슐", "amazon", in_stock=False), _item("amazon:P", "Liquid IV 16 Count", 30.0)]
+    now = [_lined("amazon:A", "Flyby · 캡슐", "amazon"), _item("amazon:P", "Liquid IV 16 Count", 24.0),
+           _lined("amazon:B", "컨디션 · 젤리", "amazon", in_stock=False), _lined("weee:B", "컨디션 · 젤리", "weee"),
+           _lined("amazon:C", "Cheers · 캡슐", "amazon", left=8), _item("amazon:N", "New Patch", 12.0),
+           _item("amazon:OWN", "Aldicom Jelly", 15, own=True, in_stock=False)]
+    pts = [{"date": (date(2025, 10, 26) + timedelta(weeks=i)).isoformat(), "value": 90 if i == 1 else 40} for i in range(52)]
+    acts = rules.weekly_actions(_ctx(shelf_now=now, shelf_prev=prev, trends={"hangover": pts},
+                                     questions=[{"label": "어디서 사나요 (구매처)", "count": 7, "examples": []}],
+                                     own_complaints=[{"topic": "맛·향", "count": 3, "examples": []}]))
+    by = {a["rule"]: a for a in acts}
+    assert {"own_oos_season", "price_cut", "new_entry", "comp_oos", "low_stock", "restock", "season_search", "top_question",
+            "own_complaint"} <= set(by)
+    for a in acts:
+        assert a["title"] and a["metric"] and a["metricLabel"] and a["steps"], a["rule"]
+    assert by["price_cut"]["metric"] == "-20%" and "-20%" in by["price_cut"]["fact"]
+    assert by["own_complaint"]["metric"] == "3건" and by["top_question"]["metric"] == "7건"
+    assert by["low_stock"]["metric"] == "8개" and by["own_oos_season"]["metric"] == "D-8"
+    assert by["season_search"]["metric"] in by["season_search"]["fact"]
+
+
 def test_insights_page_loads_part_files(auth_client):
     html = auth_client.get("/dashboard/insights").get_data(as_text=True)
     assert "/parts/insights/insights.js" in html and "/parts/insights/insights.css" in html
