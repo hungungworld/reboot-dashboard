@@ -1,6 +1,6 @@
 /* 인플루언서 · 파트너 (대표 파일) — 메뉴 등록 · 탭 틀만 둡니다. 기능 코드는 넣지 않습니다 (팀 README 4장).
-   🔎 업체 컨택 · ✉️ 협업 메일  → outreach.js  REBOOT.use('partners.outreach').render(el, 'contacts' | 'mail')
-   🗂️ 협업 이력 · 📈 판매 실적  → records.js   REBOOT.use('partners.records').render(el, 'history' | 'sales')
+   업체 컨택 · 협업 메일  → outreach.js  REBOOT.use('partners.outreach').render(el, 'contacts' | 'mail')
+   협업 이력 · 판매 실적  → records.js   REBOOT.use('partners.records').render(el, 'history' | 'sales')
    다른 파일은 탭을 바꿀 때 .part-partners 요소에 CustomEvent('ptn:go', {detail:{tab}})를 보냅니다.
    저장 키: partners.tab.u<사용자 id> (마지막으로 본 탭) */
 (function (global) {
@@ -12,10 +12,10 @@
   const store = REBOOT.store('partners');
   const KEY_TAB = `partners.tab.u${(REBOOT.user() || {}).id || 0}`;
   const TABS = [
-    { id: 'contacts', label: '🔎 업체 컨택', file: 'partners.outreach', view: 'contacts' },
-    { id: 'mail', label: '✉️ 협업 메일', file: 'partners.outreach', view: 'mail' },
-    { id: 'history', label: '🗂️ 협업 이력', file: 'partners.records', view: 'history' },
-    { id: 'sales', label: '📈 판매 실적', file: 'partners.records', view: 'sales' }
+    { id: 'contacts', label: '업체 컨택', file: 'partners.outreach', view: 'contacts' },
+    { id: 'mail', label: '협업 메일', file: 'partners.outreach', view: 'mail' },
+    { id: 'history', label: '협업 이력', file: 'partners.records', view: 'history' },
+    { id: 'sales', label: '판매 실적', file: 'partners.records', view: 'sales' }
   ];
   const tabOf = id => TABS.find(t => t.id === id);
 
@@ -89,7 +89,7 @@
   }
 
   REBOOT.register({
-    id: 'partners', label: '인플루언서 · 파트너', icon: '🤝', priority: 'P1', order: 60,
+    id: 'partners', label: '인플루언서 · 파트너', icon: '', priority: 'P1', order: 60,
     title: '함께 만드는 브랜드의 다음 장.',
     subtitle: '크리에이터와 파트너를 발견하고, 협업의 모든 단계를 연결하세요.',
     render,

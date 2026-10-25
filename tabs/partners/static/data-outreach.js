@@ -9,11 +9,11 @@
 
   P.outreach = {
     types: ['케이터링', '인플루언서'],
-    typeIcon: { 케이터링: '🍽️', 인플루언서: '📱' },
+    typeIcon: { 케이터링: '', 인플루언서: '' },
     typeTone: { 케이터링: 'orange', 인플루언서: 'purple' },
     periodDays: 30,   // 기간 기본값: 오늘 ~ 30일 뒤
 
-    // 📐 메일 구조 (서버 설정을 못 불러올 때 표시용)
+    // 메일 구조 (서버 설정을 못 불러올 때 표시용)
     mailSteps: ['인사', '회사 소개', '협업 이유', '제안 (2–3개 항목)', '일정', '다음 단계', '맺음말'],
 
     // 구분별 기본 문구 — 원하는 파트너 · 협업 목적 · 제안 내용 · 요청사항
@@ -46,12 +46,26 @@
       }
     },
 
-    // 📎 첨부파일 (서버와 같은 규칙)
+    // 첨부파일 (서버와 같은 규칙)
     attach: {
       accept: '.pdf,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.txt',
       exts: ['pdf', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'zip', 'txt'],
       maxFileMB: 25,
       maxTotalMB: 25
+    },
+
+    // 유튜브 크리에이터 — 검색 키워드 추천 묶음 (영어 검색어. 키워드 편집 창에서 눌러 추가)
+    ytSuggest: [
+      { label: '성인 파티 · 나이트라이프', items: ['bachelorette party', 'bachelor party vegas', 'nightlife vlog', 'bar crawl', '21st birthday'] },
+      { label: '술 · 칵테일', items: ['cocktail recipes', 'whiskey review', 'bourbon tasting', 'home bartender'] },
+      { label: '미국 시즌 행사', items: ['tailgate party', 'music festival vlog', 'spring break vlog'] },
+      { label: '파티 다음 날', items: ['hangover cure', 'hangover remedies', 'morning after party'] }
+    ],
+    // 대상: 유튜브 API는 시청자 국가를 주지 않으므로 EST는 추정 (국가 미표시 + 영어 채널)
+    ytTargets: {
+      US: { label: '미국', tone: 'blue' },
+      EN: { label: '영미권', tone: 'purple', help: '영국 · 캐나다 · 호주 · 뉴질랜드 · 아일랜드' },
+      EST: { label: '미국 타겟 (추정)', tone: 'orange', help: '국가 미표시 + 영어 채널 + 미국 지역 검색에 걸림 — 시청자 국가는 채널에서 직접 확인' }
     },
 
     // 업체 파일 형식 안내

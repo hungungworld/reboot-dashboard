@@ -1,7 +1,7 @@
 """인플루언서 · 파트너 API (담당: 혁주). 모든 주소는 로그인 필요 (server/security.py).
 
 상태·설정
-  GET    /api/partners/status                 규제 DB · OpenAI · Gmail 발송 연결 상태
+  GET    /api/partners/status                 규제 DB(컴플라이언스 파트 규칙 · 모니터링) · OpenAI · Gmail 발송 연결 상태
   GET    /api/partners/config                 상태 + 세부 카테고리 · 기본 프롬프트 · 가이드 목적 · 첨부 규칙
 업체 (3-1)
   GET    /api/partners  · /contacts           업체 목록 (?type=케이터링,인플루언서 &tags=festival,vip &q=검색어)
@@ -29,10 +29,11 @@
   POST   /api/partners/history/<id>/reply-summary   회신 AI 요약 (한국어: 핵심·요청사항·분위기·다음 액션)
   POST   /api/partners/history/<id>/reply-draft     AI 영문 답장 초안 {points}
 판매 실적 (3-5)
-  GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 🧪 더미 데이터
-유튜브 크리에이터 추천 (youtube.py · 소개란 공개 이메일만 · 30일 안에 갱신, 못 하면 삭제)
+  GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 더미 데이터
+유튜브 크리에이터 추천 (youtube.py · 영미권 + 미국 타겟 추정 · 소개란 공개 이메일만 · 30일 안에 갱신, 못 하면 삭제)
   GET    /api/partners/youtube                목록 (?refresh=0이면 오래된 값 갱신 안 함)
   POST   /api/partners/youtube/search         {keywords:[…]} 추천 받기 (YouTube Data API)
+  POST   /api/partners/youtube/keywords       {current:[…]} 관련 키워드 AI 추천 (OpenAI · 참고용, 키 없으면 503)
   POST   /api/partners/youtube/delete         {ids:[…]} 삭제 (크리에이터 삭제 요청 시)
   GET    /api/partners/youtube/export.csv     CSV 내보내기 (이 표만)
   POST   /api/partners/youtube/import         CSV 가져오기 (multipart file — 내보내기 형식, 기준일 30일 이내만)
@@ -57,7 +58,7 @@ from server.core import ai as core_ai
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
-from . import guide_docx, importer, mailer, prompts, sales, youtube
+from . import guide_docx, importer, mailer, prompts, regulation, sales, youtube
 from .importer import CATERING, INFLUENCER, TYPES
 from .models import PartnerAttachment, PartnerContact, PartnerHistory, PartnerYoutubeCreator
 
@@ -147,15 +148,11 @@ def _history_or_404(hid):
     return rec
 
 
-def _regulation_db():
-    # 통합 규제 DB가 정해지면 여기서 실제 접속 확인 (README 3-2). 지금은 주소가 있는지만 봄
-    return bool((envkeys.get("REGULATION_DB_URL") or "").strip())
-
-
 def _status():
     sender, _ = mailer.credentials()
-    return {"regulationDb": _regulation_db(), "openai": core_ai.openai_ready(), "model": core_ai.openai_model(),
-            "smtp": mailer.ready(), "sender": sender if mailer.ready() else ""}
+    reg = regulation.status()   # 컴플라이언스 파트의 규제 DB를 실제로 읽어 확인
+    return {"regulationDb": reg["connected"], "regulation": reg, "openai": core_ai.openai_ready(),
+            "model": core_ai.openai_model(), "smtp": mailer.ready(), "sender": sender if mailer.ready() else ""}
 
 
 # ───────── 상태 · 설정 ─────────
@@ -949,6 +946,19 @@ def youtube_search():
     return jsonify(out)
 
 
+@bp.post("/youtube/keywords")
+def youtube_keywords():
+    current = json_body().get("current") or []
+    if not isinstance(current, list):
+        raise ApiError("키워드 목록이 올바르지 않습니다.")
+    if not core_ai.openai_ready():
+        raise ApiError("OpenAI가 연결되어 있지 않습니다. 설정 › 연결에서 OPENAI_API_KEY를 넣어 주세요.", 503)
+    try:
+        return jsonify(youtube.suggest_keywords(current))
+    except core_ai.AIError as e:
+        raise ApiError(str(e), e.status)
+
+
 @bp.post("/youtube/delete")
 def youtube_delete():
     ids = json_body().get("ids") or []
@@ -1020,10 +1030,10 @@ def youtube_import():
     for rec in reader:
         cid = str(rec.get("channel_id") or "").strip()
         stats_at = _csv_date(rec.get("기준일"))
-        # 형식이 틀렸거나 기준일이 보관 기간(30일)보다 오래된 값, 미국 채널이 아닌 줄은 건너뜀
+        target = youtube.target_from_country(rec.get("국가"))
+        # 형식이 틀렸거나 기준일이 보관 기간(30일)보다 오래된 값, 영미권·미국 타겟이 아니거나 구독자 1,000명 이하인 줄은 건너뜀
         if (not YT_ID.match(cid) or stats_at is None or stats_at < oldest or stats_at > now + timedelta(days=1)
-                or str(rec.get("국가") or "").strip().upper() != youtube.COUNTRY
-                or (_csv_int(rec.get("구독자")) or 0) <= youtube.MIN_SUBSCRIBERS):
+                or target is None or (_csv_int(rec.get("구독자")) or 0) <= youtube.MIN_SUBSCRIBERS):
             skipped += 1
             continue
         row = db.session.get(PartnerYoutubeCreator, cid)
@@ -1040,6 +1050,7 @@ def youtube_import():
         row.title = clip(rec.get("크리에이터"), 200)
         row.handle = clip(rec.get("핸들"), 100)
         row.country = clip(rec.get("국가"), 10)
+        row.target = target
         thumb = str(rec.get("프로필 사진") or "").strip()
         row.thumb = thumb[:500] if thumb.startswith("https://") else ""
         row.subscribers = _csv_int(rec.get("구독자"))
