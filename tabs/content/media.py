@@ -3,7 +3,9 @@
 - 명확한 요청이 있을 때만 대화 턴이 작업을 등록 → 대화 HTTP 요청을 붙잡지 않고 뒤에서 실행 (jobs.run_background)
 - 상태: queued → running → saving → succeeded / failed / submission_unknown (응답 시간 초과 · 자동 재제출 없음)
 - 편집: 기준 이미지 파일을 실제로 넣어 고침 (GPT 이미지 계열). 지원하지 않으면 '새 시안'으로 표시하고 원본 수정이라 하지 않음
-- 글자(헤드라인·슬로건·CTA)는 이미지 안에 그리지 않고 텍스트 레이어로 따로 둠 (PL01 · README 7.2)
+- 글자(헤드라인·슬로건·CTA): 기본은 이미지 모델이 그림과 어울리게 직접 그림 (text_mode "bake" · README 7.2)
+  "글자 없이"를 고르면 글자 없는 이미지 ("none"). 그린 문구는 image_text로 따로 저장해 키워드·컴플라이언스 검사에 씀
+  예전 버전의 텍스트 레이어(text_layers)는 보여 주기만 함
 - 제품·캐릭터 참고 사진: 선택 제품 · 맛 · 캐릭터 Rebu 사용 여부에 맞는 최종 자료 사진(assets.py)을 함께 넣어 생성
   → 병·봉지·젤리 모양·라벨을 사진과 같게 (참고 사진을 받지 않는 모델이면 브랜드 키트의 외형 설명으로만 생성)
 - 파일: DATA_DIR/uploads/content/<이름>.png → GET /api/content/files/<이름>.png (로그인 필요)
@@ -35,8 +37,12 @@ NO_TEXT = ("Do not render any text, letters, numbers, logos, watermarks or label
            "leave clean negative space for a separate text overlay. Generic unbranded packaging only.")
 REF_TEXT = ("Reproduce the products and the mascot exactly as they appear in the reference images: same shape, colors, "
             "proportions and printed labels/logo; do not redesign them. Ignore measurement lines, dimension numbers and captions "
-            "in the reference images. Do not add any other text, captions, slogans, numbers or watermarks; leave clean "
-            "negative space for a separate text overlay.")
+            "in the reference images.")
+REF_NO_TEXT = (" Do not add any other text, captions, slogans, numbers or watermarks; leave clean negative space "
+               "for a separate text overlay.")
+TEXT_MODES = ("bake", "none")
+IMAGE_SCOPE = "이미지에 그리라고 넘긴 문구만 검사 · 실제 그려진 글자(철자)는 검사하지 않음"
+NO_TEXT_RE = re.compile(r"(글자|문구|텍스트|카피)\s*(없이|빼고|빼줘|없는|넣지\s*마)|no\s+text|without\s+text", re.I)
 VIEW_EN = {"trio": "three bottles, front", "front": "front view", "angle": "lying at an angle", "spec": "product views",
            "pouch": "pouch, front", "scene": "pouch with wrapped jellies", "wrapped": "individually wrapped jelly"}
 VIDEO_REF_TEXT = ("Keep the products and the mascot exactly as they appear in the reference images: same shape, colors, "
@@ -109,6 +115,30 @@ def _what(job):
     return "영상" if job.kind == "video" else "이미지"
 
 
+def text_mode_of(requested, message):
+    """이미지 글자 방식 — 메시지에 '글자 없이'가 있으면 none, 아니면 화면 선택값 (기본 bake)."""
+    if NO_TEXT_RE.search(str(message or "")):
+        return "none"
+    return requested if requested in TEXT_MODES else "bake"
+
+
+def _text_mode(snap):
+    return snap.get("image_text") if snap.get("image_text") in TEXT_MODES else "bake"
+
+
+def image_text_of(img):
+    """버전의 이미지 메타 → 소비자에게 보일 문구 (새 방식은 image_text, 예전 버전은 text_layers)."""
+    img = img or {}
+    return img.get("image_text") or img.get("text_layers") or []
+
+
+def _bake_text(lines):
+    words = "; ".join(f'{t["role"]}: "{t["text"]}"' for t in lines)
+    return ("Render this text inside the image as part of the design, spelled exactly as written, and nothing else: "
+            f"{words}. Use typography (typeface, weight, size, color, placement) that fits the image style and stays legible. "
+            "Do not add any other words, numbers or watermarks.")
+
+
 # ───────── 실행 (뒤에서) ─────────
 
 def _fallback_plan(snap, job):
@@ -150,10 +180,11 @@ def _plan(snap, job, base):
         "mode": "edit" if job.kind == "image_edit" else "generate",
         "sheet": snap.get("labels"), "decisions": snap.get("decisions"),
         "brand_facts": (snap.get("facts") or {}).get("brand"), "product_facts": (snap.get("facts") or {}).get("products"),
-        "base_version": ({"label": base.label, "notes": base.body[:1500], "image": snap.get("base_image")} if base else None),
+        "base_version": ({"label": base.label, "notes": base.body[:1500], "image": snap.get("base_image"),
+                          "text": image_text_of((base.snapshot or {}).get("image"))} if base else None),
         "copy_draft": snap.get("copy_draft"),
         "request": snap.get("request"), "instructions": job.instructions,
-        "size": job.size, "character_use": assets.character_choice(snap.get("decisions")),
+        "size": job.size, "character_use": assets.character_choice(snap.get("decisions")), "text_mode": _text_mode(snap),
         "reference_photos": _provider(job) == "higgsfield" or providers.image_supports_edit(job.model),
     }
     try:
@@ -272,9 +303,14 @@ def run_image_job(job_id):
         has_base = bool(job.kind == "image_edit" and base is not None and base.image_file)
         include_char = _include_character(snap, plan)
         refs = _references(snap, job, plan, include_char, has_base)
+        mode = _text_mode(snap)
+        texts = (plan["text_layers"] or [{"role": "slogan", "text": SLOGAN}]) if mode == "bake" else []
         if refs:
             prompt = (plan["prompt_en"] + ("\n\nImage 1 is the base image to edit. " if has_base else "\n\n")
-                      + _ref_lines(refs, snap.get("facts") or {}, 2 if has_base else 1) + "\n" + REF_TEXT)
+                      + _ref_lines(refs, snap.get("facts") or {}, 2 if has_base else 1) + "\n" + REF_TEXT
+                      + ("\n" + _bake_text(texts) if texts else REF_NO_TEXT))
+        elif texts:
+            prompt = plan["prompt_en"] + "\n\n" + _bake_text(texts) + " Generic unbranded packaging only."
         else:
             prompt = plan["prompt_en"] + "\n\n" + NO_TEXT
         job.prompt = prompt
@@ -338,10 +374,11 @@ def run_image_job(job_id):
         note_bits.append("참고 사진 없이 생성 (이 이미지 모델은 참고 사진을 받지 않음) · 제품 모양 확인 필요")
     if include_char:
         note_bits.append("캐릭터 Rebu 포함")
-    layers_text = "\n".join(t["text"] for t in plan["text_layers"])
+    note_bits.append("문구를 이미지에 직접 그림 · 철자는 게시 전 확인" if texts else "글자 없이 생성")
+    layers_text = "\n".join(t["text"] for t in texts)
     image_meta = {"model": job.model, "provider": _provider(job), "size": job.size, "mode": "edit" if edit else "generate",
-                  "prompt": job.prompt[:3000],
-                  "requested_ratio": requested_ratio, "text_layers": plan["text_layers"], "keep": plan["keep"],
+                  "prompt": job.prompt[:3000], "text_mode": mode, "image_text": texts, "baked": bool(texts),
+                  "requested_ratio": requested_ratio, "text_layers": [], "keep": plan["keep"],
                   "change": plan["change"], "prompt_fallback": plan.get("fallback", False), "usage": usage,
                   "references": [a["id"] for a in refs], "include_character": bool(include_char),
                   "seconds": round(time.time() - started, 1), "job_id": job.id}
@@ -354,7 +391,7 @@ def run_image_job(job_id):
     v.snapshot = dict(snap.get("snapshot") or {}, image=image_meta, model=job.model)
     v.snapshot_hash = snap.get("snapshot_hash") or ""
     v.review = {"keyword": review.keyword_check(layers_text, "copy", snap.get("sheet") or {}, snap.get("facts") or {}),
-                "imageScope": "이미지 속 픽셀·글자는 검사하지 않음 (텍스트 레이어만 확인)"}
+                "imageScope": IMAGE_SCOPE}
     db.session.add(v)
     db.session.flush()
     job.status, job.result_version_id, job.finished_at = "succeeded", v.id, utcnow()

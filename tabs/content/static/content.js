@@ -42,8 +42,9 @@
 
   function emptySheet() {
     return { content_type: '', channels: [], brand_focus: false, product_ids: [], goal: '', extra_request: '', reference_text: '',
-      use_character: 'AI 판단' };
+      use_character: 'AI 판단', language: '영어' };
   }
+  const SHEET_LANGUAGES = ['한국어', '영어'];  // 새 시트의 콘텐츠 언어 (서버 routes.SHEET_LANGUAGES와 같은 이름)
   const rid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   function lsGet(k, d) { try { const v = global.localStorage.getItem(LS + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
   function lsSet(k, v) { try { global.localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) { /* 저장 못 해도 화면은 동작 */ } }
@@ -93,6 +94,7 @@
     const out = { content_type: s.content_type, channels: s.channels.slice(), brand_focus: !!s.brand_focus,
       product_ids: s.product_ids.slice(), goal: s.goal || '', extra_request: s.extra_request || '' };
     if (usesCharacter(s.content_type)) out.use_character = s.use_character || 'AI 판단';
+    if (SHEET_LANGUAGES.includes(s.language)) out.language = s.language;
     return out;
   }
   // 저장해 둔 옛 시트(상품 설명·기획서 · 채널 여러 개)를 지금 규칙에 맞춤: 채널 하나 · CRM끼리만
@@ -302,7 +304,7 @@
     const s = S.sheet;
     const missing = sheetMissing(s);
     const summary = missing.length ? `${missing.join(' · ')}을(를) 골라 주세요.`
-      : `${typeLabel(s.content_type)} · ${s.channels.map(channelLabel).join(', ')} · ${targetLabel(s)}${s.goal ? ' · ' + s.goal : ''}`;
+      : `${typeLabel(s.content_type)} · ${s.channels.map(channelLabel).join(', ')} · ${targetLabel(s)} · ${s.language || '영어'}${s.goal ? ' · ' + s.goal : ''}`;
     return `<div class="cnt-sheet-summary"><span class="panel-note">${missing.length ? '필수 3개' : '선택한 정보'}</span><span class="cnt-summary-text">${esc(summary)}</span>
         <span class="panel-note">미정인 내용은 AI와 함께 정해요.</span></div>
       <div class="flex wrap cnt-start-btns">
@@ -315,6 +317,8 @@
     const t = typeOf(s.content_type);
     const goalIsPreset = DATA.goals.includes(s.goal);
     const seasons = upcomingSeasons();
+    const isNew = ctx === 'new';  // 콘텐츠 언어는 새 시트에서만 · 시작 뒤에는 대화에서 바꿔요
+    const num = n => '0' + (isNew ? n + 1 : n);
     return `<div class="cnt-sheet ${ctx === 'edit' ? 'compact' : ''}" data-sheet="${ctx}">
       <div class="field-label cnt-q">01 &nbsp; 만들 콘텐츠 <span class="cnt-req">필수</span></div>
       <div class="choice-grid cnt-types">${DATA.contentTypes.map(x => `<button type="button" class="choice" data-act="sheet-type" data-value="${esc(x.id)}" aria-pressed="${s.content_type === x.id}">${icon(x.icon)}<span>${esc(x.label)}</span>${s.content_type === x.id ? '<span class="cnt-check" aria-hidden="true">✓</span>' : ''}</button>`).join('')}</div>
@@ -329,10 +333,12 @@
           <span><b>${esc(p.ko || p.name)}</b><small>${esc(p.name)} · ${esc(productForm(p))}</small></span></label>`; }).join('')}
       </div>
       ${usesCharacter(s.content_type) ? characterFieldHtml(s) : ''}
-      <div class="field-label cnt-q">04 &nbsp; 목적 <span class="cnt-opt">선택</span></div>
+      ${isNew ? `<div class="field-label cnt-q">04 &nbsp; 콘텐츠 언어 <span class="cnt-req">필수 · 하나</span><span class="cnt-opt">소비자에게 보일 문구의 언어</span></div>
+      <div class="chips">${SHEET_LANGUAGES.map(x => `<button type="button" class="chip" data-act="sheet-language" data-value="${esc(x)}" aria-pressed="${(s.language || '영어') === x}">${esc(x)}</button>`).join('')}</div>` : ''}
+      <div class="field-label cnt-q">${num(4)} &nbsp; 목적 <span class="cnt-opt">선택</span></div>
       <div class="chips" data-ref="goal-chips-${ctx}">${goalChipsHtml(s)}</div>
       <input class="input cnt-goal" data-sheet-input="goal" maxlength="200" value="${esc(s.goal)}" placeholder="${goalIsPreset || !s.goal ? '직접 적어도 돼요 · 비워 두면 챗봇과 논의해요' : ''}" aria-label="목적">
-      <div class="between cnt-q-row"><span class="field-label cnt-q">05 &nbsp; 추가 요청 <span class="cnt-opt">선택</span></span>
+      <div class="between cnt-q-row"><span class="field-label cnt-q">${num(5)} &nbsp; 추가 요청 <span class="cnt-opt">선택</span></span>
         <button type="button" class="link cnt-ai-link" data-act="suggest" data-field="extra">${icon('spark')}아이디어 3개</button></div>
       <textarea class="input cnt-extra" data-sheet-input="extra_request" maxlength="1000" rows="2" placeholder="예: 검정 배경, 두 제품을 같이, 영어로" aria-label="추가 요청">${esc(s.extra_request)}</textarea>
       ${seasons.length ? `<div class="cnt-seasons"><span class="panel-note">다가오는 시즌</span>${seasons.map(x => `<button type="button" class="chip" data-act="add-season" data-name="${esc(x.name)}" data-start="${esc(x.start)}">${esc(x.name)} <span class="n">${esc(fmt.dday(x.start))}</span></button>`).join('')}</div>` : ''}
@@ -428,6 +434,8 @@
       else if (id !== DATA.crm.channel && s.content_type === DATA.crm.type) s.content_type = '';
     } else if (act === 'sheet-character') {
       s.use_character = b.dataset.value;
+    } else if (act === 'sheet-language') {
+      s.language = b.dataset.value;
     } else if (act === 'goal-pick') {  // 고른 것을 다시 누르면 해제 → 비우면 챗봇과 논의
       s.goal = s.goal === b.dataset.value ? '' : b.dataset.value;
     } else if (act === 'add-season') {
@@ -803,6 +811,22 @@
     </div></div>`;
   }
 
+  // 이미지 글자 방식: bake = AI가 그림과 어울리게 문구를 직접 그림 (기본) · none = 글자 없이 (이 브라우저에 기억)
+  const imgTextMode = () => lsGet('imgText', 'bake') === 'none' ? 'none' : 'bake';
+  function imgTextHtml() {
+    const cur = imgTextMode();
+    return `<div class="chips cnt-img-text" role="group" aria-label="이미지 글자">${[['bake', '글자 넣기'], ['none', '글자 없이']]
+      .map(([k, l]) => `<button type="button" class="chip" data-act="img-text" data-value="${k}" aria-pressed="${cur === k}">${l}</button>`).join('')}
+      <span class="panel-note">${cur === 'bake' ? '새 이미지에 헤드라인·슬로건을 그림과 어울리게 넣어요.' : '새 이미지는 글자 없이 만들어요.'}</span></div>`;
+  }
+  function imageFootNote(v, layers) {
+    const img = v.image || {};
+    if (img.image_text && img.image_text.length) return `AI가 문구를 이미지에 직접 그렸어요 (${esc(img.image_text.map(t => t.text).join(' / '))}). 철자는 게시 전 확인하세요.`;
+    if (img.text_mode === 'none') return '글자 없이 만든 이미지예요.';
+    if (img.baked) return '글자를 이미지에 합성한 버전이에요.';
+    return layers.length ? '예전 방식 버전 — 문구를 텍스트 레이어로 따로 얹어 보여 줘요.' : '이미지 속 글자는 검사하지 않아요.';
+  }
+
   // 카피 초안이 있으면 새 이미지는 그 초안 문구로 만들어짐 (서버가 가장 최근 텍스트 버전을 넘김)
   const hasDraft = () => !!(S.camp && S.camp.versions.some(v => v.kind !== 'image' && v.kind !== 'video'));
   function imageButtonLabel() {
@@ -1016,11 +1040,13 @@
     if (!opts.kickoff) body.client_request_id = S.retryId;
     if (opts.force) body.force_action = opts.force;
     if (opts.kickoff) body.kickoff = true;
+    body.image_text = imgTextMode();
     const input = ref('input');
     S.sending = true;
     S.pending = opts.kickoff ? { kickoff: true } : { text, force: opts.force };
     if (input && !opts.kickoff && input.value.trim() === text) input.value = '';
     renderMessages();
+    renderResults();
     updateComposer();
     let restore = '';
     try {
@@ -1043,6 +1069,7 @@
     } finally {
       S.sending = false; S.pending = null;
       renderMessages();
+      renderResults();
       updateComposer();
       const inp = ref('input');
       if (inp && restore && !inp.value.trim()) { inp.value = restore; }
@@ -1082,6 +1109,7 @@
     const jobs = c.jobs.filter(j => ACTIVE_JOB.includes(j.status) || j.status === 'failed' || j.status === 'submission_unknown').slice(0, 3);
     const canImage = ['image', 'cardnews'].includes(c.sheet.content_type);
     const ready = textReady();
+    const draftBusy = !!(S.sending && S.pending && S.pending.force === 'draft');
     const head = sel ? (sel.stale ? badge('변경 사항 미반영', 'orange') : badge('최신 결정 반영', 'green')) : badge(vs.length ? '결과 있음' : '방향 정하는 중', 'green');
     return `<div class="card-head"><h2>진행 과정 & 결과</h2>${head}</div>
       <div class="cnt-steps">${steps.map(([t, st], i) => { const ok = st === '완료' || st === '완성'; return `<div class="workflow-step ${st === '진행 중' ? 'current' : ok ? 'done' : ''}"><span class="stepnum">${ok ? '✓' : i + 1}</span>${esc(t)}<span class="cnt-step-st">${esc(st)}</span></div>`; }).join('')}</div>
@@ -1093,11 +1121,13 @@
         <div class="cnt-results-side">
           ${jobs.map(jobHtml).join('')}
           <div class="flex wrap cnt-make">
-            <button type="button" class="btn small ${canImage && hasDraft() ? '' : 'lime'}" data-act="make-draft" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('spark')}초안 만들기</button>
+            <button type="button" class="btn small ${canImage && hasDraft() ? '' : 'lime'}" data-act="make-draft" ${!ready ? 'disabled title="OpenAI 키가 필요해요"' : S.sending ? 'disabled' : ''}>${icon('spark')}초안 만들기</button>
+            ${draftBusy ? '<span class="cnt-typing cnt-make-busy" role="status"><span></span><span></span><span></span><em>만드는 중…</em></span>' : ''}
             ${canImage ? `<button type="button" class="btn small ${hasDraft() ? 'lime' : 'dark'}" data-act="make-image" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('image')}${esc(imageButtonLabel())}</button>` : ''}
             ${vs.some(v => v.kind !== 'image' && v.kind !== 'video') ? videoButtonHtml('btn small dark') : ''}
             <button type="button" class="btn small" data-act="manual-version">${icon('edit')}직접 작성</button>
           </div>
+          ${canImage ? imgTextHtml() : ''}
           ${sel && (!complete || sel.id !== c.finalVersionId) ? `<button type="button" class="btn small lime cnt-complete-btn" data-act="complete">${icon('check')}${complete ? '이 버전으로 완성하기' : '완성하기'} · ${esc(sel.label)} v${esc(sel.seq)}</button>
             <p class="panel-note">보고 있는 버전을 최종본으로 정하고 상태를 '완료'로 바꿔요. 나중에 더 수정할 수 있어요.</p>` : ''}
           ${vs.length ? `<div class="cnt-vhead"><span class="field-label">버전 ${esc(vs.length)}개</span><button type="button" class="link" data-act="export">${icon('download')}전체 내보내기 (ZIP)</button></div>
@@ -1197,7 +1227,7 @@
       const img = new global.Image();
       img.onload = () => {
         const out = global.document.createElement('canvas');
-        drawEditor(out, img, { crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100, layers: layers.map(normLayer), sel: -1 }, 0, { text: true, select: false });
+        drawEditor(out, img, { crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100, layers: layers.map(normLayer), sel: -1 }, 0, { text: true });
         global.URL.revokeObjectURL(url);
         out.toBlob(b => { if (b) { ui.download(name, b); toast('문구를 합성한 이미지를 저장했어요.'); } else toast('이미지를 만들지 못했어요.', 'error'); }, 'image/png');
       };
@@ -1239,7 +1269,7 @@
     return badge(st.label, st.tone);
   }
 
-  // 게시 전 체크 한 줄 — 키워드 · 컴플라이언스(전체 · 문구별) · AI 보조 검토 · 확인 필요 중 가장 나쁜 결과
+  // 게시 전 체크 한 줄 — 키워드 · 컴플라이언스(전체 · 문구별) · 확인 필요 중 가장 나쁜 결과
   // level: block(사용 불가) · revise(수정 필요) · check(확인 필요) · ok(걸린 항목 없음) · none(검사 전)
   function checkSummary(v) {
     let block = 0, revise = 0, check = 0, ran = false;
@@ -1254,8 +1284,7 @@
     cmpUnits(v).forEach((u, i) => addVerdict(S.unitReviews[`${v.id}:${i}`]));
     const kw = v.review && v.review.keyword;
     ((kw && kw.items) || []).forEach(i => { if (i.level === 'error') revise++; else check++; });
-    const ai = v.review && v.review.ai;
-    check += ((ai && ai.issues) || []).length + (v.needsCheck || []).length;
+    check += (v.needsCheck || []).length;
     const level = block ? 'block' : revise ? 'revise' : check ? 'check' : ran ? 'ok' : 'none';
     return { level, block, revise, check };
   }
@@ -1283,7 +1312,7 @@
     const body = img
       ? `<div class="cnt-preview${S.showLayers && layers.length ? ' layers' : ''}"><img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 시안" loading="lazy">
           ${layers.length ? `<div class="cnt-layer-box" aria-hidden="${!S.showLayers}">${layers.map(layerHtml).join('')}</div>` : ''}</div>
-         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${baked ? '글자를 이미지에 합성한 버전이에요.' : '헤드라인·슬로건 문구는 이미지에 그리지 않고 텍스트 레이어로 따로 둬요.'}</span>
+         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${imageFootNote(v, layers)}</span>
           ${layers.length ? `<button type="button" class="link" data-act="toggle-layers">텍스트 레이어 ${S.showLayers ? '숨기기' : '보기'}</button>` : ''}</div>
          ${referencesHtml(v)}
          ${imageEditHtml(v)}`
@@ -1295,7 +1324,6 @@
          ${videoEditHtml(v)}`
       : `<div class="prose cnt-doc">${ui.markdown(v.body)}</div>`;
     const cmp = complianceOf(v);
-    const ai = v.review && v.review.ai;
     const kw = v.review && v.review.keyword;
     const chk = checkSummary(v);
     return `<div class="cnt-selected">
@@ -1312,12 +1340,8 @@
         ${unitReviewsHtml(v)}
         <div class="cnt-review-row"><span>키워드 확인</span>${keywordBadge(v, false)}</div>
         ${kw && kw.items && kw.items.length ? `<ul class="cnt-review-items">${kw.items.map(i => `<li class="${esc(i.level)}">${esc(i.label)}${i.terms && i.terms.length ? ` <code>${esc(i.terms.join(', '))}</code>` : ''}</li>`).join('')}</ul>` : ''}
-        <div class="cnt-review-row"><span>컴플라이언스</span>${cmp ? badge(cmp.label || cmp.verdict, DATA.complianceTone[cmp.verdict] || '') : badge('미검토')}
-          <button type="button" class="link" data-act="compliance" data-id="${esc(v.id)}">${cmp ? '다시 검사' : '검사하기'}</button></div>
+        <div class="cnt-review-row"><span>컴플라이언스</span>${cmp ? badge(cmp.label || cmp.verdict, DATA.complianceTone[cmp.verdict] || '') : badge('미검토')}</div>
         ${cmp && cmp.findings && cmp.findings.length ? `<ul class="cnt-review-items">${cmp.findings.map(f => `<li class="${f.verdict === 'BLOCK' ? 'error' : 'warn'}">${esc(f.code)} ${esc(f.name)}${f.terms && f.terms.length ? ` <code>${esc(f.terms.join(', '))}</code>` : ''}${f.alt ? ` → ${esc(f.alt)}` : ''}</li>`).join('')}</ul>` : ''}
-        ${!media ? `<div class="cnt-review-row"><span>AI 보조 검토</span>${ai ? badge(`${(ai.issues || []).length}건 지적`, (ai.issues || []).length ? 'orange' : '') : badge('미검토')}
-          <button type="button" class="link" data-act="ai-review" data-id="${esc(v.id)}" ${textReady() ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${ai ? '다시 검토' : '검토하기'}</button></div>
-          ${ai ? `<div class="cnt-ai-review"><p>${esc(ai.summary)}</p>${(ai.issues || []).length ? `<ul class="cnt-review-items">${ai.issues.map(i => `<li class="warn">${esc(i.location)}: ${esc(i.problem)} → ${esc(i.suggestion)}</li>`).join('')}</ul>` : ''}<p class="panel-note">${esc(ai.note)}</p></div>` : ''}` : ''}
         </details>
         <p class="panel-note">${esc((v.review && v.review.videoScope) || (kw && kw.scope) || '텍스트만 확인')} · 결과는 참고용이며 법적 승인이 아니에요.</p>
       </div>
@@ -1352,17 +1376,18 @@
   function imageEditHtml(v) {
     const ready = textReady();
     const off = ready ? '' : 'disabled title="OpenAI 키가 필요해요"';
-    const quick = DATA.quick.image.filter(q => q.label !== '다른 시안' && q.label !== '문구 수정');
+    const quick = DATA.quick.image.filter(q => q.label !== '다른 시안');
     return `<div class="cnt-img-edit">
       <div class="field-label">${icon('spark')}이 이미지 수정하기</div>
       <div class="chips">${quick.map((q, i) => `<button type="button" class="chip" data-act="img-quick" data-i="${i}">${esc(q.label)}</button>`).join('')}</div>
       <div class="cnt-img-edit-row"><textarea class="input" data-ref="img-prompt" rows="2" maxlength="1000" placeholder="어떻게 고칠까요? 예: 배경만 흰색으로, 제품은 그대로" aria-label="AI 수정 요청">${esc(S.imgDraft)}</textarea>
         <button type="button" class="btn small dark" data-act="img-ai-edit" data-id="${esc(v.id)}" ${off}>${icon('spark')}AI로 수정</button></div>
       <div class="flex wrap cnt-img-edit-btns">
-        <button type="button" class="btn small" data-act="img-editor" data-id="${esc(v.id)}">${icon('edit')}직접 편집 (자르기 · 색 · 문구)</button>
+        <button type="button" class="btn small" data-act="img-editor" data-id="${esc(v.id)}">${icon('edit')}직접 편집 (자르기 · 색)</button>
         <button type="button" class="btn small ghost" data-act="img-new" ${off}>AI로 다른 시안</button>
       </div>
-      <p class="panel-note">AI 수정은 이 이미지를 기준으로 넣어 새 버전을 만들어요 (원본 유지 · 이미지 생성 비용). ${S.meta && S.meta.imageEdit === false ? '지금 이미지 모델은 편집을 지원하지 않아 새 시안으로 만들어요. ' : ''}직접 편집은 AI 없이 브라우저에서 해요.</p>
+      ${imgTextHtml()}
+      <p class="panel-note">문구를 바꾸려면 [문구 수정]처럼 AI에게 말해 주세요. AI 수정은 이 이미지를 기준으로 넣어 새 버전을 만들어요 (원본 유지 · 이미지 생성 비용). ${S.meta && S.meta.imageEdit === false ? '지금 이미지 모델은 편집을 지원하지 않아 새 시안으로 만들어요. ' : ''}직접 편집은 AI 없이 브라우저에서 해요.</p>
     </div>`;
   }
 
@@ -1420,7 +1445,7 @@
     send(text, { force: 'image' });
   }
 
-  /* 직접 편집기 — 캔버스에서 자르기 · 밝기/대비/채도 · 텍스트 레이어(끌어서 이동) → PNG를 새 버전으로 */
+  /* 직접 편집기 — 캔버스에서 자르기 · 밝기/대비/채도 → PNG를 새 버전으로 (문구는 AI 수정으로 · 예전 텍스트 레이어는 그대로 이어감) */
   const CROPS = [['original', '원본'], ['1:1', '1:1'], ['4:5', '4:5'], ['9:16', '9:16'], ['16:9', '16:9']];
   const LAYER_DEFAULT = {
     headline: { x: 0.06, y: 0.06, size: 0.07, color: '#ffffff', align: 'left' },
@@ -1428,7 +1453,6 @@
     cta: { x: 0.94, y: 0.8, size: 0.04, color: '#d7ff3f', align: 'right' },
     text: { x: 0.06, y: 0.5, size: 0.05, color: '#ffffff', align: 'left' }
   };
-  const ROLE_LABEL = { headline: '헤드라인', slogan: '슬로건', cta: 'CTA', text: '문구' };
 
   function normLayer(t) {
     const role = LAYER_DEFAULT[t.role] ? t.role : 'text';
@@ -1460,14 +1484,6 @@
 
   function layerFont(t, W) { return `800 ${Math.max(8, t.size * W)}px Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif`; }
 
-  function layerBox(ctx, t, W, H) {
-    ctx.font = layerFont(t, W);
-    const w = ctx.measureText(t.text).width, fs = Math.max(8, t.size * W);
-    const x = t.x * W, y = t.y * H;
-    const x0 = t.align === 'center' ? x - w / 2 : t.align === 'right' ? x - w : x;
-    return { x: x0, y, w, h: fs * 1.2 };
-  }
-
   function drawEditor(canvas, img, st, maxW, opts) {
     const crop = cropRect(img.naturalWidth, img.naturalHeight, st.crop, st.offset);
     const scale = maxW ? Math.min(1, maxW / crop.w) : 1;
@@ -1478,7 +1494,7 @@
     adjustPixels(ctx, canvas.width, canvas.height, st);
     if (!opts.text) return;
     const W = canvas.width, H = canvas.height;
-    st.layers.forEach((t, i) => {
+    st.layers.forEach(t => {
       if (!t.text) return;
       ctx.save();
       ctx.font = layerFont(t, W);
@@ -1489,37 +1505,14 @@
       ctx.shadowBlur = Math.max(2, t.size * W * 0.15);
       ctx.fillText(t.text, t.x * W, t.y * H);
       ctx.restore();
-      if (opts.select && i === st.sel) {
-        const b = layerBox(ctx, t, W, H);
-        ctx.save();
-        ctx.strokeStyle = '#d7ff3f';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 4]);
-        ctx.strokeRect(b.x - 4, b.y - 4, b.w + 8, b.h + 8);
-        ctx.restore();
-      }
     });
-  }
-
-  function editorLayersHtml(st) {
-    const list = st.layers.map((t, i) => `<button type="button" class="cnt-ed-layer${i === st.sel ? ' on' : ''}" data-e-sel="${i}"><small>${esc(ROLE_LABEL[t.role])}</small>${esc(t.text || '(빈 문구)')}</button>`).join('');
-    const t = st.layers[st.sel];
-    const detail = t ? `<div class="cnt-ed-detail">
-        <label class="field"><span>문구${t.role === 'slogan' ? ' (슬로건은 원문 고정)' : ''}</span><input data-e="text" maxlength="160" value="${esc(t.text)}" ${t.role === 'slogan' ? 'readonly' : ''}></label>
-        <div class="field-grid three">
-          <label class="field"><span>크기</span><input type="range" min="2" max="20" step="0.5" data-e="size" value="${t.size * 100}"></label>
-          <label class="field"><span>색</span><input type="color" data-e="color" value="${esc(t.color)}"></label>
-          <label class="field"><span>정렬</span><select data-e="align">${[['left', '왼쪽'], ['center', '가운데'], ['right', '오른쪽']].map(([k, l]) => `<option value="${k}" ${t.align === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-        </div>
-        <button type="button" class="link cnt-x" data-e-del>이 문구 지우기</button></div>` : '';
-    return `<div class="cnt-ed-layers">${list || '<p class="panel-note">텍스트 레이어가 없어요.</p>'}</div>${detail}`;
   }
 
   function imageEditor(v) {
     const c = S.camp;
     const baked = !!(v.image && v.image.baked);
-    const init = () => ({ crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100,
-      layers: baked ? [] : ((v.image && v.image.text_layers) || []).map(normLayer), sel: 0, bake: false });
+    const layers = baked ? [] : ((v.image && v.image.text_layers) || []).map(normLayer);  // 예전 버전의 레이어는 고치지 않고 그대로 넘김
+    const init = () => ({ crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100, layers, sel: -1 });
     let st = init();
     const start = JSON.stringify(st);
     const img = new global.Image();
@@ -1529,7 +1522,7 @@
       wide: true,
       body: `<div class="cnt-editor">
         <div class="cnt-ed-stage"><canvas data-e="canvas" aria-label="편집 미리보기"></canvas>
-          <p class="panel-note">글자를 끌어서 옮길 수 있어요. 저장하면 새 버전이 되고 원본은 그대로 남아요.${baked ? ' 이 버전은 글자가 이미 합성돼 있어요.' : ''}</p></div>
+          <p class="panel-note">저장하면 새 버전이 되고 원본은 그대로 남아요. 문구는 [이 이미지 수정하기]에서 AI에게 고쳐 달라고 하세요.</p></div>
         <div class="cnt-ed-panel">
           <div class="field-label">자르기 · 비율</div>
           <div class="chips" data-e="crops">${CROPS.map(([k, l]) => `<button type="button" class="chip" data-e-crop="${k}" aria-pressed="${k === 'original'}">${l}</button>`).join('')}</div>
@@ -1538,9 +1531,6 @@
           <label class="field"><span>밝기</span><input type="range" min="50" max="150" data-e="brightness" value="100"></label>
           <label class="field"><span>대비</span><input type="range" min="50" max="150" data-e="contrast" value="100"></label>
           <label class="field"><span>채도</span><input type="range" min="0" max="200" data-e="saturation" value="100"></label>
-          <div class="between"><span class="field-label">텍스트 레이어</span><button type="button" class="link" data-e-add>${icon('plus')}문구 추가</button></div>
-          <div data-e="layers">${editorLayersHtml(st)}</div>
-          <label class="cnt-ed-bake"><input type="checkbox" data-e="bake"> 글자를 이미지에 합성해서 저장 <small>(끄면 고칠 수 있는 레이어로 따로 저장)</small></label>
           <button type="button" class="link" data-e-reset>처음 상태로</button>
         </div></div>`,
       actions: [{ label: '취소', value: null }, {
@@ -1554,17 +1544,14 @@
       }],
       onOpen: el => {
         const canvas = el.querySelector('[data-e="canvas"]');
-        const box = el.querySelector('[data-e="layers"]');
-        let frame = 0, drag = null;
+        let frame = 0;
         const redraw = () => {
           if (frame || !img.naturalWidth) return;
-          frame = global.requestAnimationFrame(() => { frame = 0; drawEditor(canvas, img, st, 720, { text: true, select: true }); });
+          frame = global.requestAnimationFrame(() => { frame = 0; drawEditor(canvas, img, st, 720, { text: true }); });
         };
-        const relist = () => { box.innerHTML = editorLayersHtml(st); redraw(); };
         const syncControls = () => {
           el.querySelectorAll('[data-e-crop]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.eCrop === st.crop)));
           ['offset', 'brightness', 'contrast', 'saturation'].forEach(k => { el.querySelector(`[data-e="${k}"]`).value = k === 'offset' ? st.offset * 100 : st[k]; });
-          el.querySelector('[data-e="bake"]').checked = st.bake;
         };
         img.onload = redraw;
         img.onerror = () => { canvas.replaceWith(Object.assign(global.document.createElement('p'), { className: 'note error', textContent: '이미지를 불러오지 못했어요.' })); };
@@ -1573,58 +1560,20 @@
           const t = e.target;
           const crop = t.closest('[data-e-crop]');
           if (crop) { st.crop = crop.dataset.eCrop; syncControls(); redraw(); return; }
-          const sel = t.closest('[data-e-sel]');
-          if (sel) { st.sel = +sel.dataset.eSel; relist(); return; }
-          if (t.closest('[data-e-add]')) { st.layers.push(normLayer({ role: 'text', text: '새 문구' })); st.sel = st.layers.length - 1; relist(); return; }
-          if (t.closest('[data-e-del]')) { st.layers.splice(st.sel, 1); st.sel = Math.max(0, st.sel - 1); relist(); return; }
-          if (t.closest('[data-e-reset]')) { st = init(); syncControls(); relist(); }
+          if (t.closest('[data-e-reset]')) { st = init(); syncControls(); redraw(); }
         });
         el.addEventListener('input', e => {
           const k = e.target.dataset.e;
-          const cur = st.layers[st.sel];
           if (['brightness', 'contrast', 'saturation'].includes(k)) st[k] = +e.target.value;
           else if (k === 'offset') st.offset = +e.target.value / 100;
-          else if (k === 'bake') st.bake = e.target.checked;
-          else if (cur && k === 'text') { cur.text = e.target.value; const b = box.querySelector(`[data-e-sel="${st.sel}"]`); if (b) b.lastChild.textContent = cur.text || '(빈 문구)'; }
-          else if (cur && k === 'size') cur.size = +e.target.value / 100;
-          else if (cur && k === 'color') cur.color = e.target.value;
-          else if (cur && k === 'align') cur.align = e.target.value;
           else return;
           redraw();
         });
-        el.addEventListener('change', e => { if (e.target.dataset.e === 'align' && st.layers[st.sel]) { st.layers[st.sel].align = e.target.value; redraw(); } });
-        const point = e => {
-          const r = canvas.getBoundingClientRect();
-          return { x: (e.clientX - r.left) / r.width * canvas.width, y: (e.clientY - r.top) / r.height * canvas.height };
-        };
-        canvas.addEventListener('pointerdown', e => {
-          const p = point(e);
-          const ctx = canvas.getContext('2d');
-          for (let i = st.layers.length - 1; i >= 0; i--) {
-            const b = layerBox(ctx, st.layers[i], canvas.width, canvas.height);
-            if (p.x >= b.x - 6 && p.x <= b.x + b.w + 6 && p.y >= b.y - 6 && p.y <= b.y + b.h + 6) {
-              if (st.sel !== i) { st.sel = i; relist(); }
-              const t = st.layers[i];
-              drag = { dx: p.x - t.x * canvas.width, dy: p.y - t.y * canvas.height };
-              canvas.setPointerCapture(e.pointerId);
-              return;
-            }
-          }
-        });
-        canvas.addEventListener('pointermove', e => {
-          if (!drag) return;
-          const p = point(e), t = st.layers[st.sel];
-          t.x = Math.min(1, Math.max(0, (p.x - drag.dx) / canvas.width));
-          t.y = Math.min(1, Math.max(0, (p.y - drag.dy) / canvas.height));
-          redraw();
-        });
-        canvas.addEventListener('pointerup', () => { drag = null; });
-        canvas.addEventListener('pointercancel', () => { drag = null; });
       }
     }).then(r => {
       if (r !== 'save' || !save) return;
       const out = global.document.createElement('canvas');
-      drawEditor(out, img, st, 0, { text: st.bake, select: false });
+      drawEditor(out, img, st, 0, { text: false });
       out.toBlob(async blob => {
         if (!blob) { toast('이미지를 만들지 못했어요.', 'error'); return; }
         const fd = new global.FormData();
@@ -1632,7 +1581,7 @@
         fd.append('parent_id', String(v.id));
         fd.append('text_layers', JSON.stringify(st.layers.filter(t => t.text.trim()).map(t => ({ role: t.role, text: t.text, x: t.x, y: t.y, size: t.size, color: t.color, align: t.align }))));
         fd.append('edits', JSON.stringify({ crop: st.crop, offset: Math.round(st.offset * 100) + '%', brightness: st.brightness + '%', contrast: st.contrast + '%', saturation: st.saturation + '%' }));
-        fd.append('baked', st.bake ? '1' : '0');
+        fd.append('baked', '0');
         try {
           const res = await REBOOT.api(`${API}/campaigns/${c.id}/images`, fd);
           applyCampaign(res.campaign);
@@ -1782,7 +1731,7 @@
 
   function cmpUnits(v) {
     if (v.kind === 'image') {
-      return ((v.image && v.image.text_layers) || []).filter(t => String(t.text || '').trim())
+      return ((v.image && (v.image.image_text || v.image.text_layers)) || []).filter(t => String(t.text || '').trim())
         .map((t, i) => ({ label: t.role ? t.role.toUpperCase() : `문구 ${i + 1}`, text: String(t.text).trim() }));
     }
     if (v.kind === 'video') return [];
@@ -1842,14 +1791,12 @@
     if (!units.length) return '';
     const done = units.filter((u, i) => S.unitReviews[`${v.id}:${i}`]).length;
     return `<details class="cnt-units" open><summary>문구별 컴플라이언스 <span class="muted small">${units.length}개 문구${done ? ` · ${done}개 검사함` : ''}</span></summary>
-      <div class="between cnt-units-head"><span class="panel-note">채널(${esc(S.camp.sheet.channels.map(channelLabel).join(', '))}) · 선택 제품 기준 1차 참고 판정이에요. 법적 승인이 아니에요.</span>
-        <button type="button" class="btn small ghost" data-act="cmp-units" data-id="${esc(v.id)}">모두 검사</button></div>
+      <div class="cnt-units-head"><span class="panel-note">채널(${esc(S.camp.sheet.channels.map(channelLabel).join(', '))}) · 선택 제품 기준 1차 참고 판정이에요. 법적 승인이 아니에요.</span></div>
       <ul class="cnt-unit-list">${units.map((u, i) => {
         const r = S.unitReviews[`${v.id}:${i}`];
         const bad = r && r.findings && r.findings.length;
         return `<li class="cnt-unit${r ? (bad ? ' hit' : ' ok') : ''}">
-          <div class="between"><b>${esc(u.label)}</b><span class="flex">${r ? badge(r.label || r.verdict, DATA.complianceTone[r.verdict] || '') : ''}
-            <button type="button" class="link" data-act="cmp-unit" data-id="${esc(v.id)}" data-i="${i}">${r ? '다시 검사' : '검사'}</button></span></div>
+          <div class="between"><b>${esc(u.label)}</b>${r ? badge(r.label || r.verdict, DATA.complianceTone[r.verdict] || '') : ''}</div>
           <p class="cnt-unit-text">${r ? markTerms(u.text, r.findings) : esc(u.text)}</p>
           ${bad ? `<ul class="cnt-review-items">${r.findings.map(f => `<li class="${f.verdict === 'BLOCK' ? 'error' : 'warn'}">${esc(f.code)} ${esc(f.name)}${f.terms && f.terms.length ? ` <code>${esc(f.terms.join(', '))}</code>` : ''}${f.alt ? ` → ${esc(f.alt)}` : ''}</li>`).join('')}</ul>` : ''}
         </li>`;
@@ -1862,14 +1809,6 @@
       if (units[i]) S.unitReviews[`${v.id}:${i}`] = complianceCheck(units[i].text);
     });
     renderResults();
-  }
-
-  async function runAiReview(btn, v) {
-    ui.busy(btn, true);
-    try {
-      const res = await REBOOT.api(`${API}/versions/${v.id}/ai-review`, {});
-      applyCampaign(res.campaign);
-    } catch (e) { toast(e.message, 'error'); } finally { ui.busy(btn, false); }
   }
 
   async function selectVersion(id) {
@@ -2379,11 +2318,7 @@
         case 'select-version': selectVersion(+b.dataset.id); break;
         case 'use-base': if (v) { selectVersion(v.id); const inp = ref('input'); if (inp && !inp.disabled) { inp.focus(); inp.placeholder = `${v.label} · v${v.seq}을 어떻게 고칠까요? 예: 더 짧게, CTA만 바꿔줘`; } } break;
         case 'base-off': S.baseOff = true; updateComposer(); break;
-        case 'compliance': if (v) runCompliance(v); break;
-        case 'cmp-unit': if (v) runUnitCompliance(v, +b.dataset.i); break;
-        case 'cmp-units': if (v) runUnitCompliance(v, null); break;
-        case 'check-all': if (v) { runUnitCompliance(v, null); runCompliance(v); } break;  // 비용 없는 규칙 검사만 (AI 보조 검토는 따로)
-        case 'ai-review': if (v) runAiReview(b, v); break;
+        case 'check-all': if (v) { runUnitCompliance(v, null); runCompliance(v); } break;  // 비용 없는 규칙 검사만 · 검사 버튼은 이것 하나
         case 'manual-version': manualModal(null); break;
         case 'manual-edit': if (v) manualModal(v); break;
         case 'view-version': if (v) viewVersion(v); break;
@@ -2432,7 +2367,7 @@
         case 'iv-finish': interviewAct('finish'); break;
         case 'brief-edit': { const m = S.camp && S.camp.messages.find(x => String(x.id) === b.dataset.msg); if (m) briefEditModal(m); break; }
         case 'img-quick': {
-          const q = DATA.quick.image.filter(x => x.label !== '다른 시안' && x.label !== '문구 수정')[+b.dataset.i];
+          const q = DATA.quick.image.filter(x => x.label !== '다른 시안')[+b.dataset.i];
           const ta = ref('img-prompt');
           if (q && ta) { ta.value = q.text; S.imgDraft = q.text; selectRange(ta, q.text); }
           break;
@@ -2440,6 +2375,7 @@
         case 'img-ai-edit': if (v) imageAiEdit(v); break;
         case 'img-new': send('지금 정한 내용으로 다른 이미지 시안 만들어줘', { force: 'image', noBase: true }); break;
         case 'img-editor': if (v) imageEditor(v); break;
+        case 'img-text': lsSet('imgText', b.dataset.value === 'none' ? 'none' : 'bake'); renderResults(); break;
         default: break;
       }
     });

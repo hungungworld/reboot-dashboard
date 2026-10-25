@@ -168,6 +168,14 @@ def test_create_brand_only_and_defaults(auth_client):
     assert camp["facts"]["products"] == [] and camp["facts"]["brand"]["slogan"] == "Restart Your Day"
 
 
+def test_create_sheet_language_confirmed(auth_client):
+    ko = create(auth_client, language="한국어")["decisions"]["language"]
+    assert ko["value"] == "한국어" and ko["status"] == "confirmed"  # 시트에서 고르면 확정 → 대화에서 다시 안 물음
+    en = create(auth_client, language="영어")["decisions"]["language"]
+    assert en["value"] == "미국 영어 (US English)" and en["status"] == "confirmed"
+    assert create(auth_client, language="일본어")["decisions"]["language"]["status"] == "proposed"  # 모르는 값 → 기본 제안
+
+
 def test_create_validation(auth_client):
     def err(**kw):
         res = auth_client.post("/api/content/campaigns", json=kw)
@@ -559,7 +567,11 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     assert img["image"]["references"] == ["jelly-original-pouch-front", "jelly-original-cherry-hat-wrapped"]
     assert [Path(x).name for x in sent] == ["jelly-original-pouch-front.jpg", "jelly-original-cherry-hat-wrapped.jpg"]
     assert "Reference image 1: Reboot Jelly Original" in prompt and "exactly as they appear in the reference images" in prompt
-    assert {"role": "slogan", "text": "Restart Your Day"} in img["image"]["text_layers"]  # 슬로건 원문 그대로
+    # 새 방식: 문구는 이미지 AI가 직접 그림 (슬로건은 원문 그대로 · 텍스트 레이어 없음)
+    assert {"role": "slogan", "text": "Restart Your Day"} in img["image"]["image_text"]
+    assert img["image"]["text_layers"] == [] and img["image"]["text_mode"] == "bake" and img["image"]["baked"] is True
+    assert 'spelled exactly as written' in prompt and 'slogan: "Restart Your Day"' in prompt and 'headline: "Hello"' in prompt
+    assert "separate text overlay" not in prompt and "철자는 게시 전 확인" in img["note"]
     assert "최종 패키지" in img["note"] and "Rebu" not in img["note"] and c["jobs"][0]["status"] == "succeeded"
     assert any("이미지 시안이 준비됐어요" in m["text"] for m in c["messages"])
     res = auth_client.get(img["imageUrl"])
@@ -580,6 +592,35 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     assert [Path(x).name for x in base_sent[1:]] == ["jelly-original-lime-boot-wrapped.jpg", "jelly-original-pouch-front.jpg"]
     assert "Image 1 is the base image to edit" in calls["edit"][1][1]
     assert auth_client.get(img["imageUrl"]).status_code == 200  # 원본 파일 유지
+    # 수정할 때 프롬프트 작성 AI에게 기준 이미지에 들어간 문구를 넘김 (문구 수정 · 유지 판단용)
+    plan_in = next(ai.ctx(i) for i in range(len(ai.calls) - 1, -1, -1) if ai.calls[i]["name"] == "content_image_plan")
+    assert {"role": "headline", "text": "Hello"} in plan_in["base_version"]["text"] and plan_in["text_mode"] == "bake"
+
+
+def test_image_without_text_mode(auth_client, ai, sync_jobs, monkeypatch):
+    calls = {}
+
+    def fake_generate(prompt, size, model):
+        calls["prompt"] = prompt
+        return PNG, {}
+    monkeypatch.setattr(providers, "generate_image", fake_generate)
+    camp = create(auth_client)
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
+    ai.add("content_image_plan", {"prompt_en": "Neon on black.", "keep": [], "change": [],
+                                  "text_layers": [{"role": "headline", "text": "Hello"}], "notes_ko": "시안",
+                                  "flavors": [], "include_character": False})
+    chat(auth_client, camp, "이미지 만들어줘", image_text="none")
+    img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
+    assert img["image"]["text_mode"] == "none" and img["image"]["image_text"] == [] and not img["image"]["baked"]
+    assert "Do not render any text" in calls["prompt"] and "Hello" not in calls["prompt"] and "글자 없이" in img["note"]
+
+
+def test_text_mode_from_message():
+    from tabs.content import media
+    assert media.text_mode_of(None, "이미지 만들어줘") == "bake"
+    assert media.text_mode_of("bake", "글자 없이 이미지만 만들어줘") == "none"
+    assert media.text_mode_of("none", "이미지 만들어줘") == "none"
+    assert media.text_mode_of("evil", "make it, no text please") == "none"
 
 
 def test_image_timeout_is_submission_unknown_not_retried(auth_client, ai, sync_jobs, monkeypatch):
@@ -970,13 +1011,13 @@ def test_image_character_choice_controls_rebu(auth_client, ai, sync_jobs, monkey
     monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (sent.append((None, prompt)), (PNG, {}))[1])
     plan = {"prompt_en": "Mascot on black.", "keep": [], "change": [], "text_layers": [], "notes_ko": "시안", "flavors": [],
             "include_character": True}
-    # 사용 안 함 → AI가 넣자고 해도 Rebu 없음 · 브랜드만 골랐으니 참고 사진 없이 생성 (글자 금지 문구)
+    # 사용 안 함 → AI가 넣자고 해도 Rebu 없음 · 브랜드만 골랐으니 참고 사진 없이 생성 (문구가 없으면 슬로건만 그림)
     camp = create(auth_client, use_character="사용 안 함")
     ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
     ai.add("content_image_plan", dict(plan))
     chat(auth_client, camp, "이미지 만들어줘")
     img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
-    assert sent[-1][0] is None and "Do not render any text" in sent[-1][1] and img["image"]["references"] == []
+    assert sent[-1][0] is None and 'slogan: "Restart Your Day"' in sent[-1][1] and img["image"]["references"] == []
     assert img["image"]["include_character"] is False
     # 사용 → 캐릭터 시트를 참고 이미지로
     camp = create(auth_client, use_character="사용")

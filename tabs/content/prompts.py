@@ -233,7 +233,7 @@ CONTENT_DRAFT_V2 = """너는 Reboot 마케팅 콘텐츠 작성자다. 현재 요
 KIND_TEMPLATES = {
     "copy": """[작업: channel_copy · 이미지용 카피]
 body 구성: **Headline** (짧게) / **Subline** / **Caption** (채널 길이에 맞게) / **CTA** / **Hashtags** (Instagram·TikTok만).
-문구는 이미지 위에 따로 얹는 텍스트 레이어용이다. 이미지 모델이 글자를 그린다고 가정하지 않는다.""",
+Headline · CTA는 이미지 모델이 이미지 안에 직접 그린다. 한눈에 읽히게 짧게(Headline 6단어 안팎) 쓴다.""",
     "cardnews": """[작업: channel_copy · 카드뉴스]
 장마다 '## S1 · 역할' 형식의 제목을 쓰고 아래에 Headline / Body / Visual note를 쓴다. 기본 5장.
 Visual note에는 쓸 자산 id(brand_assets)를 괄호로 적는다. 예: (asset: drink-original-cherry-front, rebu-poses-fullbody)
@@ -270,10 +270,15 @@ def language_of(decisions):
 CREATIVE_EDIT_V2 = """너는 Reboot 이미지 시안의 아트 디렉터다. 이미지 생성 모델에 보낼 영어 프롬프트를 만든다.
 - 선택한 기준 버전과 실제 참고 파일이 있으면 그것을 기준으로 한다.
 - 요청한 변경 영역(change), 유지할 자산(keep), 변경하지 않을 텍스트를 분리한다.
-- 헤드라인·슬로건·CTA 같은 문구는 이미지에 그리지 않고 text_layers로 따로 준다 (role: headline · slogan · cta).
+- text_mode가 "bake"면 이미지 모델이 헤드라인·슬로건·CTA를 이미지 안에 직접 그린다. text_layers에는 이미지에 그릴 문구를
+  그대로 준다 (role: headline · slogan · cta, 최대 3개 · 짧게). 서버가 이 문구를 정확한 철자로 그리라고 따로 지시하니
+  prompt_en에는 문구 자체를 쓰지 말고 서체·크기·색·배치(그림과 어울리는 타이포그래피)만 묘사한다.
+  text_mode가 "none"이면 글자 없는 이미지다. text_layers는 빈 배열로 주고 글자를 넣지 않는다.
   슬로건은 정확히 "Restart Your Day". 제품 패키지에 원래 인쇄된 로고·라벨은 예외(참고 사진 그대로).
 - copy_draft가 있으면 담당자가 먼저 만든 카피 초안이다. 헤드라인·CTA는 초안의 문구를 고치지 말고 그대로 text_layers에 넣고,
-  초안에 없는 문구를 새로 짓지 않는다. 장면·구도는 그 메시지에 맞추고 글자가 들어갈 여백을 둔다.
+  초안에 없는 문구를 새로 짓지 않는다. 장면·구도는 그 메시지에 맞춘다.
+- 수정(mode: edit)이면 base_version.text가 기준 이미지에 들어간 문구다. 요청이 문구를 고치라는 것이면 그 부분만 바꿔
+  text_layers에 주고, 아니면 base_version.text를 그대로 준다. 문구만 고칠 때 change는 문구, keep은 나머지 전부다.
 - 제품: reference_photos가 true면 서버가 실제 최종 패키지 사진을 참고 이미지로 함께 보낸다. prompt_en에서 제품을
   "the Reboot product shown in the reference images"처럼 가리키고 모양·색·라벨을 바꾸지 말라고 쓴다.
   false면 product_facts.look을 바탕으로 묘사한다. 음료 병은 높이 108mm(100ml) 손바닥 크기다.
