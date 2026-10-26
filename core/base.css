@@ -352,6 +352,11 @@ textarea.input, .field textarea { resize: vertical; line-height: 1.7; min-height
 .dropzone { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 140px; border: 1px dashed var(--line-2);
   border-radius: 11px; background: var(--soft-2); color: var(--muted); font-size: 12px; text-align: center; padding: 18px; }
 .dropzone.drag { border-color: var(--lime-line); background: var(--lime-soft); }
+.upload-drop { cursor: pointer; margin: 4px 0 14px; }
+.upload-drop .icon { width: 22px; height: 22px; }
+.upload-drop strong { color: var(--ink-2); font-size: 13px; word-break: break-all; }
+.upload-drop.picked { border-style: solid; border-color: var(--lime-line); }
+.upload-drop:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* ───────── 10. 표 ───────── */
 .table-wrap { overflow: auto; -webkit-overflow-scrolling: touch; }
