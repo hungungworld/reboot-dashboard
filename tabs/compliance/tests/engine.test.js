@@ -162,6 +162,21 @@ check('열량 강조 R16 (2026-10-26 · Balance 40 kcal 전제: 음료는 저칼
   assert.strictEqual(verdict('Lightly flavored, never carbonated.'), 'PASS');
 });
 
+check('제품 사실 대조 R17 (2026-10-26 · 사양서 10-25: 맛 3가지 · 모양 젤리 봉지 · 비탄산 100 mL · 3병 박스)', () => {
+  const code = t => api.review(t, { channel: 'b2c' }).codes;
+  ['Now in mango flavor.', 'Our lime jelly sticks, 10 sticks per box.', '6 bottles per box.', 'Sparkling lemon drink.', 'A 250 ml bottle of lemon drink.', '망고 맛 젤리', '탄산 음료로 시원하게']
+    .forEach(t => assert.ok(code(t).includes('R17'), t));
+  ['Non-carbonated, in a 100 ml glass flask bottle.', 'Lightly flavored, never carbonated.', 'Three bottles per box, ready for the weekend.',
+    'Ten individually wrapped jellies in one pouch.', '100ml 유리병에 담은 비탄산 음료', 'Cherry, lemon and lime. Pick your favorite.']
+    .forEach(t => assert.ok(!code(t).includes('R17'), t));
+  assert.strictEqual(verdict('$17.99 per pouch.'), 'PASS');                          // 사양서 가격
+  assert.strictEqual(verdict('Only $9.99 today.'), 'REVIEW');                         // 가격표에 없는 가격은 확인 (R15)
+  assert.strictEqual(verdict('Loved by pharmacists.'), 'REVISE');                     // R7 전문가 권위
+  assert.strictEqual(verdict('FDA-registered facility.'), 'REVIEW');                  // R15 등록 ≠ 승인
+  assert.strictEqual(verdict('Backed by research.'), 'REVISE');                       // R9
+  assert.strictEqual(verdict('Allergen-free.'), 'REVIEW');                            // R15 알레르기 미정
+});
+
 check('처음 보는 문장 시험: GPT가 찾은 문장은 모두 맞고, 새 문장 점수는 떨어지지 않음', () => {
   const run = list => list.map(t => ({ t, v: verdict(t.text, { channel: 'b2c' }) }));
   const gpt = run(C.evalSet.filter(t => t.src === 'gpt'));

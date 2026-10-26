@@ -27,6 +27,7 @@ AI가 규칙보다 **느슨하게** 봐도 규칙 판정이 이깁니다. AI가 
 | v3.1 | 2026-10-25 | **제품 사실만 수정** (판단 기준·few-shot 구성은 그대로): 브랜드 키트(10-24) 기준 — 스틱 젤리·6병·sugar-reduced → 개별 포장 모양 젤리(봉지)·100 ml 병(1병·3병 박스)·Balance만 'Zero Sugar' · 맛 순서 · 미정 사실(봉지 개수·함량·인증·원산지·알레르기) 명시 · few-shot 5번 'Each box has 10 … jelly sticks' → 'A pouch of individually wrapped lime, lemon and cherry jellies' | 지시문의 제품 설명이 실제 패키지와 달라 AI가 틀린 사실을 근거로 판단할 위험 |
 | v3.2 | 2026-10-25 | **제품 사실만 수정** (판단 기준·few-shot 구성은 그대로): 브랜드 가이드 v1.1 — 구미형 젤리(곤약 아님)·맛별 모양·리볼버 제외 · Zero Sugar 조건부 · 참고 영양 수치(43 kcal·당 10 g) 쓰지 않음 · 공통 원료 A-HAT(헛개 추출물 + 유산균, 함량 미제공) · 행사 공식 참여 미확정 · 규칙 R1~R15 |
 | v3.3 | 2026-10-26 | **제품 사실·규칙 번호만 수정** (판단 기준·few-shot 구성은 그대로): Balance Zero Sugar 근거 '가정' → '측정 확인' · Balance 열량 40 kcal 전제(음료는 저칼로리 아님 → 'Not a low calorie food' 동반) · R11은 조건부 당 표시(팀 BLOCK), R16 열량 강조(low sugar·low calorie·light·only N calories) 신설 · R1~R16 | 최종 검토(10-26) 열량 강조 PASS 문제 |
+| v3.4 | 2026-10-26 | **규칙 번호·제품 사실 문장만 추가** (판단 기준·few-shot 구성은 그대로): R1~R17 · 제품과 다른 사실(mango 등 다른 맛·스틱·탄산·100 ml가 아닌 병·3병이 아닌 박스)은 거짓 표시 BLOCK(R17) | 최종 검토 P1 사실 대조 |
 | CS v1 | 2026-10-25 | **CS 답장 초안(`tabs/cs/ai_draft.py`)에 few-shot 3개** — ① 부작용(섭취 중단·의사 상담 먼저) ② "승인? 다음 날 괜찮아?" 질문(금지어를 부정문으로도 쓰지 않고 "a food, not a medicine") ③ 미정 정보(봉지당 개수·영양은 [확인 필요]). 예시 답장은 CS 재점검 PASS · 시연 더미 문의와 겹치지 않음 (테스트로 확인) |
 
 few-shot 예시에는 **'처음 보는 문장 시험'(data.js `evalSet`) 문장을 넣지 않았습니다.** 예시를 외워서 시험을 맞히는 것을 막기 위해서이며, 테스트(`test_ai_review_has_few_shot_without_eval_sentences`)가 확인합니다.

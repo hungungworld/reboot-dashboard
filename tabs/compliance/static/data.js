@@ -135,7 +135,10 @@
         code: 'R7', name: '의약품 오인', verdict: 'REVISE', basis: ['official', 'context'],
         legal: 'yellow', legalNote: "약처럼 보이는 표현은 '의도된 용도'를 판단하는 요소 → 문맥에 따라 갈리므로 법무 확인",
         terms: ['hangover pill', 'pill', 'tablet', 'capsule', 'doctor-formulated', 'pharmacist-formulated', "nature's aspirin", 'aspirin', 'medicine', 'prescription',
-          'trusted by pharmacists', 'pharmacist recommended', 'recommended by pharmacists'],   // 약사 권위 (2026-10-25 · 테스트 문구에서 PASS였음)
+          'trusted by pharmacists', 'pharmacist recommended', 'recommended by pharmacists',
+          'doctor-approved', 'doctor approved', 'physician-approved', 'pharmacist-approved', 'doctor-recommended', 'physician-recommended'],
+        // 2026-10-26 최종 검토: '(loved·trusted·approved·endorsed·developed) by (doctors·pharmacists…)' 같은 전문가 권위
+        patterns: ["\\b(?:loved|trusted|approved|recommended|endorsed|formulated|developed|created|backed)\\s+by\\s+(?:doctors?|physicians?|pharmacists?|nurses?|dietitians?|nutritionists?|MDs?)\\b"],   // 약사 권위 (2026-10-25 · 테스트 문구에서 PASS였음)
         ko: ['숙취약', '의약품', '알약', '처방'],
         // 약이 '아니라'고 밝히는 문장은 R7에서 뺌 (2026-10-25 · CS 답장 "Reboot is a food, not a medicine."이 REVISE였음)
         allow: ["\\bnot\\s+(?:a\\s+)?medicine\\b", "의약품이\\s*아(?:니|닙)"],
@@ -156,6 +159,7 @@
           'gut health', 'digestive health',
           // 2026-10-25 경쟁 구미 효능 문구: 아세트알데히드 처리 · GABA · 붓기 · 술 마시기 전용
           'acetaldehyde', 'GABA', 'brain fog', 'bloating', 'pre-alcohol', 'pre-drinking', 'pre-drink',
+          'bounce back', 'human again', 'yourself again', 'before your first drink', 'before your first round',   // 2026-10-26 최종 검토 (회복·음주 전 암시가 PASS였음)
           'liver support', 'liver care', 'support your liver', 'supports your liver', 'support the liver', 'supports the liver',
           'liver'],   // 검토 반영 (2026-10-25): 'Good for your liver' · 'keeps your liver happy'처럼 일반어로 간을 말해도 구조·기능 암시
         ko: ['간 건강', '간 기능', '알코올 대사', '알코올 분해', '알코올을 분해', '면역력 강화',
@@ -184,7 +188,8 @@
         code: 'R9', name: '인체적용시험 인용', verdict: 'REVISE', basis: ['official', 'internal'],
         legal: 'yellow', legalNote: '말한 수준의 시험 근거가 있으면 가능 (FTC) → 시험 보고서와 함께 법무 확인 · B2C에서 삭제하는 것은 팀 기준',
         terms: ['clinically tested', 'clinically studied', 'clinically shown', 'clinical study', 'clinical studies', 'clinical trial', 'human study', 'human trial', 'research shows', 'studies show',
-          'science-backed', 'backed by science', 'scientifically formulated', 'scientifically proven'],
+          'science-backed', 'backed by science', 'scientifically formulated', 'scientifically proven',
+          'backed by research', 'research-backed', 'backed by studies', 'peer-reviewed'],   // 2026-10-26 최종 검토 ('Backed by research.'가 PASS)
         ko: ['임상', '인체적용시험', '인체 적용 시험'],
         reason: '임상·시험 인용은 FTC 실증 대상. B2C에서 삭제하는 것은 팀 기준',
         alt: 'B2C에서는 삭제, B2B 자료에서만 (근거 문서와 함께)',
@@ -304,13 +309,18 @@
         terms: ['revolver', 'pistol', 'gun-shaped', 'official partner', 'official sponsor', 'official drink', 'official jelly', 'official snack',
           'patented', 'patent', 'Coachella',
           // 인증·시험 표시: 가이드상 인증 미정 → 사실(인증서·시험 성적)이 있을 때만 (2026-10-25)
-          'gluten-free', 'gluten free', 'non-GMO', 'GMO-free', 'organic', 'all natural', '100% natural', 'lab tested', 'third-party tested', '3rd party lab tested', 'kosher', 'halal'],
+          'gluten-free', 'gluten free', 'non-GMO', 'GMO-free', 'organic', 'all natural', '100% natural', 'lab tested', 'third-party tested', '3rd party lab tested', 'kosher', 'halal',
+          'allergen-free', 'allergen free', 'nut-free', 'soy-free', 'dairy-free',   // 2026-10-26: 알레르기 성분은 사양서에서 미정
+          // 2026-10-26 최종 검토: 사실이어도 'FDA 승인'처럼 읽히는 말 (21 CFR 1.242 등록번호 ≠ 승인 · GRAS 통지 회신 ≠ 승인) → 확인 후 사용
+          'FDA registered', 'FDA-registered', 'FDA compliant', 'FDA-compliant', 'GRAS approved', 'GRAS-approved', 'GRAS certified'],
         ko: ['리볼버', '권총', '공식 후원', '공식 파트너', '공식 음료', '공식 젤리', '특허', '코첼라', '글루텐 프리', '유기농', '무농약', '할랄'],
         patterns: [
           "\\b\\d+(?:\\.\\d+)?\\s*(?:kcal|calories|cals?)\\b",
           "\\b\\d+(?:\\.\\d+)?\\s*(?:g|grams?|mg)\\s+(?:of\\s+)?(?:sugars?|carbs?|carbohydrates?|protein|fat|sodium|caffeine)\\b",
           "\\b(?!10\\b)\\d+\\s+(?:jellies|pieces|pcs)\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:pouch|bag)\\b",   // 봉지당 10개는 확정 (2026-10-25 제품 최종 정보)
-          "\\d+(?:\\.\\d+)?\\s*(?:kcal|칼로리)", "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g"
+          "\\d+(?:\\.\\d+)?\\s*(?:kcal|칼로리)", "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g",
+          // 2026-10-26: 제품 사양서(10-25) 가격표에 없는 가격 → 프로모션이면 확인 후 사용 ($17.99 · $19.99 · $4.99 · $12.99 · $5.49 · $14.49)
+          "\\$\\s?(?!(?:17\\.99|19\\.99|4\\.99|12\\.99|5\\.49|14\\.49)(?![\\d.]))\\d+(?:\\.\\d{1,2})?(?![\\d.])"
         ],
         reason: '브랜드 가이드 v1.1 사용 제한: 참고 이미지의 영양 수치(Original 약 43 kcal · 당 약 10 g/100 ml)와 원료 함량·특허 범위는 확정되지 않았고, 리볼버 모양은 제품 구성으로 소개하지 않으며, 행사(코첼라 등) 공식 참여·제휴는 확정된 경우에만 씀 → 사람이 사실 여부 확인',
         alt: '확정된 사실만: 맛 Lime·Lemon·Cherry · 젤리 모양 카우보이 모자·올가미·부츠 · 100 ml 비탄산 음료(낱개·3병 박스) · 개별 포장 젤리 한 봉지',
@@ -342,6 +352,36 @@
           { agency: 'FDA', cite: 'FDA Food Labeling Guide 부록 A · FD&C §403(r)(1)(A)', note: "'low sugar'는 정의되지 않은 표시 → 쓸 수 없음" },
           { agency: 'FDA', cite: '21 CFR 101.56 · 101.13(b)(2)', note: "'light'는 기준 제품 대비 조건 · '적다'를 암시하는 말도 영양 강조 표시" },
           { agency: '팀', cite: '제품 사양서 2026-10-25 + Balance 40 kcal 측정 전제 (2026-10-26)', note: '음료는 저칼로리 아님 · 젤리는 1회 제공량 무게 미정' }
+        ]
+      },
+      {
+        // 2026-10-26 최종 검토 P1-1: 규칙이 '위험한 말'만 찾고 '틀린 말'은 못 찾던 문제 (망고 맛 · 6병 박스 · 탄산 · 스틱 젤리가 PASS)
+        // 사실 기준: 제품 사양서 2026-10-25 — 맛 Lime·Lemon·Cherry만 · 젤리는 개별 포장 모양 젤리(봉지당 10개) · 음료는 비탄산 100 mL 병(낱개·3병 박스)
+        // 사양서가 바뀌면 이 규칙의 사실 목록도 같이 고칩니다.
+        code: 'R17', name: '제품 사실과 다른 표현 (맛·형태·포장·탄산)', verdict: 'BLOCK', basis: ['official', 'internal'],
+        legal: 'red', legalNote: "제품과 다른 맛·형태·포장·용량을 말하면 사실이 아닌 표시 (FD&C §403(a)(1) · FTC Act §5) → 근거 자료로 풀 수 없음 · 사양서가 바뀌면 규칙도 함께 고침",
+        terms: ['jelly stick', 'jelly sticks', 'stick jelly', 'stick jellies', 'stick pack', 'stick packs', 'six-pack', '6-pack', '12-pack', 'twelve-pack'],
+        ko: ['스틱 젤리', '젤리 스틱', '스틱형', '망고 맛', '망고맛', '복숭아 맛', '포도 맛', '딸기 맛', '수박 맛', '6병', '스파클링'],   // '탄산 음료'는 '비탄산 음료'와 겹쳐 아래 패턴으로
+        patterns: [
+          // 없는 맛 (Lime · Lemon · Cherry만)
+          "\\b(?:mango|peach|grape|strawberry|watermelon|blueberry|raspberry|pineapple|yuzu|lychee|passion[\\s-]*fruit|green[\\s-]*apple|orange|grapefruit)[\\s-]+(?:flavou?r(?:ed|s)?|jell(?:y|ies)|drinks?|gumm(?:y|ies)|taste)\\b",
+          "\\b(?:new|now\\s+in|comes\\s+in|available\\s+in)\\s+(?:mango|peach|grape|strawberry|watermelon|blueberry|raspberry|pineapple|yuzu|lychee)\\b",
+          // 스틱·낱개 개수 (젤리는 봉지·개별 포장 젤리)
+          "\\b\\d+\\s+sticks?\\b",
+          // 3병이 아닌 박스 구성
+          "\\b(?!3\\b|three\\b)(?:\\d+|six|twelve|four|five|ten)\\s+bottles?\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:box|case|pack)\\b",
+          // 100 mL가 아닌 용량
+          "\\b(?!100(?!\\d))\\d{2,4}\\s*(?:ml|mL|milliliters?)\\b",   // '100ml'처럼 붙여 써도 100은 제외
+          // 탄산 (비탄산 음료) — non-carbonated · never carbonated · not carbonated는 제외
+          "(?<!non[\\s-])(?<!never\\s)(?<!not\\s)\\b(?:carbonated|sparkling|fizzy|bubbly)\\b",
+          "(?<!비)탄산\\s*(?:음료|이\\s*들어|감)"
+        ],
+        reason: "제품 사양서(2026-10-25)와 다른 사실: 맛은 Lime·Lemon·Cherry 세 가지뿐이고, 젤리는 '스틱'이 아니라 개별 포장 모양 젤리(봉지당 10개), 음료는 비탄산 100 mL 병(낱개·3병 박스)임. 사실과 다른 표시는 거짓 표시(FD&C §403(a)(1))·기만 광고(FTC Act §5)",
+        alt: '확정된 사실만: 맛 Lime·Lemon·Cherry · 개별 포장 모양 젤리(봉지당 10개) · 비탄산 100 mL 유리병(낱개·3병 박스)',
+        law: [
+          { agency: 'FDA', cite: 'FD&C Act §403(a)(1) · 21 U.S.C. 343(a)(1)', note: '라벨링이 거짓이거나 오해를 주면 부정표시 식품' },
+          { agency: 'FTC', cite: 'FTC Act §5 · §12 (15 U.S.C. 45, 52)', note: '식품 광고의 거짓·기만 금지' },
+          { agency: '팀', cite: '제품 사양서 2026-10-25 (동결)', note: '맛·형태·포장·용량·탄산 여부의 기준 · 바뀌면 이 규칙도 함께 고침' }
         ]
       }
     ],
@@ -823,7 +863,7 @@
       { id: 'regulations-gov', range: '최근 1년 · 최대 30건 (FDA는 식품·표시 관련 제목만)', agency: 'FDA·FTC', name: '규칙 · 규칙안', via: 'Regulations.gov API', modes: ['auto'],
         key: 'REGULATIONS_GOV_API_KEY',
         gets: 'FDA(식품·표시·광고 관련)와 FTC가 낸 규칙·규칙안 (의견 접수 마감일)',
-        gives: '목록 · 한글 요약 → 규칙 R1~R16을 고칠지 검토' },
+        gives: '목록 · 한글 요약 → 규칙 R1~R17을 고칠지 검토' },
       { id: 'federal-register', range: '최근 1년 · 기관별 40건 중 최대 30건 (FDA는 식품 관련 제목만)', agency: 'FDA·FTC', name: '관보 공고', via: 'Federal Register API', modes: ['auto'],
         key: '없음',
         gets: 'FTC 전체 공고 + FDA 식품 관련 공고 (제목 · 요약 · 종류)',
@@ -1002,6 +1042,7 @@
       R13: { say: '성분은 들어 있다는 사실만 써요', todo: ["'Contains Hovenia dulcis fruit extract.'처럼 쓰기", "'rich in · high in' 빼기", '함량을 내세우려면 함량 자료로 검토 요청'] },
       R14: { say: "'FDA 승인 · 인증'은 사실이 아니라 못 써요", todo: ['원산지 · 포장 · 성분 같은 사실로 바꾸기'] },
       R16: { say: "'low sugar' · 'low calorie' · 'light'는 못 써요", todo: ["Balance면 'Zero Sugar. Not a low calorie food.'로", "'only 40 calories' 같은 숫자 강조 빼기", '맛 · 포장 같은 사실로 바꾸기'] },
+      R17: { say: '제품과 다른 맛 · 형태 · 포장은 못 써요', todo: ['맛은 Lime · Lemon · Cherry만', "'스틱' 대신 개별 포장 젤리 · 봉지", '음료는 비탄산 100 mL · 낱개 또는 3병 박스'] },
       R15: { say: '확정되지 않은 정보는 확인하고 써요', todo: ['확정된 맛 · 모양 · 포장만 쓰기', '특허 · 인증 · 제휴는 증빙과 함께 검토 요청'] }
     },
     agencies: {

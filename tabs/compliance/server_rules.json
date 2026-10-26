@@ -241,7 +241,14 @@
     "(?<![A-Za-z0-9])prescription(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])trusted[\\s-]*by[\\s-]*pharmacists(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])pharmacist[\\s-]*recommended(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])recommended[\\s-]*by[\\s-]*pharmacists(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])recommended[\\s-]*by[\\s-]*pharmacists(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])doctor[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])doctor[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])physician[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])pharmacist[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])doctor[\\s-]*recommended(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])physician[\\s-]*recommended(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "\\b(?:loved|trusted|approved|recommended|endorsed|formulated|developed|created|backed)\\s+by\\s+(?:doctors?|physicians?|pharmacists?|nurses?|dietitians?|nutritionists?|MDs?)\\b"
    ],
    "ko": [
     "숙취약",
@@ -296,6 +303,11 @@
     "(?<![A-Za-z0-9])pre[\\s-]*alcohol(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])pre[\\s-]*drinking(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])pre[\\s-]*drink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])bounce[\\s-]*back(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])human[\\s-]*again(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])yourself[\\s-]*again(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])before[\\s-]*your[\\s-]*first[\\s-]*drink(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])before[\\s-]*your[\\s-]*first[\\s-]*round(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])liver[\\s-]*support(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])liver[\\s-]*care(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])support[\\s-]*your[\\s-]*liver(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -368,7 +380,11 @@
     "(?<![A-Za-z0-9])science[\\s-]*backed(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])backed[\\s-]*by[\\s-]*science(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])scientifically[\\s-]*formulated(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
-    "(?<![A-Za-z0-9])scientifically[\\s-]*proven(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
+    "(?<![A-Za-z0-9])scientifically[\\s-]*proven(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])backed[\\s-]*by[\\s-]*research(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])research[\\s-]*backed(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])backed[\\s-]*by[\\s-]*studies(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])peer[\\s-]*reviewed(?:s|es|d|ed|ing)?(?![A-Za-z0-9])"
    ],
    "ko": [
     "임상",
@@ -614,6 +630,18 @@
     "(?<![A-Za-z0-9])3rd[\\s-]*party[\\s-]*lab[\\s-]*tested(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])kosher(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])halal(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])allergen[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])allergen[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])nut[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])soy[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])dairy[\\s-]*free(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])FDA[\\s-]*registered(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])FDA[\\s-]*registered(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])FDA[\\s-]*compliant(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])FDA[\\s-]*compliant(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])GRAS[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])GRAS[\\s-]*approved(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])GRAS[\\s-]*certified(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])turmeric(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])curcumin(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
     "(?<![A-Za-z0-9])ginger(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
@@ -653,7 +681,8 @@
     "\\b\\d+(?:\\.\\d+)?\\s*(?:g|grams?|mg)\\s+(?:of\\s+)?(?:sugars?|carbs?|carbohydrates?|protein|fat|sodium|caffeine)\\b",
     "\\b(?!10\\b)\\d+\\s+(?:jellies|pieces|pcs)\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:pouch|bag)\\b",
     "\\d+(?:\\.\\d+)?\\s*(?:kcal|칼로리)",
-    "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g"
+    "(?:당류?|설탕)\\s*(?:약\\s*)?\\d+(?:\\.\\d+)?\\s*g",
+    "\\$\\s?(?!(?:17\\.99|19\\.99|4\\.99|12\\.99|5\\.49|14\\.49)(?![\\d.]))\\d+(?:\\.\\d{1,2})?(?![\\d.])"
    ],
    "ko": [
     "리볼버",
@@ -753,6 +782,52 @@
    "allow": [
     "\\bnot\\s+a\\s+(?:low|reduced)[\\s-]*calorie\\s+food\\b"
    ],
+   "legal": "red",
+   "legalByProduct": {},
+   "compensatedLegal": ""
+  },
+  {
+   "code": "R17",
+   "name": "제품 사실과 다른 표현 (맛·형태·포장·탄산)",
+   "verdict": "BLOCK",
+   "byChannel": {},
+   "byProduct": {},
+   "regex": [
+    "(?<![A-Za-z0-9])jelly[\\s-]*stick(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])jelly[\\s-]*sticks(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])stick[\\s-]*jell(?:y|ys|ies|ied|ying)(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])stick[\\s-]*jellies(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])stick[\\s-]*pack(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])stick[\\s-]*packs(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])six[\\s-]*pack(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])6[\\s-]*pack(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])12[\\s-]*pack(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "(?<![A-Za-z0-9])twelve[\\s-]*pack(?:s|es|d|ed|ing)?(?![A-Za-z0-9])",
+    "\\b(?:mango|peach|grape|strawberry|watermelon|blueberry|raspberry|pineapple|yuzu|lychee|passion[\\s-]*fruit|green[\\s-]*apple|orange|grapefruit)[\\s-]+(?:flavou?r(?:ed|s)?|jell(?:y|ies)|drinks?|gumm(?:y|ies)|taste)\\b",
+    "\\b(?:new|now\\s+in|comes\\s+in|available\\s+in)\\s+(?:mango|peach|grape|strawberry|watermelon|blueberry|raspberry|pineapple|yuzu|lychee)\\b",
+    "\\b\\d+\\s+sticks?\\b",
+    "\\b(?!3\\b|three\\b)(?:\\d+|six|twelve|four|five|ten)\\s+bottles?\\s+(?:per|in\\s+(?:a|each|every))\\s+(?:box|case|pack)\\b",
+    "\\b(?!100(?!\\d))\\d{2,4}\\s*(?:ml|mL|milliliters?)\\b",
+    "(?<!non[\\s-])(?<!never\\s)(?<!not\\s)\\b(?:carbonated|sparkling|fizzy|bubbly)\\b",
+    "(?<!비)탄산\\s*(?:음료|이\\s*들어|감)"
+   ],
+   "ko": [
+    "스틱 젤리",
+    "젤리 스틱",
+    "스틱형",
+    "망고 맛",
+    "망고맛",
+    "복숭아 맛",
+    "포도 맛",
+    "딸기 맛",
+    "수박 맛",
+    "6병",
+    "스파클링"
+   ],
+   "compensated": [],
+   "incentive": [],
+   "incentiveVerdict": "",
+   "allow": [],
    "legal": "red",
    "legalByProduct": {},
    "compensatedLegal": ""
@@ -1601,7 +1676,7 @@
   ],
   [
    "Doctor recommended.",
-   "PASS"
+   "REVISE"
   ],
   [
    "Drink all night with Reboot.",
@@ -2686,7 +2761,7 @@
   [
    "Doctor recommended.",
    "",
-   ""
+   "yellow"
   ],
   [
    "Drink all night with Reboot.",

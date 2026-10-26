@@ -1,6 +1,6 @@
 """컴플라이언스 AI 2차 판정 (Claude).
 
-규칙 판정(R1~R16)을 대신하지 않습니다. 당류·열량 표현은 브랜드 가이드 v1.1과 Balance 열량 40 kcal 전제(R11·R12·R16 · 2026-10-26)로 판정합니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
+규칙 판정(R1~R17)을 대신하지 않습니다. 당류·열량 표현은 브랜드 가이드 v1.1과 Balance 열량 40 kcal 전제(R11·R12·R16 · 2026-10-26)로 판정합니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
 '더 안전한 문장'을 참고용으로 받습니다. 최종 사용 여부는 담당자 승인으로 정합니다.
 
 Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽습니다. 로직은 원본(JUNHEE/server)과 같습니다.
@@ -30,8 +30,8 @@ The request names which product the copy is for.
 Assess the copy the way a careful US food-advertising compliance reviewer would:
 - FDA: a conventional food must not claim to prevent, treat, cure or mitigate a disease or condition (a hangover claim reads as a drug claim); structure/function claims on a conventional food must come from the food's nutritive value; no implied medical or clinical authority.
 - FTC: every objective claim needs competent and reliable substantiation; testimonials, reviews and endorsements must be genuine and disclosed; no incentivised reviews; no claims that encourage excessive drinking.
-- Sugar wording follows the brand guide (rules R11-R12): only the two Balance products may say "Zero Sugar" (measured and confirmed) - it is fine (PASS) for Balance copy and BLOCK for Original or brand-wide copy. Reduced/less sugar and no added sugar are allowed by law only under conditions, but the brand guide does not use them (BLOCK, rule R11). "Low sugar", 저당, "low calorie", "light", "guilt-free" and "only N calories" are undefined or unmet nutrient claims (BLOCK, rule R16). Never accept sugar or calorie numbers in copy.
-- The team's own rules R1-R16 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
+- Sugar wording follows the brand guide (rules R11-R12): only the two Balance products may say "Zero Sugar" (measured and confirmed) - it is fine (PASS) for Balance copy and BLOCK for Original or brand-wide copy. Reduced/less sugar and no added sugar are allowed by law only under conditions, but the brand guide does not use them (BLOCK, rule R11). "Low sugar", 저당, "low calorie", "light", "guilt-free" and "only N calories" are undefined or unmet nutrient claims (BLOCK, rule R16). Never accept sugar or calorie numbers in copy. Copy that states product facts different from the line-up above (other flavors such as mango, 'stick' jellies, carbonated or sparkling drinks, bottle sizes other than 100 ml, boxes other than 3 bottles) is a false statement (BLOCK, rule R17).
+- The team's own rules R1-R17 are listed below. Use their codes when an issue matches one; use "OTHER" for a risk the rules do not cover.
 
 Verdict scale (pick the strictest that applies):
 BLOCK = must not be used as written; REVISE = needs rewording; COND = acceptable only under a stated condition (channel, substantiation, disclosure); REVIEW = a human must judge; PASS = no issue found.
