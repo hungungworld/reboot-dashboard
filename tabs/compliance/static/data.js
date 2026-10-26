@@ -63,7 +63,7 @@
       {
         code: 'R2', name: "'hangover' 직접 언급", verdict: 'BLOCK', basis: ['official', 'internal'],
         // 2026-10-26 최종 검토: 경고장은 숙취 예방·완화 '주장'을 문제 삼음 · 단어만 막는 것은 팀 기준 → 신호 🟡 (판정 BLOCK은 팀 결정으로 유지)
-        legal: 'yellow', legalNote: "단어만 써도 숙취 예방·완화 용도로 읽힐 위험이 큼 (21 CFR 201.128 의도된 용도) · 법이 단어 자체를 금지하지는 않음 → 팀이 더 엄격하게 막음 · 예방·완화 주장이 함께 있으면 R1이 🔴",
+        legal: 'yellow', legalNote: "FDA는 숙취 예방·완화 주장을 의약품 주장으로 봄 (2020 경고장) · 애프터파티 제품 광고에 'hangover'가 나오면 그 용도로 읽힘 (21 CFR 201.128 의도된 용도) → 규제 해석상 사용 불가 · 단어 자체를 금지하는 조문은 없어 🔴(법이 직접 금지)는 아님 · 예방·완화 주장이 함께 있으면 R1이 🔴",
         terms: ['hangover', 'hang-over', 'morning after', 'hungover'],
         ko: ['숙취'],
         reason: "FDA 경고장은 숙취 예방·완화 주장을 의약품 표현으로 봄. 단순 언급까지 막는 것은 팀 기준. 'the morning after'는 미국에서 숙취를 뜻하는 관용 표현(피임약 'morning-after pill'도 연상)이라 같이 막음",
@@ -823,7 +823,7 @@
       { id: 'regulations-gov', range: '최근 1년 · 최대 30건 (FDA는 식품·표시 관련 제목만)', agency: 'FDA·FTC', name: '규칙 · 규칙안', via: 'Regulations.gov API', modes: ['auto'],
         key: 'REGULATIONS_GOV_API_KEY',
         gets: 'FDA(식품·표시·광고 관련)와 FTC가 낸 규칙·규칙안 (의견 접수 마감일)',
-        gives: '목록 · 한글 요약 → 규칙 R1~R15를 고칠지 검토' },
+        gives: '목록 · 한글 요약 → 규칙 R1~R16을 고칠지 검토' },
       { id: 'federal-register', range: '최근 1년 · 기관별 40건 중 최대 30건 (FDA는 식품 관련 제목만)', agency: 'FDA·FTC', name: '관보 공고', via: 'Federal Register API', modes: ['auto'],
         key: '없음',
         gets: 'FTC 전체 공고 + FDA 식품 관련 공고 (제목 · 요약 · 종류)',
@@ -988,9 +988,9 @@
   NS.compliance.plain = {
     rules: {
       R1: { say: '병을 고친다고 하면 못 써요', todo: ['먹는 때·맛·형태만 말하기', "'예방·치료·완화' · '두통·메스꺼움 해소' 빼기"] },
-      R2: { say: '숙취를 직접 말하면 못 써요 (팀 기준)', todo: ['After-Party · Reset · Refresh 같은 말로 바꾸기', "'the morning after'도 빼기", 'Recovery · Revive 같은 회복 단어 피하기'] },
+      R2: { say: '숙취를 직접 말하면 못 써요 (FDA 경고장 기준)', todo: ['After-Party · Reset · Refresh 같은 말로 바꾸기', "'the morning after'도 빼기", 'Recovery · Revive 같은 회복 단어 피하기'] },
       R3: { say: "'간 보호' · '100% 안전'은 못 써요", todo: ["'라벨 확인 + 전문가 상담' 안내로 바꾸기"] },
-      R4: { say: '홍조 · ALDH2는 판매 문구에 못 써요 (팀 기준)', todo: ['홍조 · 체질 이야기 빼기'] },
+      R4: { say: '홍조 · ALDH2는 판매 문구에 못 써요 (Meta 정책·팀 기준)', todo: ['홍조 · 체질 이야기 빼기'] },
       R5: { say: '효과를 장담하려면 근거가 있어야 해요', todo: ['용량 · 포장 · 맛 같은 사실로 바꾸기', '그대로 쓰려면 근거 자료로 검토 요청'] },
       R6: { say: '음주를 부추기는 말은 고쳐 주세요', todo: ['마시는 양 · 계속 마시기 이야기 빼기'] },
       R7: { say: '약처럼 보이는 이름은 고쳐 주세요', todo: ['jelly · drink 같은 식품 이름 쓰기', '애매하면 검토 요청'] },
