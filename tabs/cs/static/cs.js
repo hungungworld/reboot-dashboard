@@ -608,9 +608,9 @@
         <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="sort">
           <option value="priority" selected>처리 우선순위 (긴급·기한 순)</option><option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option></select></label>
         <div class="cs-gmailbar">
-          <button type="button" class="cs-btn" data-act="gmail-import" title="Gmail 최신 데이터 받기" disabled>${icon('mail')} Gmail 받기</button>
+          <button type="button" class="cs-btn" data-act="gmail-import" title="Gmail 최신 데이터 받기" aria-describedby="cs-gmailmsg" disabled>${icon('mail')} Gmail 받기</button>
           <button type="button" class="cs-btn" data-act="open-settings" title="담당자 연락처 · 답장 기본값 · 페르소나 · 템플릿">답장 설정</button>
-          <span class="cs-muted" data-el="gmailmsg" aria-live="polite"></span>
+          <span class="cs-muted" id="cs-gmailmsg" data-el="gmailmsg" aria-live="polite"></span>
         </div>
         <div data-el="setupnote"></div>
         <div data-el="listhead" class="cs-listhead"></div>

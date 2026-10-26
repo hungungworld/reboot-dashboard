@@ -5,7 +5,7 @@
   --cs-ink: var(--ink); --cs-muted: var(--muted); --cs-faint: var(--faint); --cs-card: var(--surface); --cs-bg: var(--canvas); --cs-soft: var(--soft); --cs-list: var(--surface-2);
   --cs-rule: var(--line); --cs-rule-strong: var(--line-2);
   --cs-accent: var(--accent); --cs-accent-ink: var(--lime-ink); --cs-accent-soft: var(--lime-soft); --cs-accent-line: var(--lime-soft-line);
-  --cs-link: var(--lime-deep); --cs-dark: var(--dark); --cs-dark-ink: var(--dark-ink); --cs-focus: var(--focus); --cs-code: var(--gray-bg);
+  --cs-link: var(--lime-deep); --cs-dark: var(--dark); --cs-dark-ink: var(--dark-ink); --cs-focus: var(--ink);   /* 초점 테두리: 연두(--focus)는 흰 바탕 대비 2.1:1이라 진한 글자색으로 (다크 모드에선 밝게) */ --cs-code: var(--gray-bg);
   --cs-red-bg: var(--red-bg); --cs-red: var(--red); --cs-orange-bg: var(--orange-bg); --cs-orange: var(--orange);
   --cs-purple-bg: var(--purple-bg); --cs-purple: var(--purple); --cs-blue-bg: var(--blue-bg); --cs-blue: var(--blue);
   --cs-green-bg: var(--green-bg); --cs-green: var(--green); --cs-gray-bg: var(--gray-bg); --cs-gray: var(--gray);
@@ -50,10 +50,14 @@
 /* 단계 안 보기 탭 (전체 · 긴급 · 기한 초과) — core .linetabs */
 .part-cs .cs-viewtabs { align-self: end; }
 .part-cs .cs-viewtabs[hidden] { display: none; }
+/* 목록 바탕(--surface-2)에서 기본 회색은 4.4:1 · 개수(흐리게 55%)는 2.1:1이라 글자 대비 4.5:1 이상으로 */
+.part-cs .cs-viewtabs button:not([aria-pressed="true"]) { color: var(--text); }
+.part-cs .cs-viewtabs button .n { opacity: 1; color: var(--text); }
+.part-cs .cs-viewtabs button:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: -3px; }
 /* Gmail 받기 · 답장 설정은 한 줄, 안내 문구는 그 아래 */
 .part-cs .cs-gmailbar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 2px; }
 .part-cs .cs-gmailbar .cs-btn { width: 100%; white-space: nowrap; }
-.part-cs .cs-gmailbar .cs-muted { font-size: 11px; grid-column: 1 / -1; }
+.part-cs .cs-gmailbar .cs-muted { font-size: 12px; color: var(--text); grid-column: 1 / -1; }
 .part-cs .cs-gmailbar .cs-muted:empty { display: none; }
 .part-cs .cs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 72vh; overflow-y: auto; }
 .part-cs .cs-item {
@@ -365,7 +369,7 @@
 .part-cs .cs-contacts { display: grid; gap: 8px; margin: 8px 0; }
 .part-cs .cs-contact { align-items: flex-end; }
 /* 받은편지함 목록 화면: 보기 · 정렬 · Gmail 불러오기를 한 줄로 */
-.part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: end; padding: 18px 16px; }
+.part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: minmax(0, 1fr) minmax(200px, 280px) auto auto; align-items: end; padding: 18px 16px; }   /* 정렬 칸은 글자 길이만큼만 */
 .part-cs .cs-inbox[data-view="list"] .cs-listcol > :nth-child(n+4) { grid-column: 1 / -1; }
 /* 버튼은 보기·정렬 칸과 같은 줄·같은 높이, 불러오기 결과 문구는 그 아래 줄 오른쪽 */
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar { display: contents; }
