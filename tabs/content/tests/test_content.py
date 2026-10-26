@@ -28,6 +28,12 @@ def sheet(**kw):
     return s
 
 
+@pytest.fixture
+def no_brand_refs(monkeypatch):
+    """브랜드 자체만 고른 캠페인을 참고 사진 없이 그리는 경로로 (참고 사진과 상관없는 테스트용 · 브랜드 → 전 제품 사진은 test_brand_focus_uses_all_product_refs)."""
+    monkeypatch.setattr(repository, "ref_product_ids", lambda s: list((s or {}).get("product_ids") or []))
+
+
 def create(client, **kw):
     res = client.post("/api/content/campaigns", json=sheet(**kw))
     assert res.status_code == 201, res.get_json()
@@ -607,7 +613,7 @@ def test_image_generate_then_edit_with_base_file(auth_client, ai, sync_jobs, mon
     assert {"role": "headline", "text": "Hello"} in plan_in["base_version"]["text"] and plan_in["text_mode"] == "bake"
 
 
-def test_image_without_text_mode(auth_client, ai, sync_jobs, monkeypatch):
+def test_image_without_text_mode(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     calls = {}
 
     def fake_generate(prompt, size, model):
@@ -633,7 +639,7 @@ def test_text_mode_from_message():
     assert media.text_mode_of("evil", "make it, no text please") == "none"
 
 
-def test_image_timeout_is_submission_unknown_not_retried(auth_client, ai, sync_jobs, monkeypatch):
+def test_image_timeout_is_submission_unknown_not_retried(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     n = {"calls": 0}
 
     def boom(prompt, size, model):
@@ -911,7 +917,7 @@ def _png(w, h):
     return head + PNG[24:]
 
 
-def test_image_editor_upload_makes_child_version(auth_client, ai, sync_jobs, monkeypatch):
+def test_image_editor_upload_makes_child_version(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (PNG, {}))
     camp = create(auth_client)
     ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
@@ -975,6 +981,29 @@ def test_manifest_files_exist_and_ids_are_valid():
     # 글자 많은 캐릭터 시트는 참고 사진으로 고르지 않음
     assert not assets.get("rebu-profile-sheet")["ref"]
     assert assets.get("jelly-original-pouch-scene")["ref"] and assets.get("jelly-balance-pouch-scene")["ref"]  # 리볼버 뺀 사진으로 교체 (2026-10-25)
+
+
+def test_brand_focus_uses_all_product_refs(auth_client, ai, sync_jobs, monkeypatch, app):
+    with app.app_context():  # 브랜드 자체 → 전 제품 (직접 고른 제품이 앞) · 브랜드 아님 → 고른 제품만
+        every = list(repository.products_index())
+        assert repository.ref_product_ids(sheet()) == every
+        assert repository.ref_product_ids(sheet(product_ids=["drink_balance"]))[0] == "drink_balance"
+        assert repository.ref_product_ids(sheet(brand_focus=False, product_ids=["drink_balance"])) == ["drink_balance"]
+    calls = {}
+
+    def fake_edit(paths, prompt, size, model):
+        calls["edit"] = (paths, prompt)
+        return PNG, {}
+    monkeypatch.setattr(providers, "edit_image", fake_edit)
+    camp = create(auth_client)  # 브랜드만 고르고 제품은 안 고름
+    ai.add("content_turn", turn(intent="generate_media", action="generate_image", text="이미지 시안을 준비할게요."))
+    ai.add("content_image_plan", {"prompt_en": "Reboot brand key visual.", "keep": [], "change": [], "text_layers": [],
+                                  "notes_ko": "", "flavors": [], "include_character": False})
+    chat(auth_client, camp, "이미지 만들어줘")
+    img = next(v for v in get(auth_client, camp["id"])["versions"] if v["kind"] == "image")
+    refs = [assets.get(x) for x in img["image"]["references"]]
+    assert {a["product_id"] for a in refs} == set(every) and len(refs) == assets.MAX_REFS
+    assert "Reboot product" not in calls["edit"][1]  # 시트에서 안 고른 제품도 이름으로 설명
 
 
 def test_pick_refs_by_flavor_and_character():
@@ -1092,7 +1121,7 @@ def test_character_choice_from_sheet_and_patch(auth_client):
     assert assets.character_choice({}) == "AI 판단" and assets.character_choice({"use_character": {"value": "아니요"}}) == "사용 안 함"
 
 
-def test_image_character_choice_controls_rebu(auth_client, ai, sync_jobs, monkeypatch):
+def test_image_character_choice_controls_rebu(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     sent = []
     monkeypatch.setattr(providers, "edit_image", lambda paths, prompt, size, model: (sent.append((paths, prompt)), (PNG, {}))[1])
     monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (sent.append((None, prompt)), (PNG, {}))[1])
@@ -1116,7 +1145,7 @@ def test_image_character_choice_controls_rebu(auth_client, ai, sync_jobs, monkey
     assert img["image"]["references"] == ["rebu-poses-fullbody"] and "캐릭터 Rebu 포함" in img["note"]
 
 
-def test_new_image_uses_copy_draft_made_first(auth_client, ai, sync_jobs, monkeypatch):
+def test_new_image_uses_copy_draft_made_first(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (PNG, {}))
     plan = {"prompt_en": "Neon lime on black.", "keep": [], "change": [], "text_layers": [], "notes_ko": "시안", "flavors": [],
             "include_character": False}
@@ -1200,7 +1229,7 @@ def test_higgsfield_video_job_uses_script_refs_and_saves_mp4(auth_client, ai, sy
     assert any(n.endswith("-video.mp4") for n in z.namelist())
 
 
-def test_higgsfield_video_needs_key_and_setting(auth_client, ai, monkeypatch):
+def test_higgsfield_video_needs_key_and_setting(no_brand_refs, auth_client, ai, monkeypatch):
     camp = create(auth_client, content_type="shortform", channels=["tiktok"])
     camp = set_settings(auth_client, camp, video_mode="higgsfield")  # 키 없음 → 구성안
     ai.add("content_turn", turn(intent="generate_media", action="generate_video"))
@@ -1585,7 +1614,7 @@ def test_two_official_slogans():
         "goal", sheet(brand_focus=False, product_ids=["jelly_original"]))[2]["reason"]
 
 
-def test_image_slogan_choice_is_drawn(auth_client, ai, sync_jobs, monkeypatch):
+def test_image_slogan_choice_is_drawn(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     sent = []
     monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (sent.append(prompt), (PNG, {}))[1])
     camp = create(auth_client)
@@ -1625,7 +1654,7 @@ def test_image_gets_three_captions_and_hashtags(auth_client, ai, sync_jobs, monk
     assert user["channel_profile"].startswith("Instagram") and "Buy Your Tomorrow" in call["system"]
 
 
-def test_caption_failure_keeps_image(auth_client, ai, sync_jobs, monkeypatch):
+def test_caption_failure_keeps_image(no_brand_refs, auth_client, ai, sync_jobs, monkeypatch):
     monkeypatch.setattr(providers, "generate_image", lambda prompt, size, model: (PNG, {}))
     camp = create(auth_client)
     ai.add("content_turn", turn(intent="generate_media", action="generate_image"))
@@ -1802,6 +1831,15 @@ def test_cardnews_save_edit_photo_and_cleanup(app, auth_client):
         assert not (media.upload_dir() / name).exists()
 
 
+def test_cardnews_block_template_saved_and_has_bg_prompt(auth_client):
+    cid = create(auth_client, content_type="cardnews")["id"]
+    deck = {"deckTitle": "Block", "template": "block", "ratio": "4:5", "cards": [
+        {"layout": "cover", "title": "Hi"}, {"layout": "outro", "title": "Bye", "cta": "Try it"}]}
+    res = auth_client.post(f"/api/content/campaigns/{cid}/cardnews", json={"deck": deck})
+    assert res.status_code == 201 and res.get_json()["deck"]["template"] == "block"
+    assert all(t in cardnews.BG_ZONE and t in cardnews.BG_MOOD for t in cardnews.TEMPLATES)  # AI 배경 프롬프트가 모든 템플릿에 있음
+
+
 # ───────── 카드뉴스 AI 배경 (cardnews.py) ─────────
 
 def _bg_deck():
@@ -1894,6 +1932,29 @@ def test_cardnews_bg_job_uses_product_refs_and_saves_file(app, auth_client, monk
     assert auth_client.delete(f"/api/content/campaigns/{cid}").status_code == 200
     with app.app_context():
         assert not (media.upload_dir() / first["file"]).exists()
+
+
+def test_cardnews_bg_higgsfield_provider(auth_client, monkeypatch, sync_bg):
+    camp = create(auth_client, content_type="cardnews", brand_focus=False, product_ids=["jelly_original"])
+    url = f"/api/content/campaigns/{camp['id']}/cardnews/backgrounds"
+    body = {"deck": _bg_deck(), "cards": [{"id": "aaaa1111", "visual": "Pouch on black."}], "provider": "higgsfield"}
+    monkeypatch.setattr(providers, "ready", lambda: True)
+    monkeypatch.setattr(higgsfield, "ready", lambda: False)
+    res = auth_client.post(url, json=body)   # Higgsfield 키가 없으면 OpenAI로 바꾸지 않고 멈춤
+    assert res.status_code == 503 and "Higgsfield" in res.get_json()["error"]
+    assert auth_client.post(url, json=dict(body, provider="nope")).status_code == 400
+    monkeypatch.setattr(media, "POLL_EVERY", 0)
+    hf = FakeHiggsfield(monkeypatch, result=JPG)
+    called = []
+    monkeypatch.setattr(providers, "edit_image", lambda *a, **k: called.append(a))
+    monkeypatch.setattr(providers, "generate_image", lambda *a, **k: called.append(a))
+    assert auth_client.post(url, json=body).status_code == 202
+    job = auth_client.get(url).get_json()["jobs"][0]
+    assert job["status"] == "succeeded" and job["provider"] == "higgsfield" and job["file"].endswith(".jpg")
+    model_path, sent = hf.submits[0]
+    assert called == [] and model_path == higgsfield.IMAGE_MODEL and sent["aspect_ratio"] == "3:4"  # 4:5에 가장 가까운 비율
+    assert "Pouch on black." in sent["prompt"] and 0 < len(sent["image_urls"]) <= assets.HIGGSFIELD_MAX_REFS
+    assert all("jelly-original" in name for name, _ in hf.uploads)
 
 
 def test_cardnews_bg_timeout_is_unknown_and_no_duplicate(app, auth_client, monkeypatch):

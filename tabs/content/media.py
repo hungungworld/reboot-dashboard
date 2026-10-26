@@ -303,7 +303,7 @@ def _references(snap, job, plan, include_char, has_base):
     dec = snap.get("decisions") or {}
     said = assets.flavors_in(snap.get("request"), job.instructions,
                              *((dec.get(k) or {}).get("value") for k in ("flavor", "featured_product", "concept")))
-    pids = (snap.get("sheet") or {}).get("product_ids") or []
+    pids = repository.ref_product_ids(snap.get("sheet"))  # 브랜드 자체를 골랐으면 전 제품
     cap = assets.HIGGSFIELD_MAX_REFS if _provider(job) == "higgsfield" else assets.MAX_REFS
     picked = assets.product_flavors_of(dec, pids, repository.products_index())
     per_product = {pid: f if len(f) < len(assets.FLAVOR_ORDER) else plan.get("flavors") or [] for pid, f in picked.items()}
@@ -313,6 +313,7 @@ def _references(snap, job, plan, include_char, has_base):
 
 def _ref_lines(refs, facts, first_index):
     names = {p.get("entity_id"): p.get("consumer_name") or p.get("internal_name") for p in facts.get("products") or []}
+    names.update({pid: p.get("name") for pid, p in repository.products_index().items() if not names.get(pid)})  # 시트에서 안 고른 제품 (브랜드 자체)
     lines = []
     for i, a in enumerate(refs, start=first_index):
         if a["type"] == "character":
@@ -455,7 +456,7 @@ def run_image_job(job_id):
         note_bits.append(f"요청 비율 {requested_ratio} → {job.size}로 생성 · 게시 전 크롭 필요할 수 있음")
     if refs:
         note_bits.append(f"최종 패키지·캐릭터 사진 {len(refs)}장을 참고해 생성 · 라벨 글자·모양은 게시 전 확인")
-    elif (snap.get("sheet") or {}).get("product_ids"):
+    elif repository.ref_product_ids(snap.get("sheet")):
         note_bits.append("참고 사진 없이 생성 (이 이미지 모델은 참고 사진을 받지 않음) · 제품 모양 확인 필요")
     if include_char:
         note_bits.append("캐릭터 Rebu 포함")
