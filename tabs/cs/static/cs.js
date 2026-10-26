@@ -1903,8 +1903,9 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     <span class="cs-sec-sum" data-ref="cs-voc-sum">${vocSumHTML()}</span></summary>
   <div class="cs-sec-body" data-ref="cs-voc">${vocHTML()}</div>
 </details>
-<div class="cs-secbar"><span class="cs-summary">템플릿 ${rows.length}개 · 사용 불가 <b class="${blocked ? 'cs-late' : 'cs-ok'}">${blocked}개</b> (목표 0개)
-  ${unchecked ? ` · <span class="cs-warn-text">컴플라이언스 탭이 없어 ${unchecked}개 심의 불가</span>` : ''}</span>
+<div class="cs-secbar"><span class="cs-summary"><span class="cs-muted">템플릿 ${rows.length}개</span>
+  ${blocked ? `<span class="badge red">사용 불가 ${blocked}</span>` : ''}
+  ${unchecked ? `<span class="badge orange" title="컴플라이언스 탭이 없어 심의하지 못했어요">심의 못 함 ${unchecked}</span>` : ''}</span>
   <span class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-all" data-open="1">모두 펼치기</button>
     <button type="button" class="cs-btn cs-btn-sm" data-act="tpl-all" data-open="">모두 접기</button></span></div>
 <p class="cs-muted">템플릿이 사용 불가면 그 유형의 발송이 전부 막혀요. [확인 필요]는 현재 설정 값으로 채웠을 때 남는 빈칸 수예요 (고객 이름·주문번호는 예시값으로 채움).</p>
