@@ -399,6 +399,9 @@
 .part-cs .cs-inbox[data-view="detail"] .cs-row-from { grid-column: 2; }
 .part-cs .cs-inbox[data-view="detail"] .cs-row-main { grid-column: 1 / -1; }
 .part-cs .cs-inbox[data-view="detail"] .cs-row-snippet { display: none; }
+/* 목록 옆에 열린 문의: 목록이 오른쪽 답장 작성기 높이만큼 내려오고, 그래도 많으면 목록 안에서 세로 스크롤 (가로 스크롤 없음) */
+.part-cs .cs-inbox[data-view="detail"] .cs-listcol { display: flex; flex-direction: column; gap: 14px; }
+.part-cs .cs-inbox[data-view="detail"] .cs-list { flex: 1 1 0; min-height: 320px; max-height: none; overflow-x: hidden; overflow-y: auto; align-content: start; }
 .part-cs .cs-mailrow.is-selected { background: var(--cs-accent-soft); border-color: var(--cs-accent-line); }
 .part-cs .cs-list-empty { padding: 24px 6px; }
 /* 목록 줄의 두 검토 표시 (문구 · CS) */
