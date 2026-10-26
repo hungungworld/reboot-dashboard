@@ -1167,10 +1167,15 @@
     const drag = dockable('price', 'summary-' + REBOOT.today(), { title: `1회분 단가 요약 (${REBOOT.today()})`,
       text: `최저 ${money(low.perServing)} (${low.brand}) · 보통 ${money(median)} (${n}개 기준) · 알디콤 ${own ? money(own.perServing) : '—'} (${ownSub})`,
       href: '/dashboard/insights#market/price', data: { min: low.perServing, minBrand: low.brand, median, products: n, own: own ? own.perServing : null } });
-    return `<div class="ins-stats three"${drag}>
+    // REBOOT (출시 전 · 사양서 가격) — 알디콤과 따로 · 순위 · 보통 가격 계산에는 안 넣음
+    const rb = S.data.shelf && S.data.shelf.reboot;
+    const rbStat = rb && rb.perUnit != null ? `<div class="ins-stat" title="${esc(rb.basis)}"><span>REBOOT 1개 · 1병당 ${badge('예시', 'orange')}</span>
+      <b>${esc(money(rb.perUnit))}${rb.maxUnit > rb.perUnit ? `<small class="ins-sub"> ~ ${esc(money(rb.maxUnit))}</small>` : ''}</b><small>출시 전 · 사양서 가격 · 순위에 안 넣음</small></div>` : '';
+    return `<div class="ins-stats${rbStat ? '' : ' three'}"${drag}>
       <div class="ins-stat"><span>최저 1회분</span><b>${esc(money(low.perServing))}</b><small>${esc(low.brand)}</small></div>
       <div class="ins-stat"><span>보통 가격 ${infoTip(TIP.median)}</span><b>${esc(money(median))}</b><small>${n}개 기준</small></div>
       <div class="ins-stat${own ? ' own-soft' : ' red'}"><span>알디콤 1회분</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small>${own ? gauge : ''}</div>
+      ${rbStat}
     </div>`;
   }
 
@@ -2223,12 +2228,30 @@
     const pad = pages > 1 ? `<tr class="ins-pad" aria-hidden="true"><td colspan="${cols.length}"></td></tr>`.repeat(MK_PAGE - shown.length) : '';   // 마지막 페이지도 표 높이 그대로
     return bar + `<div class="table-wrap"><table class="data-table ins-table ins-fixed ins-brands"${fc.attr}>${fc.group}
       <thead><tr>${head}</tr></thead>
-      <tbody>${own.concat(shown).map(brandRow).join('')}${pad}</tbody></table></div>` +
+      <tbody>${own.map(brandRow).join('')}${rebootRow(q, f)}${shown.map(brandRow).join('')}${pad}</tbody></table></div>` +
       compPager(cur, pages, rows.length, (cur - 1) * MK_PAGE + 1, (cur - 1) * MK_PAGE + shown.length, 'mk-page', '브랜드 표 페이지');
   }
   function drawBrandTable() {
     const box = $(panel('market'), '[data-ref="brand-body"]');
     if (box && S.data.shelf && S.data.competitors) { keepFocus(() => { box.innerHTML = brandTable(); }); placeMkPop(box); }
+  }
+
+  // REBOOT 줄 (알디콤 바로 아래 · 출시 전이라 진열대 데이터 없음 · 설정 › 제품 정보 사양서 가격 · 예시)
+  // 판매처 · 재고 · 주시 · AI · 구분 필터를 켜면 숨김 (진열대 값이 없어 그 조건으로 고를 수 없음)
+  function rebootRow(q, f) {
+    const rb = S.data.shelf && S.data.shelf.reboot;
+    if (!rb || !rb.items.length || f.ch || f.stock || f.watch || f.ai || f.tier || (q && !'reboot 리부트'.includes(q))) return '';
+    if (f.form && !rb.items.some(x => x.form === f.form)) return '';
+    const price = COMP_PRICE.find(x => x[0] === f.price);
+    if (price && !price[2](rb.perUnit)) return '';
+    const forms = [...new Set(rb.items.map(x => FORM_KO[x.form] || '기타'))].join(' · ');
+    const prices = rb.items.map(x => `${x.ko || x.title} ${money(x.price)}${x.priceBox ? ` · 3병 ${money(x.priceBox)}` : ''}`).join('\n');
+    return `<tr class="ins-br ins-own-row" data-brand-row="REBOOT" title="${esc(rb.basis)}">
+      <td><div class="ins-br-name"><span class="ins-tg none" aria-hidden="true"></span><b class="ins-bn-t ins-own-name">REBOOT</b>${badge('예시', 'orange')}</div></td>
+      <td class="ins-fms">${esc(forms)}</td>
+      <td title="${esc(prices)}">사양서 ${esc(money(Math.min(...rb.items.map(x => x.price))))}~</td>
+      <td class="num"><span class="ins-ps">${esc(money(rb.perUnit))}</span><small class="ins-ps-f">1개 · 1병당</small></td>
+      <td><span class="muted">—</span></td><td><span class="muted">출시 전</span></td><td class="num">—</td><td>${esc(rb.label)}</td></tr>`;
   }
 
   // 회분을 못 읽어 1회로 계산한 값 → 데이터 관리에서 고치기

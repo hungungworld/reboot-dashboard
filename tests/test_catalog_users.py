@@ -47,6 +47,21 @@ def test_facts_seeded_and_update_rules(auth_client):
     assert auth_client.put("/api/facts/unknown", json={"name": "x"}).status_code == 404
 
 
+def test_facts_reseed_updates_untouched_rows_only(app, auth_client):
+    from server.catalog import service
+    from server.catalog.models import FactRecord
+    from server.extensions import db
+    assert auth_client.put("/api/facts/jelly_original", json={"price_box": "9.5", "zero_sugar": 1}).get_json()["price_box"] == 9.5
+    with app.app_context():
+        stale = db.session.get(FactRecord, "jelly_balance")
+        stale.data = '{"id": "jelly_balance", "price": 1}'   # 예전 초기값
+        db.session.commit()
+        assert service.seed_facts() == 1                     # 안 고친 줄만 갱신
+        assert service.get_product("jelly_balance")["sugar"].startswith("0.5 g")
+        assert service.get_product("jelly_original")["price_box"] == 9.5   # 사람이 고친 줄은 그대로
+        assert service.seed_facts() == 0
+
+
 def test_users_admin_only(client, login):
     login(email="member@reboot.test")
     assert client.get("/api/users").status_code == 403

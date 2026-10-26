@@ -19,7 +19,8 @@ from .models import FactRecord, Season
 SEASON_CATEGORIES = ("holiday", "sports", "occasion")
 BRAND_FIELDS = ("name", "base_company", "market", "founded", "intro", "slogan", "colors", "character", "cm_song", "category")
 PRODUCT_FIELDS = ("name", "ko", "category", "form", "flavors", "flavor_status", "pack", "direction", "ingredients", "volume",
-                  "usage", "consumer_name", "price", "cost", "evidence", "sources", "allergens", "notes")
+                  "usage", "consumer_name", "price", "cost", "evidence", "sources", "allergens", "notes",
+                  "pack_count", "price_box", "sugar", "calories", "zero_sugar")
 EVIDENCE = ("확인 필요", "확인 완료")
 FLAVOR_STATUS = ("provisional", "confirmed")
 
@@ -141,16 +142,22 @@ def _seed_file():
 
 
 def seed_facts():
-    if db.session.query(FactRecord.entity).first() is not None:
-        return 0
+    """products.json → DB. 없는 줄은 넣고, 아무도 고치지 않은 줄(초기값)은 파일 값으로 갱신 · 사람이 고친 줄은 그대로."""
     data = _seed_file()
-    db.session.add(FactRecord(entity="brand", kind="brand", sort=0, data=json.dumps(data["brand"], ensure_ascii=False),
-                              updated_by="초기값"))
-    for i, p in enumerate(data["products"], start=1):
-        db.session.add(FactRecord(entity=p["id"], kind="product", sort=i, data=json.dumps(p, ensure_ascii=False),
-                                  updated_by="초기값"))
+    rows = [("brand", "brand", 0, data["brand"])] + [(p["id"], "product", i, p) for i, p in enumerate(data["products"], start=1)]
+    changed = 0
+    for entity, kind, sort, value in rows:
+        text = json.dumps(value, ensure_ascii=False)
+        r = db.session.get(FactRecord, entity)
+        if r is None:
+            db.session.add(FactRecord(entity=entity, kind=kind, sort=sort, data=text, updated_by="초기값"))
+        elif r.updated_by == "초기값" and r.parsed() != value:
+            r.data = text
+        else:
+            continue
+        changed += 1
     db.session.commit()
-    return len(data["products"]) + 1
+    return changed
 
 
 def facts_version():
@@ -192,7 +199,9 @@ def update_facts(entity, patch, user=""):
             raise ValueError("근거 상태는 '확인 필요' 또는 '확인 완료'입니다.")
         if k == "flavor_status" and v not in FLAVOR_STATUS:
             raise ValueError("맛 상태는 provisional(임시) 또는 confirmed(확정)입니다.")
-        if k in ("price", "cost") and v not in (None, ""):
+        if k == "zero_sugar":
+            v = bool(v)
+        if k in ("price", "cost", "price_box") and v not in (None, ""):
             try:
                 v = round(float(v), 2)
             except (TypeError, ValueError):

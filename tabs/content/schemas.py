@@ -113,6 +113,13 @@ CARDNEWS = _obj({
     })},
 })
 
+# 카드뉴스 내용 정리 (cardnews_tidy_v1) — 넣은 자료 + 제품 정보 → '1장 / 2장' 원고
+CARDNEWS_TIDY = _obj({
+    "text": _STR,
+    "needs_check": _STR_LIST,
+    "note_ko": _STR,
+})
+
 # 카드뉴스 AI 배경 추천 (cardnews_bg_plan_v1) — 카드마다 쓸지 · 장면 · 이유
 CARDNEWS_BG_PLAN = _obj({"cards": {"type": "array", "items": _obj({
     "index": {"type": "integer"},

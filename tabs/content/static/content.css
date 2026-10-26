@@ -584,6 +584,11 @@
 .part-content .cnt-cn-step .stepnum { width: 22px; height: 22px; font-size: 11px; }
 .part-content .cnt-cn-source { width: 100%; min-height: 150px; resize: vertical; }
 .part-content .cnt-cn-srcbar { margin-top: 6px; gap: 8px; flex-wrap: wrap; }
+.part-content .cnt-cn-srcbar > .flex { flex-wrap: wrap; gap: 6px; }
+/* AI로 내용 정리 뒤 안내 (확인할 것 · 되돌리기) */
+.part-content .cnt-cn-tidy { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.6; }
+.part-content .cnt-cn-tidy > span { flex: 1; min-width: 0; }
+.part-content .cnt-cn-tidy .btn { flex: none; }
 .part-content .cnt-cn-opts { display: grid; grid-template-columns: 70px 1fr; gap: 8px 12px; align-items: center; }
 .part-content .cnt-cn-opts .field-label { margin: 0; }
 .part-content .cnt-cn-tpls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
