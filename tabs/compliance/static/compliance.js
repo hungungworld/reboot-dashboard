@@ -196,23 +196,42 @@
     return Array.isArray(h) ? h : [];
   }
 
-  function saveHistory(list) { store.set(KEY.history, list.slice(0, 500)); }
+  // 1,000건까지 (2026-10-26: 일괄 심의도 기록하면서 500줄 한 번에 예전 기록이 다 밀려나지 않게 · 1건 약 0.5KB → 서버 한도 3MB 안)
+  const HIST_MAX = 1000;
+  function saveHistory(list) { store.set(KEY.history, list.slice(0, HIST_MAX)); }
 
   // 점검 기록: 마케터가 자기 대시보드에서 쓰므로 승인·반려 없이 심의할 때마다 저장합니다 (2026-10-25부터 입력하면 자동 심의).
   // 같은 문구·채널·제품·기준을 연달아 심의하면 맨 위 한 줄만 갱신합니다. (예전 '검토 요청' 이력도 그대로 읽힘)
   // 자동 심의이라 글을 쓰는 중간 문장이 쌓이지 않게, 2분 안에 같은 문장을 이어 쓰거나 지운 것도 같은 줄로 봄
+  // 점검한 사람 (2026-10-26 최종 검토: 기록에 '누가'가 없었음 · 로그인 이름 → 이메일)
+  function checkerName() {
+    try { const u = REBOOT.user() || {}; return u.name || u.email || ''; } catch (e) { return ''; }
+  }
+
+  function historyEntry(text, r, extra) {
+    return Object.assign({ id: uid(), text, channel: r.channel, category: r.category, product: r.product || '',
+      verdict: r.verdict, legal: r.legal || '', codes: r.codes, checkedAt: Date.now(), by: checkerName(),
+      // 당시 규칙 버전과 걸린 표현 (나중에 규칙이 바뀌어도 '왜 그렇게 판정했는지' 재현 · GPT 검토 ㉛)
+      rulesVersion: DATA.version, hits: r.findings.map(f => ({ code: f.code, verdict: f.verdict, terms: f.terms.slice(0, 5) })) }, extra || {});
+  }
+
   function recordCheck(text, r) {
     const list = loadHistory();
     const top = list[0];
-    const editing = top && Date.now() - (top.checkedAt || 0) < 2 * 60 * 1000 && (text.startsWith(top.text) || top.text.startsWith(text));
-    const same = top && (top.text === text || editing) && top.channel === r.channel
+    const editing = top && !top.batch && Date.now() - (top.checkedAt || 0) < 2 * 60 * 1000 && (text.startsWith(top.text) || top.text.startsWith(text));
+    const same = top && !top.batch && (top.text === text || editing) && top.channel === r.channel
       && (top.category || 'FOOD') === r.category && (top.product || '') === (r.product || '');
-    const entry = { id: same ? top.id : uid(), text, channel: r.channel, category: r.category, product: r.product || '',
-      verdict: r.verdict, codes: r.codes, checkedAt: Date.now(),
-      // 당시 규칙 버전과 걸린 표현 (나중에 규칙이 바뀌어도 '왜 그렇게 판정했는지' 재현 · GPT 검토 ㉛)
-      rulesVersion: DATA.version, hits: r.findings.map(f => ({ code: f.code, verdict: f.verdict, terms: f.terms.slice(0, 5) })) };
+    const entry = historyEntry(text, r, same ? { id: top.id } : null);
     if (same) list[0] = entry; else list.unshift(entry);
     saveHistory(list);
+  }
+
+  // 일괄 심의 결과도 점검 기록에 남김 (2026-10-26 최종 검토: 예전엔 단건만 남아 일괄 검수의 증빙이 없었음)
+  // rows: [{ text, ko, r }] · batch: 같은 파일·설정 묶음 id (같은 묶음을 다시 그려도 두 번 쌓지 않게 호출하는 쪽에서 막음)
+  function recordBatch(rows, batch) {
+    const now = Date.now();
+    const entries = rows.map((x, i) => historyEntry(x.text, x.r, Object.assign({ batch, checkedAt: now - i }, x.ko ? { ko: x.ko } : {})));
+    saveHistory(entries.concat(loadHistory()));
   }
 
   // 기록은 저장 당시 판정을 갖고 있지만, 규칙이 바뀌면(예: R11·R12 끄기) 지금 규칙으로 다시 판정해 보여 줍니다.
@@ -768,14 +787,24 @@
     }
     // AI 2차 판정이 BLOCK인데 규칙은 통과시킨 경우 → 복사 전에 한 번 더 확인 (GPT 검토 ⑨)
     const aiVerdict = r && j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : '';
-    const needConfirm = canCopy && aiVerdict === 'BLOCK';
-    if (needConfirm) {
+    // 검토 요청에 '반려' 회신이 있으면 복사 전에 한 번 더 확인 (2026-10-26 최종 검토 · 회신이 결과에 반영되지 않던 문제)
+    const rejected = !!r && REVIEW_REQS.some(q => q.text === text && Object.values(q.teams || {}).some(t => t && t.status === '반려'));
+    const needConfirm = canCopy && (aiVerdict === 'BLOCK' || rejected);
+    let confirmMsg = '';
+    if (needConfirm && rejected) {
+      tone = 'BLOCK';
+      title = '검토 요청에서 반려됐어요';
+      sub = `규칙 판정은 ${LABEL[r.verdict]} · 아래 회신 이유를 확인하고 고치는 걸 권해요`;
+      big = '확인 후 쓰세요';
+      confirmMsg = '이 문구는 검토 요청에서 반려됐어요.\n회신 이유를 확인했고, 그래도 복사할까요?';
+    } else if (needConfirm) {
       tone = 'BLOCK';
       title = 'AI가 사용 불가로 봤어요';
       sub = `규칙 판정은 ${LABEL[r.verdict]} · 아래 AI 이유를 확인하고 고치는 걸 권해요`;
       big = '확인 후 쓰세요';
+      confirmMsg = 'AI 2차 심의가 이 문구를 사용 불가로 봤어요.\n규칙에는 걸리지 않았지만 AI가 위험하다고 본 이유를 확인했고, 그래도 복사할까요?';
     }
-    return { r, canCopy, needConfirm, tone, title, sub, big };
+    return { r, canCopy, needConfirm, confirmMsg, aiVerdict, rejected, tone, title, sub, big };
   }
 
   /** 입력 방식 전환 (직접 입력 · CSV 업로드) — 두 화면의 카드 머리에 같은 버튼 */
@@ -874,12 +903,21 @@
     box.innerHTML = HIST_FILTERS.map(([id, label]) => `<button type="button" data-act="kpi" data-filter="${id}" aria-pressed="${id === cur}">${label} <span class="n">${verdicts.filter(v => matchFilter(v, id)).length}</span></button>`).join('');
   }
 
+  // Balance 제품에 'Zero Sugar'를 쓰면 법적 조건 한 줄 (21 CFR 101.60(c)(1) · 2026-10-26 최종 검토) — 안전 안내라 화면에 남김
+  function zeroSugarNote(text, r) {
+    const p = (DATA.products || []).find(x => x.id === r.product);
+    if (!p || !p.zeroSugar || !/zero[\s-]*sugar|sugar[\s-]*free|제로\s*슈[가거]|무설탕/i.test(text)) return '';
+    const hasDisclaimer = /not\s+a\s+(?:low|reduced)[\s-]*calorie\s+food|not\s+for\s+weight\s+control/i.test(text);
+    return `<p class="cmp-note">${hasDisclaimer ? '' : "<b>'Not a low calorie food'를 함께 적어야 해요</b> (Balance 열량 40 kcal · 저칼로리 아님) · "}Zero Sugar를 쓸 때마다 · 당 원료(감미료 배합) 조건은 출시 전 확인 · 표기는 'Zero Sugar'로 통일</p>`;
+  }
+
   /** 한 문구 결과: 확인할 항목 카드 (판정 · 이름 · 걸린 표현 · 수정 방향 → 이유와 근거는 자세히 창) */
   function resultHTML(text, r) {
     return `
 <div class="cmp-result">
   ${variantNote(r)}
   ${uncheckedHTML(r)}
+  ${zeroSugarNote(text, r)}
   ${r.verdict === 'PASS' ? passBoxHTML(text, r) : ''}
   ${r.findings.map(f => {
     const pl = plainOf('rules', f.code);
@@ -1191,8 +1229,12 @@
     }
     const rqBtn = p.querySelector('.cmp-more-acts [data-act="rq-open"]');
     rqBtn.disabled = !s.r;
-    rqBtn.title = s.r ? '걸린 규칙을 엑셀 요청서로 정리하고, 메일로 보내 팀마다 회신 링크로 답을 받아요' : '영어 문구를 입력하면 쓸 수 있어요';
+    rqBtn.title = !s.r ? '영어 문구를 입력하면 쓸 수 있어요'
+      : s.r.legal === 'red' ? '법 위반(🔴) 표현은 법무 검토로도 풀리지 않아요 — 표현을 바꾼 뒤 요청하세요'
+      : '걸린 규칙을 엑셀 요청서로 정리하고, 메일로 보내 팀마다 회신 링크로 답을 받아요';
     el('rq-rec').hidden = !(s.r && s.r.legal === 'yellow');   // 법무 확인(회색지대)이면 검토 요청 권장
+    // 🟡 법무 확인이거나, 규칙은 통과했지만 AI가 사용 불가로 본 경우 검토 요청을 눈에 띄게 (2026-10-26 최종 검토)
+    rqBtn.classList.toggle('cmp-primary', !!s.r && s.r.legal !== 'red' && (s.r.legal === 'yellow' || s.aiVerdict === 'BLOCK'));
     paintReviews(p, j);
     const aiBtn = p.querySelector('.cmp-more-acts [data-act="ai"]');
     serverHealth().then(h => {
@@ -1285,8 +1327,8 @@
       if (!res.ok) return;
       REVIEW_REQS = (await res.json()).items || [];
     } catch (e) { return; }
-    const p = root.querySelector('[data-sub="single"]');
-    if (p) paintReviews(p, loadJourney());
+    // 회신('반려')이 복사 확인·안내에 바로 반영되게 단건 화면 전체를 다시 그림 (2026-10-26)
+    if (root.querySelector('[data-sub="single"]')) paintSingle(root);
   }
 
   const RQ_ST = { '대기': 'wait', '승인': 'ok', '수정 필요': 'fix', '반려': 'no' };
@@ -1634,7 +1676,7 @@
         // BLOCK 문구는 복사 버튼이 나오지 않지만, 혹시 상태가 바뀌었으면 한 번 더 막음
         const s = journeyState(j);
         if (!s.canCopy) return toast('사용 불가 문구는 복사할 수 없어요. 표현을 바꾼 뒤 다시 심의하세요.');
-        if (s.needConfirm && !global.confirm('AI 2차 심의가 이 문구를 사용 불가로 봤어요.\n규칙에는 걸리지 않았지만 AI가 위험하다고 본 이유를 확인했고, 그래도 복사할까요?')) return;
+        if (s.needConfirm && !global.confirm(s.confirmMsg)) return;
         copyText(j.text.trim()).then(ok => toast(ok
           ? (s.r.verdict === 'PASS' ? '문구를 복사했어요. 규칙 미탐지는 법적 승인이 아니니 최종 확인은 직접 해 주세요.' : `문구를 복사했어요. '${LABEL[s.r.verdict] || s.r.verdict}' 판정 이유를 확인하고 쓰세요.`)
           : '복사하지 못했어요. 문구 칸에서 직접 복사하세요.'));
@@ -1868,6 +1910,7 @@
     const dlBtn = p.querySelector('[data-act="download"]');
     let rows = null;      // [{ src, ko, en, note, channel, product, category, colChannel, colProduct }]
     let results = null;
+    let recordedKey = '';   // 마지막으로 점검 기록에 남긴 묶음
 
     function judge(x) {
       const opts = { channel: x.channel, product: x.product, category: x.category || 'FOOD' };
@@ -1904,6 +1947,13 @@
 </table></div>
 ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린 표현을 누르면 이유·대체 방향·관련 기관을 볼 수 있어요.</p>' : ''}`;
       dlBtn.disabled = false;
+      // 점검 기록에 남김 — 같은 문구·채널·제품 묶음이면 다시 쌓지 않음 (번역이 끝나 다시 그릴 때 등)
+      const key = JSON.stringify(results.map(y => [y.x.src, y.x.en || '', y.x.channel, y.x.product, y.x.category || 'FOOD']));
+      if (key !== recordedKey) {
+        recordedKey = key;
+        recordBatch(results.map(y => ({ text: y.x.ko && y.x.en ? y.x.en : y.x.src, ko: y.x.ko ? y.x.src : '', r: y.r })), uid());
+        paintKpis(root);
+      }
     }
 
     /** 한국어 줄만 모아 서버에서 한 번에 번역 → 실패하면 fallback(더미의 예시 번역) 또는 한국어만 심의 */
@@ -2051,7 +2101,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
   <button type="button" class="cmp-hrow-text" data-act="hist-open" aria-expanded="false" title="눌러서 전체 문구 보기">${esc(item.text.replace(/\s+/g, ' ').trim())}</button>
   <span class="cmp-hrow-where" title="${esc(channelLabel(r.channel))}${r.product ? ` · ${esc(productLabel(r.product))}` : ''}">${where}</span>
   <span class="cmp-hrow-hits">${hitN ? `${hitN}개 · ${r.codes.map(esc).join(' ')}` : '없음'}</span>
-  <span class="cmp-hrow-time" title="${esc(fmt(ts))}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}">${histTime(ts)}</span>
+  <span class="cmp-hrow-time" title="${esc(fmt(ts))}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}${item.by ? ` · 점검 ${esc(item.by)}` : ''}${item.batch ? ' · 일괄 심의' : ''}">${histTime(ts)}${item.by || item.batch ? `<small class="cmp-muted"> · ${[item.batch ? '일괄' : '', esc(item.by || '')].filter(Boolean).join(' · ')}</small>` : ''}</span>
   <span class="cmp-hrow-acts">
     ${ko ? '' : REBOOT.ui.trBtn()}
     <button type="button" class="cmp-icon-btn" data-act="hist-copy" aria-label="문구 복사" title="${block ? '사용 불가 문구는 복사할 수 없어요' : '문구 복사'}"${block ? ' disabled' : ''}>${icon('copy')}</button>
@@ -2099,7 +2149,7 @@ ${rest.length ? `<div class="cmp-hist-rest" data-day="${esc(day)}"${open ? '' : 
 <button type="button" class="cmp-link-btn cmp-hist-fold" data-act="hist-fold" data-day="${esc(day)}" aria-expanded="${open}">${open ? '접기' : `펼치기 · ${rest.length}건 더`}</button>` : ''}`;
   }
   function histHay(item, r) {   // 검색 대상: 문구 · 채널 · 제품 · 규칙 코드 · 걸린 표현
-    return [item.text, channelLabel(r.channel), r.product ? productLabel(r.product) : '', ...r.codes, ...r.findings.flatMap(f => f.terms)].join(' ').toLowerCase();
+    return [item.text, item.ko || '', item.by || '', channelLabel(r.channel), r.product ? productLabel(r.product) : '', ...r.codes, ...r.findings.flatMap(f => f.terms)].join(' ').toLowerCase();
   }
 
   function renderHistory(root) {
@@ -2110,7 +2160,7 @@ ${rest.length ? `<div class="cmp-hist-rest" data-day="${esc(day)}"${open ? '' : 
   <label class="cmp-hist-search">${icon('search')}<input type="search" data-el="hist-q" value="${esc(p.dataset.q || '')}" placeholder="문구 · 채널 · 제품 · 걸린 표현 검색" aria-label="점검 기록 검색"></label>
 </div>
 <section class="cmp-card cmp-paper cmp-hist-table" data-el="hist-list"></section>
-<p class="cmp-paper-note">팀 공용 서버에 최근 500건까지 남아요. 문구를 누르면 전체 문구와 걸린 표현이 펼쳐지고, 걸린 표현을 누르면 자세한 설명 창이 열려요.</p>`;
+<p class="cmp-paper-note">팀 공용 서버에 최근 ${HIST_MAX.toLocaleString()}건까지 남아요 (일괄 심의 포함 · 시간에 마우스를 올리면 점검한 사람). 문구를 누르면 전체 문구와 걸린 표현이 펼쳐지고, 걸린 표현을 누르면 자세한 설명 창이 열려요.</p>`;
     paintKpis(root);
     paintHistList(root);
   }

@@ -20,12 +20,12 @@ from server import jobs, worklog
 from server.core.ai import AIError
 from server.extensions import db
 from server.models import iso, utcnow
-from . import assets, brandkit, media, prompts, providers, repository, review, schemas
+from . import assets, brandkit, higgsfield, media, prompts, providers, repository, review, schemas
 from .models import ContentJob, ContentVersion
 
 LAYOUTS = ("cover", "list", "quote", "stat", "outro")
 LAYOUT_LABELS = {"cover": "표지", "list": "목록", "quote": "인용", "stat": "숫자", "outro": "마무리"}
-TEMPLATES = ("neon", "clean", "photo")    # 화면 data.js cardnews.templates와 같은 ID (CSS .cnt-cn-t-<ID>)
+TEMPLATES = ("neon", "clean", "photo", "block")    # 화면 data.js cardnews.templates와 같은 ID (CSS .cnt-cn-t-<ID>)
 RATIOS = ("1:1", "4:5")
 TONES = {"info": "정보형 — 차분하고 정확하게", "casual": "캐주얼 — 친구에게 말하듯 가볍게",
          "hook": "후킹형 — 첫 장에서 멈추게 하는 강한 문장"}
@@ -328,9 +328,12 @@ BG_ZONE = {  # 템플릿마다 글자가 올라가는 자리를 비워 두게 �
              "a designer will place dark headline text there. Put the main subject in the lower half.",
     "photo": "Keep the lower 45% of the frame simple and uncluttered; a white text box will cover it. "
              "Put the main subject in the upper half.",
+    "block": "Keep the top 45% of the frame dark, calm and uncluttered (deep black); "
+             "a designer will place neon headline text there. Put the main subject in the lower half.",
 }
 BG_MOOD = {"neon": "dark, moody studio with neon lime (#E4FA18) accent lighting", "clean": "bright, airy, clean white studio",
-           "photo": "natural, vivid lifestyle photography"}
+           "photo": "natural, vivid lifestyle photography",
+           "block": "high-contrast photography on a deep black background, bold graphic look"}
 BG_SAFE = ("No alcohol, no drinking scenes, no bars or bottles of liquor, no medicine or pills, no people who look sick or tired. "
            "No guns or revolver shapes.")
 
@@ -338,6 +341,7 @@ BG_SAFE = ("No alcohol, no drinking scenes, no bars or bottles of liquor, no med
 def bg_dict(j):
     s = j.snapshot or {}
     return {"id": j.id, "cardId": s.get("card_id"), "status": j.status, "error": j.error, "file": s.get("file"),
+            "provider": s.get("provider") or "openai",
             "url": repository.file_url(s.get("file")) if s.get("file") else None, "visual": s.get("visual", ""),
             "createdAt": iso(j.created_at)}
 
@@ -354,13 +358,18 @@ def default_visual(c, deck):
             "Reboot jelly pouches or bottles as the hero, with props that fit the message.")
 
 
-def start_backgrounds(c, items, deck, *, user):
-    """items: [{id, visual}] → 작업 목록. 카드마다 작업 하나 (실패해도 다른 카드는 그대로)."""
+def start_backgrounds(c, items, deck, *, user, provider="openai"):
+    """items: [{id, visual}] → 작업 목록. 카드마다 작업 하나 (실패해도 다른 카드는 그대로).
+    provider: openai · higgsfield (Higgsfield는 4:5가 없어 가장 가까운 3:4로 만들고 카드에 꽉 채워 깜)"""
     sheet = repository.sheet_of(c)
     decisions = c.decisions
-    per_product = assets.product_flavors_of(decisions, sheet["product_ids"], repository.products_index())
+    pids = repository.ref_product_ids(sheet)  # 브랜드 자체를 골랐으면 전 제품 사진을 참고
+    per_product = assets.product_flavors_of(decisions, pids, repository.products_index())
     choice = assets.character_choice(decisions)
-    model, size = providers.image_model(), media.image_size(deck["ratio"])
+    if provider == "higgsfield":
+        model, size = higgsfield.IMAGE_MODEL, higgsfield.nearest_ratio(deck["ratio"], higgsfield.IMAGE_RATIOS, "3:4")
+    else:
+        provider, model, size = "openai", providers.image_model(), media.image_size(deck["ratio"])
     out = []
     for it in items:
         visual = _clip(it.get("visual"), 400)
@@ -371,8 +380,8 @@ def start_backgrounds(c, items, deck, *, user):
         character = choice == "사용" or (choice == "AI 판단" and "rebu" in visual.lower())
         job = ContentJob(id=secrets.token_hex(16), campaign_id=c.id, kind=BG_KIND, status="queued", model=model, size=size,
                          instructions=visual, created_by=user)
-        job.snapshot = {"provider": "openai", "card_id": card["id"], "visual": visual, "template": deck["template"],
-                        "ratio": deck["ratio"], "layout": card["layout"], "product_ids": sheet["product_ids"],
+        job.snapshot = {"provider": provider, "card_id": card["id"], "visual": visual, "template": deck["template"],
+                        "ratio": deck["ratio"], "layout": card["layout"], "product_ids": pids,
                         "per_product": per_product, "character": character, "ref_skip": assets.ref_skip_of(decisions)}
         db.session.add(job)
         out.append(job)
@@ -402,16 +411,25 @@ def run_bg_job(job_id):
     db.session.commit()
     snap = dict(job.snapshot)
     started = time.time()
+    hf = snap.get("provider") == "higgsfield"
     try:
         pids = snap.get("product_ids") or []
         refs = (assets.pick_refs(pids, per_product=snap.get("per_product") or {}, character=bool(snap.get("character")),
-                                 limit=BG_REFS, skip=snap.get("ref_skip") or ()) if providers.image_supports_edit(job.model) else [])
+                                 limit=min(BG_REFS, assets.HIGGSFIELD_MAX_REFS) if hf else BG_REFS, skip=snap.get("ref_skip") or ())
+                if hf or providers.image_supports_edit(job.model) else [])
         job.prompt = bg_prompt(snap, refs, brandkit.product_facts(pids))
         db.session.commit()  # 프롬프트가 있으면 '제공사에 보냄'으로 봄 (멈추면 자동 재제출 없이 결과 확인 불가)
-        if refs:
-            png, usage = providers.edit_image([str(assets.path_of(a)) for a in refs], job.prompt, job.size, job.model)
+        paths = [str(assets.path_of(a)) for a in refs]
+        if hf:
+            body = {"prompt": job.prompt, "aspect_ratio": job.size, "resolution": higgsfield.IMAGE_RESOLUTION}
+            png, usage = media._hf_run(job, higgsfield.IMAGE_MODEL, body, paths)
+            snap = dict(job.snapshot)  # 요청 ID가 들어감
+        elif refs:
+            png, usage = providers.edit_image(paths, job.prompt, job.size, job.model)
         else:
             png, usage = providers.generate_image(job.prompt, job.size, job.model)
+    except media.Canceled as e:
+        return _bg_fail(job, str(e), "canceled")
     except providers.SubmissionUnknown as e:
         return _bg_fail(job, str(e), "submission_unknown")
     except providers.ProviderError as e:
@@ -433,8 +451,8 @@ def run_bg_job(job_id):
     job.status, job.finished_at = "succeeded", utcnow()
     db.session.commit()
     worklog.add("content", "AI 프롬프트", "카드뉴스 AI 배경 생성",
-                detail={"model": job.model, "size": job.size, "prompt": job.prompt[:1500], "campaign": job.campaign_id,
-                        "references": len(refs), "usage": usage}, user_name=job.created_by)
+                detail={"provider": snap.get("provider"), "model": job.model, "size": job.size, "prompt": job.prompt[:1500],
+                        "campaign": job.campaign_id, "references": len(refs), "usage": usage}, user_name=job.created_by)
 
 
 def _bg_fail(job, message, status="failed"):
