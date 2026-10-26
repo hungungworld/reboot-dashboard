@@ -511,6 +511,48 @@
   background: linear-gradient(180deg, rgba(255, 255, 255, .95) 0%, rgba(255, 255, 255, .7) 36%, rgba(255, 255, 255, 0) 62%, rgba(255, 255, 255, .55) 100%); }
 .part-content .cnt-cn-card.cnt-cn-full.cnt-cn-t-photo::after { background: linear-gradient(180deg, rgba(0, 0, 0, 0) 78%, rgba(0, 0, 0, .35) 100%); }
 
+/* 네온 블록 — 검정 · 네온 색 블록을 레이아웃마다 번갈아 (표지 · 인용 · 숫자 = 검정, 목록 · 마무리 = 네온)
+   장식(버스트 · 점 격자)은 카드 ::before 하나로 그림 (::after는 전체 배경 그라데이션이 씀) */
+.part-content .cnt-cn-card.cnt-cn-t-block { --cn-bg: #0c0d0f; --cn-ink: #fff; --cn-muted: rgba(255, 255, 255, .7); --cn-accent: #e4fa18;
+  --cn-line: rgba(255, 255, 255, .18); --cn-em-bg: transparent; --cn-em-ink: #e4fa18; --cn-cta-bg: #e4fa18; --cn-cta-ink: #0c0d0f; }
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-list,
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-outro { --cn-bg: #e4fa18; --cn-ink: #0c0d0f; --cn-muted: rgba(12, 13, 15, .72);
+  --cn-accent: #0c0d0f; --cn-line: rgba(12, 13, 15, .22); --cn-em-bg: #0c0d0f; --cn-em-ink: #e4fa18; --cn-cta-bg: #0c0d0f; --cn-cta-ink: #e4fa18; }
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-title { font-weight: 640; letter-spacing: -.025em; line-height: 1.08; }
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-cover .cnt-cn-title { color: var(--cn-accent); }
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-cover .cnt-cn-em { color: #fff; }
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-photo { border-radius: 0; }
+.part-content .cnt-cn-card.cnt-cn-t-block::before { content: ""; position: absolute; z-index: 2; pointer-events: none; }
+/* 버스트(✳) — 가는 부채꼴을 원으로 잘라 모서리에 반쯤 걸침 */
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-cover::before,
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-outro::before,
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-stat::before { top: -210px; right: -210px; width: 420px; height: 420px;
+  background: repeating-conic-gradient(var(--cn-accent) 0 7deg, transparent 7deg 30deg);
+  -webkit-mask: radial-gradient(circle closest-side, #000 97%, transparent 100%); mask: radial-gradient(circle closest-side, #000 97%, transparent 100%); }
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-stat::before { top: 88px; right: 88px; width: 170px; height: 170px; }
+/* 점 격자 3×3 */
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-list::before { top: 88px; right: 88px; width: 156px; height: 156px;
+  background: radial-gradient(circle, var(--cn-accent) 0 45%, transparent 47%) 0 0 / 52px 52px; }
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-cover .cnt-cn-body,
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-outro .cnt-cn-body,
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-list .cnt-cn-body { padding-right: 150px; }
+.part-content .cnt-cn-card.cnt-cn-t-block.cnt-cn-l-stat .cnt-cn-body { padding-right: 200px; }
+/* 인용 — 큰 네온 원 안에 문구 */
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-quote { align-self: center; display: flex; align-items: center; justify-content: center;
+  width: min(100%, 640px); aspect-ratio: 1; margin: 20px 0 0; padding: 80px; border-radius: 50%; background: var(--cn-accent);
+  color: var(--cn-bg); text-align: center; font-size: calc(62px * var(--k, 1)); font-weight: 800; line-height: 1.1; overflow: hidden; }
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-quote::before { content: none; }
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-quote .cnt-cn-em { background: transparent; color: #fff; }
+/* 숫자 — 아주 큰 숫자 + 설명 아래 손글씨 밑줄 */
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-number { font-size: calc(250px * var(--k, 1)); font-weight: 800; }
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-desc::after { content: ""; display: block; width: 300px; height: 12px; margin-top: 24px;
+  border-radius: 999px; background: var(--cn-accent); transform: rotate(-2deg); }
+/* CTA — 화살표 원이 붙은 알약 */
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-cta { display: inline-flex; align-items: center; gap: 22px; padding: 14px 42px 14px 14px;
+  border: 3px solid var(--cn-cta-bg); }
+.part-content .cnt-cn-card.cnt-cn-t-block .cnt-cn-cta::before { content: "\2192"; display: inline-flex; align-items: center; justify-content: center;
+  flex: none; width: 66px; height: 66px; border-radius: 50%; border: 3px solid var(--cn-cta-ink); color: var(--cn-cta-ink); font-size: 38px; font-weight: 800; }
+
 /* 편집 화면 (PNG에는 들어가지 않음) */
 .part-content .cnt-cn-bg-modes { margin-bottom: 10px; }
 .part-content .cnt-cn-bg-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 34px; margin-bottom: 10px; }
