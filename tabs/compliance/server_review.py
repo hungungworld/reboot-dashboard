@@ -41,7 +41,7 @@ def products():
 
 
 def review(text, channel="cs", product=""):
-    """{verdict, legal, codes, hits}. 브라우저 review(text, {channel, product})와 같은 판정 (일반식품).
+    """{verdict, legal, codes, hits, items}. items = 걸린 규칙마다 {code, name, verdict, legal} (검토 요청서 엑셀용). 브라우저 review(text, {channel, product})와 같은 판정 (일반식품).
     product: 제품 id면 그 제품 기준(byProduct · 예: Original에 Zero Sugar → BLOCK) · "all"이면 4종 중 가장 엄격 (2026-10-25)"""
     if product == "all":
         res = [review(text, channel, p) for p in products()] or [review(text, channel)]
@@ -52,9 +52,17 @@ def review(text, channel="cs", product=""):
             for c, h in r["hits"].items():
                 hits.setdefault(c, h)
         legal = max((r["legal"] for r in res), key=lambda x: LIGHT_RANK[x])
-        return {"verdict": worst["verdict"], "legal": legal, "codes": codes, "hits": hits}
+        items = {}
+        for r in res:   # 규칙마다 가장 엄격한 판정·신호
+            for x in r["items"]:
+                cur = items.setdefault(x["code"], dict(x))
+                if RANK[x["verdict"]] > RANK[cur["verdict"]]:
+                    cur["verdict"] = x["verdict"]
+                if LIGHT_RANK[x["legal"]] > LIGHT_RANK[cur["legal"]]:
+                    cur["legal"] = x["legal"]
+        return {"verdict": worst["verdict"], "legal": legal, "codes": codes, "hits": hits, "items": [items[c] for c in codes]}
     src = str(text or "").replace("*", " ")
-    verdict, legal, codes, hits = "PASS", "", [], {}
+    verdict, legal, codes, hits, items = "PASS", "", [], {}, []
     for r in _rules():
         text = _mask(r, src)
         found = [m.group(0).strip() for rx in r["_re"] for m in rx.finditer(text)]
@@ -81,6 +89,7 @@ def review(text, channel="cs", product=""):
             legal = light
         codes.append(r["code"])
         hits[r["code"]] = found[:5] or ["(보상 조건 문구)" if compensated else "(후기 대가 문구)"]
+        items.append({"code": r["code"], "name": r["name"], "verdict": v, "legal": light})
         if RANK[v] > RANK[verdict]:
             verdict = v
-    return {"verdict": verdict, "legal": legal, "codes": codes, "hits": hits}
+    return {"verdict": verdict, "legal": legal, "codes": codes, "hits": hits, "items": items}

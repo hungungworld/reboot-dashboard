@@ -422,7 +422,16 @@
     const v = store.get(KEY.persona, null);
     return v && String(v.text || '').trim() ? v : PERSONA_DEFAULT;
   }
-  const LIST_MAX = 5;   // 문의함 · 고객 기록 첫 화면에 보이는 개수 (나머지는 '더 보기')
+  const LIST_MAX = 5;   // 문의함 · 고객 기록 한 페이지에 보이는 개수
+  const PG_SLOTS = 5;   // 페이지 번호 칸 수 (1–5 · 6–10 묶음)
+  // 페이지 버튼 (인사이트 구매자 리뷰 표와 같은 모양): 왼쪽 'N건 중 a–b' · 오른쪽 ‹ 번호 › — 칸 수 고정, 없는 페이지는 흐리게
+  function pagerHTML(cur, pages, total, act, unit) {
+    const from = (cur - 1) * LIST_MAX + 1, to = Math.min(cur * LIST_MAX, total);
+    const first = Math.floor((cur - 1) / PG_SLOTS) * PG_SLOTS + 1;
+    const btn = (p, label, aria) => `<button type="button" class="cs-pg${p === cur && !aria ? ' on' : ''}" data-act="${act}" data-p="${p}"${p < 1 || p > pages || (p === cur && !aria) ? ' disabled' : ''}${p === cur && !aria ? ' aria-current="page"' : ''}${aria ? ` aria-label="${aria}"` : ''}>${label}</button>`;
+    return `<div class="cs-pg-row"><span class="cs-muted">${total}${unit} 중 ${from}–${to}</span>
+      <nav class="cs-pg-nav" aria-label="목록 페이지">${btn(cur - 1, '‹', '이전 페이지')}${Array.from({ length: PG_SLOTS }, (_, k) => btn(first + k, first + k)).join('')}${btn(cur + 1, '›', '다음 페이지')}</nav></div>`;
+  }
 
   function aiNotesHTML(inq) {
     return `<div class="cs-ainotes">
@@ -660,10 +669,9 @@
       }
       const sh = e.target.closest('[data-act^="share-"]');
       if (sh && !sh.disabled) { runShare(ui, sh); return; }
-      if (e.target.closest('[data-act="list-more"]')) {
-        const key = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
-        ui.listMore = ui.listMore === key ? null : key;
-        renderList(ui);
+      const pg = e.target.closest('[data-act="list-page"]');
+      if (pg) {
+        if (!pg.disabled) { ui.listPage = { key: `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`, p: +pg.dataset.p }; renderList(ui); }
         return;
       }
       if (e.target.closest('[data-act="cust-clear"]')) { ui.custFilter = null; ui.filter = 'open'; renderList(ui); return; }
@@ -817,12 +825,19 @@
     fbox.innerHTML = VIEWS.map(([v, l]) =>
       `<button type="button" data-filter="${v}" aria-pressed="${v === ui.filter}">${l} <span class="n">${all.filter(i => pass(i, v)).length}</span></button>`).join('');
     const unread = i => !i.readAt && i.status === '답변 대기';
-    // 처음엔 LIST_MAX건만 (선택한 메일이 뒤쪽이면 모두) · 단계·필터가 바뀌면 다시 접힘
-    const moreKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
-    const all5 = ui.listMore === moreKey || shown.length <= LIST_MAX || shown.findIndex(i => i.id === ui.selected) >= LIST_MAX;
-    const visible = all5 ? shown : shown.slice(0, LIST_MAX);
-    const moreBtn = shown.length > LIST_MAX ? `<li class="cs-list-more"><button type="button" class="cs-btn cs-btn-sm" data-act="list-more">${all5 ? '접기' : `나머지 ${shown.length - LIST_MAX}건 더 보기`}</button></li>` : '';
-    ui.root.querySelector('[data-el="list"]').innerHTML = shown.length ? visible.map(i => {
+    // 한 페이지 LIST_MAX건 · 단계·필터가 바뀌면 선택한 메일이 있는 페이지(없으면 1쪽)로
+    const pageKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
+    const pages = Math.max(1, Math.ceil(shown.length / LIST_MAX));
+    const selAt = shown.findIndex(i => i.id === ui.selected);
+    const want = ui.listPage && ui.listPage.key === pageKey ? ui.listPage.p : selAt >= 0 ? Math.floor(selAt / LIST_MAX) + 1 : 1;
+    const cur = Math.min(Math.max(1, want), pages);
+    ui.listPage = { key: pageKey, p: cur };
+    const visible = shown.slice((cur - 1) * LIST_MAX, cur * LIST_MAX);
+    // 마지막 페이지도 빈 줄로 채워 목록 높이 그대로 (줄 높이는 그린 뒤 맞춤)
+    const pad = pages > 1 ? '<li class="cs-list-pad" aria-hidden="true"></li>'.repeat(LIST_MAX - visible.length) : '';
+    const moreBtn = pages > 1 ? `<li class="cs-list-pg">${pagerHTML(cur, pages, shown.length, 'list-page', '건')}</li>` : '';
+    const listEl = ui.root.querySelector('[data-el="list"]');
+    listEl.innerHTML = shown.length ? visible.map(i => {
       const late = isOpen(i) && now > due(i);
       const snippet = String(i.body || '').replace(/\s+/g, ' ').trim().slice(0, 140);
       return `
@@ -833,7 +848,9 @@
     <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span>${ui.filter === 'all' ? `<span class="cs-chip">${STAGE_NAME[stageOf(i)]}</span>` : ''}${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}${i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}${gatesMini(i)}</span></span>
   <span class="cs-row-side"><span class="cs-row-time" title="받은 시간">${fmt(i.receivedAt)}</span><span class="cs-due${late ? ' is-late' : ''}">${dueText(i)}</span></span>
 </button></li>`;
-    }).join('') + moreBtn : `<li class="cs-muted cs-list-empty">${ui.filter === 'all' ? '해당하는 문의가 없어요.' : STAGE_EMPTY[ui.sub]}</li>`;
+    }).join('') + pad + moreBtn : `<li class="cs-muted cs-list-empty">${ui.filter === 'all' ? '해당하는 문의가 없어요.' : STAGE_EMPTY[ui.sub]}</li>`;
+    const row1 = pad && listEl.querySelector('.cs-mailrow');
+    if (row1) listEl.querySelectorAll('.cs-list-pad').forEach(li => { li.style.height = `${row1.offsetHeight}px`; });
     const head = ui.root.querySelector('[data-el="listhead"]');
     if (head) head.innerHTML = `<b>${ui.filter === 'all' ? '이 고객 문의' : STAGE_NAME[ui.sub]}</b> <span class="cs-muted">${shown.length}건${shown.filter(unread).length ? ` · 안 읽음 <b>${shown.filter(unread).length}</b>` : ''}</span>`;
     const cf = ui.root.querySelector('[data-el="custfilter"]');
@@ -1533,6 +1550,8 @@ ${todoPanelHTML(inq.draft)}
         : sort === 'signal' ? (b.signals.length + b.behavior.length) - (a.signals.length + a.behavior.length) || b.list.length - a.list.length
           : b.list.length - a.list.length || b.last - a.last);
     const count = fn => all.filter(fn).length;
+    const custPages = Math.max(1, Math.ceil(shown.length / LIST_MAX));
+    const custCur = Math.min(Math.max(1, ui.custPage || 1), custPages);
     const typeText = c => Object.entries(c.types).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}${n > 1 ? `×${n}` : ''}`).join(' ');
     p.innerHTML = `
 <div class="cs-outbox">
@@ -1548,7 +1567,7 @@ ${todoPanelHTML(inq.draft)}
   </div>
   <div class="cs-actions cs-cust-tools"><button type="button" class="cs-btn cs-btn-sm" data-act="cust-all" data-open="1">모두 펼치기</button>
     <button type="button" class="cs-btn cs-btn-sm" data-act="cust-all" data-open="">모두 접기</button></div>
-  ${shown.length ? `<div class="cs-custs">${shown.slice(0, ui.custMore ? shown.length : LIST_MAX).map(c => `
+  ${shown.length ? `<div class="cs-custs">${shown.slice((custCur - 1) * LIST_MAX, custCur * LIST_MAX).map(c => `
   <details class="cs-sec cs-cust" data-email="${esc(c.email)}"${CUST_OPEN.get(c.email) ? ' open' : ''}>
     <summary><span class="cs-avatar" aria-hidden="true">${initials(c.names[0])}</span>
       <span class="cs-sec-title">${esc(c.names.join(' · '))} <span class="cs-muted cs-cust-email">${esc(c.email)}</span></span>
@@ -1569,10 +1588,10 @@ ${todoPanelHTML(inq.draft)}
       <ol class="cs-thread">${c.list.slice().reverse().map(threadHTML).join('')}</ol>
     </div>
   </details>`).join('')}</div>
-  ${shown.length > LIST_MAX ? `<div class="cs-list-more"><button type="button" class="cs-btn cs-btn-sm" data-act="cust-more">${ui.custMore ? '접기' : `나머지 ${shown.length - LIST_MAX}명 더 보기`}</button></div>` : ''}` : '<p class="cs-muted">해당하는 고객이 없어요. 보기를 \'전체 고객\'으로 바꿔 보세요.</p>'}
+  ${custPages > 1 ? `<div class="cs-list-pg">${pagerHTML(custCur, custPages, shown.length, 'cust-page', '명')}</div>` : ''}` :'<p class="cs-muted">해당하는 고객이 없어요. 보기를 \'전체 고객\'으로 바꿔 보세요.</p>'}
 </div>`;
-    p.querySelector('[data-el="cust-view"]').onchange = e => { ui.custView = e.target.value; ui.custMore = false; renderCustomers(ui, p); };
-    p.querySelector('[data-el="cust-sort"]').onchange = e => { ui.custSort = e.target.value; renderCustomers(ui, p); };
+    p.querySelector('[data-el="cust-view"]').onchange = e => { ui.custView = e.target.value; ui.custPage = 1; renderCustomers(ui, p); };
+    p.querySelector('[data-el="cust-sort"]').onchange = e => { ui.custSort = e.target.value; ui.custPage = 1; renderCustomers(ui, p); };
     const save = row => {
       const email = row.dataset.email;
       const tag = row.querySelector('[data-el="cust-tag"]').value;
@@ -1592,7 +1611,8 @@ ${todoPanelHTML(inq.draft)}
     p.onkeydown = e => { if (e.target.dataset.el === 'cust-note' && e.key === 'Enter') save(card(e.target)); };
     p.onfocusout = e => { if (e.target.dataset.el === 'cust-note' && e.target.value.trim() !== ((custTags()[card(e.target).dataset.email] || {}).note || '')) save(card(e.target)); };
     p.onclick = e => {
-      if (e.target.closest('[data-act="cust-more"]')) { ui.custMore = !ui.custMore; renderCustomers(ui, p); return; }
+      const pg = e.target.closest('[data-act="cust-page"]');
+      if (pg) { if (!pg.disabled) { ui.custPage = +pg.dataset.p; renderCustomers(ui, p); } return; }
       const all = e.target.closest('[data-act="cust-all"]');
       if (all) {
         p.querySelectorAll('details.cs-cust').forEach(d => { d.open = !!all.dataset.open; CUST_OPEN.set(d.dataset.email, d.open); });

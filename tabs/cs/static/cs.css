@@ -493,7 +493,14 @@
 .part-cs .cs-checks .cs-check input { margin-top: 2px; flex-shrink: 0; }
 .part-cs .cs-rcard .cs-share-wrap { margin-top: 0; }
 
-/* 문의함 · 고객 기록 '더 보기' (첫 화면 5건) */
-.part-cs .cs-list-more { list-style: none; display: flex; justify-content: center; padding: 12px 0 4px; }
+/* 문의함 · 고객 기록 페이지 버튼 (인사이트 구매자 리뷰 표와 같은 모양) — 목록 바닥 줄 */
+.part-cs .cs-list-pad { list-style: none; border-bottom: 1px solid transparent; }
+.part-cs .cs-list-pg { list-style: none; margin-top: 6px; padding: 10px 12px; border-top: 1px solid var(--cs-rule); border-radius: 0 0 var(--radius-sm) var(--radius-sm); background: var(--cs-soft); }
+.part-cs .cs-pg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; font-size: 12px; }
+.part-cs .cs-pg-nav { display: flex; gap: 4px; }
+.part-cs .cs-pg { width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.part-cs .cs-pg:hover:not(:disabled) { border-color: var(--ink); }
+.part-cs .cs-pg.on { background: var(--accent); border-color: var(--accent); color: var(--lime-ink); font-weight: 700; cursor: default; }
+.part-cs .cs-pg:disabled:not(.on) { opacity: .35; cursor: default; }
 /* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
 .part-cs .linetabs { overflow-y: hidden; }

@@ -347,10 +347,15 @@ p { margin: 0; line-height: 1.65; }
 .subtabs { display: flex; gap: 7px; margin-bottom: 23px; flex-wrap: wrap; }
 .subtabs button { padding: 9px 13px; border-radius: var(--radius-sm); color: var(--muted); font-size: 12px; }
 .subtabs button.active, .subtabs [aria-selected="true"] { background: var(--dark); color: var(--dark-ink); }
-.period, .seg { display: inline-flex; background: var(--soft); border-radius: 7px; padding: 3px; }
-.period button, .seg button { padding: 6px 11px; font-size: 11px; color: var(--muted-2); border-radius: var(--radius-xs); }
-.period button.selected, .seg button.selected, .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .05); }
-/* 밑줄 탭: 골라서 아래 화면이 바뀌는 하위 탭 (값만 고르는 토글은 .seg) */
+.period { display: inline-flex; background: var(--soft); border-radius: 7px; padding: 3px; }
+.period button { padding: 6px 11px; font-size: 11px; color: var(--muted-2); border-radius: var(--radius-xs); }
+.period button.selected { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .05); }
+/* 값 토글: 밑줄 탭과 같은 모양 (글자만, 고르면 굵게 + 밑줄) */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.seg button { padding: 6px 10px 7px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; font-size: 12px; color: var(--muted); cursor: pointer; transition: color .15s; }
+.seg button:hover { color: var(--ink); }
+.seg button.selected, .seg button[aria-pressed="true"] { color: var(--ink); font-weight: 750; border-bottom-color: var(--ink); }
+/* 밑줄 탭: 골라서 아래 화면이 바뀌는 하위 탭 */
 .linetabs { display: flex; gap: 6px; max-width: 100%; overflow-x: auto; border-bottom: 1px solid var(--line); }
 .linetabs button { flex: none; white-space: nowrap; padding: 12px 14px 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 0; background: none; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; transition: color .15s; }
 .linetabs button:hover { color: var(--ink); }
@@ -365,13 +370,17 @@ p { margin: 0; line-height: 1.65; }
 .field-label, .field > span:first-child { font-size: 12px; font-weight: 550; display: block; margin: 0 0 9px; color: var(--ink-2); }
 .field small, .hint { display: block; font-size: 11px; color: var(--muted); margin-top: 6px; }
 .input, .field input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), .field select, .field textarea, select.input, textarea.input {
-  width: 100%; border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 11px 12px; background: var(--surface); color: var(--text); font-size: 12px; }
+  width: 100%; border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 11px 12px; background: var(--surface); color: var(--text); font-size: 12px; line-height: 1.55; }
+/* 선택 칸은 line-height를 무시해 글 칸보다 낮아지므로 높이를 글 칸과 맞춤 */
+.field select, select.input { min-height: calc(1.55em + 24px); }
 .input::placeholder, .field input::placeholder, textarea::placeholder { color: var(--faint); }
 .input:focus, .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid #c8d631; outline-offset: 0; border-color: transparent; }
 textarea.input, .field textarea { resize: vertical; line-height: 1.7; min-height: 90px; }
 .input[readonly] { background: var(--soft-2); }
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .field-grid.three { grid-template-columns: repeat(3, 1fr); }
+/* 한 줄에 나란히 놓인 칸은 위쪽 여백 없이 높이를 맞춤 (간격은 gap이 맡음) */
+.field-grid > .field { margin-top: 0; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
 .check input { width: 16px; height: 16px; accent-color: var(--focus); margin: 0; }
 .search { position: relative; }

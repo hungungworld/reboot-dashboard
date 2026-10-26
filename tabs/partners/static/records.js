@@ -913,10 +913,12 @@
     const st = { el, data: null, pref: getSalesPref(), picked: [] };
     el.innerHTML = `
       <div class="filters ptn-rec-salesbar">
-        <div class="flex wrap">${badge('예시', 'orange')}<span class="panel-note">Shopify · UTM 연동 전 (환불 주문 제외)</span></div>
+        <div class="flex wrap" data-ref="src">${badge('예시', 'orange')}<span class="panel-note">Shopify · UTM 연동 전 (환불 주문 제외)</span></div>
         <div class="flex wrap">
           <div class="period" role="group" aria-label="조회 기간">${R.salesPresets.map(n => `<button type="button" data-days="${n}">최근 ${n}일</button>`).join('')}</div>
           <input type="date" class="input ptn-rec-date" data-ref="start" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input ptn-rec-date" data-ref="end" aria-label="종료일">
+          ${ui.fileBtn('upload', { label: '시연 사이트 실적 업로드', type: 'CSV', attrs: 'data-sales-act="upload"', title: '관리자 › Order details CSV (+ Creator performance CSV)를 함께 고르세요' })}
+          <button type="button" class="btn small ghost" data-sales-act="reset" hidden>예시로 되돌리기</button>
           ${ui.fileBtn('download', { label: '판매 실적 다운로드', type: 'CSV', attrs: 'data-sales-act="csv"' })}
         </div>
       </div>
@@ -930,6 +932,8 @@
         return;
       }
       if (e.target.closest('[data-sales-act="csv"]')) downloadCsv(st);
+      if (e.target.closest('[data-sales-act="upload"]')) pickShop(st);
+      if (e.target.closest('[data-sales-act="reset"]')) resetShop(st);
       if (e.target.closest('[data-sales-act="all"]')) { st.picked = []; updateLine(st); }
     });
     el.addEventListener('change', e => {
@@ -942,6 +946,40 @@
       loadSales(st);
     });
     loadSales(st);
+  }
+
+  async function pickShop(st) {
+    const out = await ui.uploadModal({
+      title: '시연 사이트 실적 업로드', accept: '.csv', type: 'CSV', multiple: true, okLabel: '올리기',
+      help: `<p class="small">시연 사이트 관리자 › Sales overview에서 내려받은 파일을 함께 고르세요.</p>
+        <ul class="small muted mt-8"><li><b>Order details</b> CSV (필수 · Order status를 All로 두면 환불도 집계)</li>
+        <li><b>Creator performance › All creators</b> CSV (접속량 · 없으면 0)</li></ul>`
+    });
+    if (out && out.files && out.files.length) uploadShop(st, Array.from(out.files));
+  }
+
+  async function uploadShop(st, files) {
+    const fd = new FormData();
+    files.forEach(f => fd.append('file', f, f.name));
+    try {
+      await REBOOT.upload('/api/partners/sales/upload', fd);
+      st.data = null;   // 기간 범위가 바뀌므로 프리셋을 새 범위로 다시 적용
+      toast('시연 사이트 실적 CSV를 반영했어요.');
+      loadSales(st);
+    } catch (e) {
+      toast(`CSV를 업로드하지 못했어요: ${e.message}`, 'error');
+    }
+  }
+
+  async function resetShop(st) {
+    if (!(await ui.confirm('올린 시연 사이트 CSV를 지우고 예시 데이터로 되돌릴까요?'))) return;
+    try {
+      await REBOOT.api('/api/partners/sales/upload', undefined, { method: 'DELETE' });
+      st.data = null;
+      loadSales(st);
+    } catch (e) {
+      toast(`되돌리지 못했어요: ${e.message}`, 'error');
+    }
   }
 
   function presetRange(days, max) {
@@ -981,20 +1019,26 @@
     e.value = d.end;
     el.querySelectorAll('[data-days]').forEach(b => b.classList.toggle('selected', Number(b.dataset.days) === st.pref.days));
     const t = d.totals;
+    const shop = d.source === 'shop';
+    const ex = d.dummy ? badge('예시', 'orange') : '';
+    el.querySelector('[data-ref="src"]').innerHTML = shop
+      ? `${ex}${badge('시연 사이트 CSV', 'green')}<span class="panel-note">${d.uploadedAt ? esc(fmt.datetime(d.uploadedAt)) + ' 업로드 · ' : ''}paid 주문만 매출 (환불 제외)</span>`
+      : `${ex}<span class="panel-note">Shopify · UTM 연동 전 (환불 주문 제외)</span>`;
+    el.querySelector('[data-sales-act="reset"]').hidden = !shop;
     destroyCharts();
     el.querySelector('[data-ref="out"]').innerHTML = `
       <div class="kpis">
-        ${ui.kpi({ label: '접속량', value: fmt.num(t.visits), unit: '회', featured: true, icon: 'users', foot: '할인코드 링크 방문 (예시)' })}
+        ${ui.kpi({ label: '접속량', value: fmt.num(t.visits), unit: '회', featured: true, icon: 'users', foot: shop ? (d.hasVisits ? '크리에이터 링크 방문 (전체 기간 누적)' : 'Creator performance CSV를 올리면 표시') : '할인코드 링크 방문 (예시)' })}
         ${ui.kpi({ label: '주문', value: fmt.num(t.orders), unit: '건', icon: 'check', foot: `환불 ${fmt.num(t.refunds)}건 제외 · 전환율 ${fmt.pct(t.conversion, 2)}` })}
-        ${ui.kpi({ label: '판매량', value: fmt.num(t.units), unit: '개', icon: 'chart', foot: '주문 수량 합계 (예시)' })}
-        ${ui.kpi({ label: '매출', value: usd(t.revenue), icon: 'dollar', foot: `예시 단가 $${fmt.num(d.unitPrice, 2)} 기준` })}
+        ${ui.kpi({ label: '판매량', value: fmt.num(t.units), unit: '개', icon: 'chart', foot: shop ? '주문 수량 합계' : '주문 수량 합계 (예시)' })}
+        ${ui.kpi({ label: '매출', value: usd(t.revenue), icon: 'dollar', foot: shop ? '주문 금액 합계 (할인 후)' : `예시 단가 $${fmt.num(d.unitPrice, 2)} 기준` })}
       </div>
-      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 크리에이터 ${fmt.num(d.creators.length)}명 ${d.source === 'placeholder' ? '(올린 인플루언서가 없어 Creator A~L 예시 이름)' : '(올린 인플루언서 상위 ' + fmt.num(d.creators.length) + '곳 · 예시 행 제외)'}</p>
+      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 크리에이터 ${fmt.num(d.creators.length)}명 ${shop ? '(시연 사이트 크리에이터 링크 · 전환율 = 기간 주문 ÷ 누적 방문)' : d.source === 'placeholder' ? '(올린 인플루언서가 없어 Creator A~L 예시 이름)' : '(올린 인플루언서 상위 ' + fmt.num(d.creators.length) + '곳 · 예시 행 제외)'}</p>
       <div class="grid-2 ptn-rec-charts">
-        <section class="card"><div class="card-head"><h2>크리에이터별 매출</h2>${badge('예시', 'orange')}</div>
+        <section class="card"><div class="card-head"><h2>크리에이터별 매출</h2>${ex}</div>
           <div class="ptn-rec-chart" data-ref="bar-box"><canvas data-ref="bar" role="img" aria-label="크리에이터별 매출 막대 그래프 (표는 아래)"></canvas></div></section>
         <section class="card"><div class="card-head"><h2>일별 매출 추이<span data-ref="line-who"></span></h2>
-            <div class="flex"><button type="button" class="btn small soft" data-sales-act="all" data-ref="line-all" hidden>전체 보기</button>${badge('예시', 'orange')}</div></div>
+            <div class="flex"><button type="button" class="btn small soft" data-sales-act="all" data-ref="line-all" hidden>전체 보기</button>${ex}</div></div>
           <p class="ptn-rec-change" data-ref="line-change"></p>
           <div class="ptn-rec-chart ptn-rec-chart-line"><canvas data-ref="line" role="img" aria-label="일별 매출 선 그래프 (일별 표는 아래)"></canvas></div>
           <details class="mt-8"><summary class="small">일별 표 보기</summary>
@@ -1003,9 +1047,9 @@
           </details></section>
       </div>
       <details class="card mt-24 ptn-rec-salestable" data-ref="sales-table"${st.tableOpen === false ? '' : ' open'}>
-        <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('예시', 'orange')}</summary>
+        <summary class="card-head"><h2>크리에이터별 실적</h2>${ex}</summary>
         <div class="table-wrap" data-ref="sales-wrap">${salesTableHtml(st)}</div>
-        <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify 주문의 할인코드 · UTM 집계로 바뀌어요.</p>
+        <p class="panel-note mt-8">${esc(d.note || '')}${shop ? '' : ' 연동 후에는 Shopify 주문의 할인코드 · UTM 집계로 바뀌어요.'}</p>
       </details>`;
     bindResize(el.querySelector('[data-ref="sales-table"]'));
     el.querySelector('[data-ref="sales-table"]').addEventListener('toggle', ev => { st.tableOpen = ev.target.open; });
@@ -1141,20 +1185,21 @@
     const d = st.data;
     if (!d) return;
     const rows = [['구분', '기간', '크리에이터', '할인코드', '접속량', '주문 수', '판매량', '매출(USD)', '전환율(%)', '환불(건)']];
-    d.creators.forEach(c => rows.push(['예시', `${d.start}~${d.end}`, c.name, c.code, c.visits, c.orders, c.units, c.revenue, c.conversion, c.refunds]));
+    const kind = d.dummy ? '예시' : '실적';
+    d.creators.forEach(c => rows.push([kind, `${d.start}~${d.end}`, c.name, c.code, c.visits, c.orders, c.units, c.revenue, c.conversion, c.refunds]));
     const t = d.totals;
-    rows.push(['예시', `${d.start}~${d.end}`, '합계', '', t.visits, t.orders, t.units, t.revenue, t.conversion, t.refunds]);
-    ui.download(`reboot-partners-creator-sales-dummy-${d.start}_${d.end}.csv`, ui.csv(rows), 'text/csv;charset=utf-8');
+    rows.push([kind, `${d.start}~${d.end}`, '합계', '', t.visits, t.orders, t.units, t.revenue, t.conversion, t.refunds]);
+    ui.download(`reboot-partners-creator-sales${d.dummy ? '-dummy' : ''}-${d.start}_${d.end}.csv`, ui.csv(rows), 'text/csv;charset=utf-8');
   }
 
-  /** 성과분석 파트용: Promise {dummy:true, creators:[{name, code, visits, orders, units, revenue, conversion}], totals} */
+  /** 성과분석 파트용: Promise {dummy(올린 시연 사이트 CSV가 예시면 true), creators:[{name, code, visits, orders, units, revenue, conversion}], totals} */
   function creatorSales(o) {
     o = o || {};
     const q = new URLSearchParams();
     if (o.start) q.set('start', o.start);
     if (o.end) q.set('end', o.end);
     return REBOOT.api('/api/partners/sales' + (q.toString() ? '?' + q : '')).then(d => ({
-      dummy: true, start: d.start, end: d.end, source: d.source, unitPrice: d.unitPrice, currency: d.currency,
+      dummy: d.dummy, start: d.start, end: d.end, source: d.source, unitPrice: d.unitPrice, currency: d.currency,
       creators: d.creators.map(c => ({ name: c.name, code: c.code, visits: c.visits, orders: c.orders, units: c.units, revenue: c.revenue, conversion: c.conversion })),
       totals: d.totals
     }));
