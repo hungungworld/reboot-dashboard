@@ -926,9 +926,12 @@
     const sig = passSignals(text);
     return `
 <div class="cmp-pass">
-  <p><b>왜 통과했나요?</b> ${DATA.rules.some(x => x.off) ? `사용 중인 규칙 ${checks.length}개(${RULE_SPAN} 중 꺼 둔 규칙 제외)` : `규칙 ${RULE_SPAN} ${checks.length}개`}를 모두 확인했고 걸린 표현이 없어요.
-    ${ex.length ? `비슷한 표현 ${ex.length}개는 문맥상 괜찮은 쓰임으로 봤어요.` : ''}
-    ${sig.warn.length ? `<span class="cmp-pass-warn">다만 사람이 볼 부분이 ${sig.warn.length}가지 있어요.</span>` : ''}</p>
+  <div class="cmp-pass-text">
+    <p class="cmp-pass-q">왜 통과했나요?</p>
+    <p>${DATA.rules.some(x => x.off) ? `사용 중인 규칙 ${checks.length}개(${RULE_SPAN} 중 꺼 둔 규칙 제외)` : `규칙 ${RULE_SPAN} ${checks.length}개`}를 모두 확인했고 걸린 표현이 없어요.
+      ${ex.length ? `비슷한 표현 ${ex.length}개는 문맥상 괜찮은 쓰임으로 봤어요.` : ''}</p>
+    ${sig.warn.length ? `<p class="cmp-pass-warn">다만 사람이 볼 부분이 ${sig.warn.length}가지 있어요.</p>` : ''}
+  </div>
   <button type="button" class="cmp-btn cmp-btn-sm cmp-more" data-act="pass-detail" aria-haspopup="dialog">자세히</button>
 </div>`;
   }

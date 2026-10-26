@@ -377,9 +377,11 @@
     },
     confirm(message, o) {
       o = o || {};
+      // "삭제할까요? 되돌릴 수 없어요."처럼 질문 뒤에 설명이 붙으면 질문 줄과 설명 줄을 나눔
+      const qa = String(message).match(/^([^?]*\?)\s+(\S[\s\S]*)$/);
       return ui.modal({
         title: o.title || '확인',
-        body: `<p>${esc(message)}</p>`,
+        body: qa ? `<p><b>${esc(qa[1])}</b></p><p class="muted mt-8">${esc(qa[2])}</p>` : `<p>${esc(message)}</p>`,
         actions: [{ label: o.cancel || '취소', value: false }, { label: o.ok || '확인', value: true, tone: o.danger ? 'danger' : 'lime' }]
       }).then(v => v === true);
     },

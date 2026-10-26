@@ -186,7 +186,9 @@
 .part-compliance .cmp-rq-pick label { margin-right: 14px; white-space: nowrap; }
 /* PASS '왜 통과했나요?' */
 .part-compliance .cmp-pass { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--cmp-soft); border-radius: var(--radius-sm); }
-.part-compliance .cmp-pass p { margin: 0; font-size: 12px; line-height: 1.7; flex: 1 1 320px; }
+.part-compliance .cmp-pass-text { flex: 1 1 320px; }
+.part-compliance .cmp-pass p { margin: 0; font-size: 12px; line-height: 1.7; }
+.part-compliance .cmp-pass-q { font-weight: 700; margin-bottom: 2px !important; }
 .part-compliance .cmp-pass-warn { color: var(--cmp-faint); }
 .part-compliance .cmp-label { display: inline-block; min-width: 88px; color: var(--cmp-faint); font-size: 12px; }
 .part-compliance .cmp-basis { color: var(--cmp-muted); font-size: 12px; }
