@@ -112,7 +112,7 @@ def rule_items(today, ctx, brief):
         items.append({"title": f"{s['name']} 캠페인 소재·카피 준비",
                       "reason": f"{s['name']} D-{s['dday']} · 준비 기간({s['leadDays']}일)에 들어옴", "source": "content"})
         if s["priority"] == 1:
-            items.append({"title": f"{s['name']} 광고 문구 컴플라이언스 사전 점검",
+            items.append({"title": f"{s['name']} 광고 문구 사전 심의",
                           "reason": f"우선순위 1 시즌 · D-{s['dday']}", "source": "compliance"})
     for s in seasons:
         if s["ongoing"] or s["inLead"]:
@@ -125,7 +125,7 @@ def rule_items(today, ctx, brief):
             break
     cs = ctx.get("cs")
     if cs and cs["open"] > 0:
-        items.append({"title": f"미처리 CS 문의 {cs['open']}건 답변",
+        items.append({"title": f"미처리 CS 문의 {cs['open']}건 답장",
                       "reason": f"CS 미처리 {cs['open']}건 (긴급 {cs['urgent']} · 기한 초과 {cs['overdue']})", "source": "cs"})
     comp = ctx.get("compliance")
     if comp and comp["pending"] > 0:
@@ -134,7 +134,7 @@ def rule_items(today, ctx, brief):
     perf = ctx.get("performance")
     if perf:
         if perf["sample"]:
-            items.append({"title": "실제 성과 CSV 올리기", "reason": "성과분석이 아직 샘플 데이터로 표시됨", "source": "performance"})
+            items.append({"title": "실제 성과 CSV 업로드", "reason": "성과분석이 아직 예시 데이터로 표시됨", "source": "performance"})
         else:
             chg = perf["change"].get("roas")
             change = f" · 전주 대비 {chg:+.1f}%" if chg is not None else ""
@@ -171,7 +171,7 @@ def ai_items(today, ctx, brief):
         src = it.get("source") if it.get("source") in SOURCES else "home"
         out.append({"title": title, "reason": str(it.get("reason") or "").strip()[:500], "source": src})
     if not out:
-        raise AIError("AI가 할 일을 만들지 못했습니다.")
+        raise AIError("AI가 할 일을 만들지 못했어요.")
     return out[:MAX_ITEMS]
 
 
@@ -202,7 +202,7 @@ def generate(context=None, auto=False, user="시스템"):
                 try:
                     items, origin = ai_items(today, ctx, brief), "ai"
                 except AIError as e:
-                    items, warning = rule_items(today, ctx, brief), f"AI로 만들지 못해 규칙으로 만들었습니다 ({e})"
+                    items, warning = rule_items(today, ctx, brief), f"AI로 만들지 못해 규칙으로 만들었어요 ({e})"
             else:
                 items = rule_items(today, ctx, brief)
             # 완료 안 한 자동 항목만 바꿈 (직접 추가 · 완료 항목은 그대로)
@@ -224,8 +224,8 @@ def generate(context=None, auto=False, user="시스템"):
             marker.origin, marker.generated_at, marker.generated_by = origin, utcnow(), str(user or "")[:100]
             marker.note = warning[:300]
             db.session.commit()
-            worklog.add("home", "기타", f"이번 주 To-Do {'AI' if origin == 'ai' else '규칙'} 생성 ({added}개)",
+            worklog.add("home", "기타", f"이번 주 할 일 {'AI' if origin == 'ai' else '규칙'} 생성 ({added}개)",
                         detail={"week": ws.isoformat(), "auto": bool(auto), "warning": warning}, user_name=user)
             return dict(week_payload(ws), skipped=False, warning=warning)
     except jobs.Busy:
-        return dict(week_payload(ws), skipped=True, warning="다른 사람이 지금 만들고 있습니다. 잠시 뒤 새로고침하세요.")
+        return dict(week_payload(ws), skipped=True, warning="다른 사람이 지금 만들고 있어요. 잠시 뒤 새로고침하세요.")

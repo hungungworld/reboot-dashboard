@@ -38,7 +38,7 @@
 
   const progressBadge = v => (v ? badge(`${PROG[v] ? PROG[v].emoji + ' ' : ''}${v}`, PROG[v] ? PROG[v].tone : '') : '<span class="faint">—</span>');
   const mailBadge = v => (v ? badge(`${MAILS[v] ? MAILS[v].emoji + ' ' : ''}${v}`, MAILS[v] ? MAILS[v].tone : '') : '<span class="faint">—</span>');
-  const kindBadge = v => badge(v === '샘플' ? '샘플 · 예시' : v, KINDS[v] ? KINDS[v].tone : '');
+  const kindBadge = v => badge(v === '샘플' ? '예시' : v, KINDS[v] ? KINDS[v].tone : '');
   const settingsLink = '<a class="link" href="/dashboard/settings">설정 › 연결</a>';
   function initials(name) {
     const words = String(name || '').replace(/^예시\)\s*/, '').split(/[\s·,&/()\-]+/).filter(w => /[A-Za-z0-9가-힣]/.test(w));
@@ -101,7 +101,7 @@
 
   function getFilters() {
     const f = store.get(K.filters, null);
-    return Object.assign({ partner: '', kind: '', view: 'table' }, f && typeof f === 'object' ? f : {});
+    return Object.assign({ partner: '', kind: '', view: 'board' }, f && typeof f === 'object' ? f : {});
   }
   function saveFilters(f) { store.set(K.filters, f); }
 
@@ -125,7 +125,7 @@
       [data, status] = await Promise.all([REBOOT.api('/api/partners/history'), REBOOT.api('/api/partners/status').catch(() => ({}))]);
     } catch (e) {
       if (!el.isConnected) return;
-      el.innerHTML = errorBox(e.message);
+      el.innerHTML = errorBox(`협업 기록을 불러오지 못했어요. ${e.message}`);
       el.querySelector('[data-rec-retry]').addEventListener('click', () => renderHistory(el));
       return;
     }
@@ -141,21 +141,21 @@
     el.innerHTML = `
       <div class="filters ptn-rec-bar">
         <div class="flex wrap">
-          <label class="ptn-rec-sel"><span class="sr-only">업체</span><select class="input" data-ref="partner" aria-label="업체로 거르기"></select></label>
+          <label class="ptn-rec-sel"><span class="sr-only">파트너</span><select class="input" data-ref="partner" aria-label="파트너로 거르기"></select></label>
           <div class="chips" data-ref="kinds" role="group" aria-label="출처"></div>
-          <button type="button" class="btn small dark" data-rec-act="check"${smtp ? '' : ' disabled'}>답장 확인 (Gmail)</button>
+          <button type="button" class="btn small dark" data-rec-act="check"${smtp ? '' : ' disabled'}>새 회신 확인 (Gmail)</button>
         </div>
         <div class="flex wrap">
           <div class="seg" role="group" aria-label="보기">
-            <button type="button" data-rec-view="table" aria-pressed="${st.f.view !== 'board'}">이력 표</button>
-            <button type="button" data-rec-view="board" aria-pressed="${st.f.view === 'board'}">협업 보드</button>
+            <button type="button" data-rec-view="board" aria-pressed="${st.f.view === 'board'}">진행 상태</button>
+            <button type="button" data-rec-view="table" aria-pressed="${st.f.view !== 'board'}">활동 이력</button>
           </div>
           <button type="button" class="btn small ghost" data-rec-act="columns">표시 항목</button>
-          <button type="button" class="btn small soft" data-rec-act="add" aria-expanded="false">수기 기록 추가</button>
+          <button type="button" class="btn small soft" data-rec-act="add" aria-expanded="false">기록 추가</button>
           <button type="button" class="btn small danger" data-rec-act="delete" disabled>선택 삭제</button>
         </div>
       </div>
-      ${smtp ? '' : `<p class="note mb-16">답장 확인은 Gmail(앱 비밀번호)이 연결되면 쓸 수 있습니다 — ${settingsLink}. 그 전에는 편집 창에서 상태를 직접 바꿀 수 있습니다.</p>`}
+      ${smtp ? '' : `<p class="note mb-16">새 회신 확인은 Gmail(앱 비밀번호)이 연결되면 쓸 수 있어요 — ${settingsLink}. 그 전에는 편집 창에서 상태를 직접 바꿀 수 있어요.</p>`}
       <div data-ref="addbox"></div>
       <div data-ref="body"></div>`;
     wireHistory(st);
@@ -178,7 +178,7 @@
     if (st.f.partner && !opts.some(o => o[0] === st.f.partner)) opts.unshift([st.f.partner, st.f.partner + ' (기록 없음)']);
     st.el.querySelector('[data-ref="partner"]').innerHTML = `<option value="">전체 업체 (${opts.length})</option>` +
       opts.map(([k, name]) => `<option value="${esc(k)}"${k === st.f.partner ? ' selected' : ''}>${esc(name)}</option>`).join('');
-    st.el.querySelector('[data-ref="kinds"]').innerHTML = [['', '전체']].concat(R.kinds.map(k => [k.v, k.v])).map(([v, label]) =>
+    st.el.querySelector('[data-ref="kinds"]').innerHTML = [['', '전체']].concat(R.kinds.map(k => [k.v, k.v === '샘플' ? '예시' : k.v])).map(([v, label]) =>
       `<button type="button" class="chip" data-rec-kind="${esc(v)}" aria-pressed="${st.f.kind === v}" title="${esc((KINDS[v] || {}).help || '모든 출처')}">${esc(label)}<span class="n">${fmt.num(v ? st.items.filter(h => h.kind === v).length : st.items.length)}</span></button>`).join('');
   }
 
@@ -231,9 +231,9 @@
     host.innerHTML = `<section class="card flush ptn-rec-tablecard">
       <div class="table-wrap"><table class="data-table ptn-rec-table">
         <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-ref="all" aria-label="보이는 기록 모두 선택"></th>${cols.map(c => headCell(c)).join('')}<th class="ptn-rec-edit" scope="col">편집</th></tr></thead>
-        <tbody>${list.length ? groups.map(g => row(g, cols, st)).join('') : `<tr><td colspan="${cols.length + 2}">${ui.empty('기록이 없습니다. 협업 메일을 보내거나 수기 기록 추가로 남기세요.', 'clock')}</td></tr>`}</tbody>
+        <tbody>${list.length ? groups.map(g => row(g, cols, st)).join('') : `<tr><td colspan="${cols.length + 2}">${ui.empty('아직 협업 기록이 없어요. 제안 메일을 보내거나 기록 추가를 눌러 시작하세요.', 'clock')}</td></tr>`}</tbody>
       </table></div>
-      <p class="panel-note ptn-rec-foot">업체 ${fmt.num(groups.length)}곳 · 기록 ${fmt.num(list.length)}건 · 같은 업체는 한 줄에 최근 상태로 보이고, 업체 이름을 누르면 주고받은 메일 전체가 열립니다 · 표는 읽기 전용이며 수정은 편집에서 합니다. 회신 받음을 누르면 회신 창이 열립니다.</p>
+      <p class="panel-note ptn-rec-foot">업체 ${fmt.num(groups.length)}곳 · 기록 ${fmt.num(list.length)}건 · 같은 업체는 한 줄에 최근 상태로 보이고, 업체 이름을 누르면 주고받은 메일 전체가 열려요 · 표는 읽기 전용이고 수정은 편집에서 해요. 회신 받음을 누르면 받은 답장이 열려요.</p>
     </section>`;
     updateDeleteBtn(st);
     bindResize(host);
@@ -332,7 +332,7 @@
       case 'kind': return `<td>${kindBadge(h.kind)}</td>`;
       case 'activity': return `<td class="nowrap">${esc(h.activity || '—')}</td>`;
       case 'mailStatus': return `<td class="nowrap">${h.mailStatus === '회신 받음' && h.reply
-        ? `<button type="button" class="ptn-rec-replybtn" data-rec-reply="${h.id}" title="회신 창 열기">${mailBadge(h.mailStatus)}</button>` : mailBadge(h.mailStatus)}</td>`;
+        ? `<button type="button" class="ptn-rec-replybtn" data-rec-reply="${h.id}" title="받은 답장 보기">${mailBadge(h.mailStatus)}</button>` : mailBadge(h.mailStatus)}</td>`;
       case 'progress': return `<td class="nowrap">${progressBadge(h.progress)}</td>`;
       case 'owner': return `<td class="nowrap">${esc(h.owner || '—')}</td>`;
       case 'subject': return `<td class="ptn-rec-clip" title="${esc(h.subject)}">${esc(h.subject || '—')}</td>`;
@@ -363,7 +363,7 @@
       st.items = data.items || [];
       setAwaiting(data.awaiting);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`협업 기록을 불러오지 못했어요. ${e.message}`, 'error');
     }
     if (!st.el.isConnected) return;
     paintFiltersBar(st);
@@ -438,7 +438,7 @@
     try {
       const out = await REBOOT.api('/api/partners/replies/check', {});
       if (out.replies || out.bounces) {
-        toast(`새 답장 확인 — 회신 ${out.replies}건 · 반송 ${out.bounces}건`);
+        toast(`새 회신 확인 · ${out.replies}건 · 반송 ${out.bounces}건`);
         if (st.el.isConnected) await reload(st);
       }
     } catch (e) {
@@ -453,10 +453,10 @@
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/replies/check', {});
-      toast(out.checked ? `발송 기록 ${out.checked}건 확인 — 회신 ${out.replies}건 · 반송 ${out.bounces}건 갱신` : '확인할 발송 기록(발송 성공 · 회신 대기)이 없습니다.');
+      toast(out.checked ? `발송 기록 ${out.checked}건 확인 · 회신 ${out.replies}건 · 반송 ${out.bounces}건 갱신` : '확인할 발송 기록(발송 성공 · 회신 대기)이 없어요.');
       await reload(st);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`새 회신을 확인하지 못했어요: ${e.message}`, 'error');
     } finally {
       if (btn.isConnected) ui.busy(btn, false);
     }
@@ -468,7 +468,7 @@
     const body = doc.createElement('div');
     body.className = 'part-partners ptn-rec-form';
     body.innerHTML = `
-      ${h.kind === '샘플' ? '<p class="note warn">예시(샘플) 기록입니다. 실제 업체 기록이 아닙니다.</p>' : ''}
+      ${h.kind === '샘플' ? '<p class="note warn">예시 기록이에요. 실제 업체 기록이 아니에요.</p>' : ''}
       <div class="field-grid ptn-rec-grid">
         <label class="field"><span>활동</span><select class="input" data-e="activity">
           ${Array.from(new Set(['메일 발송', '답장 발송'].concat(R.activities, h.activity ? [h.activity] : []))).map(a => `<option value="${esc(a)}"${a === h.activity ? ' selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
@@ -479,7 +479,7 @@
         <label class="field"><span>진행 상태</span><select class="input" data-e="progress">
           ${R.progress.map(p => `<option value="${esc(p.v)}"${p.v === h.progress ? ' selected' : ''}>${esc(p.v)}</option>`).join('')}</select></label>
       </div>
-      <p class="small muted ptn-rec-hint">상태(메일)를 회신 대기로 두면 답장 확인 대상이 됩니다.</p>
+      <p class="small muted ptn-rec-hint">상태(메일)를 회신 대기로 두면 새 회신 확인 대상이 돼요.</p>
       <label class="field"><span>일시</span><input class="input" type="datetime-local" data-e="at" value="${esc(toLocalInput(h.at))}"></label>
       <label class="field"><span>메모 · 비고</span><textarea class="input" rows="5" data-e="memo">${esc(h.memo)}</textarea></label>`;
     let patch = null;
@@ -502,13 +502,13 @@
       }]
     });
     if (v !== 'save' || !patch) return;
-    if (!Object.keys(patch).length) return toast('바뀐 내용이 없습니다.');
+    if (!Object.keys(patch).length) return toast('바뀐 내용이 없어요.');
     try {
       await REBOOT.api(`/api/partners/history/${h.id}`, patch, { method: 'PATCH' });
-      toast('기록을 저장했습니다.');
+      toast('기록을 저장했어요.');
       reload(st);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`기록을 저장하지 못했어요: ${e.message}`, 'error');
     }
   }
 
@@ -523,7 +523,7 @@
     }
     const pre = st.f.partner && !st.f.partner.startsWith('name:') ? st.f.partner : '';
     box.innerHTML = `<section class="card ptn-rec-add mb-16">
-      <div class="card-head"><h2>수기 기록 추가</h2>${badge('수기', 'green')}</div>
+      <div class="card-head"><h2>기록 추가</h2>${badge('수기', 'green')}</div>
       <div class="field-grid three">
         <label class="field"><span>업체</span><select class="input" data-add="partner">
           <option value="">직접 입력</option>
@@ -551,13 +551,13 @@
         partner_id: pid, partner_name: name, activity: val('activity'), progress: val('progress'),
         owner: val('owner').trim(), at: fromLocalInput(val('at')), memo: val('memo').trim()
       });
-      toast('수기 기록을 추가했습니다.');
+      toast('수기 기록을 추가했어요.');
       box.innerHTML = '';
       const add = st.el.querySelector('[data-rec-act="add"]');
       if (add) add.setAttribute('aria-expanded', 'false');
       reload(st);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`수기 기록을 추가하지 못했어요: ${e.message}`, 'error');
       ui.busy(btn, false);
     }
   }
@@ -567,15 +567,15 @@
     const ids = Array.from(st.sel);
     if (!ids.length) return;
     const firms = new Set(st.items.filter(h => st.sel.has(h.id)).map(partnerKey)).size;
-    const ok = await ui.confirm(`선택한 업체 ${firms}곳의 기록 ${ids.length}건을 삭제할까요? 삭제하면 되돌릴 수 없습니다.`, { title: '삭제 확인', ok: '삭제 확인', danger: true });
+    const ok = await ui.confirm(`선택한 업체 ${firms}곳의 기록 ${ids.length}건을 삭제할까요? 삭제하면 되돌릴 수 없어요.`, { title: '삭제 확인', ok: '삭제', danger: true });
     if (!ok) return;
     try {
       const out = await REBOOT.api('/api/partners/history/delete', { ids });
-      toast(`${out.deleted}건을 삭제했습니다.`);
+      toast(`${out.deleted}건을 삭제했어요.`);
       st.sel.clear();
       reload(st);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`삭제하지 못했어요: ${e.message}`, 'error');
     }
   }
 
@@ -585,7 +585,7 @@
     const body = doc.createElement('div');
     body.className = 'part-partners ptn-rec-form';
     const paint = focusSel => {
-      body.innerHTML = `<p>보일 항목을 고르고 ↑ ↓로 순서를 바꿉니다. 내 화면에만 적용됩니다.</p>
+      body.innerHTML = `<p>보일 항목을 고르고 ↑ ↓로 순서를 바꿔요. 내 화면에만 적용돼요.</p>
         <ul class="ptn-rec-cols">${cols.map((c, i) => `<li>
           <label class="check"><input type="checkbox" data-col="${i}"${c.on ? ' checked' : ''}> ${esc(c.label)}</label>
           <span class="flex">
@@ -634,7 +634,7 @@
     const pop = doc.createElement('div');
     pop.className = 'card ptn-rec-pop';
     pop.setAttribute('role', 'dialog');
-    pop.setAttribute('aria-label', `${h.partnerName || ''} 회신 미리보기`);
+    pop.setAttribute('aria-label', `${h.partnerName || ''} 받은 답장 미리보기`);
     pop.innerHTML = `
       <div class="between"><strong>${esc(h.partnerName || '')}</strong>${mailBadge('회신 받음')}</div>
       <p class="small muted">${esc(r.from || '')} · ${esc(fmt.datetime(r.at))}</p>
@@ -694,7 +694,7 @@
           <details${i === list.length - 1 ? ' open' : ''}><summary class="small"><b>${esc(m.subject || '(제목 없음)')}</b></summary>
             <pre class="ptn-rec-pre">${esc(m.body || '(본문 없음)')}</pre></details>
           ${m.error ? `<span class="ptn-rec-err">${esc(m.error)}</span>` : ''}
-        </li>`).join('')}</ol>` : ui.empty('주고받은 메일이 없습니다. (수기 기록만 있음)', 'mail');
+        </li>`).join('')}</ol>` : ui.empty('주고받은 메일이 없어요. (수기 기록만 있음)', 'mail');
     ui.modal({ title: `${h.partnerName || ''} — 메일 히스토리`, body, wide: true, actions: [{ label: '닫기', value: false }] });
   }
 
@@ -714,8 +714,8 @@
             <p class="small muted">${esc(r.from || '')} · ${esc(fmt.datetime(r.at))}${r.estimated ? ' · ' + badge('추정 매칭', 'orange') : ''}${h.kind === '샘플' ? ' · ' + badge('예시', 'orange') : ''}</p>
             <p class="small"><b>${esc(r.subject || '')}</b></p>
           </div>
-          <div class="ptn-rec-summary mt-16" data-ref="summary">${s.openai ? '<div class="skeleton ptn-skel-sm"></div>' : `<p class="note">${settingsLink}에서 OPENAI_API_KEY를 넣으면 AI 요약(핵심 · 요청사항 · 분위기 · 다음 액션)을 볼 수 있습니다.</p>`}</div>
-          <details class="mt-16"${s.openai && !opts.showOriginal ? '' : ' open'}><summary class="small">회신 원문</summary><pre class="ptn-rec-pre">${esc(r.body || '(본문 없음)')}</pre></details>
+          <div class="ptn-rec-summary mt-16" data-ref="summary">${s.openai ? '<div class="skeleton ptn-skel-sm"></div>' : `<p class="note">${settingsLink}에서 OpenAI 키를 넣으면 AI 요약(핵심 · 요청사항 · 분위기 · 다음 액션)을 볼 수 있어요.</p>`}</div>
+          <details class="mt-16"${s.openai && !opts.showOriginal ? '' : ' open'}><summary class="small">받은 답장 원문</summary><pre class="ptn-rec-pre">${esc(r.body || '(본문 없음)')}</pre></details>
           <details class="mt-8"><summary class="small">우리가 보낸 메일</summary><pre class="ptn-rec-pre">${esc(h.subject || '')}\n\n${esc(h.body || '')}</pre></details>
         </div>
         <div>
@@ -724,12 +724,12 @@
           <label class="field"><span>제목</span><input class="input" data-r="subject" value="${esc(reSubject)}" maxlength="300"></label>
           <label class="field"><span>본문 (영어)</span><textarea class="input" rows="9" data-r="body"></textarea></label>
           <label class="field"><span>담당자</span><input class="input" data-r="owner" value="${esc(myName)}" maxlength="60"></label>
-          <label class="check mt-8"><input type="checkbox" data-r="confirm"${s.smtp ? '' : ' disabled'}> 내용을 확인했고 같은 Gmail 대화로 보냅니다.</label>
+          <label class="check mt-8"><input type="checkbox" data-r="confirm"${s.smtp ? '' : ' disabled'}> 내용을 확인했고 같은 Gmail 대화로 보내요.</label>
           <div class="flex wrap mt-16">
-            <button type="button" class="btn dark" data-r-act="send" disabled>답장 발송</button>
+            <button type="button" class="btn dark" data-r-act="send" disabled>답장 보내기</button>
             <button type="button" class="btn ghost" data-r-act="detail">메일 화면에서 자세히 쓰기</button>
           </div>
-          <p class="hint" data-ref="rhint">${s.smtp ? '' : `Gmail이 연결되지 않았습니다 — ${settingsLink}`}</p>
+          <p class="hint" data-ref="rhint">${s.smtp ? '' : `Gmail이 연결되지 않았어요 — ${settingsLink}`}</p>
         </div>
       </div>`;
     let changed = false;
@@ -749,7 +749,7 @@
       const a = b.dataset.rAct;
       if (a === 'resum') return loadSummary(body, h, true);
       if (a === 'detail') {
-        try { REBOOT.use('partners.outreach').openReply(h); } catch (err) { toast('메일 화면을 열지 못했습니다.', 'error'); return; }
+        try { REBOOT.use('partners.outreach').openReply(h); } catch (err) { toast('메일 화면을 열지 못했어요.', 'error'); return; }
         closeModal(body);
         return;
       }
@@ -762,7 +762,7 @@
           val('confirm').checked = false;
           body.querySelector('[data-ref="draft-badge"]').innerHTML = badge('AI 초안 · 참고용', 'purple');
         } catch (err) {
-          toast(err.message, 'error');
+          toast(`AI 답장 초안을 만들지 못했어요: ${err.message}`, 'error');
         } finally {
           ui.busy(b, false);
           sync();
@@ -780,20 +780,20 @@
           });
           changed = true;
           if (out.ok) {
-            toast('답장을 보냈습니다 — 같은 Gmail 대화 · 진행 상태 협의 중');
+            toast('답장을 보냈어요 — 같은 Gmail 대화 · 진행 상태 협의 중');
             closeModal(body);
             return;
           }
-          toast(`답장 발송 실패: ${out.error} (이력에 저장했습니다)`, 'error');
+          toast(`답장을 보내지 못했어요: ${out.error} (협업 기록에 저장했어요)`, 'error');
           val('confirm').checked = false;
         } catch (err) {
-          toast(err.message, 'error');
+          toast(`답장을 보내지 못했어요: ${err.message}`, 'error');
         }
         ui.busy(b, false);
         sync();
       }
     });
-    const done = ui.modal({ title: `회신 — ${h.partnerName || ''}`, body, wide: true, actions: [{ label: '닫기', value: false }] });
+    const done = ui.modal({ title: `받은 답장 — ${h.partnerName || ''}`, body, wide: true, actions: [{ label: '닫기', value: false }] });
     if (s.openai) loadSummary(body, h, false);
     await done;
     if (changed && st.el.isConnected) reload(st);
@@ -813,7 +813,7 @@
         </dl>
         <button type="button" class="link" data-r-act="resum">↻ 다시 요약</button>`;
     } catch (e) {
-      box.innerHTML = `<p class="note error">AI 요약을 만들지 못했습니다: ${esc(e.message)}</p><button type="button" class="link mt-8" data-r-act="resum">↻ 다시 시도</button>`;
+      box.innerHTML = `<p class="note error">AI 요약을 만들지 못했어요: ${esc(e.message)}</p><button type="button" class="link mt-8" data-r-act="resum">↻ 다시 시도</button>`;
     }
   }
 
@@ -826,14 +826,14 @@
     try {
       ov = await REBOOT.api('/api/partners/overview');
     } catch (e) {
-      if (el.isConnected) el.innerHTML = `<p class="note error">${esc(e.message)}</p>`;
+      if (el.isConnected) el.innerHTML = `<p class="note error">협업 보드를 불러오지 못했어요. ${esc(e.message)}</p>`;
       return;
     }
     if (!el.isConnected) return;
     setAwaiting(ov.awaiting);
     const partners = ov.partners || [];
     if (!partners.length) {
-      el.innerHTML = ui.empty('아직 협업 기록이 없습니다. 협업 메일을 보내거나 수기 기록을 추가하면 보드에 나타납니다.', 'grid');
+      el.innerHTML = ui.empty('아직 협업 기록이 없어요. 제안 메일을 보내거나 기록을 추가하면 여기에 나타나요.', 'grid');
       return;
     }
     el.innerHTML = `<div class="ptn-rec-kanban">${R.board.map(col => {
@@ -843,7 +843,7 @@
         ${items.map(miniCard).join('') || '<p class="ptn-rec-colempty">없음</p>'}
       </section>`;
     }).join('')}</div>
-    <p class="panel-note mt-8">업체마다 가장 최근 기록의 진행 상태입니다. 진행 상태는 협업 이력의 편집 · 수기 기록으로 바꿉니다. 카드를 누르면 그 업체로 이동합니다.</p>`;
+    <p class="panel-note mt-8">업체마다 가장 최근 기록의 진행 상태예요. 진행 상태는 활동 이력의 편집 · 기록 추가로 바꿔요. 카드를 누르면 그 파트너의 활동 이력이 열려요.</p>`;
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-pick]');
       if (!b) return;
@@ -913,11 +913,11 @@
     const st = { el, data: null, pref: getSalesPref(), picked: [] };
     el.innerHTML = `
       <div class="filters ptn-rec-salesbar">
-        <div class="flex wrap">${badge('더미 데이터', 'orange')}<span class="panel-note">Shopify 할인코드 주문 · UTM 방문 연동 전 가상값입니다 (환불 주문 제외).</span></div>
+        <div class="flex wrap">${badge('예시', 'orange')}<span class="panel-note">Shopify · UTM 연동 전 (환불 주문 제외)</span></div>
         <div class="flex wrap">
           <div class="period" role="group" aria-label="조회 기간">${R.salesPresets.map(n => `<button type="button" data-days="${n}">최근 ${n}일</button>`).join('')}</div>
           <input type="date" class="input ptn-rec-date" data-ref="start" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input ptn-rec-date" data-ref="end" aria-label="종료일">
-          <button type="button" class="btn small soft" data-sales-act="csv">${icon('download')} CSV</button>
+          ${ui.fileBtn('download', { label: '판매 실적 다운로드', type: 'CSV', attrs: 'data-sales-act="csv"' })}
         </div>
       </div>
       <div data-ref="out"><div class="skeleton ptn-skel"></div></div>`;
@@ -967,7 +967,7 @@
       }
       paintSales(st);
     } catch (e) {
-      if (el.isConnected) el.querySelector('[data-ref="out"]').innerHTML = `<p class="note error">${esc(e.message)}</p>`;
+      if (el.isConnected) el.querySelector('[data-ref="out"]').innerHTML = `<p class="note error">판매 실적을 불러오지 못했어요. ${esc(e.message)}</p>`;
     }
   }
 
@@ -984,17 +984,17 @@
     destroyCharts();
     el.querySelector('[data-ref="out"]').innerHTML = `
       <div class="kpis">
-        ${ui.kpi({ label: '접속량', value: fmt.num(t.visits), unit: '회', featured: true, icon: 'users', foot: '할인코드 링크 방문 (더미)' })}
+        ${ui.kpi({ label: '접속량', value: fmt.num(t.visits), unit: '회', featured: true, icon: 'users', foot: '할인코드 링크 방문 (예시)' })}
         ${ui.kpi({ label: '주문', value: fmt.num(t.orders), unit: '건', icon: 'check', foot: `환불 ${fmt.num(t.refunds)}건 제외 · 전환율 ${fmt.pct(t.conversion, 2)}` })}
-        ${ui.kpi({ label: '판매량', value: fmt.num(t.units), unit: '개', icon: 'chart', foot: '주문 수량 합계 (더미)' })}
-        ${ui.kpi({ label: '매출', value: usd(t.revenue), icon: 'dollar', foot: `가상 단가 $${fmt.num(d.unitPrice, 2)} 기준 (더미)` })}
+        ${ui.kpi({ label: '판매량', value: fmt.num(t.units), unit: '개', icon: 'chart', foot: '주문 수량 합계 (예시)' })}
+        ${ui.kpi({ label: '매출', value: usd(t.revenue), icon: 'dollar', foot: `예시 단가 $${fmt.num(d.unitPrice, 2)} 기준` })}
       </div>
-      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 크리에이터 ${fmt.num(d.creators.length)}명 ${d.source === 'placeholder' ? '(가져온 인플루언서가 없어 Creator A~L 가상 이름)' : '(가져온 인플루언서 상위 ' + fmt.num(d.creators.length) + '곳 · 예시 행 제외)'}</p>
+      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 크리에이터 ${fmt.num(d.creators.length)}명 ${d.source === 'placeholder' ? '(올린 인플루언서가 없어 Creator A~L 예시 이름)' : '(올린 인플루언서 상위 ' + fmt.num(d.creators.length) + '곳 · 예시 행 제외)'}</p>
       <div class="grid-2 ptn-rec-charts">
-        <section class="card"><div class="card-head"><h2>크리에이터별 매출</h2>${badge('더미', 'orange')}</div>
+        <section class="card"><div class="card-head"><h2>크리에이터별 매출</h2>${badge('예시', 'orange')}</div>
           <div class="ptn-rec-chart" data-ref="bar-box"><canvas data-ref="bar" role="img" aria-label="크리에이터별 매출 막대 그래프 (표는 아래)"></canvas></div></section>
         <section class="card"><div class="card-head"><h2>일별 매출 추이<span data-ref="line-who"></span></h2>
-            <div class="flex"><button type="button" class="btn small soft" data-sales-act="all" data-ref="line-all" hidden>전체 보기</button>${badge('더미', 'orange')}</div></div>
+            <div class="flex"><button type="button" class="btn small soft" data-sales-act="all" data-ref="line-all" hidden>전체 보기</button>${badge('예시', 'orange')}</div></div>
           <p class="ptn-rec-change" data-ref="line-change"></p>
           <div class="ptn-rec-chart ptn-rec-chart-line"><canvas data-ref="line" role="img" aria-label="일별 매출 선 그래프 (일별 표는 아래)"></canvas></div>
           <details class="mt-8"><summary class="small">일별 표 보기</summary>
@@ -1003,9 +1003,9 @@
           </details></section>
       </div>
       <details class="card mt-24 ptn-rec-salestable" data-ref="sales-table"${st.tableOpen === false ? '' : ' open'}>
-        <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('더미 데이터', 'orange')}</summary>
+        <summary class="card-head"><h2>크리에이터별 실적</h2>${badge('예시', 'orange')}</summary>
         <div class="table-wrap" data-ref="sales-wrap">${salesTableHtml(st)}</div>
-        <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify Orders API(discount_codes) · UTM 집계로 바뀝니다.</p>
+        <p class="panel-note mt-8">${esc(d.note || '')} 연동 후에는 Shopify 주문의 할인코드 · UTM 집계로 바뀌어요.</p>
       </details>`;
     bindResize(el.querySelector('[data-ref="sales-table"]'));
     el.querySelector('[data-ref="sales-table"]').addEventListener('toggle', ev => { st.tableOpen = ev.target.open; });
@@ -1029,7 +1029,7 @@
     const d = st.data;
     const el = st.el;
     if (!Chart) {
-      el.querySelectorAll('.ptn-rec-chart').forEach(x => { x.innerHTML = ui.empty('차트 라이브러리를 불러오지 못했습니다. 아래 표를 보세요.', 'chart'); });
+      el.querySelectorAll('.ptn-rec-chart').forEach(x => { x.innerHTML = ui.empty('차트를 불러오지 못했어요. 아래 표를 보세요.', 'chart'); });
       return;
     }
     const t = chartTheme(el);
@@ -1141,9 +1141,9 @@
     const d = st.data;
     if (!d) return;
     const rows = [['구분', '기간', '크리에이터', '할인코드', '접속량', '주문 수', '판매량', '매출(USD)', '전환율(%)', '환불(건)']];
-    d.creators.forEach(c => rows.push(['더미', `${d.start}~${d.end}`, c.name, c.code, c.visits, c.orders, c.units, c.revenue, c.conversion, c.refunds]));
+    d.creators.forEach(c => rows.push(['예시', `${d.start}~${d.end}`, c.name, c.code, c.visits, c.orders, c.units, c.revenue, c.conversion, c.refunds]));
     const t = d.totals;
-    rows.push(['더미', `${d.start}~${d.end}`, '합계', '', t.visits, t.orders, t.units, t.revenue, t.conversion, t.refunds]);
+    rows.push(['예시', `${d.start}~${d.end}`, '합계', '', t.visits, t.orders, t.units, t.revenue, t.conversion, t.refunds]);
     ui.download(`reboot-partners-creator-sales-dummy-${d.start}_${d.end}.csv`, ui.csv(rows), 'text/csv;charset=utf-8');
   }
 

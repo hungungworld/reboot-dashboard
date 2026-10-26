@@ -510,8 +510,8 @@ def test_rule_todos_without_key(auth_client, today):
     assert "Halloween 캠페인 소재·카피 준비" in titles
     assert "D-8" in by["Halloween 캠페인 소재·카피 준비"]["reason"]          # 근거
     assert any("Thanksgiving Eve 준비 일정 잡기" == t for t in titles)       # 준비 시작이 2주 안
-    assert by["미처리 CS 문의 5건 답변"]["source"] == "cs" and "긴급 1" in by["미처리 CS 문의 5건 답변"]["reason"]
-    assert "검토 대기 카피 2건 확인" in titles and "실제 성과 CSV 올리기" in titles
+    assert by["미처리 CS 문의 5건 답장"]["source"] == "cs" and "긴급 1" in by["미처리 CS 문의 5건 답장"]["reason"]
+    assert "검토 대기 카피 2건 확인" in titles and "실제 성과 CSV 업로드" in titles
     assert all(i["origin"] == "rule" and i["ai"] is False and i["reason"] for i in j["items"])
     assert j["open"] == len(j["items"])
     # 같은 주 자동 생성은 한 번만
@@ -529,7 +529,7 @@ def test_regenerate_keeps_manual_and_done(auth_client, today):
     titles = [i["title"] for i in j2["items"]]
     assert "파트너 미팅 자료 준비" in titles
     assert titles.count(first["title"]) == 1                     # 완료 항목은 남고 중복으로 다시 생기지 않음
-    assert "미처리 CS 문의 5건 답변" not in titles                # 현황이 없으니 빠짐
+    assert "미처리 CS 문의 5건 답장" not in titles               # 현황이 없으니 빠짐
     done = [i for i in j2["items"] if i["done"]]
     assert done and done[0]["id"] == first["id"] and done[0]["doneBy"] == "테스터"
     assert j2["items"][-1]["done"] is True                       # 완료 항목은 아래로

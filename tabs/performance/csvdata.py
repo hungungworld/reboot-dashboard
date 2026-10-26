@@ -25,7 +25,7 @@ HEADER = ("날짜", "채널", "광고비", "노출수", "클릭수", "전환수"
 FIELDS = ("date", "channel", "spend", "impressions", "clicks", "conversions", "revenue")
 NUM_FIELDS = FIELDS[2:]
 HEADER_TEXT = ",".join(HEADER)
-HEADER_ERROR = f'첫 줄은 "{HEADER_TEXT}" 이어야 합니다. 양식 받기로 받은 파일에 붙여 넣어 주세요.'
+HEADER_ERROR = f'첫 줄은 "{HEADER_TEXT}" 이어야 해요. 양식 다운로드로 받은 CSV에 붙여 넣어 주세요.'
 SAMPLE_PATH = ROOT / "tabs" / "performance" / "data" / "performance_sample.csv"
 MAX_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 50_000
@@ -63,7 +63,7 @@ def decode(raw):
             return raw.decode(enc)
         except UnicodeDecodeError:
             continue
-    raise CsvError("파일 글자 인코딩을 읽지 못했습니다. UTF-8 또는 엑셀 CSV(쉼표로 분리)로 저장해 주세요.")
+    raise CsvError("파일 글자 인코딩을 읽지 못했어요. UTF-8 또는 엑셀 CSV(쉼표로 분리)로 저장해 주세요.")
 
 
 def parse_date(value, line):
@@ -74,7 +74,7 @@ def parse_date(value, line):
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
         except ValueError:
             pass
-    raise CsvError(f"{line}번째 줄: 날짜 '{s[:20]}'을(를) 읽지 못했습니다 (예: 2026-10-19).")
+    raise CsvError(f"{line}번째 줄: 날짜 '{s[:20]}'을(를) 읽지 못했어요 (예: 2026-10-19).")
 
 
 def parse_number(value, label, line):
@@ -85,16 +85,16 @@ def parse_number(value, label, line):
     try:
         n = float(s)
     except ValueError:
-        raise CsvError(f"{line}번째 줄: {label} '{raw[:20]}'은(는) 숫자가 아닙니다.")
+        raise CsvError(f"{line}번째 줄: {label} '{raw[:20]}'은(는) 숫자가 아니에요.")
     if not math.isfinite(n) or n < 0:
-        raise CsvError(f"{line}번째 줄: {label}은(는) 0 이상의 숫자여야 합니다.")
+        raise CsvError(f"{line}번째 줄: {label}은(는) 0 이상의 숫자여야 해요.")
     return int(round(n))
 
 
 def parse_csv(text):
     """CSV 글 → (행 목록, 정보). 행: {date, channel, spend, impressions, clicks, conversions, revenue}."""
     if len(text) > MAX_BYTES * 2:
-        raise CsvError("파일이 너무 큽니다 (5MB 이하).")
+        raise CsvError("파일이 너무 커요 (5MB 이하).")
     reader = csv.reader(io.StringIO(text.lstrip("\ufeff")))
     header = next(reader, None)
     cells = [c.strip().lstrip("\ufeff") for c in (header or [])]
@@ -107,13 +107,13 @@ def parse_csv(text):
         if not any(str(c).strip() for c in row):
             continue
         if len(row) < len(HEADER):
-            raise CsvError(f"{line}번째 줄: 칸이 {len(row)}개입니다 (7개 필요: {HEADER_TEXT}).")
+            raise CsvError(f"{line}번째 줄: 칸이 {len(row)}개예요 (7개 필요: {HEADER_TEXT}).")
         extra = [c for c in row[len(HEADER):] if str(c).strip()]
         if extra:
-            raise CsvError(f"{line}번째 줄: 칸이 7개보다 많습니다. 금액의 쉼표(,)는 큰따옴표로 감싸거나 빼 주세요.")
+            raise CsvError(f"{line}번째 줄: 칸이 7개보다 많아요. 금액의 쉼표(,)는 큰따옴표로 감싸거나 빼 주세요.")
         channel = row[1].strip()
         if not channel:
-            raise CsvError(f"{line}번째 줄: 채널 이름이 비어 있습니다.")
+            raise CsvError(f"{line}번째 줄: 채널 이름이 비어 있어요.")
         item = {"date": parse_date(row[0], line), "channel": channel[:40]}
         for i, f in enumerate(NUM_FIELDS, start=2):
             item[f] = parse_number(row[i], HEADER[i], line)
@@ -122,9 +122,9 @@ def parse_csv(text):
             dupes += 1  # 같은 파일 안에서 같은 날짜+채널은 아래 줄 값으로
         found[key] = item
         if len(found) > MAX_ROWS:
-            raise CsvError(f"행이 너무 많습니다 ({MAX_ROWS:,}행 이하).")
+            raise CsvError(f"행이 너무 많아요 ({MAX_ROWS:,}행 이하).")
     if not found:
-        raise CsvError("데이터 행이 없습니다. 첫 줄(제목) 아래에 날짜별·채널별 값을 넣어 주세요.")
+        raise CsvError("데이터 행이 없어요. 첫 줄(제목) 아래에 날짜별·채널별 값을 넣어 주세요.")
     return sort_rows(found.values()), {"duplicates": dupes}
 
 
@@ -168,7 +168,7 @@ def load():
             return {"rows": _read_file(path), "source": "upload", "meta": read_meta()}
         except (OSError, CsvError):
             current_app.logger.exception("업로드한 성과 CSV를 읽지 못했습니다")
-            return {"rows": [], "source": "upload", "meta": read_meta(), "error": "저장된 CSV를 읽지 못했습니다. 다시 올려 주세요."}
+            return {"rows": [], "source": "upload", "meta": read_meta(), "error": "저장된 CSV를 읽지 못했어요. 다시 올려 주세요."}
     if SAMPLE_PATH.is_file():
         return {"rows": _read_file(SAMPLE_PATH), "source": "sample", "meta": {}}
     return {"rows": [], "source": "none", "meta": {}}
