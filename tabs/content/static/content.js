@@ -681,7 +681,9 @@
 
   function barHtml() {
     const c = S.camp;
-    return `<div class="flex cnt-bar-title">${icon('spark')}<strong title="${esc(c.title)}">${esc(c.title)}</strong>
+    // ← 기본 정보 수정: 제작 화면을 떠나지 않고 1~6번 시트를 창으로 다시 열어 고침 (sheetEditModal · 만든 초안·카드뉴스는 그대로)
+    return `<div class="flex cnt-bar-title"><button type="button" class="btn small ghost cnt-back" data-act="sheet-edit" title="1~6번 기본 정보 시트를 다시 열어 고쳐요 (만든 초안은 그대로)">← 기본 정보 수정</button>
+        ${icon('spark')}<strong title="${esc(c.title)}">${esc(c.title)}</strong>
         <button type="button" class="link" data-act="rename" aria-label="캠페인명 바꾸기 · 삭제">${icon('edit')}</button></div>
       <div class="flex cnt-bar-right">
         <span class="cnt-status ${statusTone(c.status)}" title="완성하기 → 완료 · 더 수정하기 → 제작 중 (자동)">${esc(c.status)}</span>
