@@ -1214,10 +1214,10 @@
   }
 
   function koBox(text) {
-    return `<div class="result ptn-out-ko mt-16">
-      <div class="between"><strong class="small">한국어 번역</strong>${badge('AI 번역 · 참고용 (발송 본문은 영어 그대로)', 'purple')}</div>
-      <pre class="ptn-out-pre mt-8">${esc(text)}</pre>
-      <button type="button" class="link mt-8" data-act="ko-close">번역 닫기</button>
+    return `<div class="ptn-out-ko mt-16">
+      <span class="ptn-ko-tag">AI 번역 · 참고용</span>
+      <pre class="ptn-out-pre">${esc(text)}</pre>
+      <p class="ptn-ko-note">발송 본문은 영어 그대로예요. <button type="button" class="link" data-act="ko-close">번역 닫기</button></p>
     </div>`;
   }
 
