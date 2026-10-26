@@ -527,9 +527,8 @@
     });
     btn.disabled = false;
     if (r.ok) {
-      out.innerHTML = `<div class="cs-tr"><span class="cs-tr-tag">${r.engine === 'already-ko' ? '이미 한국어' : r.engine === 'ai' ? 'AI 번역 · 참고용' : '기계 번역 · 참고용'}</span>
-  <p class="cs-tr-text">${esc(r.text)}</p>${r.note ? `<p class="cs-muted">${esc(r.note)}</p>` : ''}
-  <p class="cs-muted">뜻 확인용이에요. 다시 심의·승인·발송은 영어 원문 기준이에요.</p></div>`;
+      out.innerHTML = `<div class="cs-tr"><span class="cs-tr-tag">${r.engine === 'already-ko' ? '이미 한국어' : r.engine === 'ai' ? 'AI 번역' : '기계 번역'}</span>
+  <p class="cs-tr-text">${esc(r.text)}</p>${r.note ? `<p class="cs-muted">${esc(r.note)}</p>` : ''}</div>`;
     } else if (r.reason === 'empty') {
       out.innerHTML = '<p class="cs-muted">번역할 내용이 없어요.</p>';
     } else {
@@ -929,7 +928,7 @@
         </div>
         <div class="cs-cextra">
           <div data-el="ainotes" aria-live="polite">${inq.aiNotes && inq.aiNotes.length ? aiNotesHTML(inq) : ''}</div>
-          ${trBlock('', '초안 한국어로 보기 (보내기 전 뜻 확인)', 'draft')}
+          ${trBlock('', '초안 한국어로 보기', 'draft')}
         </div>
       </div>
       <div class="cs-cpane cs-notepane" data-ctab-pane="note"${ui.ctab === 'note' ? '' : ' hidden'}>
