@@ -877,3 +877,13 @@
 .part-insights .ins-promo-body { display: grid; gap: 4px; }
 .part-insights .ins-promo-body .field-label { display: inline-block; margin: 0 8px 0 0; }
 @media (max-width: 720px) { .part-insights .ins-promo-row { grid-template-columns: 1fr; } }
+
+/* 노란 체크 패널로 담기: 끌 수 있는 자료 · [패널에 담기] */
+.part-insights [data-dock-id] { cursor: grab; }
+.part-insights [data-dock-id]:active { cursor: grabbing; }
+.part-insights [data-dock-id] input, .part-insights [data-dock-id] button, .part-insights [data-dock-id] a { cursor: pointer; }
+.part-insights [data-dock-id] input.input { cursor: text; }
+.part-insights .ins-dock-btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--muted); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.part-insights .ins-dock-btn:hover { border-color: var(--lime-line); color: var(--ink); background: var(--soft-2); }
+.part-insights .ins-dock-btn .icon { width: 12px; height: 12px; }
