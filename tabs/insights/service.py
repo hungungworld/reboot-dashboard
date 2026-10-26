@@ -127,6 +127,29 @@ def _changes(now, prev):
     return out
 
 
+def reboot_line():
+    """REBOOT 4종 — 설정 › 제품 정보의 사양서 가격 (출시 전 · 아직 진열대에 없음 · 화면에 '예시').
+    알디콤(실제 진열대 데이터)과 따로 보여 줌. 1회 제공량이 미정이라 1회분 대신 1개(젤리) · 1병(음료)당 값.
+    진열대 순위 · 보통 가격 계산에는 넣지 않음."""
+    items = []
+    for p in catalog.get_products():
+        price = p.get("price")
+        if price is None:
+            continue
+        jelly = str(p.get("id") or "").startswith("jelly")
+        n = p.get("pack_count")
+        unit = round(price / n, 2) if jelly and isinstance(n, (int, float)) and n > 0 else price
+        box = p.get("price_box")
+        per_unit = min([unit] + ([round(box / 3, 2)] if isinstance(box, (int, float)) else []))   # 음료 3병 박스
+        items.append({"id": p.get("id"), "title": p.get("consumer_name") or p.get("name"), "ko": p.get("ko"),
+                      "form": "gummy" if jelly else "liquid", "price": price, "priceBox": box,
+                      "perUnit": per_unit, "unitLabel": "1개" if jelly else "1병", "zeroSugar": bool(p.get("zero_sugar"))})
+    units = [x["perUnit"] for x in items]
+    return {"brand": "REBOOT", "label": "REBOOT (출시 전)", "demo": True, "items": items,
+            "perUnit": min(units) if units else None, "maxUnit": max(units) if units else None,
+            "basis": "설정 › 제품 정보의 사양서 가격 · 1회 제공량 미정이라 1개 · 1병당 · 진열대 순위 · 보통 가격에는 넣지 않아요"}
+
+
 def shelf_view():
     now, prev, info = snapshots()
     changes = _changes(now, prev)
@@ -156,7 +179,7 @@ def shelf_view():
         "lowStock": lines.LOW_STOCK, "demo": demo_info(), "forms": competitors.FORMS,
         "weekLabels": {src: week_label(i["week"]) for src, i in info.items()},
         "compare": bool(prev), "weeeRaw": [{"url": u, **v} for u, v in raw.items()],
-        "bucketLabels": BUCKET_LABEL,
+        "bucketLabels": BUCKET_LABEL, "reboot": reboot_line(),
     }
 
 
