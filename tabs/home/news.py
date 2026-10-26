@@ -10,6 +10,9 @@
   AI는 업계 뉴스 · 트렌드를 나눠 2번 부름 (한 번에 많이 시키면 후보를 적게 냄). 그래도 자리가 남으면 관련 기사 최신순으로 채움(요약 없음)
   보도 급증 수치는 AI에 주지 않음 (요약이 급증 칩에 끌려가지 않게)
   제목만 보고 씀 (본문 추측 금지)
+- 시즌 뉴스 (2026-10-26): 시즌 캘린더에서 준비 기간 · 진행 중인 시즌(monitor 켠 것)마다 검색어를 자동으로 붙임
+  검색어는 queries.json seasonQueries(이름에 그 낱말이 들어가면) → 없으면 '"시즌이름" + seasonDefault'. 회차(Super Bowl LXI의 LXI)는 뗌
+  시즌 기사는 보도 급증 계산에서 빼고, AI를 한 번 더 불러 시즌 칸(최대 4개 · 시즌마다 2개 먼저)으로 따로 고름
 - 실패하면 마지막 결과를 그대로 두고 화면에 '업데이트 실패' 표시
 """
 import json
@@ -19,6 +22,7 @@ from datetime import timedelta
 from flask import current_app
 
 from server import jobs, worklog
+from server.catalog import service as catalog
 from server.config import ROOT
 from server.core.ai import AIError, openai_json, openai_model, openai_ready
 from server.extensions import db
@@ -35,6 +39,9 @@ AI_PER_GROUP = 20  # 검색어마다 최신 20개까지 → 기사가 많은 분
 MAX_ITEMS = 8
 TREND_ITEMS = 4    # 트렌드 칸 최대
 TREND_PER_SOURCE = 2  # 트렌드 칸은 한 매체 최대 (다른 매체 후보가 모자라면 넘을 수 있음)
+SEASON_ITEMS = 4   # 시즌 칸 최대
+SEASON_PER = 2     # 시즌 칸은 한 시즌 최대 (다른 시즌 후보가 모자라면 넘을 수 있음)
+SEASON_DEFAULT = "(party OR drinks OR spending OR marketing)"
 AI_CANDIDATES = 20
 # 막연한 문구 거르기 (켜 보고 별로면 False): 이 표현이 든 '마케터의 시선' · 요약 줄은 버림
 STRICT_COPY = True
@@ -43,7 +50,7 @@ SIGNAL_SLOTS = 2   # signal 분야마다 자리 보장
 AREA_CAP = 3       # 한 분야 최대
 STATS_DAYS = 60    # 검색어 점검 기간 (이 기간 동안 고른 카드가 0개면 교체 후보)
 AREAS = (("category", "숙취 카테고리"), ("competitor", "경쟁 브랜드"), ("regulation", "규제"), ("behavior", "음주 행태"),
-         ("nonalc", "무알코올 · 기능성"), ("sales", "주류 판매"), ("kfood", "K-푸드"), ("trend", "트렌드"))
+         ("nonalc", "무알코올 · 기능성"), ("sales", "주류 판매"), ("kfood", "K-푸드"), ("trend", "트렌드"), ("season", "시즌"))
 TOPICS = ("판매 동향", "소비 트렌드", "규제·정책", "경쟁·신제품", "업계 일반")
 LIMIT_NOTE = "구글 뉴스 · 업계지 기사 제목 기준 요약이라 기사 본문은 보지 않았어요. 판매량·가격은 인사이트 탭에서 봐요."
 
@@ -52,7 +59,7 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
 
 규칙
 - 기사 제목과 매체에 있는 내용만 근거로 씁니다. 본문을 읽은 것처럼 쓰거나, 주어지지 않은 숫자·사실을 만들지 않습니다.
-- section이 news면 업계 뉴스만 다룹니다 (area에 trend를 쓰지 않음). section이 trend면 모든 기사를 area trend로 봅니다.
+- section이 news면 업계 뉴스만 다룹니다 (area에 trend · season을 쓰지 않음). section이 trend면 모든 기사를 area trend로, season이면 area season으로 봅니다.
 - 기사마다 검색한 분야(area)가 붙어 있지만, 기사 내용에 맞는 분야를 다시 고릅니다 (area: category 숙취 카테고리 · competitor 경쟁사 ·
   regulation 규제 · behavior 음주 행태 · nonalc 무알코올·기능성 · sales 주류 판매 · kfood K-푸드 · trend 트렌드). 예: FDA로 찾았어도 Z세대 음주 기사면 behavior.
 - 고를 기사 (넓게 고르고 점수로 가립니다): 숙취 제품 · 성분(DHM · 전해질 등), 경쟁 브랜드 소식(Liquid I.V. · ZBiotics 등의 협찬 · 신제품 · 캠페인),
@@ -62,11 +69,15 @@ AI_SYSTEM = """당신은 미국 시장에 진출한 한국 숙취해소 젤리·
   주류와 직접 관련이 없어도 고릅니다. 다른 분야에 더 맞는 기사(예: 경쟁 브랜드 신제품)는 그 분야로 보냅니다.
   트렌드 기사의 why_ko는 'REBOOT에 적용할 점' 한 줄 (예: "브랜드들이 틱톡샵 라이브로 첫 구매 유도 — 우리 런칭 채널에 라이브 판매 검토").
   업계 일반 기사(인수합병 · 실적 · 공장 · B2B 솔루션 광고)는 트렌드로 고르지 않습니다.
+- 시즌(area season): 기사마다 붙은 season(지금 준비 중인 미국 시즌 · 이벤트 이름: Halloween, Super Bowl 등)에 대한 기사 중
+  시즌 소비 지출 · 파티 · 음주 · 음식, 브랜드 시즌 캠페인 · 광고 · 한정판, 유통 시즌 프로모션처럼 REBOOT 시즌 캠페인에 쓸 수 있는 것.
+  시즌 이름만 스친 기사(경기 결과 · 선수 소식 · 사건 · 날씨)는 고르지 않습니다.
+  시즌 기사의 why_ko는 '그 시즌 캠페인에 반영할 점' 한 줄 (예: "할로윈 파티 지출 증가 보도 — 11/1 아침 숙취 카피 게시 시점 확인").
 - 미국 밖 시장만 다룬 기사(필리핀 · 영국 등 매출)는 관련 기사로 치지 않습니다.
 - 버릴 기사: 'hangover'를 비유로 쓴 기사(예: AI hangover, tariff hangover, DOGE hangover, post-election hangover — 술과 무관하면 모두 뺌),
   음주 사고·범죄, 주가·인물 가십, 인사 소식, 미국 밖 시장만 다룬 기사, 무관한 산업.
 - relevant_ids: 관련 있는 기사 id 전부.
-- articles: section news면 후보 12~16개 — 관련 기사가 있는 분야는 분야마다 2개 이상. section trend면 후보 4~6개 — 가능하면 서로 다른 매체에서. 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
+- articles: section news면 후보 12~16개 — 관련 기사가 있는 분야는 분야마다 2개 이상. section trend면 후보 4~6개 — 가능하면 서로 다른 매체에서. section season이면 후보 4~8개 — 시즌이 여럿이면 시즌마다 고르게. 같은 소식은 하나만. 관련 기사가 있는 분야는 분야마다 최소 1개씩 넣습니다
   (특히 숙취 카테고리 · 경쟁사 · 규제는 기사 수가 적어도 꼭 확인). 기사마다 점수를 매깁니다 (점수 합으로 서버가 최종 8개를 고름).
   distance(REBOOT와의 거리): 2 = 숙취 제품·성분 · 경쟁 브랜드 · 영양제/식품 규제, 1 = 음주 행태 · 무알코올·기능성 음료 · K-푸드, 0 = 주류 업계 일반
   action(실행 가능성): 2 = 이번 주 카피·캠페인·채널에 바로 반영할 수 있음, 1 = 참고, 0 = 없음
@@ -178,13 +189,54 @@ def build_query(cfg, group):
     return str(group["query"]).strip()
 
 
+# ───────── 시즌 검색어 ─────────
+
+ROMAN = re.compile(r"\s+[IVXLC]+$")
+
+
+def active_seasons(today=None):
+    """지금 준비 기간 · 진행 중인 시즌 (설정 › 시즌 캘린더에서 모니터링을 켠 것)."""
+    return [s for s in catalog.list_seasons(today=today) if s.get("monitor") and (s.get("inLead") or s.get("ongoing"))]
+
+
+def season_query(cfg, name):
+    """시즌 이름 → 검색어. seasonQueries 열쇠가 이름에 들어 있으면 그것, 없으면 '"이름" + 기본 낱말' (회차 로마 숫자는 뗌)."""
+    low = str(name).lower()
+    for key, q in (cfg.get("seasonQueries") or {}).items():
+        if not key.startswith("_") and key.lower() in low and str(q).strip():
+            return str(q).strip()
+    base = ROMAN.sub("", str(name)).strip()
+    return f'"{base}" {cfg.get("seasonDefault") or SEASON_DEFAULT}'
+
+
+def season_groups(cfg, seasons):
+    """시즌 목록 → 검색어 묶음 (같은 검색어는 한 번만)."""
+    out, seen = [], set()
+    for s in seasons:
+        name = ROMAN.sub("", str(s.get("name") or "")).strip()
+        gid = "season-" + (re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or str(s.get("id")))
+        q = season_query(cfg, name)
+        if not name or gid in seen or q in {g["query"] for g in out}:
+            continue
+        seen.add(gid)
+        out.append({"id": gid, "label": name, "area": "season", "areaLabel": "시즌", "kind": "season", "query": q, "season": name})
+    return out
+
+
+def load_all(today=None):
+    """검색어 설정 + 지금 시즌 검색어."""
+    cfg = load_queries()
+    cfg["groups"] = cfg["groups"] + season_groups(cfg, active_seasons(today))
+    return cfg
+
+
 def groups_public(cfg=None):
     try:
-        cfg = cfg or load_queries()
+        cfg = cfg or load_all()
     except (OSError, ValueError):
         return []
     return [{"id": g["id"], "label": g.get("label") or g["id"], "area": g["area"], "areaLabel": g["areaLabel"], "kind": g["kind"],
-             "query": g.get("query", ""), "feed": g.get("feed", "")} for g in cfg["groups"]]
+             "query": g.get("query", ""), "feed": g.get("feed", ""), "season": g.get("season", "")} for g in cfg["groups"]]
 
 
 def make_client():
@@ -256,7 +308,7 @@ def recent_articles(days=7, limit=AI_MAX_ARTICLES, per_group=AI_PER_GROUP, cfg=N
         if groups is not None and (a.group_id not in groups or drop(a.title, groups[a.group_id])):
             continue  # 지운 검색어 · 예전 규칙으로 들어온 기사
         g = (groups or {}).get(a.group_id) or {}
-        if a.seen_at < now - timedelta(days=signal_days if g.get("kind") == "signal" else days):
+        if a.seen_at < now - timedelta(days=signal_days if g.get("kind") in ("signal", "season") else days):
             continue
         if per.get(a.group_id, 0) < per_group:
             out.append(a)
@@ -280,20 +332,26 @@ def score_of(it):
     return int(it.get("distance") or 0) + int(it.get("action") or 0) + int(it.get("source") or 0) + int(it.get("novelty") or 0)
 
 
-def pick(cands, kind_of, limit=MAX_ITEMS, trend_limit=TREND_ITEMS):
+def _spread(cands, key, limit, per_cap):
+    """점수순 후보 → 같은 key(매체 · 시즌)는 per_cap개까지 먼저, 모자라면 점수순으로 채움 (최대 limit개, 점수순)."""
+    out, per = [], {}
+    for c in cands:
+        k = c.get(key, "")
+        if len(out) < limit and per.get(k, 0) < per_cap:
+            out.append(c)
+            per[k] = per.get(k, 0) + 1
+    out += [c for c in cands if c not in out][:limit - len(out)]
+    return sorted(out, key=lambda c: -c["score"])
+
+
+def pick(cands, kind_of, limit=MAX_ITEMS, trend_limit=TREND_ITEMS, season_limit=SEASON_ITEMS):
     """점수순 후보 → 업계 뉴스: signal 분야는 SIGNAL_SLOTS개씩 먼저, 한 분야는 AREA_CAP개까지, 나머지는 점수순 (최대 limit개)
-    + 트렌드(kind trend): 점수순 최대 trend_limit개 (업계 뉴스 뒤에 붙임)."""
+    + 트렌드(kind trend): 한 매체 TREND_PER_SOURCE개 먼저, 최대 trend_limit개
+    + 시즌(kind season): 한 시즌 SEASON_PER개 먼저, 최대 season_limit개 (업계 뉴스 · 트렌드 뒤에 붙임)."""
     cands = sorted(cands, key=lambda c: -c["score"])
-    trend_all = [c for c in cands if kind_of(c["area"]) == "trend"]
-    trends, per_src = [], {}
-    for c in trend_all:  # 한 매체 TREND_PER_SOURCE개까지 먼저
-        src = c.get("domain", "")
-        if len(trends) < trend_limit and per_src.get(src, 0) < TREND_PER_SOURCE:
-            trends.append(c)
-            per_src[src] = per_src.get(src, 0) + 1
-    trends += [c for c in trend_all if c not in trends][:trend_limit - len(trends)]  # 모자라면 점수순으로 채움
-    trends.sort(key=lambda c: -c["score"])
-    cands = [c for c in cands if kind_of(c["area"]) != "trend"]
+    trends = _spread([c for c in cands if kind_of(c["area"]) == "trend"], "domain", trend_limit, TREND_PER_SOURCE)
+    seasons = _spread([c for c in cands if kind_of(c["area"]) == "season"], "season", season_limit, SEASON_PER)
+    cands = [c for c in cands if kind_of(c["area"]) not in ("trend", "season")]
     out, per = [], {}
 
     def take(c):
@@ -305,29 +363,43 @@ def pick(cands, kind_of, limit=MAX_ITEMS, trend_limit=TREND_ITEMS):
     for c in cands:
         if len(out) < limit and c not in out and per.get(c["area"], 0) < AREA_CAP:
             take(c)
-    return sorted(out, key=lambda c: -c["score"]) + trends
+    return sorted(out, key=lambda c: -c["score"]) + trends + seasons
 
 
 def vague(text):
     return STRICT_COPY and any(w in str(text or "") for w in VAGUE)
 
 
+SECTION_LABEL = {"news": "업계 뉴스", "trend": "트렌드", "season": "시즌"}
+
+
+def season_of(article, by_group):
+    """기사를 모은 검색어 중 시즌 검색어가 있으면 그 시즌 이름 (다른 검색어로 먼저 들어온 기사도 시즌 칸으로)."""
+    for gid in [article.group_id] + [g for g in (article.groups or "").split(",") if g]:
+        g = by_group.get(gid) or {}
+        if g.get("kind") == "season":
+            return g.get("season") or g.get("label", "")
+    return ""
+
+
 def _ask(section, articles, cfg):
-    """AI 1번 (section: news 업계 뉴스 / trend 트렌드) → (후보 목록, 관련 id 집합, 한 줄 요약)."""
+    """AI 1번 (section: news 업계 뉴스 / trend 트렌드 / season 시즌) → (후보 목록, 관련 id 집합, 한 줄 요약)."""
     if not articles:
         return [], set(), ""
     ids = {a.id for a in articles}
     by_group = {g["id"]: g for g in cfg["groups"]}
     kinds = {g["area"]: g["kind"] for g in cfg["groups"]}  # AI가 고른 분야도 여기 있는 것만 씀
     area_of = {a.id: (by_group.get(a.group_id) or {}).get("area", a.group_id) for a in articles}
+    season = {a.id: season_of(a, by_group) for a in articles} if section == "season" else {}
     data = {
         "section": section,
-        "articles": [{"id": a.id, "title": a.title, "source": a.domain, "date": a.seen_at.strftime("%Y-%m-%d"),
-                      "group": a.group_id, "area": (by_group.get(a.group_id) or {}).get("areaLabel", "")} for a in articles],
-        "groups": [g for g in groups_public(cfg) if (g["kind"] == "trend") == (section == "trend")],
+        "articles": [dict({"id": a.id, "title": a.title, "source": a.domain, "date": a.seen_at.strftime("%Y-%m-%d"),
+                           "group": a.group_id, "area": (by_group.get(a.group_id) or {}).get("areaLabel", "")},
+                          **({"season": season[a.id]} if season else {})) for a in articles],
+        "groups": [g for g in groups_public(cfg) if g["kind"] == section or (section == "news" and g["kind"] not in ("trend", "season"))],
     }
     raw = openai_json(AI_SYSTEM, data, schema=AI_SCHEMA, schema_name="news_items", max_tokens=4000,
-                      part="home", action=f"미국 시장 브리핑 {'트렌드' if section == 'trend' else '업계 뉴스'} 필터링·요약")
+                      part="home", action=f"미국 시장 브리핑 {SECTION_LABEL[section]} 필터링·요약")
     relevant = {i for i in (raw.get("relevant_ids") or []) if isinstance(i, int) and i in ids}
     cands, used = [], set()
     titles = {a.id: a.title for a in articles}
@@ -344,49 +416,55 @@ def _ask(section, articles, cfg):
         used.add(aid)
         relevant.add(aid)
         area = it.get("area") if it.get("area") in kinds else area_of[aid]
-        if (kinds.get(area) == "trend") != (section == "trend"):
-            area = "trend" if section == "trend" else area_of[aid]  # 칸을 넘나들지 않게
+        if section in ("trend", "season"):
+            area = section  # 칸을 넘나들지 않게
+        elif kinds.get(area) in ("trend", "season"):
+            area = area_of[aid]
         why = str(it.get("why_ko") or "").strip()[:200]
-        cands.append({"id": aid, "domain": domains[aid], "title_ko": title_ko, "summary_ko": str(it.get("summary_ko") or "").strip()[:300],
-                      "why_ko": "" if vague(why) else why,
-                      "topic": it.get("topic") if it.get("topic") in TOPICS else "업계 일반",
-                      "score": score_of(it), "area": area})
+        cands.append(dict({"id": aid, "domain": domains[aid], "title_ko": title_ko, "summary_ko": str(it.get("summary_ko") or "").strip()[:300],
+                           "why_ko": "" if vague(why) else why,
+                           "topic": it.get("topic") if it.get("topic") in TOPICS else "업계 일반",
+                           "score": score_of(it), "area": area}, **({"season": season[aid]} if season else {})))
         if len(cands) >= AI_CANDIDATES:
             break
     head = str(raw.get("headline") or "").strip()[:200]
     return cands, relevant, "" if vague(head) else head
 
 
-def _fill(items, relevant, articles, area_of, limit):
+def _fill(items, relevant, articles, area_of, limit, season=None):
     """AI가 고른 카드가 limit보다 적으면 관련 기사 최신순으로 채움 (한국어 요약 없음 · fallback 표시)."""
     used = {c["id"] for c in items}
     for a in sorted(articles, key=lambda a: a.seen_at, reverse=True):
         if len(items) >= limit:
             break
         if a.id in relevant and a.id not in used:
-            items.append({"id": a.id, "title_ko": "", "summary_ko": "", "why_ko": "", "topic": "업계 일반", "score": 0,
-                          "area": area_of[a.id], "fallback": True})
+            items.append(dict({"id": a.id, "title_ko": "", "summary_ko": "", "why_ko": "", "topic": "업계 일반", "score": 0,
+                               "area": area_of[a.id], "fallback": True}, **({"season": season[a.id]} if season else {})))
             used.add(a.id)
     return items
 
 
 def summarize(articles, cfg):
-    """업계 뉴스 · 트렌드를 나눠 AI 2번 → 자리 규칙으로 업계 최대 8개 + 트렌드 최대 4개 (모자라면 관련 기사로 채움)
+    """업계 뉴스 · 트렌드 · 시즌을 나눠 AI 최대 3번 → 자리 규칙으로 업계 최대 8개 + 트렌드 최대 4개 + 시즌 최대 4개 (모자라면 관련 기사로 채움)
     → (summary dict, 관련 기사 id 집합). 한쪽 AI가 실패하면 AIError를 그대로 올림."""
     by_group = {g["id"]: g for g in cfg["groups"]}
     kinds = {g["area"]: g["kind"] for g in cfg["groups"]}
-    area_of = {a.id: (by_group.get(a.group_id) or {}).get("area", a.group_id) for a in articles}
-    is_trend = {a.id: kinds.get(area_of[a.id]) == "trend" for a in articles}
-    news_arts = [a for a in articles if not is_trend[a.id]]
-    trend_arts = [a for a in articles if is_trend[a.id]]
+    season = {a.id: season_of(a, by_group) for a in articles}
+    area_of = {a.id: "season" if season[a.id] else (by_group.get(a.group_id) or {}).get("area", a.group_id) for a in articles}
+    sec = {a.id: kinds.get(area_of[a.id]) if kinds.get(area_of[a.id]) in ("trend", "season") else "news" for a in articles}
+    news_arts = [a for a in articles if sec[a.id] == "news"]
+    trend_arts = [a for a in articles if sec[a.id] == "trend"]
+    season_arts = [a for a in articles if sec[a.id] == "season"]
     c1, r1, h1 = _ask("news", news_arts, cfg)
     c2, r2, h2 = _ask("trend", trend_arts, cfg)
-    picked = pick(c1 + c2, lambda area: kinds.get(area, "flow"))
-    news_items = _fill([c for c in picked if kinds.get(c["area"]) != "trend"], r1, news_arts, area_of, MAX_ITEMS)
+    c3, r3, h3 = _ask("season", season_arts, cfg)
+    picked = pick(c1 + c2 + c3, lambda area: kinds.get(area, "flow"))
+    news_items = _fill([c for c in picked if kinds.get(c["area"]) not in ("trend", "season")], r1, news_arts, area_of, MAX_ITEMS)
     trend_items = _fill([c for c in picked if kinds.get(c["area"]) == "trend"], r2, trend_arts, area_of, TREND_ITEMS)
-    lines = ([f"업계: {h1}"] if h1 else []) + ([f"트렌드: {h2}"] if h2 else [])
-    relevant = r1 | r2
-    return {"headline": "\n".join(lines), "items": news_items + trend_items, "relevant_ids": sorted(relevant)}, relevant
+    season_items = _fill([c for c in picked if kinds.get(c["area"]) == "season"], r3, season_arts, area_of, SEASON_ITEMS, season)
+    lines = ([f"업계: {h1}"] if h1 else []) + ([f"트렌드: {h2}"] if h2 else []) + ([f"시즌: {h3}"] if h3 else [])
+    relevant = r1 | r2 | r3
+    return {"headline": "\n".join(lines), "items": news_items + trend_items + season_items, "relevant_ids": sorted(relevant)}, relevant
 
 
 # ───────── 수집 ─────────
@@ -438,7 +516,7 @@ def collect(run_id=None, trigger="daily", user_name="시스템", client=None):
 
 
 def _collect(run, client, user_name):
-    cfg = load_queries()
+    cfg = load_all()
     counts, errors, signals = {}, [], []
     ok_groups, fails = 0, 0
     now = utcnow()
@@ -477,8 +555,8 @@ def _collect(run, client, user_name):
             else:
                 kept.append(a)
         arts = kept
-        sig = None if g.get("feed") else rss.surge([a.get("date") for a in arts], now, float(cfg.get("surgeRatio", 1.5)),
-                                                   int(cfg.get("surgeMinRecent", 5)))  # 피드 기사 수는 사이트 게시 속도라 급증으로 보지 않음
+        sig = None if g.get("feed") or g.get("kind") == "season" else rss.surge([a.get("date") for a in arts], now, float(cfg.get("surgeRatio", 1.5)),
+                                                   int(cfg.get("surgeMinRecent", 5)))  # 피드는 사이트 게시 속도 · 시즌은 다가오면 늘어 급증으로 보지 않음
         if sig:
             signals.append(dict(sig, group=g["id"], label=label))
         counts[g["id"]] = {"found": found, "kept": len(arts), "dropped": dropped, "new": store_articles(arts, g["id"], run.id)}
@@ -531,6 +609,8 @@ def payload():
     labels = {g["id"]: g["label"] for g in cfg_groups}
     areas = {g["area"]: g["areaLabel"] for g in cfg_groups}
     kinds = {g["area"]: g["kind"] for g in cfg_groups}
+    areas.setdefault("season", "시즌")   # 시즌이 끝나 검색어가 빠져도 지난 요약의 시즌 기사는 시즌 칸으로
+    kinds.setdefault("season", "season")
     latest = HomeNewsRun.query.order_by(HomeNewsRun.id.desc()).first()
     running = running_run()
     last_ok = HomeNewsRun.query.filter(HomeNewsRun.status.in_(("ok", "partial"))).order_by(HomeNewsRun.id.desc()).first()
@@ -559,7 +639,7 @@ def payload():
             d = a.to_dict()
             items.append(dict(d, titleKo=it.get("title_ko", ""), summaryKo=it.get("summary_ko", ""),
                               whyKo=it.get("why_ko", ""), score=it.get("score"), area=it.get("area", ""), areaLabel=areas.get(it.get("area"), ""),
-                              topic=it.get("topic", ""), kind=kinds.get(it.get("area"), "flow"), fallback=bool(it.get("fallback")), groupLabel=labels.get(a.group_id, ""),
+                              topic=it.get("topic", ""), kind=kinds.get(it.get("area"), "flow"), season=it.get("season", ""), fallback=bool(it.get("fallback")), groupLabel=labels.get(a.group_id, ""),
                               surge=bool(surging & set(d["groups"]))))
         ai = {"headline": s.get("headline", ""), "items": items, "at": iso(ai_run.finished_at), "model": ai_run.model}
 
@@ -611,7 +691,7 @@ def query_stats(groups):
         if a.group_id in stat:
             stat[a.group_id]["picked"] += 1
     enough = bool(runs) and runs[0].started_at <= utcnow() - timedelta(days=30)
-    return [dict(g, runs=len(runs), **stat[g["id"]], replace=enough and stat[g["id"]]["picked"] == 0) for g in groups]
+    return [dict(g, runs=len(runs), **stat[g["id"]], replace=enough and g["kind"] != "season" and stat[g["id"]]["picked"] == 0) for g in groups]
 
 
 def brief():

@@ -3,6 +3,21 @@
   "when": "14d",
   "surgeRatio": 1.5,
   "surgeMinRecent": 5,
+  "_seasonQueries": "시즌 뉴스 (2026-10-26): 설정 › 시즌 캘린더에서 준비 기간 · 진행 중인 시즌마다 아래 검색어를 자동으로 붙임 (시즌 칸 최대 4개). 열쇠가 시즌 이름에 들어 있으면 그 검색어 (예: Thanksgiving → Thanksgiving Eve), 없으면 '\"시즌이름\" ' + seasonDefault",
+  "seasonDefault": "(party OR drinks OR spending OR marketing)",
+  "seasonQueries": {
+    "Halloween": "Halloween (party OR drinks OR candy OR spending OR costume)",
+    "Thanksgiving": "Thanksgiving (\"Blackout Wednesday\" OR drinking OR drinks OR spending OR party)",
+    "Christmas": "Christmas (party OR drinks OR spending OR gifts OR \"holiday season\")",
+    "New Year": "\"New Year's Eve\" (party OR drinks OR champagne OR hangover OR spending)",
+    "Mardi Gras": "\"Mardi Gras\" (party OR drinks OR parade OR spending)",
+    "Super Bowl": "\"Super Bowl\" (party OR beer OR ads OR snacks OR spending)",
+    "St. Patrick": "\"St. Patrick's Day\" (beer OR drinks OR party OR spending)",
+    "Cinco de Mayo": "\"Cinco de Mayo\" (drinks OR margarita OR beer OR spending)",
+    "Memorial Day": "\"Memorial Day\" (weekend OR barbecue OR drinks OR sales)",
+    "Independence Day": "\"Fourth of July\" (party OR barbecue OR drinks OR spending)",
+    "Labor Day": "\"Labor Day\" (weekend OR barbecue OR drinks OR sales)"
+  },
   "areas": [
     {"id": "category", "label": "숙취 카테고리", "kind": "signal"},
     {"id": "competitor", "label": "경쟁 브랜드", "kind": "signal"},

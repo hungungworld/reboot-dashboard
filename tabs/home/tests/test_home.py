@@ -11,6 +11,7 @@ from server.extensions import db
 from tabs.home import news, routes, rss, todos
 from tabs.home.models import HomeNewsArticle, HomeNewsRun
 
+REAL_ACTIVE_SEASONS = news.active_seasons  # no_seasons가 바꾸기 전 원래 함수
 TODAY = date(2026, 10, 23)  # 금요일 → 이번 주 월요일 10-19
 
 
@@ -18,6 +19,12 @@ TODAY = date(2026, 10, 23)  # 금요일 → 이번 주 월요일 10-19
 def today(monkeypatch):
     monkeypatch.setattr("server.catalog.service._today", lambda: TODAY)
     return TODAY
+
+
+@pytest.fixture(autouse=True)
+def no_seasons(monkeypatch):
+    """기본은 준비 중인 시즌 없음 (실행 날짜에 따라 검색어 수가 바뀌지 않게). 시즌 테스트는 따로 바꿈."""
+    monkeypatch.setattr("tabs.home.news.active_seasons", lambda today=None: [])
 
 
 @pytest.fixture()
@@ -108,7 +115,7 @@ def test_queries_are_plain_search_terms():
         assert g["kind"] in ("signal", "flow", "trend") and g["areaLabel"]
     for g in feeds:
         assert g["feed"].startswith("https://") and g.get("source") and not g.get("query")
-    assert {a for a, _ in news.AREAS} == {g["area"] for g in cfg["groups"]}
+    assert {a for a, _ in news.AREAS} - {"season"} == {g["area"] for g in cfg["groups"]}   # 시즌 검색어는 시즌 캘린더에서 자동으로
     assert {g["area"] for g in cfg["groups"] if g["kind"] == "signal"} == {"category", "competitor", "regulation"}
     assert {"DUI", "drunk driving", "crash"} <= set(cfg["exclude"])
 
@@ -170,6 +177,34 @@ def test_pick_spreads_trends_across_sources():
     assert sorted(c["id"] for c in out) == [0, 1, 10, 11]          # 한 매체 2개까지 · 다른 매체로 채움
     only = news.pick(mr + others[:1], kinds)
     assert sorted(c["id"] for c in only) == [0, 1, 2, 10]          # 다른 매체가 모자라면 점수순으로 채움
+
+
+def test_pick_keeps_seasons_last_and_spread():
+    kinds = {"behavior": "flow", "trend": "trend", "season": "season"}.get
+    hw = [{"id": i, "area": "season", "season": "Halloween", "score": 9} for i in range(4)]
+    tg = [{"id": 10, "area": "season", "season": "Thanksgiving Eve", "score": 2}]
+    out = news.pick([{"id": 20, "area": "behavior", "score": 1}, {"id": 30, "area": "trend", "score": 1}] + hw + tg, kinds)
+    assert [c["area"] for c in out] == ["behavior", "trend"] + ["season"] * news.SEASON_ITEMS   # 시즌은 맨 뒤 따로
+    assert 10 in [c["id"] for c in out]                                         # 점수가 낮아도 다른 시즌 먼저 (한 시즌 2개)
+    assert sorted(c["id"] for c in news.pick(hw[:3] + tg, kinds, season_limit=3)) == [0, 1, 10]
+
+
+def test_season_queries():
+    cfg = news.load_queries()
+    gs = news.season_groups(cfg, [{"id": 1, "name": "Halloween"}, {"id": 2, "name": "Thanksgiving Eve"},
+                                  {"id": 3, "name": "Super Bowl LXI"}, {"id": 4, "name": "Juneteenth"}, {"id": 5, "name": "Halloween"}])
+    q = {g["id"]: g["query"] for g in gs}
+    assert list(q) == ["season-halloween", "season-thanksgiving-eve", "season-super-bowl", "season-juneteenth"]   # 같은 시즌은 한 번
+    assert q["season-halloween"].startswith("Halloween (") and q["season-thanksgiving-eve"].startswith("Thanksgiving (")
+    assert q["season-super-bowl"].startswith('"Super Bowl"')                                       # 회차(LXI)는 뗌
+    assert q["season-juneteenth"] == f'"Juneteenth" {cfg["seasonDefault"]}'                         # 없는 시즌은 기본 낱말
+    assert all(g["kind"] == "season" and g["area"] == "season" for g in gs)
+
+
+def test_active_seasons_from_calendar(app):
+    with app.app_context():
+        names = [s["name"] for s in REAL_ACTIVE_SEASONS(today=date(2026, 10, 26))]
+    assert "Halloween" in names and "Thanksgiving Eve" in names and "Christmas" not in names   # 준비 기간 · 진행 중만
 
 
 def test_client_parses_rss_and_retries(monkeypatch):
@@ -429,6 +464,45 @@ def test_feed_drops_old_articles_and_ai_trend_slot(fast, auth_client, monkeypatc
         assert HomeNewsArticle.query.filter_by(url="https://md.example.com/old").count() == 0
     it = auth_client.get("/api/home/news").get_json()["ai"]["items"][0]
     assert it["kind"] == "trend" and it["areaLabel"] == "트렌드" and it["whyKo"].startswith("런칭")
+
+
+def test_season_news_collected_into_season_slot(fast, auth_client, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setattr("tabs.home.news.active_seasons", lambda today=None: [{"id": 1, "name": "Halloween"}])
+    hq = news.season_query(news.load_queries(), "Halloween")
+
+    def responder(p):
+        if p.get("q") == f"{hq} when:14d":
+            now = _now()
+            return FakeRes(body=rss_xml([{"url": f"https://hw.example.com/{i}", "title": f"Halloween party spending hits record {i}",
+                                          "source": "NRF", "date": now - timedelta(hours=i)} for i in range(6)]))
+        return good_responder(p)
+
+    calls = make_session(monkeypatch, responder)
+    sections = []
+
+    def fake_openai_json(system, user, **kw):
+        sections.append(user["section"])
+        if user["section"] != "season":
+            return {"relevant_ids": [], "headline": "", "articles": []}
+        a = user["articles"][0]
+        assert a["season"] == "Halloween" and all(g["kind"] == "season" for g in user["groups"])
+        return {"relevant_ids": [a["id"]], "headline": "할로윈 지출 기사",
+                "articles": [{"id": a["id"], "title_en": a["title"], "title_ko": "할로윈 파티 지출 최고치", "summary_ko": "s",
+                              "why_ko": "11/1 아침 숙취 카피 게시 시점 확인", "area": "behavior", "topic": "소비 트렌드",
+                              "distance": 1, "action": 2, "source": 1, "novelty": 1}]}
+
+    monkeypatch.setattr("tabs.home.news.openai_json", fake_openai_json)
+    with fast.app_context():
+        run = news.collect()
+        assert json.loads(run.counts)["season-halloween"]["new"] == 6
+        assert "season-halloween" not in {s["group"] for s in json.loads(run.signals)}   # 시즌은 보도 급증에서 뺌
+    assert any(c.get("q") == f"{hq} when:14d" for c in calls) and sections == ["news", "trend", "season"]
+    j = auth_client.get("/api/home/news").get_json()
+    it = next(i for i in j["ai"]["items"] if i["titleKo"] == "할로윈 파티 지출 최고치")
+    assert it["kind"] == "season" and it["season"] == "Halloween" and it["area"] == "season"   # AI가 다른 분야를 골라도 시즌 칸
+    assert "시즌: 할로윈 지출 기사" in j["ai"]["headline"]
+    assert any(q["id"] == "season-halloween" and q["replace"] is False for q in j["queryStats"])
 
 
 def test_ai_error_keeps_articles(fast, auth_client, monkeypatch):
