@@ -1122,6 +1122,7 @@
     return `${baseChip}<button type="button" class="cnt-tool" data-act="ref-upload" title="JPG · PNG · WebP · 최대 3장 · AI가 보고 대화에 참고해요">${icon('image')}레퍼런스 이미지</button>
       <button type="button" class="cnt-tool" data-act="reference">${icon('plus')}참고 문구</button>
       <button type="button" class="cnt-tool" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 입력창에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button>
+      <button type="button" class="cnt-tool" data-act="dock" title="인사이트 탭에서 노란 체크 패널에 담아 둔 자료를 입력창에 덧붙여요">${icon('doc')}노란 패널 자료</button>
       <button type="button" class="cnt-tool" data-act="ai-settings">${icon('settings')}설정</button><span class="cnt-mode">${mode}</span>`;
   }
 
@@ -2243,7 +2244,39 @@
     });
   }
 
-  // 고객 브리프 (인사이트 파트 · 사람이 승인한 요약만). 원본 리뷰는 오지 않음. 고르면 입력창에 넣음 (자동 전송 안 함)
+  // 여러 개를 체크한 뒤 [확인]을 눌러야 반영 (하나 누르자마자 닫히지 않게) — 고객 브리프 · 노란 패널 자료 공통
+  // rows: [html] · 확인하면 고른 번호 배열을 돌려줌 (취소 · 닫기 = null)
+  async function pickModal(o) {
+    let picked = [];
+    const v = await modal({
+      title: o.title,
+      body: `${o.intro}<div class="cnt-persona-list">${o.rows.map((h, i) => `<label class="choice cnt-pick"><input type="checkbox" data-pick="${i}"><span>${h}</span></label>`).join('')}</div>${o.foot || ''}`,
+      actions: [{ label: '취소', value: null }, { label: '확인', value: true, tone: 'lime', onClick: body => {
+        picked = Array.from(body.querySelectorAll('[data-pick]:checked')).map(x => +x.dataset.pick);
+        if (!picked.length) { toast('넣을 항목을 하나 이상 체크하세요.', 'error'); return false; }
+        return true;
+      } }]
+    });
+    return v ? picked : null;
+  }
+  // 고른 글을 카드뉴스 '넣을 내용' 칸(편집기) 또는 AI 입력창 뒤에 덧붙임 (자동 생성 · 전송 안 함)
+  function appendPicked(parts, what) {
+    const add = parts.join('\n\n');
+    if (cnActive()) {
+      const n = S.cn;
+      n.source = n.source.trim() ? `${n.source.trim()}\n\n${add}` : add;
+      lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
+      cnRenderSetup();
+      toast(`${what} ${parts.length}개를 넣었어요. 내용을 확인하고 고쳐도 돼요.`);
+      return;
+    }
+    const input = ref('input');
+    if (!input) return;
+    input.value = input.value.trim() ? `${input.value.trim()}\n\n${add}` : add;
+    input.focus();
+  }
+
+  // 고객 브리프 (인사이트 파트 · 사람이 승인한 요약만). 원본 리뷰는 오지 않음. 체크하고 [확인]하면 입력창에 넣음 (자동 전송 안 함)
   async function briefModal() {
     await loadBrief();  // 콘텐츠 탭을 연 뒤에 승인했을 수 있어 누를 때마다 새로 읽음
     const b = S.brief;
@@ -2257,41 +2290,60 @@
       return;
     }
     const list = b.themes;
-    modal({
-      title: `고객 브리프 (인사이트 탭 · ${esc(b.month)})`,
-      body: `<p>리뷰 · 유튜브 질문을 주제로 묶어 사람이 승인한 요약이에요. 참고용이고, 만든 문구는 컴플라이언스 검토를 거쳐요. 고르면 ${cnActive() ? "'카드뉴스에 넣을 내용' 칸 뒤에 덧붙여요 (자동 생성 안 함)" : '입력창에 넣어 드려요 (자동 전송 안 함)'}.</p>
-        <div class="cnt-persona-list">${list.map((t, i) => `<button type="button" class="choice" data-brief="${i}"><span><b>${esc(t.theme)}</b> ${badge(`신뢰도 ${t.confidence}`, t.confidence === '높음' ? 'green' : 'blue')}
+    const picked = await pickModal({
+      title: `고객 브리프 (인사이트 탭 · ${b.month})`,
+      intro: `<p>리뷰 · 유튜브 질문을 주제로 묶어 사람이 승인한 요약이에요.<br>참고용이고, 만든 문구는 컴플라이언스 검토를 거쳐요.<br>쓸 주제를 체크하고 [확인]을 누르면 ${cnActive() ? "'카드뉴스에 넣을 내용' 칸 뒤에 덧붙여요 (자동 생성 안 함)" : '입력창에 넣어 드려요 (자동 전송 안 함)'}.</p>`,
+      rows: list.map(t => `<b>${esc(t.theme)}</b> ${badge(`신뢰도 ${t.confidence}`, t.confidence === '높음' ? 'green' : 'blue')}
           <br><small>각도: ${esc(t.angle)}</small><br><small>말할 방향: ${esc(t.say)}</small>
           ${t.avoid && t.avoid.length ? `<br><small class="muted">피할 말: ${esc(t.avoid.join(' · '))}</small>` : ''}
-          <br><small class="muted">근거: ${esc(t.evidence)}</small></span></button>`).join('')}</div>
-        <p class="small muted">모든 주제에서 피할 말: ${esc((b.avoid || []).join(' · '))}</p>`,
-      actions: [{ label: '닫기', value: null }],
-      onOpen: el => {
-        el.addEventListener('click', e => {
-          const btn = e.target.closest('[data-brief]');
-          if (!btn) return;
-          const t = list[+btn.dataset.brief];
-          const avoid = t ? [].concat(t.avoid || [], b.avoid || []) : [];
-          const close = el.closest('.modal-backdrop') && el.closest('.modal-backdrop').querySelector('[data-modal-close]');
-          if (t && cnActive()) {  // 카드뉴스 편집기: 1단계 '넣을 내용' 칸 뒤에 덧붙임 (파일 업로드와 같은 방식)
-            const n = S.cn;
-            const add = `[제작 방향 · 인사이트 고객 브리프 '${t.theme}' — 카드 문구로 그대로 쓰지 말고 방향으로만 참고]\n각도: ${t.angle}\n말할 방향: ${t.say}${avoid.length ? `\n피할 말: ${avoid.join(', ')}` : ''}`;
-            n.source = n.source.trim() ? `${n.source.trim()}\n\n${add}` : add;
-            lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
-            if (close) close.click();
-            cnRenderSetup();
-            toast(`'${t.theme}' 브리프를 넣었어요. 내용을 확인하고 고쳐도 돼요.`);
-            return;
-          }
-          const input = ref('input');
-          if (input && t) {
-            input.value = `고객 브리프 '${t.theme}' 방향으로 만들어 줘. 각도: ${t.angle} / 말할 방향: ${t.say}${avoid.length ? ` / 피할 말: ${avoid.join(', ')}` : ''}`;
-          }
-          if (close) close.click();
-          if (input) input.focus();
-        });
-      }
+          <br><small class="muted">근거: ${esc(t.evidence)}</small>`),
+      foot: `<p class="small muted">모든 주제에서 피할 말: ${esc((b.avoid || []).join(' · '))}</p>`
     });
+    if (!picked) return;
+    const themes = picked.map(i => list[i]).filter(Boolean);
+    const avoidOf = t => [].concat(t.avoid || [], b.avoid || []);
+    if (cnActive()) {  // 카드뉴스 편집기: 1단계 '넣을 내용' 칸 뒤에 덧붙임 (파일 업로드와 같은 방식)
+      appendPicked(themes.map(t => {
+        const avoid = avoidOf(t);
+        return `[제작 방향 · 인사이트 고객 브리프 '${t.theme}' — 카드 문구로 그대로 쓰지 말고 방향으로만 참고]\n각도: ${t.angle}\n말할 방향: ${t.say}${avoid.length ? `\n피할 말: ${avoid.join(', ')}` : ''}`;
+      }), '브리프');
+      return;
+    }
+    appendPicked(themes.map(t => {
+      const avoid = avoidOf(t);
+      return `고객 브리프 '${t.theme}' 방향으로 만들어 줘. 각도: ${t.angle} / 말할 방향: ${t.say}${avoid.length ? ` / 피할 말: ${avoid.join(', ')}` : ''}`;
+    }), '브리프');
+  }
+
+  // 노란 체크 패널 › 인사이트 자료 (홈 파트 REBOOT.use('home').dockItems). 체크하고 [확인]하면 입력창(카드뉴스는 '넣을 내용' 칸) 뒤에 덧붙임 · 자동 전송 안 함
+  const DOCK_KIND_KO = { action: '이번 주 액션', brief: '콘텐츠 브리프', price: '1회분 단가', promo: '시즌 프로모션',
+    brand: '브랜드', change: '경쟁사 변화', review: '리뷰', other: '기타' };
+  async function dockModal() {
+    let list = null;
+    try {
+      const home = REBOOT.use('home');
+      if (home && typeof home.dockItems === 'function') list = await home.dockItems();
+    } catch (e) { list = null; }
+    if (!Array.isArray(list)) { toast('노란 체크 패널 자료를 불러오지 못했어요. 새로고침 후 다시 해 보세요.', 'error'); return; }
+    if (!list.length) {
+      modal({
+        title: '노란 패널 자료',
+        body: `<p>아직 담아 둔 인사이트 자료가 없어요.<br>인사이트 탭에서 액션 · 브리프 · 단가 · 프로모션 · 브랜드 · 변화 · 리뷰를 오른쪽 아래 노란 버튼으로 끌어다 놓거나 [패널에 담기]를 누르면 여기서 쓸 수 있어요.</p>
+          <a class="link" href="/dashboard/insights">인사이트 탭으로 가기 ${icon('arrow')}</a>`,
+        actions: [{ label: '닫기', value: null }]
+      });
+      return;
+    }
+    const picked = await pickModal({
+      title: `노란 패널 자료 (${list.length}개)`,
+      intro: `<p>인사이트 탭에서 담아 둔 자료예요.<br>쓸 자료를 체크하고 [확인]을 누르면 ${cnActive() ? "'카드뉴스에 넣을 내용' 칸 뒤에 덧붙여요 (자동 생성 안 함)" : '입력창 뒤에 덧붙여요 (자동 전송 안 함)'}.<br>만든 문구는 컴플라이언스 검토를 거쳐요.</p>`,
+      rows: list.map(d => `<b>${esc(d.title)}</b> ${badge(DOCK_KIND_KO[d.kind] || '기타', 'blue')}
+          ${d.text ? `<br><small>${esc(d.text).replace(/\n/g, '<br>')}</small>` : ''}
+          ${d.memo ? `<br><small class="muted">메모: ${esc(d.memo)}</small>` : ''}`)
+    });
+    if (!picked) return;
+    appendPicked(picked.map(i => list[i]).filter(Boolean).map(d =>
+      `[참고 · 인사이트 자료 '${d.title}' — 그대로 쓰지 말고 근거·방향으로만 참고]${d.text ? '\n' + d.text : ''}${d.memo ? '\n메모: ' + d.memo : ''}`), '자료');
   }
 
   /* ───────── 시트 AI 추천 (모달 · 고를 때만 적용) ───────── */
@@ -2686,7 +2738,7 @@
         placeholder="예: 제품 소개 메모, 블로그 글, FAQ, 이벤트 안내…&#10;'1장 / 2장'이나 '## 제목'으로 나눠 쓰면 그 단위로 카드를 나눠요.">${esc(n.source)}</textarea>
       <div class="flex between cnt-cn-srcbar">
         <span class="panel-note" data-ref="cn-count">${cnCountText()}</span>
-        <span class="flex"><button type="button" class="btn small" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 이 칸에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button>${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
+        <span class="flex"><button type="button" class="btn small" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 이 칸에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button><button type="button" class="btn small" data-act="dock" title="인사이트 탭에서 노란 체크 패널에 담아 둔 자료를 이 칸에 덧붙여요">${icon('doc')}노란 패널 자료</button>${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
       </div>
       <div class="cnt-cn-step"><span class="stepnum">2</span><strong>옵션</strong></div>
       <div class="cnt-cn-opts">
@@ -3395,6 +3447,7 @@
         }
         case 'persona': personaModal(); break;
         case 'brief': briefModal(); break;
+        case 'dock': dockModal(); break;
         case 'answer': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = ''; inp.placeholder = b.dataset.q; inp.focus(); } break; }
         case 'pick-candidate': pickCandidate(b); break;
         case 'add-decision': if (S.camp) addDecisionModal(); break;

@@ -903,8 +903,8 @@
   }
 
   /* ───────── 이번 주 To-Do 버튼 (모든 화면 오른쪽 아래) ─────────
-     버튼 → 오른쪽 사이드 패널: 세 묶음을 각각 접고 펼침 (펼침 상태는 dockOpen에 기억)
-     - 이번 주 할 일: 확인 · 체크 · 직접 추가 (삭제 · 다시 만들기는 데일리 브리핑에서)
+     버튼 → 오른쪽 사이드 패널: 세 묶음을 각각 접고 펼침 (열 때마다 모두 접은 상태로 시작)
+     - 이번 주 할 일: 확인 · 체크 · 직접 추가 · 고치기 · 지우기 (다시 만들기는 데일리 브리핑에서)
      - 저장한 뉴스: 기사 주소 · 제목으로 저장 · 보관 해제 (홈 브리핑 '보관함'과 같은 목록 /api/home/news/saved)
      - 인사이트 자료: 인사이트 탭 자료를 노란 버튼 · 이 묶음으로 끌어다 놓거나 [패널에 담기] → /api/home/dock/items
        끌 때 넘기는 값: dataTransfer 'application/x-reboot-insight' = {kind, sourceKey, title, text, data, href, url} (DOCK_MIME)
@@ -917,9 +917,17 @@
     const q = name => D.el && D.el.querySelector(`[data-dock="${name}"]`);
 
     function itemHtml(t) {
+      if (String(D.editing) === String(t.id)) {   // 패널에서 바로 고치기 (제목 · 근거)
+        return `<form class="home-dock-form home-dock-edit" data-dock="todo-edit" data-id="${esc(t.id)}">
+          <input class="input" name="title" maxlength="200" value="${esc(t.title)}" aria-label="할 일">
+          <input class="input" name="reason" maxlength="500" value="${esc(t.reason || '')}" placeholder="근거 (선택)" aria-label="근거">
+          <span class="flex"><button type="submit" class="btn small lime">저장</button><button type="button" class="btn small" data-dock-edit-cancel>취소</button></span></form>`;
+      }
       return `<label class="home-dock-item${t.done ? ' done' : ''}" data-id="${esc(t.id)}">
         <input type="checkbox" data-dock-toggle${t.done ? ' checked' : ''} aria-label="완료 표시: ${esc(t.title)}">
-        <span class="grow"><span class="home-dock-title">${esc(t.title)}</span><span class="home-dock-reason">근거: ${esc(t.reason || '—')}</span></span></label>`;
+        <span class="grow"><span class="home-dock-title">${esc(t.title)}</span><span class="home-dock-reason">근거: ${esc(t.reason || '—')}</span></span>
+        <button type="button" class="home-dock-close" data-dock-edit aria-label="수정: ${esc(t.title)}" title="수정">${icon('edit')}</button>
+        <button type="button" class="home-dock-close" data-dock-del aria-label="삭제: ${esc(t.title)}" title="삭제">${icon('x')}</button></label>`;
     }
     // 인사이트 긴급 · 기회 (읽기 전용) — 누르면 근거 화면
     function signalHtml(x) {
@@ -987,7 +995,8 @@
       q('panel').hidden = !on;
       q('scrim').hidden = !on;
       q('fab').setAttribute('aria-expanded', String(on));
-      if (on) { load(); q('close').focus(); } else q('fab').focus();
+      // 열 때마다 세 묶음 모두 접은 상태로 시작
+      if (on) { D.el.querySelectorAll('.home-dock-sec').forEach(s => { s.open = false; }); D.editing = null; load(); q('close').focus(); } else q('fab').focus();
     }
     async function toggle(box) {
       const id = box.closest('[data-id]').dataset.id;
@@ -1018,6 +1027,30 @@
         if (S.root && S.todos) paintTodos(); else paint();
       } catch (e) { toast(`할 일을 추가하지 못했어요: ${e.message}`, 'error'); }
       busy(btn, false);
+    }
+    // 패널에서 할 일 고치기 · 지우기 → 홈 화면이 열려 있으면 같은 목록(S.todos)도
+    async function saveEdit(form) {
+      const id = form.dataset.id, title = form.elements.title.value.trim();
+      if (!title) { toast('할 일을 입력하세요.', 'error'); form.elements.title.focus(); return; }
+      const btn = form.querySelector('button[type="submit"]');
+      busy(btn, true);
+      try {
+        const u = await REBOOT.api(`/api/home/todos/${encodeURIComponent(id)}`, { title, reason: form.elements.reason.value.trim() }, { method: 'PATCH' });
+        [D.todos, S.todos].forEach(t => { const it = t && t.items.find(i => String(i.id) === String(id)); if (it) Object.assign(it, u); });
+        D.editing = null;
+        toast('할 일을 고쳤어요.');
+        if (S.root && S.todos) paintTodos(); else paint();
+      } catch (e) { busy(btn, false); toast(`할 일을 고치지 못했어요: ${e.message}`, 'error'); }
+    }
+    async function removeTodo(btn) {
+      const id = btn.closest('[data-id]').dataset.id;
+      busy(btn, true);
+      try {
+        await REBOOT.api(`/api/home/todos/${encodeURIComponent(id)}`, undefined, { method: 'DELETE' });
+        [D.todos, S.todos].filter((x, i, a) => x && a.indexOf(x) === i).forEach(t => { t.items = t.items.filter(i => String(i.id) !== String(id)); });
+        toast('할 일을 지웠어요.');
+        if (S.root && S.todos) paintTodos(); else paint();
+      } catch (e) { busy(btn, false); toast(`할 일을 지우지 못했어요: ${e.message}`, 'error'); }
     }
     // 홈 브리핑의 보관 표시도 같이 (홈이 열려 있을 때만)
     function syncHome() {
@@ -1076,9 +1109,9 @@
     }
     // 끌어다 놓기: 끌기 시작하면 노란 버튼을 강조 → 버튼 위로 오면 패널 · 인사이트 자료 묶음을 열고 → 패널 안에 놓으면 담기
     function openNotes() {
+      if (!D.open) setOpen(true);
       const sec = D.el.querySelector('.home-dock-sec[data-sec="insight"]');
       if (sec) sec.open = true;
-      if (!D.open) setOpen(true);
     }
     function bindDrop() {
       doc.addEventListener('dragstart', e => { if (hasDockData(e)) doc.body.classList.add('home-dock-dragging'); });
@@ -1104,7 +1137,6 @@
     }
     function mount() {
       if (D.el || !doc.body || !REBOOT.user || !REBOOT.user()) return;
-      const secOpen = store.get('dockOpen', { todo: true, news: false, insight: false }) || {};
       D.el = doc.createElement('div');
       D.el.className = 'home-dock';
       D.el.innerHTML = `
@@ -1115,7 +1147,7 @@
           <div class="home-dock-head"><h2 id="home-dock-title">이번 주</h2>
             <button type="button" class="home-dock-close" data-dock="close" aria-label="닫기">${icon('x')}</button></div>
           <div class="home-dock-body">
-            <details class="home-dock-sec" data-sec="todo"${secOpen.todo !== false ? ' open' : ''}>
+            <details class="home-dock-sec" data-sec="todo">
               <summary>이번 주 할 일<span class="head-cap" data-dock="left"></span></summary>
               <p class="panel-note" data-dock="meta"></p>
               <div class="home-dock-list" data-dock="list"></div>
@@ -1125,7 +1157,7 @@
                 <button type="submit" class="btn small lime">${icon('plus')} 할 일 추가</button>
               </form>
             </details>
-            <details class="home-dock-sec" data-sec="news"${secOpen.news ? ' open' : ''}>
+            <details class="home-dock-sec" data-sec="news">
               <summary>저장한 뉴스<span class="head-cap" data-dock="news-n"></span></summary>
               <form class="home-dock-form" data-dock="news-form">
                 <input class="input" name="url" type="url" maxlength="1000" placeholder="기사 주소 (https://…)" aria-label="기사 주소">
@@ -1134,7 +1166,7 @@
               </form>
               <div class="home-dock-list" data-dock="news"></div>
             </details>
-            <details class="home-dock-sec" data-sec="insight"${secOpen.insight ? ' open' : ''}>
+            <details class="home-dock-sec" data-sec="insight">
               <summary>인사이트 자료<span class="head-cap" data-dock="notes-n"></span></summary>
               <div class="home-dock-drop">인사이트 탭의 자료를 이 패널이나 노란 버튼으로 끌어다 놓으면 담겨요. 끌기 어려우면 자료 옆 [패널에 담기]를 누르세요.</div>
               <div class="home-dock-list" data-dock="notes"></div>
@@ -1149,7 +1181,12 @@
       D.el.addEventListener('click', e => {
         const un = e.target.closest('[data-dock-unsave]');
         const unn = e.target.closest('[data-dock-unnote]');
-        if (un) unsave(un);
+        const ed = e.target.closest('[data-dock-edit]'), del = e.target.closest('[data-dock-del]');
+        if (ed || del) e.preventDefault();   // label 안 버튼: 체크 표시가 바뀌지 않게
+        if (ed) { D.editing = ed.closest('[data-id]').dataset.id; paint(); const f = q('todo-edit'); if (f) f.elements.title.focus(); }
+        else if (del) { if (global.confirm('이 할 일을 지울까요?')) removeTodo(del); }
+        else if (e.target.closest('[data-dock-edit-cancel]')) { D.editing = null; paint(); }
+        else if (un) unsave(un);
         else if (unn) removeNote(unn);
         else if (e.target.closest('[data-dock="fab"]')) setOpen(!D.open);
         else if (e.target.closest('[data-dock="close"], [data-dock="scrim"], .home-dock-go')) setOpen(false);
@@ -1159,14 +1196,8 @@
         e.preventDefault();
         if (e.target.dataset.dock === 'todo-form') addTodo(e.target);
         else if (e.target.dataset.dock === 'news-form') saveNews(e.target);
+        else if (e.target.dataset.dock === 'todo-edit') saveEdit(e.target);
       });
-      // 접고 펼친 상태 기억 (toggle 이벤트는 거품이 안 올라와서 capture로 받음)
-      D.el.addEventListener('toggle', e => {
-        if (!e.target.matches || !e.target.matches('.home-dock-sec')) return;
-        const o = store.get('dockOpen', { todo: true, news: false, insight: false }) || {};
-        o[e.target.dataset.sec] = e.target.open;
-        store.set('dockOpen', o);
-      }, true);
       doc.addEventListener('keydown', e => { if (e.key === 'Escape' && D.open) setOpen(false); });
       bindDrop();
       const b = store.get('todoBadge', null);

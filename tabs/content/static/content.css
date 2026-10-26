@@ -352,6 +352,9 @@
 .part-content .cnt-suggest-list .cnt-concept strong { font-size: 13px; }
 .part-content .cnt-persona-list { display: flex; flex-direction: column; gap: 8px; }
 .part-content .cnt-persona-list .choice { width: 100%; }
+.part-content .cnt-pick { cursor: pointer; align-items: flex-start; }
+.part-content .cnt-pick input { margin-top: 3px; flex: none; }
+.part-content .cnt-pick:has(input:checked) { border-color: var(--lime-line); background: var(--lime-wash); }
 .part-content .cnt-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
 .part-content .cnt-cmp { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-2); min-width: 0; max-height: 60vh; overflow: auto; }
 .part-content .cnt-cmp img { width: 100%; border-radius: var(--radius-sm); display: block; }

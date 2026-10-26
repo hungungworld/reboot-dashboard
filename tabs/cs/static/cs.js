@@ -827,12 +827,13 @@
     const unread = i => !i.readAt && i.status === '답변 대기';
     // 한 페이지 LIST_MAX건 · 단계·필터가 바뀌면 선택한 메일이 있는 페이지(없으면 1쪽)로
     const pageKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
-    const pages = Math.max(1, Math.ceil(shown.length / LIST_MAX));
+    // 문의를 연 화면(detail)은 페이지 없이 전부 · 오른쪽 답장 작성기 높이만큼 채우고 넘치면 목록 안 스크롤 (cs.css)
+    const pages = ui.view === 'detail' ? 1 : Math.max(1, Math.ceil(shown.length / LIST_MAX));
     const selAt = shown.findIndex(i => i.id === ui.selected);
     const want = ui.listPage && ui.listPage.key === pageKey ? ui.listPage.p : selAt >= 0 ? Math.floor(selAt / LIST_MAX) + 1 : 1;
     const cur = Math.min(Math.max(1, want), pages);
     ui.listPage = { key: pageKey, p: cur };
-    const visible = shown.slice((cur - 1) * LIST_MAX, cur * LIST_MAX);
+    const visible = pages > 1 ? shown.slice((cur - 1) * LIST_MAX, cur * LIST_MAX) : shown;
     // 마지막 페이지도 빈 줄로 채워 목록 높이 그대로 (줄 높이는 그린 뒤 맞춤)
     const pad = pages > 1 ? '<li class="cs-list-pad" aria-hidden="true"></li>'.repeat(LIST_MAX - visible.length) : '';
     const moreBtn = pages > 1 ? `<li class="cs-list-pg">${pagerHTML(cur, pages, shown.length, 'list-page', '건')}</li>` : '';
