@@ -680,7 +680,6 @@
 .part-compliance .cmp-mail-warn .cmp-icon { width: 14px; height: 14px; flex-shrink: 0; }
 /* 첨부 줄 버튼: 공통 파일 버튼 (업로드 · 다운로드 ▾) — 창 아래쪽이라 메뉴는 위로 열림 */
 .part-compliance .cmp-attach .file-actions [hidden] { display: none; }
-.part-compliance .cmp-attach-menu .file-menu-list { top: auto; bottom: calc(100% + 4px); white-space: nowrap; }
 .part-compliance .cmp-mail-done .file-actions { justify-content: flex-start; margin-left: 0; }
 /* ERP(Fiori) 폼: 라벨 + 테두리 입력칸 · 받는 사람은 토큰 · 닫기 포커스는 얇은 링 */
 .part-compliance .cmp-mail-fields dt::after { content: ':'; }
@@ -700,6 +699,7 @@
 .part-compliance .cmp-attach-txt { display: grid; gap: 2px; min-width: 0; }
 .part-compliance .cmp-attach-txt b { font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
 .part-compliance .cmp-attach-txt small { font-size: 12px; color: var(--cmp-muted); }
+.part-compliance .cmp-attach-help { flex-basis: 100%; font-size: 12px; line-height: 1.5; color: var(--cmp-muted); }   /* 열어 보기 · 바꾸기가 무엇인지 한 줄 */
 .part-compliance .cmp-mail-foot { align-items: center; }
 .part-compliance .cmp-mail-from { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--cmp-muted); }
 .part-compliance .cmp-mail-from .cmp-icon, .part-compliance .cmp-mail-foot .cmp-btn .cmp-icon { width: 15px; height: 15px; }
