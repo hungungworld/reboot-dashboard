@@ -1094,10 +1094,14 @@
       const gap = own.perServing - median;
       ownSub = Math.abs(gap) < 0.005 ? '보통 가격과 같아요' : `보통 가격보다 ${money(Math.abs(gap))} ${gap > 0 ? '비싸요' : '저렴해요'}`;
     }
+    // 최저 ~ 최고 사이 알디콤 위치 막대 (세로 눈금 = 보통 가격)
+    const at = v => (vals[n - 1] > vals[0] ? (v - vals[0]) / (vals[n - 1] - vals[0]) * 100 : 50).toFixed(1);
+    const gauge = own ? `<div class="ins-gauge" title="왼쪽 끝 최저 ${esc(money(vals[0]))} · 오른쪽 끝 최고 ${esc(money(vals[n - 1]))} · 세로 눈금 보통 가격">
+      <u style="left:${at(median)}%"></u><i style="left:${at(own.perServing)}%"></i></div>` : '';
     return `<div class="ins-stats three">
       <div class="ins-stat"><span>최저 1회분</span><b>${esc(money(low.perServing))}</b><small>${esc(low.brand)}</small></div>
       <div class="ins-stat"><span>보통 가격 ${infoTip(TIP.median)}</span><b>${esc(money(median))}</b><small>${n}개 기준</small></div>
-      <div class="ins-stat${own ? '' : ' red'}"><span>자사 1회분</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small></div>
+      <div class="ins-stat${own ? ' own-soft' : ' red'}"><span>자사 1회분</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small>${own ? gauge : ''}</div>
     </div>`;
   }
 
@@ -1113,7 +1117,7 @@
         <button type="button" data-act="sw-zoom" data-z="in" aria-label="확대">+</button><button type="button" data-act="sw-zoom" data-z="fit">전체</button></div>
       <div class="ins-sw-scroll" data-ref="swarm">${swarmSvg(priced, SWARM_PX)}</div><div class="ins-sw-tip" role="tooltip" hidden></div></div>
       <div class="ins-sw-key small">
-        <div class="ins-sw-key-g"><span class="ins-sw-key-h">색상</span><span><i class="ins-lg"></i>경쟁 상품</span><span><i class="ins-lg own"></i>자사</span>
+        <div class="ins-sw-key-g"><span class="ins-sw-key-h">색상</span>${formLegend(priced.map(formOf))}<span><i class="ins-lg own"></i>자사</span>
           <span><i class="ins-lg watched"></i>주시</span><span><i class="ins-lg oos"></i>품절</span><span title="중앙값"><i class="ins-lg med"></i>보통 가격</span></div>
         <div class="ins-sw-key-g"><span class="ins-sw-key-h">크기</span><span class="ins-sw-key-size" aria-hidden="true"><i></i><i></i><i></i></span><span>리뷰 많을수록 크게</span></div>
         <div class="ins-sw-key-g"><span class="ins-sw-key-h">사용법</span><span>휠로 확대 · 끌어서 이동 · 두 손가락으로 확대 · 빈 곳 두 번 누르면 2배 · 점에 올리면(터치는 한 번) 미리보기, 누르면 상세</span></div>
@@ -1255,17 +1259,20 @@
     // 눈금: $20까지는 $1마다, 그 위로는 $5마다
     const ticks = [];
     for (let v = 0; v <= end; v++) if (v <= 20 || v % 5 === 0) ticks.push(v);
-    const grid = ticks.map(v => `<line class="ins-sw-grid${v % 3 === 0 && v <= 6 ? ' major' : ''}" x1="${X(v).toFixed(1)}" x2="${X(v).toFixed(1)}" y1="${head}" y2="${axisY}"></line>
-      <text class="ins-sw-tick" x="${X(v).toFixed(1)}" y="${axisY + 18}" text-anchor="middle">$${v}</text>`).join('');
+    // 점선 격자 없이 가격대 바탕색으로 나눔 — 눈금은 아래 글자만
+    const grid = ticks.map(v => `<text class="ins-sw-tick" x="${X(v).toFixed(1)}" y="${axisY + 18}" text-anchor="middle">$${v}</text>`).join('');
     // 보통 가격(중앙값) 선
     const vals = priced.map(x => x.perServing).sort((a, b) => a - b), n = vals.length;
     const median = n % 2 ? vals[(n - 1) / 2] : (vals[n / 2 - 1] + vals[n / 2]) / 2;
     const medLine = `<line class="ins-sw-med" x1="${X(median)}" x2="${X(median)}" y1="${head + 4}" y2="${axisY}"></line>
       <text class="ins-sw-med-t" x="${X(median) + 5}" y="${head + 14}">보통 ${esc(money(median))}</text>`;
     const dots = placed.slice().sort((a, b) => (a.x.own - b.x.own) || (b.r - a.r)).map(({ x, r, cx, off }) => {
-      const cls = ['ins-dot', x.own ? 'own' : '', x.watched ? 'watched' : '', x.in_stock === false ? 'oos' : ''].filter(Boolean).join(' ');
+      const cls = ['ins-dot', `f-${formOf(x)}`, x.own ? 'own' : '', x.watched ? 'watched' : '', x.in_stock === false ? 'oos' : ''].filter(Boolean).join(' ');
       return `<circle class="${cls}" cx="${cx.toFixed(1)}" cy="${(mid + off).toFixed(1)}" r="${r.toFixed(1)}" data-act="prod" data-id="${esc(x.id)}" data-tip="${esc(x.id)}"></circle>`;
     }).join('');
+    // 알디콤 기둥: 점에서 가격 축까지 (가격 위치를 바로 읽게)
+    const pillars = placed.filter(p => p.x.own).map(({ cx, off, r }) =>
+      `<line class="ins-sw-pillar" x1="${cx.toFixed(1)}" x2="${cx.toFixed(1)}" y1="${(mid + off + r).toFixed(1)}" y2="${axisY}"></line>`).join('');
     // 자사 이름표: 점 위 말풍선 (마우스는 통과 — 아래 깔린 같은 가격대 점도 올리고 누를 수 있게)
     const tags = placed.filter(p => p.x.own).map(({ x, r, cx, off }) => {
       const t = `자사 ${money(x.perServing)}`, w = t.length * 6.6 + 14, y = mid + off - r - 8;
@@ -1274,7 +1281,7 @@
     }).join('');
     return `<div class="ins-sw-in" style="width:${W}px">
         <svg class="ins-sw-svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="1회분 단가 분포: 점 하나가 상품 하나, 점이 클수록 리뷰가 많아요">
-          ${bands}${grid}<line class="ins-sw-axis" x1="${PL}" x2="${W - PR / 2}" y1="${axisY}" y2="${axisY}"></line>${medLine}${dots}${tags}</svg></div>`;
+          ${bands}${grid}<line class="ins-sw-axis" x1="${PL}" x2="${W - PR / 2}" y1="${axisY}" y2="${axisY}"></line>${medLine}${pillars}${dots}${tags}</svg></div>`;
   }
   // 점에 마우스를 올리면 말풍선: 1줄 브랜드 · 1회분 가격 / 2줄 제품명(최대 2줄) / 3줄 판매처 · 별점 · 리뷰
   // 보이는 영역 안으로 맞추고, 점 위에 자리가 없을 때만 아래로
@@ -1393,6 +1400,10 @@
   const FORM_KO = { liquid: '액상', powder: '분말', stick: '스틱', gummy: '젤리/구미', pellet: '환', tablet: '캡슐/정제', other: '기타' };
   const FORM_ORDER = Object.keys(FORM_KO);
   const formRank = f => { const i = FORM_ORDER.indexOf(f); return i < 0 ? FORM_ORDER.length : i; };
+  // 제형 색 범례 (진열대 · 단가 차트 공통) — 지금 보이는 제형만, 늘 같은 순서
+  const formLegend = forms => FORM_ORDER.filter(f => f !== 'other' && forms.includes(f))
+    .map(f => `<span class="f-${f}"><i class="ins-lg form"></i>${esc(FORM_KO[f])}</span>`).join('');
+  const formOf = x => (x.line && x.line.form) || 'other';
 
   // 1회분 비교에 넣어도 되는 상품: 회분을 못 읽어 1개 = 1회로 놓은 것(default)은 뺌 (브랜드 비교 competitors.py와 같은 기준)
   // 예) 'Hovenia Drink Extract 870 g' $87.99 → 1회분 $87.99로 보이던 문제
@@ -1422,7 +1433,7 @@
     const status = !flag ? '' : flag[1] === 'cut' || flag[1] === 'up' ? `가격 ${flag[0]}` : flag[0];
     const tipText = [name, FORM_KO[p.form], `1회분 ${money(x.perServing)}`, `판매처 ${chans.join(' · ')}`,
       STOCK[p.state][0], p.pricePct != null ? `지난 수집 대비 ${fmt.signed(p.pricePct, 0, '%')}` : '', '누르면 브랜드 비교에서 펼쳐요'].filter(Boolean).join(' · ');
-    const cls = ['ins-pf-tile', p.own ? 'own' : '', p.state === 'oos' ? 'oos' : '', p.watched ? 'watched' : ''].filter(Boolean).join(' ');
+    const cls = ['ins-pf-tile', `f-${p.form}`, p.own ? 'own' : '', p.state === 'oos' ? 'oos' : '', p.watched ? 'watched' : ''].filter(Boolean).join(' ');
     const brand = p.own ? 'REBOOT' : (x.line && x.line.brand) || x.brand || '브랜드 모름';
     return `<button type="button" class="${cls}" data-act="brand-go" data-brand="${esc(brand)}" data-name="${esc(name)}" data-form="${esc(FORM_KO[p.form] || '기타')}"
       data-ps="${x.perServing}" data-src="${esc(chans.join(' · '))}" data-flag="${flag ? flag[1] : ''}" data-status="${esc(status)}" title="${esc(tipText)}" aria-label="${esc(tipText)}">
@@ -1453,7 +1464,7 @@
     return `<section class="card mt-24 ins-pantry">
       ${tiers}
       ${flow}
-      <div class="ins-legend small mt-16"><span><i class="ins-lg own"></i>우리 제품</span><span><i class="ins-lg oos"></i>품절 (빈자리)</span>
+      <div class="ins-legend small mt-16">${formLegend(priced.map(p => p.form))}<span><i class="ins-lg own"></i>우리 제품</span><span><i class="ins-lg oos"></i>품절 (빈자리)</span>
         <span><i class="ins-lg low"></i>곧 품절</span></div>
       <p class="panel-note mt-8">같은 제품은 1회분이 가장 싼 판매처 한 곳만 놓았어요.${unpriced ? ` 가격을 못 읽은 ${unpriced}개는 뺐어요 (데이터 관리에서 가격을 넣을 수 있어요).` : ''} 타일이나 아래 점 줄을 끌어 넘겨 보고, 가운데 타일을 누르면 브랜드 비교에서 판매처별 상품을 펼쳐 봐요.</p>
     </section>`;

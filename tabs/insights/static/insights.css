@@ -311,10 +311,13 @@
 .part-insights .ins-sw-svg { display: block; }
 .part-insights .ins-sw-band { fill: transparent; }
 .part-insights .ins-sw-band.mid { fill: var(--soft-2); }
+.part-insights .ins-sw-pillar { stroke: var(--lime-line, var(--lime)); stroke-width: 2; stroke-linecap: round; pointer-events: none; }
+.part-insights .ins-gauge { position: relative; height: 4px; margin-top: 8px; border-radius: 4px; background: var(--lime-soft-line); }
+.part-insights .ins-gauge u { position: absolute; top: -2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .6; }
+.part-insights .ins-gauge i { position: absolute; top: -4px; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: var(--lime); border: 2px solid var(--lime-deep); }
+.part-insights .ins-stat.own-soft { background: var(--lime-soft); border-color: var(--lime-soft-line); }
 .part-insights .ins-sw-band-t { font-size: 11px; fill: var(--muted); }
 .part-insights .ins-sw-band-n { font-weight: 700; fill: var(--ink-2); }
-.part-insights .ins-sw-grid { stroke: var(--line); stroke-dasharray: 2 4; }
-.part-insights .ins-sw-grid.major { stroke: var(--line-2); stroke-dasharray: none; }
 .part-insights .ins-sw-tick { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 .part-insights .ins-sw-axis { stroke: var(--line-2); stroke-width: 1.5; }
 .part-insights .ins-sw-med { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .55; }
@@ -359,14 +362,14 @@
 .part-insights .ins-pre { margin: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 280px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
 .part-insights .ins-axis { font-size: 10px; fill: var(--muted); }
-.part-insights .ins-dot { fill: var(--muted); fill-opacity: .42; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; transition: fill-opacity .12s, transform .12s; }
-.part-insights .ins-dot:hover { fill-opacity: .9; stroke: var(--ink); }
-.part-insights .ins-dot.watched { fill: var(--orange); fill-opacity: .8; }
+.part-insights .ins-dot { fill: var(--fi, var(--muted)); fill-opacity: .55; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; transition: fill-opacity .12s, transform .12s; }
+.part-insights .ins-dot:hover { fill-opacity: 1; stroke: var(--ink); }
+.part-insights .ins-dot.watched { stroke: var(--ink-2); stroke-width: 2; }
 .part-insights .ins-dot.own { fill: var(--lime); fill-opacity: 1; stroke: var(--ink); stroke-width: 2; }
 .part-insights .ins-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; color: var(--muted); }
 .part-insights .ins-lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; background: var(--gray); opacity: .6; }
 .part-insights .ins-lg.own { background: var(--lime); border: 1px solid var(--lime-deep); opacity: 1; }
-.part-insights .ins-lg.watched { background: var(--orange); opacity: .8; }
+.part-insights .ins-lg.watched { background: transparent; border: 2px solid var(--ink-2); opacity: 1; }
 /* 칸 너비 고정 — 글자 길이와 상관없이 모든 페이지의 표 폭 · 칸 위치 · 가로 스크롤이 같게 */
 .part-insights .ins-comp-table td.ins-field { font-size: 11px; line-height: 1.5; }
 .part-insights .ins-src { font-size: 9px; color: var(--blue); white-space: nowrap; }
@@ -581,10 +584,29 @@
   display: flex; align-items: center; justify-content: center; border-radius: 22px; background: var(--soft); border: 1px solid var(--line); will-change: transform; }
 .part-insights .ins-pf-tile .ins-pc-ico { width: 64px; height: 64px; stroke: var(--ink-2); stroke-width: 1.2; }
 .part-insights .ins-pf-tile .ins-pc-ico .dot { fill: var(--ink-2); }
+/* 제형 색 (2026-10-26): 진열대 타일 · 단가 차트 점이 같은 색 — 눈이 편하게 회색에 가까운 옅은 색만, 알디콤은 라임, 빨강 · 주황은 품절 · 가격 변동에만 */
+.part-insights { --f-liquid-bg: #eff2f7; --f-liquid: #7d8fae; --f-powder-bg: #f4f1ec; --f-powder: #a08f74; --f-stick-bg: #f1f0f5; --f-stick: #9289aa;
+  --f-gummy-bg: #f5f0f2; --f-gummy: #a98f9c; --f-pellet-bg: #eff3f0; --f-pellet: #7f9a8a; --f-tablet-bg: #eef3f3; --f-tablet: #7c9a9f; }
+:root[data-theme="dark"] .part-insights { --f-liquid-bg: #24272d; --f-liquid: #8e9cb6; --f-powder-bg: #29261f; --f-powder: #ab9d86; --f-stick-bg: #26252c; --f-stick: #9f98b4;
+  --f-gummy-bg: #2a2528; --f-gummy: #b19ca6; --f-pellet-bg: #232825; --f-pellet: #8fa699; --f-tablet-bg: #222829; --f-tablet: #8ca6aa; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .part-insights { --f-liquid-bg: #24272d; --f-liquid: #8e9cb6; --f-powder-bg: #29261f; --f-powder: #ab9d86; --f-stick-bg: #26252c; --f-stick: #9f98b4;
+    --f-gummy-bg: #2a2528; --f-gummy: #b19ca6; --f-pellet-bg: #232825; --f-pellet: #8fa699; --f-tablet-bg: #222829; --f-tablet: #8ca6aa; }
+}
+.part-insights .f-liquid { --fb: var(--f-liquid-bg); --fi: var(--f-liquid); }
+.part-insights .f-powder { --fb: var(--f-powder-bg); --fi: var(--f-powder); }
+.part-insights .f-stick { --fb: var(--f-stick-bg); --fi: var(--f-stick); }
+.part-insights .f-gummy { --fb: var(--f-gummy-bg); --fi: var(--f-gummy); }
+.part-insights .f-pellet { --fb: var(--f-pellet-bg); --fi: var(--f-pellet); }
+.part-insights .f-tablet { --fb: var(--f-tablet-bg); --fi: var(--f-tablet); }
+.part-insights .ins-pf-tile { background: var(--fb, var(--soft)); border-color: transparent; }
+.part-insights .ins-pf-tile .ins-pc-ico { stroke: var(--fi, var(--ink-2)); stroke-width: 1.3; }
+.part-insights .ins-pf-tile .ins-pc-ico .dot { fill: var(--fi, var(--ink-2)); }
+.part-insights .ins-lg.form { background: var(--fi, var(--gray)); opacity: 1; border-radius: 3px; }
 .part-insights .ins-pf-tile.own { background: var(--lime-soft); border: 2px solid var(--lime-line, var(--lime)); }
 .part-insights .ins-pf-tile.own .ins-pc-ico { stroke: var(--lime-ink); }
 .part-insights .ins-pf-tile.own .ins-pc-ico .dot { fill: var(--lime-ink); }
-.part-insights .ins-pf-tile.watched { border-color: var(--orange); }
+.part-insights .ins-pf-tile.watched { border: 2px solid var(--ink-2); }
 .part-insights .ins-pf-tile.oos { background: var(--surface); border: 1.5px dashed var(--red); }
 .part-insights .ins-pf-tile.oos .ins-pc-ico { stroke: var(--muted); opacity: .5; }
 .part-insights .ins-pf-pill { position: absolute; top: 12px; right: 12px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
