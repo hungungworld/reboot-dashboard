@@ -118,7 +118,7 @@
 .part-partners .ptn-out-pill.is-on::before { background: var(--green); }
 .part-partners .ptn-out-pill .link { font-size: 11px; text-decoration: underline; }
 .part-partners .ptn-out-subbar { margin-bottom: 18px; flex-wrap: wrap; }
-.part-partners .ptn-out-subbar .seg button { font-size: 12px; padding: 9px 13px; }   /* 하위 탭 공통 크기 (core .subtabs) */
+.part-partners .ptn-out-subbar .linetabs { flex: 1; }
 
 .part-partners .ptn-out-prompt { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-2); }
 .part-partners .ptn-out-prompt > summary { cursor: pointer; font-size: 12px; font-weight: 600; }

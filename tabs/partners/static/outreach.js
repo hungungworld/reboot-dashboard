@@ -1075,7 +1075,7 @@
     el.innerHTML = `
       <div class="ptn-out-statusline" aria-label="연결 상태">${statusLine(cfg.status)}</div>
       <div class="between ptn-out-subbar">
-        <div class="seg" role="group" aria-label="제안 작성 화면">
+        <div class="linetabs" role="group" aria-label="제안 작성 화면">
           <button type="button" data-sub="compose" aria-pressed="${d.sub !== 'guide'}">제안 메일</button>
           <button type="button" data-sub="guide" aria-pressed="${d.sub === 'guide'}">협업 가이드</button>
         </div>
@@ -1814,7 +1814,7 @@
 
         <section class="card">
           <div class="card-head"><h2>협업 가이드 <span class="tiny muted">같은 조건으로 만드는</span></h2><span data-ref="g-badge">${g.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
-          <div class="seg" role="group" aria-label="보기">
+          <div class="linetabs" role="group" aria-label="보기">
             <button type="button" data-gview="preview" aria-pressed="${g.view !== 'edit'}">문서 미리보기</button>
             <button type="button" data-gview="edit" aria-pressed="${g.view === 'edit'}">원문 편집</button>
           </div>

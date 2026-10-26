@@ -322,6 +322,12 @@ p { margin: 0; line-height: 1.65; }
 .period, .seg { display: inline-flex; background: var(--soft); border-radius: 7px; padding: 3px; }
 .period button, .seg button { padding: 6px 11px; font-size: 11px; color: var(--muted-2); border-radius: var(--radius-xs); }
 .period button.selected, .seg button.selected, .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .05); }
+/* 밑줄 탭: 골라서 아래 화면이 바뀌는 하위 탭 (값만 고르는 토글은 .seg) */
+.linetabs { display: flex; gap: 6px; max-width: 100%; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.linetabs button { flex: none; white-space: nowrap; padding: 12px 14px 14px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; border-radius: 0; background: none; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; transition: color .15s; }
+.linetabs button:hover { color: var(--ink); }
+.linetabs button.selected, .linetabs button[aria-pressed="true"], .linetabs button[aria-selected="true"] { color: var(--ink); font-weight: 750; border-bottom-color: var(--ink); }
+.linetabs button .n { opacity: .55; margin-left: 2px; font-weight: 400; }
 /* 왼쪽 하위 메뉴로 옮긴 탭 줄은 화면에서 숨김 (core.js · data-subnav="off"면 그대로 둠) */
 .part-root [role="tablist"].is-subnav-mirrored { display: none !important; }
 

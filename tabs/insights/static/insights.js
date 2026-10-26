@@ -1008,8 +1008,8 @@
     const el = panel(tab);
     if (!$(el, '[data-ref="data-body"]')) {
       // 시장 · 고객은 질문 카드 아래에 화면 안 탭을 따로 그림 (pageTabs)
-      const tabs = tab === 'market' || tab === 'customers' || SUBS[tab].length < 2 ? '' : `<div class="chips ins-subtabs" role="tablist" aria-label="${esc(tab)} 보기">${SUBS[tab].map(([id, l]) =>
-        `<button type="button" class="chip" role="tab" data-sub="${id}" aria-pressed="false">${esc(l)}</button>`).join('')}</div>`;
+      const tabs = tab === 'market' || tab === 'customers' || SUBS[tab].length < 2 ? '' : `<div class="linetabs ins-subtabs" role="tablist" aria-label="${esc(tab)} 보기">${SUBS[tab].map(([id, l]) =>
+        `<button type="button" role="tab" data-sub="${id}" aria-pressed="false">${esc(l)}</button>`).join('')}</div>`;
       el.innerHTML = `${tabs}<div data-ref="data-body"></div>`;
     }
     $$(el, '.ins-subtabs [data-sub]').forEach(b => {
@@ -1060,7 +1060,7 @@
 
   // 시장 · 고객 화면 안 탭: 질문 카드 바로 아래. 컴플라이언스처럼 왼쪽 메뉴로 옮기지 않음 (data-subnav="off")
   function pageTabs(tab, sub) {
-    return `<div class="ins-ptabs"><div class="ins-ptabs-in" role="tablist" data-subnav="off" aria-label="${esc((TABS.find(t => t[0] === tab) || [])[1] || tab)} 보기">${SUBS[tab].map(([k, l]) =>
+    return `<div class="ins-ptabs"><div class="linetabs ins-ptabs-in" role="tablist" data-subnav="off" aria-label="${esc((TABS.find(t => t[0] === tab) || [])[1] || tab)} 보기">${SUBS[tab].map(([k, l]) =>
       `<button type="button" role="tab" data-sub="${k}" aria-selected="${sub === k}">${esc(l)}</button>`).join('')}</div></div>`;
   }
 
@@ -1384,7 +1384,7 @@
   // 보기 바꾸기 버튼 줄 (진열대 · 구매자 리뷰 공통) — 질문 카드와 내용 사이, 왼쪽 끝 한 줄 · 크기 · 간격 같게
   // items: [[값, 이름, 개수(없으면 생략)]]
   function viewSeg(act, items, cur, label) {
-    return `<div class="ins-view-bar"><div class="seg" role="group" aria-label="${esc(label)}">${items.map(([k, l, n]) =>
+    return `<div class="ins-view-bar"><div class="linetabs" role="group" aria-label="${esc(label)}">${items.map(([k, l, n]) =>
       `<button type="button" data-act="${act}" data-v="${k}" aria-pressed="${cur === k}">${esc(l)}${n == null ? '' : ` <span class="n">${esc(n)}</span>`}</button>`).join('')}</div></div>`;
   }
 
@@ -2456,7 +2456,7 @@
     const sm = d.summary;
     if (!sm) return '';
     const own = S.rv.scope !== 'comp';
-    const seg = `<div class="seg" role="group" aria-label="누구의 리뷰">${[['own', '알디콤'], ['comp', `경쟁 브랜드 ${sm.brands.length}곳`]].map(([k, l]) =>
+    const seg = `<div class="linetabs" role="group" aria-label="누구의 리뷰">${[['own', '알디콤'], ['comp', `경쟁 브랜드 ${sm.brands.length}곳`]].map(([k, l]) =>
       `<button type="button" data-act="rv-scope" data-v="${k}"${(k === 'own') === own ? ' class="selected"' : ''} aria-pressed="${(k === 'own') === own}">${l}</button>`).join('')}</div>`;
     return `<section class="card mt-24 ins-rh">${seg}${own ? rhOwn(sm) : rhBrands(sm)}</section>`;
   }
