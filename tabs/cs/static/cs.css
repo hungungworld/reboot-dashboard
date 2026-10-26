@@ -170,7 +170,7 @@
 .part-cs .cs-input::placeholder { color: var(--cs-faint); }
 .part-cs .cs-input:disabled, .part-cs .cs-input[readonly] { background: var(--cs-soft); }
 
-.part-cs .cs-draft { font-size: 13px; line-height: 1.85; resize: vertical; background: transparent; border: 0; padding: 0; min-height: 260px; }
+.part-cs .cs-draft { font-size: 13px; line-height: 1.85; resize: vertical; background: transparent; border: 0; padding: 0; min-height: 180px; }
 .part-cs .cs-draft[readonly] { background: transparent; }
 /* 초안 위 빈칸 안내 ([확인 필요]마다 무엇을 채울지 · 그 문장 · 누르면 위치로) */
 .part-cs .cs-todo-panel { background: var(--cs-orange-bg); border: 1px solid var(--cs-orange); border-radius: var(--radius-sm); padding: 12px 14px; }
@@ -257,8 +257,8 @@
 .part-cs .cs-trblock { display: grid; gap: 6px; justify-items: start; }
 .part-cs .cs-btn.cs-btn-sm { font-size: 11px; padding: 7px 10px; border-radius: var(--radius-sm); }
 /* 번역 결과 = 차트 말풍선과 같은 모양 (컴플라이언스 .cmp-tr · 인사이트 .ins-sw-tip과 같은 값) */
-.part-cs .cs-tr { display: grid; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--surface); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
-.part-cs .cs-tr-tag { font-size: 11px; font-weight: 700; color: inherit; }
+.part-cs .cs-tr { display: grid; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: 10px; background: var(--cs-accent-soft); border: 1px solid var(--cs-accent-line); color: var(--cs-ink); }
+.part-cs .cs-tr-tag { font-size: 11px; font-weight: 700; color: var(--cs-muted); }
 .part-cs .cs-tr-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; color: inherit; }
 .part-cs .cs-tr .cs-muted { margin: 0; font-size: 11px; color: inherit; opacity: .7; }
 .part-cs .cs-warn a { color: inherit; font-weight: 700; }
@@ -395,8 +395,9 @@
 .part-cs .cs-sec.is-warn > summary { background: var(--cs-orange-bg); }
 .part-cs .cs-linkbtn { font: inherit; font-weight: 650; color: var(--cs-link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
 .part-cs .cs-linkbtn:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: 2px; }
-/* 초안 칸은 내용만큼 늘어남 (fitDraft) · 칸 안 스크롤 없음 */
+/* 초안 칸은 내용만큼 늘어나다 화면 55%에서 멈춤 (fitDraft) · 그때만 칸 안 스크롤 */
 .part-cs .cs-draft { overflow: hidden; resize: none; }
+.part-cs textarea.cs-draft.is-capped { overflow-y: auto; }
 
 /* ───────── 메일함 구조: 답장 작성기 · ① 문구 검토 · ② CS 검토 · 보내기 줄 (2026-10-26) ───────── */
 /* 목록 옆에 열린 문의: 목록 줄을 한 칸으로 줄임 */
@@ -450,11 +451,12 @@
 .part-cs .cs-cfields dt { color: var(--cs-muted); width: 60px; flex-shrink: 0; }
 .part-cs .cs-cfields dd { margin: 0; overflow-wrap: anywhere; }
 /* 초안 + 뒤에 깐 밑줄 층 (같은 글꼴·줄 간격·줄바꿈이어야 밑줄이 글자와 겹침) */
-.part-cs .cs-hl { position: relative; padding: 16px 18px; background: var(--cs-draft-bg); }
+/* 한 줄은 약 80자까지 (넓은 화면에서 줄이 너무 길지 않게) · 오른쪽 여백을 밑줄 층 inset과 똑같이 */
+.part-cs .cs-hl { position: relative; padding: 16px max(18px, calc(100% - 80ch - 18px)) 16px 18px; background: var(--cs-draft-bg); }
 .part-cs .cs-hl .cs-draft { display: block; margin: 0; font-family: inherit; font-size: 13px; font-weight: 400; line-height: 1.85; letter-spacing: normal;
-  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; tab-size: 8; }
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; tab-size: 8; scrollbar-gutter: stable; }
 .part-cs .cs-hl textarea.cs-draft { position: relative; background: transparent; caret-color: var(--cs-ink); }
-.part-cs .cs-hl-back { position: absolute; inset: 16px 18px; color: transparent; pointer-events: none; min-height: 0; overflow: hidden; }
+.part-cs .cs-hl-back { position: absolute; inset: 16px max(18px, calc(100% - 80ch - 18px)) 16px 18px; color: transparent; pointer-events: none; min-height: 0; overflow: hidden; }
 .part-cs .cs-hl-back mark { color: transparent; border-radius: 3px; padding: 0; background: none; text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
 .part-cs .cs-hl-back .cs-hl-BLOCK { background: var(--cs-red-bg); text-decoration: underline wavy var(--cs-red); }
 .part-cs .cs-hl-back .cs-hl-REVISE { background: var(--cs-orange-bg); text-decoration: underline wavy var(--cs-orange); }
@@ -503,6 +505,15 @@
 .part-cs .cs-checks .cs-check { align-items: flex-start; line-height: 1.55; cursor: pointer; }
 .part-cs .cs-checks .cs-check input { margin-top: 2px; flex-shrink: 0; }
 .part-cs .cs-rcard .cs-share-wrap { margin-top: 0; }
+/* 단계 탭을 할 일 카드 바로 위에 (오른쪽 패널 한 덩어리) · 좁은 칸이라 번호 위 · 이름 아래 4칸 */
+.part-cs .cs-review .cs-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; margin: 0; }
+.part-cs .cs-review .cs-steps button { display: grid; justify-items: center; gap: 2px; padding: 8px 2px 10px; white-space: normal; text-align: center; font-size: 12px; line-height: 1.35; }
+.part-cs .cs-review .cs-step-no { margin: 0; font-size: 11px; }
+/* 카드마다 주 버튼 하나를 맨 아래 같은 자리에 꽉 차게 · 보조 동작은 그 아래 글자 링크 */
+.part-cs .cs-rcard .cs-next { flex: 1 1 100%; white-space: normal; }
+.part-cs .cs-subacts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+.part-cs .cs-wait { display: grid; gap: 10px; }
+.part-cs [data-el="csfield"][hidden], .part-cs .cs-wait[hidden], .part-cs .cs-share-wrap[hidden] { display: none; }
 
 /* 문의함 · 고객 기록 페이지 버튼 (인사이트 구매자 리뷰 표와 같은 모양) — 목록 바닥 줄 */
 .part-cs .cs-list-pad { list-style: none; border-bottom: 1px solid transparent; }
