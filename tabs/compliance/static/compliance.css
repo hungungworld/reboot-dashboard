@@ -362,9 +362,11 @@
 /* 뜻 한글로 보기: 다른 탭과 같은 작은 버튼(cmp-btn-sm) + 번역 아이콘 */
 .part-compliance .cmp-btn.cmp-btn-tr { margin-left: 0; }
 .part-compliance .cmp-btn-tr .cmp-icon { width: 15px; height: 15px; }
-.part-compliance .cmp-tr { border-left: 2px solid var(--cmp-accent); padding: 4px 12px; display: grid; gap: 4px; }
-.part-compliance .cmp-tr-tag { font-size: 12px; font-weight: 650; color: var(--cmp-link); letter-spacing: .3px; }
-.part-compliance .cmp-tr-text { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.7; }
+/* 번역 결과 = 차트 말풍선과 같은 모양 (진한 바탕 · 흰 글씨 · 둥근 모서리, 인사이트 .ins-sw-tip과 같은 값) */
+.part-compliance .cmp-tr { display: grid; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--surface); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.part-compliance .cmp-tr-tag { font-size: 11px; font-weight: 700; color: inherit; }
+.part-compliance .cmp-tr-text { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: inherit; }
+.part-compliance .cmp-tr .cmp-muted { margin: 0; font-size: 11px; color: inherit; opacity: .7; }
 .part-compliance .cmp-tr a, .part-compliance .cmp-note a { color: inherit; font-weight: 700; }
 
 @media (max-width: 1200px) {

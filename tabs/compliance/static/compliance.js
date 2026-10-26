@@ -2504,7 +2504,7 @@ ${monFilterHTML()}
 <div data-el="mon-results">${monResultsHTML(sources)}</div>`;
 
     cbox.innerHTML = `
-<p class="cmp-summary">후보 ${cands.length}개 · 승인 대기 ${nCand}개 · 승인 ${approved.length}개</p>
+<p class="cmp-summary"><span class="cmp-muted">후보 ${cands.length}개${approved.length ? ` · 승인 ${approved.length}개` : ''}</span>${nCand ? `<span class="badge orange">승인 대기 ${nCand}</span>` : ''}</p>
 <p class="cmp-muted">수집한 경고장·NAD 결정 문구(NAD는 식품·음료·건강 결정만)는 자동으로 사례집이나 규칙에 들어가지 않아요.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">사람이 승인한 문구만 내려받아 컴플라이언스 담당자가 경고장 사례집에 옮기고 규칙 시험을 다시 실행해요. <b>'규칙 미탐지'로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요해요.</p></details>
 ${cands.length ? `
 <div class="cmp-row">
