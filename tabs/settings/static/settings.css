@@ -20,7 +20,7 @@
 /* 켜기/끄기 토글 (체크박스를 base.css .switch 모양으로) */
 .part-settings .set-tgl { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: var(--ink-2); }
 .part-settings .set-tgl input { appearance: none; -webkit-appearance: none; position: relative; flex-shrink: 0; width: 36px; height: 21px; margin: 0;
-  border-radius: 12px; background: var(--line-2); cursor: pointer; transition: background .15s; }
+  border-radius: 999px; background: var(--line-2); cursor: pointer; transition: background .15s; }
 .part-settings .set-tgl input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 15px; height: 15px; border-radius: 50%;
   background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .13); transition: transform .15s; }
 .part-settings .set-tgl input:checked { background: var(--accent); }
@@ -31,7 +31,7 @@
 /* 브랜드 컬러 견본 */
 .part-settings .set-swatches { display: flex; flex-wrap: wrap; gap: 14px 22px; }
 .part-settings .set-swatch { display: flex; align-items: center; gap: 10px; font-size: 12px; }
-.part-settings .set-swatch i { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line-2); display: block; flex-shrink: 0; }
+.part-settings .set-swatch i { width: 30px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--line-2); display: block; flex-shrink: 0; }
 .part-settings .set-swatch small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
 
 /* 브랜드 읽기 화면 */
@@ -58,39 +58,51 @@
 .part-settings .set-src-row .input { padding: 9px 10px; }
 
 /* 목록 편집 (검색어 · 키워드) */
-.part-settings .set-list { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--surface-2); }
+.part-settings .set-list { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; background: var(--surface-2); }
 .part-settings .set-chiprow { display: flex; flex-wrap: wrap; gap: 7px; min-height: 26px; align-items: center; }
-.part-settings .set-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 5px 5px 5px 10px; border-radius: 7px;
+.part-settings .set-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 5px 5px 5px 10px; border-radius: var(--radius-xs);
   background: var(--surface); border: 1px solid var(--line-2); font-size: 12px; color: var(--ink-2); }
 .part-settings .set-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .part-settings .set-chip.url > span { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; letter-spacing: 0; }
-.part-settings .set-chip button { width: 20px; height: 20px; border-radius: 5px; display: grid; place-items: center; color: var(--muted); flex-shrink: 0; }
+.part-settings .set-chip button { width: 20px; height: 20px; border-radius: var(--radius-xs); display: grid; place-items: center; color: var(--muted); flex-shrink: 0; }
 .part-settings .set-chip button:hover { background: var(--red-bg); color: var(--red); }
 .part-settings .set-chip button .icon { width: 12px; height: 12px; }
 .part-settings .set-addrow { display: flex; gap: 8px; margin-top: 10px; }
 .part-settings .set-addrow .input { padding: 8px 10px; }
 .part-settings .set-seg { display: flex; width: 100%; }
-.part-settings .set-seg button { flex: 1; font-size: 12px; padding: 9px 8px; }
+.part-settings .set-seg button { flex: 1; font-size: 11px; padding: 9px 8px; }
 .part-settings .set-asins td { padding: 8px 10px; vertical-align: middle; }
 .part-settings .set-asins .input { padding: 8px 10px; min-width: 110px; }
 .part-settings .set-asin { text-transform: uppercase; }
 
 /* 표 안 보조 줄 · 연결 */
-.part-settings .set-sub { display: block; margin-top: 4px; font-size: 10px; color: var(--muted); font-weight: 400; line-height: 1.5; }
+.part-settings .set-sub { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); font-weight: 400; line-height: 1.5; }
 .part-settings .set-conn td { vertical-align: middle; }
 .part-settings .set-conn th, .part-settings .set-conn td { padding-left: 11px; padding-right: 11px; }
-.part-settings .set-conn td:first-child { overflow-wrap: normal; word-break: keep-all; min-width: 140px; }
-.part-settings .set-conn td:first-child .set-sub { white-space: nowrap; }
-.part-settings .set-conn td.mono { white-space: normal; word-break: break-all; min-width: 90px; max-width: 160px; }
 .part-settings .set-conn .set-row-actions { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
 .part-settings .set-conn .set-row-actions .btn { justify-content: center; white-space: nowrap; }
-.part-settings .set-used { min-width: 160px; font-size: 11px; }
+.part-settings .set-used { font-size: 11px; }
 .part-settings .set-value { word-break: break-all; }
-.part-settings .set-code { background: var(--soft); border-radius: 8px; padding: 12px; font-size: 11px; line-height: 1.7; overflow-x: auto;
+.part-settings .set-code { background: var(--soft); border-radius: var(--radius-sm); padding: 12px; font-size: 11px; line-height: 1.7; overflow-x: auto;
   white-space: pre; margin: 12px 0 0; color: var(--ink-2); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
 .part-settings .set-copy { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.part-settings .set-copy code { flex: 1; min-width: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px;
+.part-settings .set-copy code { flex: 1; min-width: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: var(--radius-xs); padding: 8px 10px;
   font-size: 11px; word-break: break-all; letter-spacing: 0; }
+
+/* 고정 칸 표 (수집 대상 · 연결 · 작업 기록 · 시즌 — 인사이트 경쟁사 표와 같은 모양): 칸 너비 고정 · 긴 글자는 … */
+.part-settings .set-fixed { table-layout: fixed; min-width: 100%; }
+.part-settings .set-fixed th { position: relative; white-space: nowrap; }
+.part-settings .set-fixed td { vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.part-settings .set-fixed td .set-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-settings .set-fixed td.set-wrap { white-space: normal; }
+.part-settings .set-fixed tbody tr:hover { background: var(--soft-2); }
+.part-settings .set-fixed tr.set-off td:not(:first-child) { opacity: .5; }
+/* 칸 너비 조절 손잡이: 머리글 오른쪽 끝 — 마우스를 올리면 라임 선 */
+.part-settings .set-col-rs { position: absolute; top: 0; right: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 1; }
+.part-settings .set-col-rs::after { content: ""; position: absolute; top: 25%; bottom: 25%; right: 3px; width: 2px; border-radius: 1px; background: transparent; }
+.part-settings .set-fixed th:hover .set-col-rs::after { background: var(--line-2); }
+.part-settings .set-col-rs:hover::after, .part-settings .set-col-rs.on::after { background: var(--lime-line); top: 0; bottom: 0; }
+.part-settings .set-search { width: 200px; padding: 8px 10px; }
 
 /* 작업 로그 */
 .part-settings .set-wl td { vertical-align: middle; }
@@ -98,7 +110,7 @@
 .part-settings .set-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
 .part-settings .set-kv > span { color: var(--muted); }
 .part-settings .set-h3 { font-size: 13px; margin: 18px 0 8px; }
-.part-settings .set-pre { margin: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 300px; overflow: auto;
+.part-settings .set-pre { margin: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; max-height: 300px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; font-size: 11px; line-height: 1.65; color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
 

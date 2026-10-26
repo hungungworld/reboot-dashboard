@@ -46,7 +46,7 @@ SERVICES = [
     Service("FDA_DASHBOARD_USER", "FDA Data Dashboard 계정 (이메일)", "규제 모니터링 (수입 거부 · 경고장)", secret=False),
     Service("FDA_DASHBOARD_KEY", "FDA Data Dashboard 키", "규제 모니터링 (수입 거부 · 경고장)", "무료 키"),
     Service("SHOPIFY_TOKEN", "Shopify", "할인코드별 주문·매출 (연동 예정)"),
-    Service("HIGGSFIELD_API_KEY", "Higgsfield", "콘텐츠 이미지·영상 (연동 예정)"),
+    Service("HIGGSFIELD_API_KEY", "Higgsfield", "콘텐츠 이미지·영상"),
     Service("GMAIL_ADDRESS", "Gmail 주소 (SMTP)", "협업 메일 발송", secret=False,
             aliases=("GMAIL_ADDRESS", "gmail_address")),
     Service("GMAIL_APP_PASSWORD", "Gmail 앱 비밀번호", "협업 메일 발송 · 답장 확인 (IMAP)", "16자리 앱 비밀번호",
@@ -60,7 +60,7 @@ SERVICES = [
     Service("PRODUCT_DESC", "제품 설명 (AI 프롬프트)", "파트너 메일·가이드", secret=False, group="setting"),
     Service("REGULATION_DB_URL", "규제(검열) DB 주소", "파트너 협업 메일 '규제 DB 연결' 표시 (통합 DB 미정)", group="setting"),
     Service("CONTENT_TEXT_MODEL", "콘텐츠 대화·제작 모델", "콘텐츠 제작 (비우면 OPENAI_MODEL)", secret=False, group="setting"),
-    Service("CONTENT_IMAGE_MODEL", "콘텐츠 이미지 모델", "콘텐츠 이미지 생성 (비우면 gpt-image-1)", secret=False, group="setting"),
+    Service("CONTENT_IMAGE_MODEL", "콘텐츠 이미지 모델", "콘텐츠 이미지 생성 (비우면 gpt-image-2.5-sunburst)", secret=False, group="setting"),
 ]
 _BY_NAME = {s.name: s for s in SERVICES}
 DEFAULTS = {"OPENAI_MODEL": "gpt-4o-mini"}

@@ -65,12 +65,12 @@ def _now():
 
 def record(message_id, body, approver, account, verdict):
     if verdict not in VERDICTS:
-        raise ApprovalError("BLOCK이거나 재검사 판정이 없는 답장은 승인할 수 없습니다.")
+        raise ApprovalError("사용 불가 판정이거나 다시 심의 결과가 없는 답장은 승인할 수 없어요.")
     with _lock:
         data = _load()
         cur = data.get(message_id) or {}
         if cur.get("sent_at"):
-            raise ApprovalError("이미 보낸 문의입니다. 새 답장은 Gmail에서 직접 이어서 보내세요.", 409)
+            raise ApprovalError("이미 보낸 문의예요. 새 답장은 Gmail에서 직접 이어서 보내세요.", 409)
         data[message_id] = {"hash": fingerprint(body), "approver": approver, "account": account,
                             "verdict": verdict, "approved_at": _now()}
         _save(data)
@@ -93,11 +93,11 @@ def check(message_id, body):
     """보내기 직전 대조. 통과하면 승인 기록을 돌려줌."""
     cur = _load().get(message_id)
     if not cur:
-        raise ApprovalError("서버에 승인 기록이 없습니다. 문의함에서 다시 최종 승인하세요.")
+        raise ApprovalError("서버에 승인 기록이 없어요. 문의함에서 다시 최종 승인하세요.")
     if cur.get("sent_at"):
-        raise ApprovalError("이미 보낸 답장입니다 (같은 답장을 두 번 보내지 않음).", 409)
+        raise ApprovalError("이미 보낸 답장이에요 (같은 답장을 두 번 보내지 않음).", 409)
     if cur.get("hash") != fingerprint(body):
-        raise ApprovalError("승인한 뒤 답장 내용이 바뀌었습니다. 문의함에서 다시 최종 승인하세요.")
+        raise ApprovalError("승인한 뒤 답장 내용이 바뀌었어요. 문의함에서 다시 최종 승인하세요.")
     return cur
 
 
@@ -109,7 +109,7 @@ def begin_send(message_id, body):
     try:
         fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        raise ApprovalError("이 답장은 보내는 중이거나 지난번 보내기 결과가 확실하지 않습니다. "
+        raise ApprovalError("이 답장은 보내는 중이거나 지난번 보내기 결과가 확실하지 않아요. "
                             "Gmail 보낸편지함을 확인하고, 안 갔으면 문의함에서 다시 최종 승인하세요.", 409)
     with os.fdopen(fd, "w") as f:
         f.write(_now())

@@ -140,12 +140,12 @@ def shelf_view():
     oos = [x for x in now if x["in_stock"] is False]
     if now:
         parts = [f"{BUCKET_LABEL[k]} {len(v)}개" for k, v in groups.items()]
-        one = f"진열대 상품 {len(now)}개 · 1회분 단가 " + " / ".join(parts)
+        one = f"진열대 제품 {len(now)}개 · 1회분 단가 " + " / ".join(parts)
         if own:
             ps = [x["perServing"] for x in own if x["perServing"] is not None]
-            one += f" · 자사 {len(own)}개" + (f" (1회분 {'$%.2f' % min(ps)}~)" if ps else "")
+            one += f" · 알디콤 {len(own)}개" + (f" (1회분 {'$%.2f' % min(ps)}~)" if ps else "")
         else:
-            one += " · 자사 상품은 아직 진열대에서 찾지 못했어요"
+            one += " · 알디콤 제품은 아직 진열대에서 찾지 못했어요"
         if oos:
             one += f" · 품절 {len(oos)}개"
     else:
@@ -535,7 +535,7 @@ def monthly_view(month=None, t=None):
 
 SEVERITY = {"부작용": 3, "효과": 2}   # 나머지 주제는 1
 CHECK_TOPICS = {"부작용"}              # 순위와 따로 CS · 컴플라이언스가 확인
-PRIORITY_BASIS = "자사 불만 리뷰 건수 × 심각도(부작용 3 · 효과 2 · 나머지 1) · 규칙 계산 · 참고용"
+PRIORITY_BASIS = "알디콤 불만 리뷰 건수 × 심각도(부작용 3 · 효과 2 · 나머지 1) · 규칙 계산 · 참고용"
 
 
 def _recent_reviews():
@@ -689,12 +689,12 @@ def _analysis_view(now, prev, cols, watch, total):
     own_items = [x for x in now if x["own"]]
     own = None
     if own_items:
-        own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤 (자사)", own=True,
-                   tierLabel="자사", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
+        own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤", own=True,
+                   tierLabel="알디콤", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
     changes, changes_demo = comp_changes(now, prev)
     analyzed = sum(1 for d in rows if d["analyzed"])
     chans = sorted({ch["label"] for d in rows for ch in d["channels"]})
-    one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 판매 채널 {' · '.join(chans) or '없음'}"
+    one = (f"경쟁 브랜드 {len(rows)}개 (분석 {analyzed}개) · 판매처 {' · '.join(chans) or '없음'}"
            + (f" · 이번 주 변화 {len(changes)}건" + (" (예시)" if changes_demo else "") if changes else "")
            + (f" · 주시 중 {len(watch)}개" if watch else "")) if total or rows else ""
     return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes, "changesDemo": changes_demo,
@@ -703,7 +703,7 @@ def _analysis_view(now, prev, cols, watch, total):
             "aiReady": insights_ai.ready(), "firecrawlReady": envkeys.has("FIRECRAWL_API_KEY"), "deepTop": competitors.DEEP_TOP}
 
 
-EXPORT_HEAD = [("brand", "브랜드"), ("tier", "구분"), ("status", "상태"), ("channels", "판매 채널 (최저가)"),
+EXPORT_HEAD = [("brand", "브랜드"), ("tier", "구분"), ("status", "상태"), ("channels", "판매처 (최저가)"),
                ("perServing", "1회분 최저 ($)"), ("forms", "제형"), ("reviews", "진열대 리뷰 수"), ("praise", "고객 칭찬"),
                ("complaint", "고객 불만"), ("youtube", "유튜브 언급")] + list(competitors.FIELDS) + [
                ("website", "홈페이지"), ("sources", "출처"), ("researched_at", "조사일(UTC)")]
@@ -882,7 +882,7 @@ def reviews_view():
     brands = {}
     items = []
     for r in rows:
-        key = "자사 (알디콤)" if r.own else (r.brand or guess_brand(r.product_title) or "브랜드 미상")
+        key = "알디콤" if r.own else (r.brand or guess_brand(r.product_title) or "브랜드 미상")
         b = brands.setdefault(key, {"brand": key, "own": r.own, "watched": key.lower() in watch, "total": 0,
                                     "topics": {t: {"pos": 0, "neg": 0, "neu": 0} for t in TOPICS}, "ratings": []})
         b["total"] += 1
@@ -896,7 +896,7 @@ def reviews_view():
                           "sourceLabel": REVIEW_SOURCE_LABEL.get(r.source, r.source), "product": r.product_title[:200],
                           "rating": r.rating, "title": r.title, "text": r.text[:1500], "summaryKo": r.summary_ko,
                           "topics": r.topic_list(), "sentiment": r.sentiment, "date": r.date_text, "by": r.classified_by})
-    table = sorted(brands.values(), key=lambda b: (not b["own"], not b["watched"], -b["total"]))[:12]
+    table = sorted(brands.values(), key=lambda b: (not b["own"], not b["watched"], -b["total"]))
     for b in table:
         b["avgRating"] = round(sum(b["ratings"]) / len(b["ratings"]), 2) if b["ratings"] else None
         b.pop("ratings")

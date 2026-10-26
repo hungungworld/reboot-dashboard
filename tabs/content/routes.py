@@ -60,14 +60,14 @@ def _who():
 def _campaign(cid):
     c = db.session.get(ContentCampaign, cid)
     if c is None or c.content_type in O.RETIRED_TYPES:  # 없앤 콘텐츠 종류(상품 설명·기획서)는 숨김 — DB에는 남음
-        raise ApiError("없는 캠페인입니다.", 404)
+        raise ApiError("없는 캠페인이에요.", 404)
     return c
 
 
 def _version(vid):
     v = db.session.get(ContentVersion, vid)
     if v is None:
-        raise ApiError("없는 버전입니다.", 404)
+        raise ApiError("없는 버전이에요.", 404)
     return v
 
 
@@ -81,7 +81,7 @@ def _conflict(e):
     db.session.rollback()
     c = db.session.get(ContentCampaign, e.campaign_id)
     if c is None:
-        return jsonify(error="캠페인이 삭제되었습니다."), 404
+        return jsonify(error="캠페인이 삭제됐어요."), 404
     return jsonify(error="다른 곳에서 먼저 바뀌었어요. 최신 상태를 불러왔으니 확인 후 다시 시도하세요.",
                    conflict=True, revision=c.revision, campaign=repository.campaign_state(c)), 409
 
@@ -179,6 +179,7 @@ def campaigns_create():
                      if data.get("use_character") and sheet["content_type"] in assets.CHARACTER_TYPES else None)
         flavors = (assets.norm_product_flavors(data["product_flavors"], sheet["product_ids"], products)
                    if data.get("product_flavors") is not None and sheet["product_ids"] else None)
+        ref_skip = assets.norm_ref_skip(data["ref_skip"]) if data.get("ref_skip") and sheet["product_ids"] else None
     except ValueError as e:
         raise ApiError(str(e))
     try:  # 브라우저에 저장된 새 캠페인 기본값 — 이상하면 기본값으로
@@ -211,6 +212,9 @@ def campaigns_create():
     if flavors:  # 시트에서 제품마다 고른 맛 → 확정 결정 (참고 사진도 그 맛으로)
         c.decisions = dict(c.decisions, product_flavors={"value": flavors, "status": "confirmed", "source": "sheet",
                                                          "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
+    if ref_skip:  # 시트에서 눌러 뺀 참고 사진 → 확정 결정 (이미지·영상 만들 때 안 보냄)
+        c.decisions = dict(c.decisions, ref_skip={"value": ref_skip, "status": "confirmed", "source": "sheet",
+                                                  "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
     db.session.add(c)
     db.session.flush()
     lab = repository.labels_of(sheet, products)
@@ -263,6 +267,12 @@ def campaigns_patch(cid):
                 raise ApiError(str(e))
             changes.append({"field": "decisions.product_flavors", "value": value,
                             "status": "confirmed" if value else "undecided"})
+        if "ref_skip" in sheet_in:  # 뺀 참고 사진 (다 다시 켜면 지움)
+            try:
+                value = assets.norm_ref_skip(sheet_in["ref_skip"])
+            except ValueError as e:
+                raise ApiError(str(e))
+            changes.append({"field": "decisions.ref_skip", "value": value, "status": "confirmed" if value else "undecided"})
         plan = repository.plan_changes(repository.sheet_of(c), c.decisions, changes, user=user, source="sheet",
                                        revision=c.revision)
         if plan["rejected"]:
@@ -273,12 +283,12 @@ def campaigns_patch(cid):
     if "title" in data:
         title = clip(data.get("title"), 80).strip()
         if not title:
-            raise ApiError("캠페인명을 입력하세요.")
+            raise ApiError("캠페인명을 입력해 주세요.")
         if title != c.title:
             c.title, changed = title, True
     if "status" in data:
         if data["status"] not in O.STATUSES:
-            raise ApiError("상태는 제작 중 · 검토 중 · 완료 중 하나입니다.")
+            raise ApiError("상태는 제작 중 · 검토 중 · 완료 중 하나예요.")
         if data["status"] != c.status:
             c.status, changed = data["status"], True
     if isinstance(data.get("settings"), dict):
@@ -383,7 +393,7 @@ def campaigns_decisions(cid):
         raise repository.Conflict(cid)
     changes = data.get("changes")
     if not isinstance(changes, list) or not changes:
-        raise ApiError("바꿀 항목이 없습니다.")
+        raise ApiError("바꿀 항목이 없어요.")
     source = data.get("source") if data.get("source") in ("candidate", "manual", "undo") else "manual"
     user = _who()
     try:
@@ -427,10 +437,10 @@ def images_upload(cid):
     c = _campaign(cid)
     f = request.files.get("file")
     if f is None:
-        raise ApiError("이미지 파일이 없습니다.")
+        raise ApiError("이미지 파일이 없어요.")
     data = f.read(media.UPLOAD_MAX + 1)
     if len(data) > media.UPLOAD_MAX:
-        raise ApiError("이미지가 너무 큽니다 (12MB 이하).", 413)
+        raise ApiError("이미지가 너무 커요 (12MB 이하).", 413)
     size = media.png_size(data)
     if size is None or not (16 <= size[0] <= 4096 and 16 <= size[1] <= 4096):
         raise ApiError("PNG 이미지만 저장할 수 있어요 (가로·세로 16~4096px).")
@@ -439,17 +449,17 @@ def images_upload(cid):
     except (TypeError, ValueError):
         parent = None
     if parent is None or parent.campaign_id != cid or parent.kind != "image":
-        raise ApiError("편집한 원본 이미지 버전을 찾지 못했습니다.")
+        raise ApiError("편집한 원본 이미지 버전을 찾지 못했어요.")
     try:
         layers = media.clean_layers(json.loads(request.form.get("text_layers") or "[]"))
         edits = json.loads(request.form.get("edits") or "{}")
     except ValueError:
-        raise ApiError("편집 정보를 읽지 못했습니다.")
+        raise ApiError("편집 정보를 읽지 못했어요.")
     edits = {k: clip(v, 40) for k, v in (edits.items() if isinstance(edits, dict) else []) if k in media.EDIT_KEYS}
     baked = request.form.get("baked") == "1"
     name = media.save_upload(data, cid)
     if not name:
-        raise ApiError("이미지를 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+        raise ApiError("이미지를 저장하지 못했어요 (서버 저장 공간 확인).", 500)
     user = _who()
     sheet = repository.sheet_of(c)
     facts = brandkit.product_facts(sheet["product_ids"])
@@ -489,10 +499,10 @@ def versions_create(cid):
     data = json_body(max_bytes=256 * 1024)
     kind = data.get("kind")
     if kind not in O.TEXT_KINDS:
-        raise ApiError("결과물 종류를 고르세요 (카피 · 카드뉴스 · 숏폼 구성안 · 상품 설명 · CRM 메시지 · 기획서).")
+        raise ApiError("결과물 종류를 골라 주세요 (카피 · 카드뉴스 · 숏폼 구성안 · 상품 설명 · CRM 메시지 · 기획서).")
     body = repository.clip_text(data.get("body"), 20000)
     if not body:
-        raise ApiError("본문을 입력하세요.")
+        raise ApiError("본문을 입력해 주세요.")
     parent = None
     if data.get("parent_id") not in (None, ""):
         try:
@@ -500,7 +510,7 @@ def versions_create(cid):
         except (TypeError, ValueError):
             parent = None
         if parent is None or parent.campaign_id != cid:
-            raise ApiError("기준 버전을 찾지 못했습니다.")
+            raise ApiError("기준 버전을 찾지 못했어요.")
     user = _who()
     label = clip(data.get("label"), 30).strip() or (parent.label if parent else "직접 작성")
     sheet = repository.sheet_of(c)
@@ -527,19 +537,19 @@ def references_upload(cid):
     """레퍼런스 이미지 (multipart: file, note?) → 저장 → 대화 AI가 한 번 보고 요약. 이미지 생성 참고 사진으로는 쓰지 않음."""
     c = _campaign(cid)
     if len(repository.references_of(cid)) >= media.REF_PER_CAMPAIGN:
-        raise ApiError(f"레퍼런스는 캠페인마다 {media.REF_PER_CAMPAIGN}장까지예요. 하나를 지우고 올려 주세요.")
+        raise ApiError(f"레퍼런스는 캠페인마다 {media.REF_PER_CAMPAIGN}장까지예요. 하나를 삭제하고 올려 주세요.")
     f = request.files.get("file")
     if f is None:
-        raise ApiError("이미지 파일이 없습니다.")
+        raise ApiError("이미지 파일이 없어요.")
     data = f.read(media.REF_MAX_BYTES + 1)
     if len(data) > media.REF_MAX_BYTES:
-        raise ApiError("이미지가 너무 큽니다 (5MB 이하).", 413)
+        raise ApiError("이미지가 너무 커요 (5MB 이하).", 413)
     try:
         name, dims = media.save_reference(data, cid)
     except ValueError as e:
         raise ApiError(str(e))
     if not name:
-        raise ApiError("이미지를 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+        raise ApiError("이미지를 저장하지 못했어요 (서버 저장 공간 확인).", 500)
     user = _who()
     note = clip(request.form.get("note"), 300).strip()
     ref = ContentReference(campaign_id=cid, file=name, width=dims[0], height=dims[1], note=note, created_by=user)
@@ -574,7 +584,7 @@ def references_delete(cid, rid):
     _campaign(cid)
     ref = db.session.get(ContentReference, rid)
     if ref is None or ref.campaign_id != cid:
-        raise ApiError("없는 레퍼런스입니다.", 404)
+        raise ApiError("없는 레퍼런스예요.", 404)
     name = ref.file
     db.session.delete(ref)
     db.session.commit()
@@ -590,7 +600,7 @@ def campaigns_select(cid):
     if vid is not None:
         v = db.session.get(ContentVersion, int(vid)) if str(vid).isdigit() else None
         if v is None or v.campaign_id != cid:
-            raise ApiError("이 캠페인의 버전이 아닙니다.")
+            raise ApiError("이 캠페인의 버전이 아니에요.")
         vid = v.id
     c.selected_version_id = vid
     db.session.commit()
@@ -604,10 +614,10 @@ def campaigns_export(cid):
     only_id = None
     if only:
         if not only.isdigit():
-            raise ApiError("버전 번호가 올바르지 않습니다.")
+            raise ApiError("버전 번호가 올바르지 않아요.")
         v = db.session.get(ContentVersion, int(only))
         if v is None or v.campaign_id != cid:
-            raise ApiError("이 캠페인의 버전이 아닙니다.", 404)
+            raise ApiError("이 캠페인의 버전이 아니에요.", 404)
         only_id = v.id
     data, filename = build_zip(c, only_id)
     worklog.add("content", "기타", f"내보내기: {c.title}", detail={"campaign": cid, "version": only_id, "bytes": len(data)})
@@ -622,7 +632,7 @@ def suggest():
     data = json_body()
     field = data.get("field")
     if field not in ("goal", "extra"):
-        raise ApiError("추천할 항목은 목적(goal) 또는 추가 요청(extra)입니다.")
+        raise ApiError("추천할 항목은 목적 또는 추가 요청이에요.")
     raw = data.get("sheet") if isinstance(data.get("sheet"), dict) else {}
     products = repository.products_index()
     sheet = dict(repository.EMPTY_SHEET)
@@ -698,7 +708,7 @@ def versions_review(vid):
     data = json_body()
     verdict = str(data.get("verdict") or "")
     if verdict not in ("BLOCK", "REVISE", "COND", "REVIEW", "PASS", "UNAVAILABLE", "ERROR"):
-        raise ApiError("판정 값이 올바르지 않습니다.")
+        raise ApiError("판정 값이 올바르지 않아요.")
     findings = []
     for f in (data.get("findings") or [])[:30]:
         if isinstance(f, dict):
@@ -718,7 +728,7 @@ def versions_ai_review(vid):
     v = _version(vid)
     c = _campaign(v.campaign_id)
     if v.kind == "image":
-        raise ApiError("이미지는 AI 보조 검토 대상이 아닙니다 (텍스트 레이어만 키워드 확인).")
+        raise ApiError("이미지는 AI 보조 검토 대상이 아니에요 (텍스트 레이어만 키워드 확인).")
     if not providers.ready():
         raise ApiError(conversation.NO_KEY, 503)
     sheet = repository.sheet_of(c)
@@ -745,21 +755,21 @@ def versions_ai_review(vid):
 @bp.get("/jobs/<job_id>")
 def jobs_get(job_id):
     if not job_id.isalnum() or len(job_id) > 32:
-        raise ApiError("없는 작업입니다.", 404)
+        raise ApiError("없는 작업이에요.", 404)
     repository.settle_stale_jobs()
     j = db.session.get(ContentJob, job_id)
     if j is None:
-        raise ApiError("없는 작업입니다.", 404)
+        raise ApiError("없는 작업이에요.", 404)
     return jsonify(job=repository.job_dict(j))
 
 
 @bp.post("/jobs/<job_id>/cancel")
 def jobs_cancel(job_id):
     if not job_id.isalnum() or len(job_id) > 32:
-        raise ApiError("없는 작업입니다.", 404)
+        raise ApiError("없는 작업이에요.", 404)
     j = db.session.get(ContentJob, job_id)
     if j is None:
-        raise ApiError("없는 작업입니다.", 404)
+        raise ApiError("없는 작업이에요.", 404)
     try:
         ok, message = media.cancel_job(j)
     except providers.ProviderError as e:
@@ -779,7 +789,7 @@ def assets_list():
 def assets_file(name):
     a = assets.get(name[:-4]) if (name or "").endswith(".jpg") else None
     if a is None or not assets.path_of(a).is_file():
-        raise ApiError("없는 자산입니다.", 404)
+        raise ApiError("없는 자산이에요.", 404)
     resp = send_from_directory(str(assets.path_of(a).parent), assets.path_of(a).name, mimetype="image/jpeg", max_age=0)
     resp.headers["Cache-Control"] = "private, max-age=86400"
     return resp
@@ -788,17 +798,17 @@ def assets_file(name):
 @bp.get("/files/<name>")
 def files(name):
     if not media.FILE_RE.match(name or ""):
-        raise ApiError("없는 파일입니다.", 404)
+        raise ApiError("없는 파일이에요.", 404)
     photo = cardnews.PHOTO_RE.match(name)
     if photo:  # 카드뉴스 카드 사진 — 덱 JSON에만 이름이 있어 캠페인이 있는지만 확인
         if db.session.get(ContentCampaign, int(photo.group(1))) is None:
-            raise ApiError("없는 파일입니다.", 404)
+            raise ApiError("없는 파일이에요.", 404)
     elif (ContentVersion.query.filter_by(image_file=name).first() is None
             and ContentReference.query.filter_by(file=name).first() is None):
-        raise ApiError("없는 파일입니다.", 404)
+        raise ApiError("없는 파일이에요.", 404)
     folder = media.upload_dir()
     if not (folder / name).is_file():
-        raise ApiError("파일을 찾지 못했습니다 (서버 저장소 확인).", 404)
+        raise ApiError("파일을 찾지 못했어요 (서버 저장소 확인).", 404)
     resp = send_from_directory(str(folder), name, mimetype=media.MIMES["." + name.rsplit(".", 1)[1]], max_age=0)
     resp.headers["Cache-Control"] = "private, max-age=86400"
     resp.headers["Content-Disposition"] = f'inline; filename="reboot-content-{name}"'
@@ -908,7 +918,7 @@ def cardnews_save(cid):
         except (TypeError, ValueError):
             parent = None
         if parent is None or parent.campaign_id != cid:
-            raise ApiError("기준 버전을 찾지 못했습니다.")
+            raise ApiError("기준 버전을 찾지 못했어요.")
     label = clip(data.get("label"), 30).strip() or (parent.label if parent else "예시" if deck["demo"] else "직접 작성")
     note = ("카드뉴스 편집기 · 직접 수정" + (f" · {parent.label} v{parent.seq}에서 수정" if parent else "")
             + (" · 예시 데이터로 시작" if deck["demo"] else ""))
@@ -921,7 +931,7 @@ def cardnews_photo(cid):
     _cardnews_campaign(cid)
     f = request.files.get("file")
     if f is None:
-        raise ApiError("사진 파일이 없습니다.")
+        raise ApiError("사진 파일이 없어요.")
     data = f.read(cardnews.PHOTO_MAX_BYTES + 1)
     if len(data) > cardnews.PHOTO_MAX_BYTES:
         raise ApiError("사진이 너무 커요 (6MB 이하).", 413)
@@ -932,7 +942,7 @@ def cardnews_photo(cid):
     try:
         (media.upload_dir() / name).write_bytes(data)
     except OSError:
-        raise ApiError("사진을 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+        raise ApiError("사진을 저장하지 못했어요 (서버 저장 공간 확인).", 500)
     return jsonify(name=name, url=repository.file_url(name)), 201
 
 

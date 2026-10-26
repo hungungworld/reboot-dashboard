@@ -56,7 +56,7 @@ def call_json_images(system, user, images, *, schema, name, action, max_tokens=3
 
     import openai
     if not ready():
-        raise AIError("OpenAI 키가 없습니다. 설정 › 연결에서 OPENAI_API_KEY를 넣어 주세요.", 503)
+        raise AIError("OpenAI 키가 없어요. 설정 › 연결에서 OpenAI 키를 넣어 주세요.", 503)
     model = text_model()
     text = user if isinstance(user, str) else json.dumps(user, ensure_ascii=False)
     parts = [{"type": "text", "text": text}] + [
@@ -69,32 +69,32 @@ def call_json_images(system, user, images, *, schema, name, action, max_tokens=3
             messages=[{"role": "system", "content": system}, {"role": "user", "content": parts}],
             response_format={"type": "json_schema", "json_schema": {"name": name, "schema": schema, "strict": True}})
     except openai.AuthenticationError:
-        raise AIError("OpenAI 키가 올바르지 않습니다 (설정 › 연결 확인).", 503)
+        raise AIError("OpenAI 키가 올바르지 않아요 (설정 › 연결 확인).", 503)
     except (openai.PermissionDeniedError, openai.NotFoundError):
-        raise AIError(f"이 키로는 '{model}' 모델을 쓸 수 없습니다 (설정 › 연결의 OpenAI 모델 확인).", 503)
+        raise AIError(f"이 키로는 '{model}' 모델을 쓸 수 없어요 (설정 › 연결의 OpenAI 모델 확인).", 503)
     except openai.RateLimitError:
-        raise AIError("요청이 많거나 사용 한도를 넘었습니다. 잠시 뒤 다시 시도하세요.", 429)
+        raise AIError("요청이 많거나 사용 한도를 넘었어요. 잠시 뒤 다시 시도하세요.", 429)
     except openai.BadRequestError as e:
-        raise AIError(f"AI가 이미지를 처리하지 못했습니다 ({getattr(e, 'code', None) or 'bad_request'}). "
-                      "이미지를 읽는 모델인지(CONTENT_TEXT_MODEL) 확인하세요.", 400)
+        raise AIError(f"AI가 이미지를 처리하지 못했어요 ({getattr(e, 'code', None) or 'bad_request'}). "
+                      "대화·제작 모델이 이미지를 읽을 수 있는 모델인지 확인하세요.", 400)
     except openai.APITimeoutError:
-        raise AIError("AI 응답이 늦어 중단했습니다. 다시 시도하세요.", 504)
+        raise AIError("AI 응답이 늦어 중단했어요. 다시 시도하세요.", 504)
     except openai.APIConnectionError:
-        raise AIError("AI 서버에 연결하지 못했습니다 (인터넷 확인).", 502)
+        raise AIError("AI 서버에 연결하지 못했어요 (인터넷 확인).", 502)
     except openai.APIStatusError as e:
         raise AIError(f"AI 서버 오류 ({e.status_code}). 잠시 뒤 다시 시도하세요.", 502)
     choice = res.choices[0]
     if choice.finish_reason == "length":
-        raise AIError("AI 응답이 길어 잘렸습니다. 다시 시도하세요.")
+        raise AIError("AI 응답이 길어 잘렸어요. 다시 시도하세요.")
     if getattr(choice.message, "refusal", None):
-        raise AIError("AI가 이 이미지를 다루는 요청을 거절했습니다. 다른 이미지로 시도하세요.", 422)
+        raise AIError("AI가 이 이미지를 다루는 요청을 거절했어요. 다른 이미지로 시도하세요.", 422)
     out = choice.message.content or ""
     try:
         data = json.loads(out)
     except ValueError:
-        raise AIError("AI 응답을 읽지 못했습니다. 다시 시도하세요.")
+        raise AIError("AI 응답을 읽지 못했어요. 다시 시도하세요.")
     if not isinstance(data, dict):
-        raise AIError("AI 응답 형식이 올바르지 않습니다. 다시 시도하세요.")
+        raise AIError("AI 응답 형식이 올바르지 않아요. 다시 시도하세요.")
     u = getattr(res, "usage", None)
     worklog.add("content", "AI 프롬프트", action, detail={
         "model": getattr(res, "model", model), "images": len(images),
@@ -107,7 +107,7 @@ def call_json_images(system, user, images, *, schema, name, action, max_tokens=3
 def _client():
     import openai
     if not ready():
-        raise ProviderError("OpenAI 키가 없습니다. 설정 › 연결에서 OPENAI_API_KEY를 넣어 주세요.", 503)
+        raise ProviderError("OpenAI 키가 없어요. 설정 › 연결에서 OpenAI 키를 넣어 주세요.", 503)
     return openai.OpenAI(api_key=envkeys.get("OPENAI_API_KEY"), timeout=IMAGE_TIMEOUT, max_retries=0)
 
 
@@ -115,11 +115,11 @@ def _png_from(res):
     data = getattr(res, "data", None) or []
     b64 = getattr(data[0], "b64_json", None) if data else None
     if not b64:
-        raise ProviderError("이미지 결과(파일)를 받지 못했습니다.")
+        raise ProviderError("이미지 결과(파일)를 받지 못했어요.")
     try:
         return base64.b64decode(b64)
     except ValueError:
-        raise ProviderError("이미지 결과를 읽지 못했습니다.")
+        raise ProviderError("이미지 결과를 읽지 못했어요.")
 
 
 def _bad_request_detail(e):
@@ -137,20 +137,20 @@ def _run(fn, model):
     try:
         return fn()
     except openai.APITimeoutError:
-        raise SubmissionUnknown("이미지 응답이 늦어 연결을 끊었습니다. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않습니다.", 504)
+        raise SubmissionUnknown("이미지 응답이 늦어 연결을 끊었어요. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않아요.", 504)
     except openai.AuthenticationError:
-        raise ProviderError("OpenAI 키가 올바르지 않습니다 (설정 › 연결 확인).", 503)
+        raise ProviderError("OpenAI 키가 올바르지 않아요 (설정 › 연결 확인).", 503)
     except (openai.PermissionDeniedError, openai.NotFoundError):
-        raise ProviderError(f"이 키로는 이미지 모델 '{model}'을 쓸 수 없습니다 (CONTENT_IMAGE_MODEL 확인 · 조직 인증 필요 여부 확인).", 503)
+        raise ProviderError(f"이 키로는 이미지 모델 '{model}'을 쓸 수 없어요 (이미지 모델 설정 · 조직 인증 필요 여부 확인).", 503)
     except openai.RateLimitError:
-        raise ProviderError("요청이 많거나 사용 한도를 넘었습니다. 잠시 뒤 다시 요청하세요.", 429)
+        raise ProviderError("요청이 많거나 사용 한도를 넘었어요. 잠시 뒤 다시 요청하세요.", 429)
     except openai.BadRequestError as e:
         code = getattr(e, "code", None) or "bad_request"
         if "moderation" in str(code) or "safety" in str(code):
-            raise ProviderError("이미지 모델의 안전 정책에 걸려 만들지 못했습니다. 요청 표현을 바꿔 보세요.", 400)
-        raise ProviderError(f"이미지 요청을 처리하지 못했습니다 ({code}{_bad_request_detail(e)}).", 400)
+            raise ProviderError("이미지 모델의 안전 정책에 걸려 만들지 못했어요. 요청 표현을 바꿔 보세요.", 400)
+        raise ProviderError(f"이미지 요청을 처리하지 못했어요 ({code}{_bad_request_detail(e)}).", 400)
     except openai.APIConnectionError:
-        raise SubmissionUnknown("이미지 서버 연결이 끊겼습니다. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않습니다.", 502)
+        raise SubmissionUnknown("이미지 서버 연결이 끊겼어요. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않아요.", 502)
     except openai.APIStatusError as e:
         raise ProviderError(f"이미지 서버 오류 ({e.status_code}). 잠시 뒤 다시 요청하세요.", 502)
 
@@ -170,7 +170,7 @@ def high_fidelity(model=None):
 def edit_image(paths, prompt, size, model):
     """이미지 파일들(편집 기준 이미지 · 제품·캐릭터 참고 사진)을 넣어 생성·편집 (GPT 이미지 계열만). paths: 경로 하나 또는 목록."""
     if not image_supports_edit(model):
-        raise ProviderError(f"이미지 모델 '{model}'은 기준 이미지 편집을 지원하지 않습니다.", 400)
+        raise ProviderError(f"이미지 모델 '{model}'은 기준 이미지 편집을 지원하지 않아요.", 400)
     paths = [paths] if isinstance(paths, (str, bytes)) or hasattr(paths, "__fspath__") else list(paths)
     client = _client()
     extra = {"input_fidelity": "high"} if high_fidelity(model) else {}
@@ -190,7 +190,7 @@ def edit_image(paths, prompt, size, model):
 def check_connection():
     """키가 실제로 동작하는지 — 모델 조회만 함 (토큰·생성 비용 없음). 반환: {ok, message, models:{이름: ok}}"""
     if not ready():
-        return {"ok": False, "message": "OpenAI 키가 없습니다 (설정 › 연결).", "models": {}}
+        return {"ok": False, "message": "OpenAI 키가 없어요 (설정 › 연결).", "models": {}}
     import openai
     client = openai.OpenAI(api_key=envkeys.get("OPENAI_API_KEY"), timeout=15, max_retries=0)
     models, msg = {}, ""
@@ -199,11 +199,11 @@ def check_connection():
             client.models.retrieve(m)
             models[m] = True
         except openai.AuthenticationError:
-            return {"ok": False, "message": "OpenAI 키가 올바르지 않습니다 (설정 › 연결 확인).", "models": {}}
+            return {"ok": False, "message": "OpenAI 키가 올바르지 않아요 (설정 › 연결 확인).", "models": {}}
         except (openai.PermissionDeniedError, openai.NotFoundError):
-            models[m], msg = False, f"이 키로는 '{m}' 모델을 쓸 수 없습니다."
+            models[m], msg = False, f"이 키로는 '{m}' 모델을 쓸 수 없어요."
         except (openai.APIConnectionError, openai.APITimeoutError):
-            return {"ok": False, "message": "OpenAI 서버에 연결하지 못했습니다 (인터넷 확인).", "models": {}}
+            return {"ok": False, "message": "OpenAI 서버에 연결하지 못했어요 (인터넷 확인).", "models": {}}
         except openai.APIStatusError as e:
             models[m], msg = False, f"OpenAI 서버 오류 ({e.status_code})."
     ok = all(models.values())

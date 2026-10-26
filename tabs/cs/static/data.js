@@ -185,7 +185,7 @@
         ])
       },
       {
-        code: 'C10', name: '기타·협업 제안', mode: '⚪ 다른 파트 전달', owner: '인플루언서·파트너 (혁주)', dueHours: 72, tag: '—', ownerRequired: false,
+        code: 'C10', name: '기타·협업 제안', mode: '⚪ 다른 탭 전달', owner: '인플루언서·파트너 (혁주)', dueHours: 72, tag: '—', ownerRequired: false,
         keywords: ['collab', 'collaborate', 'collaboration', 'partnership', 'influencer', 'sponsor', 'sponsorship', 'creator', 'PR package', 'affiliate'],
         keywordsKo: ['협업', '제휴', '협찬'],
         template: t([

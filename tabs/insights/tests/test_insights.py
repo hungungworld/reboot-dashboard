@@ -325,12 +325,6 @@ def test_rules_season_search_lift_questions_and_complaints():
     assert all("Thanksgiving" not in a["fact"] for a in acts)
 
 
-# ───────── 화면 API (빈 상태) ─────────
-
-def test_insights_requires_login(client):
-    assert client.get("/api/insights/weekly").status_code == 401
-
-
 def test_rules_actions_have_short_title_metric_and_steps():
     # 한 줄 목록용: 모든 규칙에 짧은 제목 · 핵심 숫자 · 할 일 단계, 숫자는 사실 문장과 같은 값
     prev = [_lined("amazon:A", "Flyby · 캡슐", "amazon", in_stock=False), _item("amazon:P", "Liquid IV 16 Count", 30.0)]
@@ -351,6 +345,12 @@ def test_rules_actions_have_short_title_metric_and_steps():
     assert by["own_complaint"]["metric"] == "3건" and by["top_question"]["metric"] == "7건"
     assert by["low_stock"]["metric"] == "8개" and by["own_oos_season"]["metric"] == "D-8"
     assert by["season_search"]["metric"] in by["season_search"]["fact"]
+
+
+# ───────── 화면 API (빈 상태) ─────────
+
+def test_insights_requires_login(client):
+    assert client.get("/api/insights/weekly").status_code == 401
 
 
 def test_insights_page_loads_part_files(auth_client):
@@ -683,7 +683,7 @@ def test_ai_rewrite_and_monthly_with_mocked_openai(app, auth_client, monkeypatch
     assert seen == ["review_topics", "weekly_actions", "monthly_review"]
     week = auth_client.get("/api/insights/weekly").get_json()
     assert week["aiUsed"] and all(a["ai"] and a["fact"].startswith("AI 사실") for a in week["actions"])
-    assert week["actions"][0]["base"]["fact"].startswith("경쟁 상품")  # 규칙 문장도 함께
+    assert week["actions"][0]["base"]["fact"].startswith("경쟁 제품")  # 규칙 문장도 함께
     # 같은 데이터면 다시 부르지 않음 (저장된 문장)
     auth_client.post("/api/insights/update", json={"items": ["actions"]})
     assert seen.count("weekly_actions") == 1
@@ -1105,7 +1105,7 @@ def test_competitor_research_fills_from_evidence_then_web(app, auth_client, monk
     cheers = next(c for c in auth_client.get("/api/insights/data/competitors").get_json()["table"] if c["brand"] == "Cheers")
     assert cheers["analysis"]["message"]["text"] == "과학 기반 숙취 케어 v2" and cheers["history"][0]["changed"] == ["핵심 메시지"]
     csv_text = auth_client.get("/api/insights/competitors.csv").data.decode("utf-8-sig")
-    assert csv_text.splitlines()[0].startswith("브랜드,구분,상태,판매 채널 (최저가)") and "Amazon $15.00 · Yami $12.00" in csv_text
+    assert csv_text.splitlines()[0].startswith("브랜드,구분,상태,판매처 (최저가)") and "Amazon $15.00 · Yami $12.00" in csv_text
     rows = json.loads(auth_client.get("/api/insights/competitors.json").data)
     assert {r["brand"] for r in rows} == {"Cheers", "Flyby", "Liquid I.V.", "Morning Is Back"}
     assert "fc-test-key" not in csv_text and "sk-test" not in json.dumps(rows)

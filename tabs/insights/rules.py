@@ -20,19 +20,19 @@ from datetime import date, timedelta
 GRADE_ORDER = {"긴급": 0, "기회": 1, "참고": 2}
 SOURCE_LABEL = {"amazon": "Amazon", "weee": "Weee!", "yami": "Yami"}
 RULE_LABEL = {
-    "own_oos_season": "자사 품절 + 45일 안에 시즌 → 긴급",
-    "price_cut": "경쟁사 가격 10% 이상 인하 → 긴급",
-    "price_up": "경쟁사 가격 10% 이상 인상 → 참고",
+    "own_oos_season": "알디콤 품절 + 45일 안에 시즌 → 긴급",
+    "price_cut": "경쟁 제품 가격 10% 이상 인하 → 긴급",
+    "price_up": "경쟁 제품 가격 10% 이상 인상 → 참고",
     "new_entry": "신규 제품 진입 → 참고",
     "season_search": "작년 검색이 평균보다 20% 이상 늘었던 시즌이 30일 안 → 기회",
     "top_question": "유튜브 댓글 최다 질문 → 기회",
-    "own_complaint": "자사 리뷰 불만 1위 → 긴급",
-    "comp_oos": "경쟁 제품 한 채널 품절 → 기회",
-    "comp_oos_multi": "경쟁 제품 2채널 이상 동시 품절 → 긴급",
-    "low_stock": "경쟁 상품 재고 20개 이하 → 참고",
-    "restock": "경쟁 상품 재입고 → 참고",
+    "own_complaint": "알디콤 리뷰 불만 1위 → 긴급",
+    "comp_oos": "경쟁 제품 한 판매처 품절 → 기회",
+    "comp_oos_multi": "경쟁 제품 2개 판매처 이상 동시 품절 → 긴급",
+    "low_stock": "경쟁 제품 재고 20개 이하 → 참고",
+    "restock": "경쟁 제품 재입고 → 참고",
 }
-COMPLIANCE = "광고 문구에 효능 표현이나 경쟁 브랜드 이름을 넣을 때는 컴플라이언스 탭 검토를 거쳐요."
+COMPLIANCE = "광고 문구에 효능 표현이나 경쟁 브랜드 이름을 넣을 때는 컴플라이언스 탭에서 문구 심의를 거쳐요."
 LOW_STOCK = 20
 PRICE_PCT = 10
 OOS_DAYS = 45
@@ -136,11 +136,11 @@ def weekly_actions(ctx):
         names = ", ".join(f"{_short(x['title'])} ({SOURCE_LABEL.get(x.get('source'), x.get('source'))})" for x in oos[:3])
         acts.append(_action(
             "own_oos_season", "긴급",
-            f"자사(알디콤) 상품 {len(oos)}개가 품절이에요: {names}.",
+            f"알디콤 제품 {len(oos)}개가 품절이에요: {names}.",
             f"{s['name']}까지 {d}일 남았어요 (D-{d}). 수요가 몰리는 시기에 살 수 없으면 고객이 경쟁 제품으로 넘어가요.",
             "판매처에 재입고 일정을 확인하고, 시즌 전 재입고가 어렵다면 캠페인 링크를 재고가 있는 판매처로 바꾸세요.",
-            {"품절 상품": [{"title": x["title"], "source": x.get("source"), "link": x.get("link")} for x in oos], "시즌": s["name"], "시즌 시작": s["start"], "남은 날": d}, weight=100 - d,
-            head=_head(f"자사 상품 {len(oos)}개가 {s['name']} 앞에 품절이에요", f"D-{d}", s["name"],
+            {"알디콤 품절 제품": [{"title": x["title"], "source": x.get("source"), "link": x.get("link")} for x in oos], "시즌": s["name"], "시즌 시작": s["start"], "남은 날": d}, weight=100 - d,
+            head=_head(f"알디콤 제품 {len(oos)}개가 {s['name']} 앞에 품절이에요", f"D-{d}", s["name"],
                        ["판매처에 재입고 일정 확인하기", "시즌 전 재입고가 어려우면 캠페인 링크를 재고 있는 판매처로 바꾸기"])))
 
     # 2) 경쟁사 가격 ±10% · 3) 신규 진입 — 지난 수집이 있어야 비교 가능
@@ -168,18 +168,18 @@ def weekly_actions(ctx):
             top = rows[0]
             word = "내렸어요" if rule == "price_cut" else "올렸어요"
             more = f" 외 {len(rows) - 1}개" if len(rows) > 1 else ""
-            fact = (f"경쟁 상품 {len(rows)}개가 가격을 10% 넘게 {word}. 가장 큰 변동: {_short(top['title'])} "
+            fact = (f"경쟁 제품 {len(rows)}개가 가격을 10% 넘게 {word}. 가장 큰 변동: {_short(top['title'])} "
                     f"({SOURCE_LABEL.get(top['source'], top['source'])}) {_usd(top['before'])} → {_usd(top['after'])} ({top['pct']:+.0f}%){more}.")
             if rule == "price_cut":
-                why = "같은 진열대에서 가격 차이가 벌어지면 자사 상품이 상대적으로 비싸 보여 구매가 줄 수 있어요."
+                why = "같은 진열대에서 가격 차이가 벌어지면 알디콤 제품이 상대적으로 비싸 보여 구매가 줄 수 있어요."
                 todo = "시장 › 가격 위치에서 1회분 단가 구간을 비교하고, 할인 · 묶음 구성으로 대응할지 정하세요."
             else:
-                why = "경쟁사 가격이 오르면 자사 가격 경쟁력이 상대적으로 좋아져요."
+                why = "경쟁 제품 가격이 오르면 알디콤 가격 경쟁력이 상대적으로 좋아져요."
                 todo = "1회분 단가 비교를 상세페이지 · 콘텐츠 메시지에 쓸 수 있는지 검토하세요."
-            head = _head(f"경쟁 상품 {len(rows)}개가 가격을 {word}", f"{top['pct']:+.0f}%", "최대 인하" if rule == "price_cut" else "최대 인상",
+            head = _head(f"경쟁 제품 {len(rows)}개가 가격을 {word}", f"{top['pct']:+.0f}%", "최대 인하" if rule == "price_cut" else "최대 인상",
                          ["시장 › 가격 위치에서 1회분 단가 구간 비교하기", "할인 · 묶음 구성으로 대응할지 정하기"] if rule == "price_cut"
                          else ["1회분 단가 비교를 상세페이지 · 콘텐츠 메시지에 쓸 수 있는지 검토하기"])
-            acts.append(_action(rule, grade, fact, why, todo, {"변동 상품": rows[:10]}, weight=abs(top["pct"]), head=head))
+            acts.append(_action(rule, grade, fact, why, todo, {"가격 변동 제품": rows[:10]}, weight=abs(top["pct"]), head=head))
         new = [x for x in now if x.get("source") in compare and (x.get("source"), x.get("key")) not in before
                and not x.get("own")]
         if new:
@@ -187,13 +187,13 @@ def weekly_actions(ctx):
             more = f" 외 {len(new) - 3}개" if len(new) > 3 else ""
             acts.append(_action(
                 "new_entry", "참고",
-                f"진열대에 새 상품 {len(new)}개가 들어왔어요: {names}{more}.",
+                f"진열대에 새 제품 {len(new)}개가 들어왔어요: {names}{more}.",
                 "같은 검색어 · 카테고리에서 고객의 선택지가 늘어요.",
-                "시장 › 브랜드 비교에서 새 상품의 가격 · 메시지를 확인하고 주시할지 정하세요.",
-                {"새 상품": [{"title": x["title"], "source": x.get("source"), "price": x.get("price"), "link": x.get("link")} for x in new[:10]]},
+                "시장 › 브랜드 비교에서 새 제품의 가격 · 메시지를 확인하고 주시할지 정하세요.",
+                {"새 제품": [{"title": x["title"], "source": x.get("source"), "price": x.get("price"), "link": x.get("link")} for x in new[:10]]},
                 weight=len(new),
-                head=_head(f"진열대에 새 상품 {len(new)}개가 들어왔어요", f"{len(new)}개", "새 상품",
-                           ["시장 › 브랜드 비교에서 새 상품의 가격 · 메시지 확인하기", "주시할지 정하기"])))
+                head=_head(f"진열대에 새 제품 {len(new)}개가 들어왔어요", f"{len(new)}개", "새 제품",
+                           ["시장 › 브랜드 비교에서 새 제품의 가격 · 메시지 확인하기", "주시할지 정하기"])))
 
     # 7) 경쟁 제품 라인 품절 — 한 채널 = 기회 · 2채널 이상 = 긴급 (지난 수집에도 품절이면 'N주째')
     was = line_oos(prev) if prev is not None else {}
@@ -212,14 +212,14 @@ def weekly_actions(ctx):
         acts.append(_action(
             "comp_oos_multi", "긴급",
             f"{top['line']} — {' · '.join(top['oos'])}에서 모두 품절이에요{more}.{again}",
-            "여러 채널에서 한꺼번에 비면 공백이 길어질 수 있어요. 이 제품을 찾던 고객이 다른 제품을 처음 사 보는 시기예요.",
-            "외부 광고(IG · TikTok) 랜딩을 재고가 넉넉한 자사 채널로 모으고, 처음 산 고객이 계속 사도록 묶음 구성이나 공구 일정 앞당기기를 검토하세요. "
+            "여러 판매처에서 한꺼번에 비면 공백이 길어질 수 있어요. 이 제품을 찾던 고객이 다른 제품을 처음 사 보는 시기예요.",
+            "외부 광고(IG · TikTok) 랜딩을 재고가 넉넉한 알디콤 판매처로 모으고, 처음 산 고객이 계속 사도록 묶음 구성이나 공구 일정 앞당기기를 검토하세요. "
             "품절 원인은 판매처 공지로 확인하세요."
             + (" 늘린 광고가 실제로 팔리고 있는지 성과분석에서 확인하세요." if top["again"] else "") + " " + COMPLIANCE,
             {"품절 제품": multi[:10]}, weight=200 + len(multi),
-            head=_head(f"{top['line']} — {' · '.join(top['oos'])}에서 모두 품절이에요", "연속 품절" if top["again"] else f"{len(top['oos'])}채널",
+            head=_head(f"{top['line']} — {' · '.join(top['oos'])}에서 모두 품절이에요", "연속 품절" if top["again"] else f"{len(top['oos'])}개 판매처",
                        "지난주에도 품절" if top["again"] else "동시 품절",
-                       ["외부 광고(IG · TikTok) 랜딩을 재고 넉넉한 자사 채널로 모으기", "처음 산 고객을 위한 묶음 구성 · 공구 일정 앞당기기 검토하기",
+                       ["외부 광고(IG · TikTok) 랜딩을 재고 넉넉한 알디콤 판매처로 모으기", "처음 산 고객을 위한 묶음 구성 · 공구 일정 앞당기기 검토하기",
                         "판매처 공지로 품절 원인 확인하기"] + (["늘린 광고가 실제로 팔리는지 성과분석에서 확인하기"] if top["again"] else []))))
     if single:
         top = single[0]
@@ -228,7 +228,7 @@ def weekly_actions(ctx):
         acts.append(_action(
             "comp_oos", "기회",
             f"{top['line']} — {ch}에서 품절이에요{more}." + (" 지난주에 이어 계속 품절이에요." if top["again"] else ""),
-            f"{ch}에서 이 제품을 찾던 고객이 바로 살 수 있는 다른 제품을 찾아요. 이 채널에서 고객을 데려올 기회예요.",
+            f"{ch}에서 이 제품을 찾던 고객이 바로 살 수 있는 다른 제품을 찾아요. 이 판매처에서 고객을 데려올 기회예요.",
             f"{ch}에서 경쟁 브랜드 키워드 입찰 상향을 검토하고, 소재에 '재고 있음 · 즉시 출고'를 넣으세요. "
             "이 기간에는 할인 쿠폰 없이도 팔릴 수 있으니 쿠폰 보류도 검토하세요. " + COMPLIANCE,
             {"품절 제품": single[:10]}, weight=len(single),
@@ -302,7 +302,7 @@ def weekly_actions(ctx):
             "top_question", "기회",
             f"유튜브 댓글에서 가장 많은 질문은 '{q['label']}'이에요 ({q['count']}건).{ex}",
             "사기 전에 고객이 궁금해하는 점이라, 먼저 답해 주면 망설임을 줄일 수 있어요.",
-            "상세페이지 FAQ · 짧은 영상으로 답하세요. 효능 표현은 컴플라이언스 검토를 거쳐요.",
+            "상세페이지 FAQ · 짧은 영상으로 답하세요. 효능 표현은 컴플라이언스 탭에서 문구 심의를 거쳐요.",
             {"질문 주제": q["label"], "건수": q["count"], "예시": (q.get("examples") or [])[:3]}, weight=q["count"],
             head=_head(f"가장 많은 질문은 '{q['label']}'", f"{q['count']}건", "유튜브 질문", ["상세페이지 FAQ로 답하기", "짧은 영상으로 답하기"])))
 
@@ -313,12 +313,12 @@ def weekly_actions(ctx):
         ex = f' 예: "{_short(c["examples"][0], 80)}"' if c.get("examples") else ""
         acts.append(_action(
             "own_complaint", "긴급",
-            f"자사 리뷰 불만 1위는 '{c['topic']}'이에요 ({c['count']}건).{ex}",
+            f"알디콤 리뷰 불만 1위는 '{c['topic']}'이에요 ({c['count']}건).{ex}",
             "같은 불만이 쌓이면 별점과 구매 전환이 함께 떨어져요.",
-            "CS · 제품 담당과 원인을 확인하고, 상세페이지 안내나 CS 답변 템플릿을 고치세요.",
+            "CS · 제품 담당과 원인을 확인하고, 상세페이지 안내나 CS 답장 템플릿을 고치세요.",
             {"불만 주제": c["topic"], "건수": c["count"], "예시": (c.get("examples") or [])[:3]}, weight=c["count"],
-            head=_head(f"자사 리뷰 불만 1위는 '{c['topic']}'", f"{c['count']}건", "불만 리뷰",
-                       ["CS · 제품 담당과 원인 확인하기", "상세페이지 안내나 CS 답변 템플릿 고치기"])))
+            head=_head(f"알디콤 리뷰 불만 1위는 '{c['topic']}'", f"{c['count']}건", "불만 리뷰",
+                       ["CS · 제품 담당과 원인 확인하기", "상세페이지 안내나 CS 답장 템플릿 고치기"])))
 
     acts.sort(key=lambda a: (GRADE_ORDER[a["grade"]], -a["weight"]))
     seen = {}

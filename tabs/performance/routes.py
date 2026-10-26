@@ -23,7 +23,7 @@ from . import csvdata, metrics
 
 bp = Blueprint("performance", __name__, url_prefix="/api/performance")
 
-NO_AI = "OpenAI가 연결되어 있지 않습니다. 설정 › 연결에서 OPENAI_API_KEY를 넣으면 AI 해석·예산 제안을 쓸 수 있습니다."
+NO_AI = "OpenAI가 연결되어 있지 않아요. 설정 › 연결에서 OpenAI 키를 넣으면 AI 해석·예산 제안을 쓸 수 있어요."
 
 
 def _who():
@@ -46,13 +46,13 @@ def _period(rng, start="", end=""):
         s = date.fromisoformat(start or end)
         e = date.fromisoformat(end or start)
     except ValueError:
-        raise ApiError("기간은 YYYY-MM-DD 형식이어야 합니다.")
+        raise ApiError("기간은 2026-10-19처럼 연-월-일 형식이어야 해요.")
     if s > e:
         s, e = e, s
     lo, hi = date.fromisoformat(rng["start"]), date.fromisoformat(rng["end"])
     s, e = max(s, lo), min(e, hi)
     if s > e:
-        raise ApiError("고른 기간에는 CSV 데이터가 없습니다. 기간을 바꿔 주세요.")
+        raise ApiError("고른 기간에는 CSV 데이터가 없어요. 기간을 바꿔 주세요.")
     return s.isoformat(), e.isoformat()
 
 
@@ -66,7 +66,7 @@ def data():
 
 def _save(text, mode, filename):
     if mode not in ("merge", "replace"):
-        raise ApiError("방식은 merge(합치기) 또는 replace(전체 바꾸기)입니다.")
+        raise ApiError("방식은 합치기 또는 전체 바꾸기 중 하나여야 해요.")
     try:
         rows, info = csvdata.parse_csv(text)
     except csvdata.CsvError as e:
@@ -75,9 +75,9 @@ def _save(text, mode, filename):
         with jobs.file_lock("performance-csv", stale_seconds=120):
             meta = csvdata.save(rows, mode, _who(), filename)
     except jobs.Busy:
-        raise ApiError("다른 사람이 지금 CSV를 저장하고 있습니다. 잠시 뒤 다시 시도하세요.", 409)
+        raise ApiError("다른 사람이 지금 CSV를 저장하고 있어요. 잠시 뒤 다시 시도하세요.", 409)
     meta["duplicates"] = info["duplicates"]
-    worklog.add("performance", "기타", f"성과 CSV 업로드 ({'합치기' if mode == 'merge' else '전체 바꾸기'} · {meta['rows']}행)",
+    worklog.add("performance", "기타", f"성과 CSV 파일 올리기 ({'합치기' if mode == 'merge' else '전체 바꾸기'} · {meta['rows']}행)",
                 detail={"file": meta["filename"], "added": meta["added"], "updated": meta["updated"],
                         "backup": meta["backup"], "fromSample": meta["fromSample"]})
     d = csvdata.load()
@@ -91,7 +91,7 @@ def _from_request():
         f = request.files["file"]
         raw = f.read(csvdata.MAX_BYTES + 1)
         if len(raw) > csvdata.MAX_BYTES:
-            raise ApiError("파일이 너무 큽니다 (5MB 이하).", 413)
+            raise ApiError("파일이 너무 커요 (5MB 이하).", 413)
         try:
             text = csvdata.decode(raw)
         except csvdata.CsvError as e:
@@ -100,7 +100,7 @@ def _from_request():
     if request.is_json:
         body = json_body(max_bytes=csvdata.MAX_BYTES * 3)
         return str(body.get("csv") or ""), str(body.get("mode") or "merge"), clip(body.get("filename"), 120)
-    raise ApiError("CSV 파일(file) 또는 JSON {csv, mode}를 보내 주세요.", 415)
+    raise ApiError("CSV 파일을 골라 올려 주세요.", 415)
 
 
 @bp.put("")
@@ -116,7 +116,7 @@ def upload_csv():
 @bp.delete("")
 def reset():
     backup = csvdata.reset_to_sample()
-    worklog.add("performance", "기타", "성과 데이터 지우기 (샘플로 되돌림)", detail={"backup": backup})
+    worklog.add("performance", "기타", "성과 데이터 삭제 (예시 데이터로 되돌림)", detail={"backup": backup})
     return jsonify(ok=True, backup=backup)
 
 
@@ -174,7 +174,7 @@ def advice():
     rows = d["rows"]
     rng = csvdata.date_range(rows)
     if not rng:
-        raise ApiError("성과 데이터가 아직 없어요. 매출 CSV를 먼저 올려 주세요.")
+        raise ApiError("아직 성과 데이터가 없어요. 매출 CSV 파일을 먼저 올려 주세요.")
     start, end = _period(rng, body.get("start"), body.get("end"))
     s = metrics.summarize(rows, start, end, rng, csvdata.channels(rows))
     out = adv.advise(s, d["source"])
@@ -192,7 +192,7 @@ def insight():
     rows = d["rows"]
     rng = csvdata.date_range(rows)
     if not rng:
-        raise ApiError("성과 데이터가 아직 없어요. 매출 CSV를 먼저 올려 주세요.")
+        raise ApiError("아직 성과 데이터가 없어요. 매출 CSV 파일을 먼저 올려 주세요.")
     start, end = _period(rng, body.get("start"), body.get("end"))
     s = metrics.summarize(rows, start, end, rng, csvdata.channels(rows))
     out = adv.insight(s, d["source"])
