@@ -839,7 +839,7 @@
         <label>보고 기간 <select class="input" data-ref="week">${opts.map((o, i) => `<option value="${i}"${o.start === S.period.start && o.end === S.period.end ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></label>
         ${ui.fileBtn('download', { label: 'PDF 다운로드', type: '인쇄', act: 'print', title: '브라우저 인쇄 창에서 PDF로 저장' })}
       </div>
-      <article class="perf-report" data-ref="sheet" aria-label="주간 성과 보고서"></article>`;
+      <article class="perf-report" data-ref="sheet" aria-label="성과 보고서"></article>`;
     ref('week').addEventListener('change', e => {
       const o = opts[+e.target.value];
       if (!o) return;
