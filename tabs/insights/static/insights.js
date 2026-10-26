@@ -1,5 +1,5 @@
 /* 시장 · 고객 인사이트 (담당: 이현경) — tabs/insights/docs/README.md '3번째 대시보드'.
-   왼쪽 메뉴 (2026-10-26 묶음): TO DO = 이번 주 · 이번 달 / 데이터 = 시장 · 고객 · 데이터 관리 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
+   왼쪽 메뉴 (2026-10-26 묶음): TO DO = 주간 · 월간 / 데이터 = 시장 · 고객 · 데이터 관리 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
    - 시장: 변화 · 가격 위치 · 브랜드 비교 / 고객: 구매자 리뷰 · 유튜브 댓글
    - 데이터 관리: 마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증 (예전엔 머리글 버튼으로만 열렸음)
    - 보관한 기사는 2026-10-26 홈 › 미국 시장 브리핑 보관함 창으로 옮김 (옛 주소는 홈으로 넘김)
@@ -20,7 +20,7 @@
   const store = REBOOT.store('insights');   // 저장 키: reboot:insights:summary (메뉴 숫자용)
 
   // [id, 이름, 왼쪽 메뉴 묶음, 흐린 글씨] — 묶음 이름표는 core.js가 data-group으로 그림
-  const TABS = [['weekly', '이번 주', 'TO DO'], ['monthly', '이번 달', 'TO DO'],
+  const TABS = [['weekly', '주간', 'TO DO'], ['monthly', '월간', 'TO DO'],
     ['market', '시장', '데이터'], ['customers', '고객', '데이터'], ['manage', '데이터 관리', '데이터', true]];
   // 화면 안 탭
   const SUBS = {
@@ -75,7 +75,7 @@
       items: actionRows(w.actions).filter(r => r.grade !== '참고').map(r => {
         const src = ACTION_SRC[r.rule];
         return { id: r.key, grade: r.grade, title: r.title, todo: r.steps.join(' → '),
-          href: `/dashboard/insights${src ? src[0] : '#weekly'}`, src: src ? src[1] : '이번 주' };
+          href: `/dashboard/insights${src ? src[0] : '#weekly'}`, src: src ? src[1] : '주간' };
       })
     } : null));
   }
@@ -540,7 +540,7 @@
     own_oos_season: ['#market/brands', '시장 › 브랜드 비교'], price_cut: ['#market/changes', '시장 › 변화'], price_up: ['#market/changes', '시장 › 변화'],
     comp_oos: ['#market/changes', '시장 › 변화'], comp_oos_multi: ['#market/changes', '시장 › 변화'], low_stock: ['#market/changes', '시장 › 변화'],
     restock: ['#market/changes', '시장 › 변화'], new_entry: ['#market/changes', '시장 › 변화'], own_complaint: ['#customers/reviews', '고객 › 구매자 리뷰'],
-    top_question: ['#customers/audience', '고객 › 유튜브 댓글'], season_search: ['#monthly', '이번 달 · 검색 트렌드']
+    top_question: ['#customers/audience', '고객 › 유튜브 댓글'], season_search: ['#monthly', '월간 · 검색 트렌드']
   };
 
   // 사실 문장의 첫 문장만 (참고 한 줄 · 홈 할 일 제목)
