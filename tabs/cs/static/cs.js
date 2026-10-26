@@ -16,6 +16,10 @@
   const HOUR = 3600 * 1000;
   const TYPES = {};
   DATA.types.forEach(t => { TYPES[t.code] = t; });
+  // 예시 문의 영어 제목의 한글 뜻 — 이미 저장된 문의에도 붙도록 저장값 대신 id로 찾음
+  const SUBJECT_KO = {};
+  DATA.dummyInquiries.forEach(d => { if (d.subjectKo) SUBJECT_KO[d.id] = d.subjectKo; });
+  const subjectKo = i => SUBJECT_KO[i.id] ? ` <span class="cs-muted">(${esc(SUBJECT_KO[i.id])})</span>` : '';
   const DONE = ['발송 완료', '종결'];
   const TODO_RE = /\[확인 필요[^\]]*\]/g;
   const LABEL = { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '걸린 표현 없음' };
@@ -339,7 +343,7 @@
   function dueText(i) {
     if (!isOpen(i)) return '처리됨';
     const left = due(i) - Date.now();
-    return left < 0 ? `기한 ${span(left)} 초과` : `${span(left)} 남음`;
+    return left < 0 ? `${span(left)} 늦음` : `${span(left)} 남음`;
   }
   function badge(v) {
     if (!LABEL[v]) return `<span class="cs-badge">${esc(v)}</span>`;
@@ -567,22 +571,9 @@
     new: '새로 온 문의가 없어요.', phrase: '문구 검토할 답장이 없어요.', cs: 'CS 검토를 기다리는 답장이 없어요.',
     ready: '보낼 답장이 없어요. CS 검토를 승인하면 여기로 와요.', sent: '보낸 답장이 없어요.'
   };
-  // 목록 위 흐름 줄: 단계마다 지금 할 일 한 문장
-  const STAGE_GUIDE = {
-    new: '문의를 열어 초안을 읽고, 빈칸 [확인 필요]를 채워 문구 검토로 넘겨요.',
-    phrase: '걸린 표현을 고치고 빈칸을 모두 채운 뒤 「문구 검토 완료」를 눌러요.',
-    cs: '작성자가 아닌 사람이 확인 항목을 체크하고 승인해요. 고칠 게 있으면 의견을 적어 돌려보내요.',
-    ready: '두 검토를 마친 답장이에요. 받는 사람을 확인하고 보내요.',
-    sent: '보낸 답장이에요. 고객 답이 더 없으면 종결해요.'
-  };
   // 문의 하나 처리 단계 (상세 화면 밑줄 탭) · 오른쪽 칸에 한 단계 카드만 보여 줌
+  // 단계 이름은 왼쪽 메뉴 · 단계 탭에만, 할 일은 오른쪽 카드에만 (중복 표시 정리 2026-10-26)
   const STEPS = [['reply', '답장 쓰기'], ['phrase', '문구 검토'], ['cs', 'CS 검토'], ['send', '보내기']];
-  const STEP_GUIDE = {
-    reply: '고객 메일을 읽고 왼쪽 초안을 고쳐요. 빈칸 [확인 필요]를 모두 채우면 문구 검토로 넘어가요.',
-    phrase: '자동 심의에 걸린 표현을 고치고 「문구 검토 완료」를 눌러요. 본문을 다시 고치면 이 단계로 돌아와요.',
-    cs: '작성자가 아닌 사람이 확인 항목을 체크하고 승인해요. 고칠 게 있으면 의견을 적어 돌려보내요.',
-    send: '두 검토를 마친 답장만 보낼 수 있어요. 받는 사람을 확인하고 보내요.'
-  };
   // 단계 안 보기 탭 ('all'은 고객 이력 → 문의 보기 전용이라 탭 없음)
   const VIEWS = [['open', '전체'], ['urgent', '긴급 (C1)'], ['overdue', '기한 초과']];
   // 답장 설정 밑줄 탭 · 템플릿 유형 탭 (화면을 다시 그려도 유지 · 새로고침하면 기본값)
@@ -605,12 +596,11 @@
     <div class="cs-subpanel">
     <div class="cs-inbox" data-view="list">
       <div class="cs-listcol">
-        <div class="cs-flow" data-el="flow"></div>
         <div class="linetabs cs-viewtabs" data-el="filter" role="group" aria-label="보기"></div>
         <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="sort">
           <option value="priority" selected>처리 우선순위 (긴급·기한 순)</option><option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option></select></label>
         <div class="cs-gmailbar">
-          <button type="button" class="cs-btn" data-act="gmail-import" disabled>${icon('mail')} Gmail 최신 데이터 받기</button>
+          <button type="button" class="cs-btn" data-act="gmail-import" title="Gmail 최신 데이터 받기" disabled>${icon('mail')} Gmail 받기</button>
           <button type="button" class="cs-btn" data-act="open-settings" title="담당자 연락처 · 답장 기본값 · 페르소나 · 템플릿">답장 설정</button>
           <span class="cs-muted" data-el="gmailmsg" aria-live="polite"></span>
         </div>
@@ -675,8 +665,6 @@
       if (e.target.closest('[data-act="cust-clear"]')) { ui.custFilter = null; ui.filter = 'open'; renderList(ui); return; }
       if (e.target.closest('[data-act="open-settings"]')) { ui.showTab('templates'); return; }
       if (e.target.closest('[data-act="edit-persona"]')) { SET_TAB = 'persona'; ui.showTab('templates'); return; }
-      const go = e.target.closest('[data-act="go-sub"]');
-      if (go) { setView(ui, 'list'); ui.showSub(go.dataset.sub); return; }
       if (e.target.closest('[data-act="tpl-back"]')) { ui.showTab('inbox'); return; }
     });
 
@@ -785,8 +773,8 @@
     if (box) {
       const dv = replyDefaults();
       const empty = (DATA.replyDefaults || []).filter(f => !String(dv[f.key] || '').trim()).length;
-      box.innerHTML = empty ? `<p class="cs-note cs-setupnote">답장 기본값 <b>${empty}개 미입력</b> · 비어 있으면 초안에 [확인 필요]가 남아 문구 검토가 막혀요.
-        <button type="button" class="cs-btn cs-btn-sm" data-act="open-settings">답장 설정 열기</button></p>` : '';
+      box.innerHTML = empty ? `<button type="button" class="cs-setupnote" data-act="open-settings"
+        title="비어 있으면 초안에 [확인 필요]가 남아 문구 검토가 막혀요">${icon('alert')} 답장 기본값 <b>${empty}개</b> 비어 있음 · 채우기 →</button>` : '';
     }
   }
 
@@ -824,11 +812,6 @@
     fbox.hidden = ui.filter === 'all';
     fbox.innerHTML = VIEWS.map(([v, l]) =>
       `<button type="button" data-filter="${v}" aria-pressed="${v === ui.filter}">${l} <span class="n">${all.filter(i => pass(i, v)).length}</span></button>`).join('');
-    // 흐름 줄: 다섯 단계 중 지금 단계 + 이 단계에서 할 일
-    const flow = ui.root.querySelector('[data-el="flow"]');
-    if (flow) flow.innerHTML = ui.filter === 'all' ? '' : `<ol class="cs-flow-steps" aria-label="문의 처리 흐름">${SUBS.map(([id, l]) =>
-      `<li><button type="button" data-act="go-sub" data-sub="${id}"${id === ui.sub ? ' aria-current="step"' : ''}>${l}</button></li>`).join('')}</ol>
-      <p class="cs-flow-guide">${esc(STAGE_GUIDE[ui.sub])}</p>`;
     const unread = i => !i.readAt && i.status === '답변 대기';
     // 처음엔 LIST_MAX건만 (선택한 메일이 뒤쪽이면 모두) · 단계·필터가 바뀌면 다시 접힘
     const moreKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
@@ -842,7 +825,7 @@
 <li><button type="button" class="cs-item cs-mailrow${i.id === ui.selected ? ' is-selected' : ''}${unread(i) ? ' is-unread' : ''}${late ? ' is-late' : ''}${ui.highlight && ui.highlight.has(i.id) ? ' is-new' : ''}" data-id="${esc(i.id)}">
   <span class="cs-avatar" aria-hidden="true">${initials(i.name)}</span>
   <span class="cs-row-from"><span class="cs-item-name">${esc(i.name)}</span>${custMap.has(emailOf(i.from)) ? custChips(custMap.get(emailOf(i.from)), true) : ''}</span>
-  <span class="cs-row-main"><span class="cs-row-line"><b class="cs-row-subject">${esc(i.subject)}</b><span class="cs-row-snippet"> — ${esc(snippet)}</span></span>
+  <span class="cs-row-main"><span class="cs-row-line"><b class="cs-row-subject">${esc(i.subject)}</b>${subjectKo(i)}<span class="cs-row-snippet"> — ${esc(snippet)}</span></span>
     <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span>${ui.filter === 'all' ? `<span class="cs-chip">${STAGE_NAME[stageOf(i)]}</span>` : ''}${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}${i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}${gatesMini(i)}</span></span>
   <span class="cs-row-side"><span class="cs-row-time" title="받은 시간">${fmt(i.receivedAt)}</span><span class="cs-due${late ? ' is-late' : ''}">${dueText(i)}</span></span>
 </button></li>`;
@@ -882,21 +865,20 @@
       <div class="cs-chips">
         <span class="cs-type cs-type-${t.code}">${t.code} ${esc(t.name)}</span>
         <span class="cs-chip cs-chip-dim">${prod ? esc(prod.ko) : '제품 미확인'}</span>
-        <span class="cs-chip">${STAGE_NAME[stageOf(inq)]}</span>
         ${inq.dummy ? '<span class="cs-chip cs-chip-dim">예시</span>' : ''}
         ${inq.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}
       </div>
       <span class="cs-ref">#${esc(inq.id)}</span>
     </div>
-    <h3 class="cs-subject">${esc(inq.subject)}</h3>
-    <div class="cs-meta"><span>담당 <b>${esc(t.owner)}</b></span><span>응답 기한 <b>${fmt(due(inq))}</b> (${dueText(inq)})</span><span>${esc(t.mode)}</span><span>팀 태그 ${esc(t.tag)}</span></div>
+    <h3 class="cs-subject">${esc(inq.subject)}${subjectKo(inq)}</h3>
+    <div class="cs-meta"><span>담당 <b>${esc(t.owner)}</b></span><span>응답 기한 <b>${fmt(due(inq))}</b> (${dueText(inq)})</span><span>처리: ${esc(t.mode)}</span><span>분류: ${esc(t.tag)}</span></div>
     ${(c => c && (c.list.length > 1 || c.signals.length || c.behavior.length || (c.tag && c.tag.tag)) ? `<div class="cs-cust-line">${custChips(c)}
       ${c.signals.map(x => `<span class="cs-muted">${esc(x.label)}</span>`).concat(c.behavior.map(b => `<span class="cs-muted">${esc(b)}</span>`)).join(' · ')}
       ${c.tag && c.tag.note ? `<span class="cs-muted">· 분류 이유: ${esc(c.tag.note)}</span>` : ''}
       <button type="button" class="cs-btn cs-btn-sm" data-act="cust-history">고객 기록 보기</button></div>
       ${inq.type === 'C1' && c.tag && ['watch', 'limit'].includes(c.tag.tag) ? '<p class="cs-note cs-note-block">주의 고객으로 분류돼 있어도 부작용 신고(C1)는 평소처럼 처리하세요 (FDA 보고 대상 판단).</p>' : ''}` : '')(customers().find(c => c.email === emailOf(inq.from)))}
     ${t.code === 'C1' && !locked ? (adv => adv
-      ? `<div class="cs-escal is-done">${icon('shield')}<span>부작용 접수 완료 · ${fmt(adv.createdAt)}</span><button type="button" class="cs-btn cs-btn-sm" data-act="to-adverse-records">접수 기록 보기</button></div>`
+      ? `<div class="cs-escal is-done">${icon('shield')}<span>부작용 기록 남김 · ${fmt(adv.createdAt)}</span><button type="button" class="cs-btn cs-btn-sm" data-act="to-adverse-records">접수 기록 보기</button></div>`
       : `<div class="cs-escal">${icon('alert')}<span><b>부작용 신고 문의예요.</b> 답장보다 접수 기록을 먼저 남기세요.</span><button type="button" class="cs-btn cs-primary" data-act="to-adverse">부작용 접수 열기</button></div>`
     )(loadAdverse().find(x => x.linkedInquiry === inq.id)) : ''}
     <details class="cs-classify"><summary>분류·제품 바꾸기 <span class="cs-muted">(자동 분류: ${esc(inq.typeAuto)})</span></summary>
@@ -924,7 +906,6 @@
   </div>
 
   <nav class="linetabs cs-steps" role="tablist" data-subnav="off" aria-label="답장 처리 단계" data-el="steps"></nav>
-  <p class="cs-step-guide" data-el="stepguide"></p>
   <div class="cs-work">
     <section class="cs-composer" aria-label="답장 쓰기">
       <div class="cs-ctabs">
@@ -1106,7 +1087,6 @@ ${todoPanelHTML(inq.draft)}
       nav.innerHTML = STEPS.map(([id, l], k) => `<button type="button" role="tab" data-act="step" data-step="${id}" aria-selected="${id === ui.step}">
   <span class="cs-step-no">0${k + 1}</span>${l}${done[id] ? '<span class="cs-step-ok" aria-label="끝남">✓</span>' : ''}</button>`).join('');
     } else nav.querySelectorAll('[data-step]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.step === ui.step)));
-    box.querySelector('[data-el="stepguide"]').textContent = STEP_GUIDE[ui.step];
     box.querySelectorAll('[data-step-pane]').forEach(p => { p.hidden = p.dataset.stepPane !== ui.step; });
   }
 

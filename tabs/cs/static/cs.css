@@ -43,26 +43,18 @@
 /* 2단 문의함 (시안 .split-inbox) */
 .part-cs .cs-inbox {
   display: grid; grid-template-columns: 310px minmax(0, 1fr); align-items: stretch; min-height: 560px;
-  background: var(--cs-card); border: 1px solid var(--cs-rule); border-radius: var(--radius); overflow: hidden;
+  background: var(--cs-card); border: 1px solid var(--cs-rule); border-radius: var(--radius); overflow: clip;   /* hidden이면 오른쪽 단계 카드 sticky가 안 붙음 */
 }
 .part-cs .cs-listcol { display: grid; gap: 14px; align-content: start; background: var(--cs-list); border-right: 1px solid var(--cs-rule); padding: 18px 12px; }
 .part-cs .cs-listcol > .cs-field { padding: 0 2px; }
-/* 흐름 줄 (새 문의 → 문구 검토 → CS 검토 → 보낼 준비 → 보냄) + 지금 할 일 */
-.part-cs .cs-flow:empty { display: none; }
-.part-cs .cs-flow { grid-column: 1 / -1; display: grid; gap: 6px; padding: 0 2px; }
-.part-cs .cs-flow-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-size: 12px; }
-.part-cs .cs-flow-steps li { display: flex; align-items: center; }
-.part-cs .cs-flow-steps li + li::before { content: '→'; color: var(--cs-faint); margin: 0 6px; }
-.part-cs .cs-flow-steps button { font: inherit; border: 0; background: none; padding: 2px 0; color: var(--cs-muted); cursor: pointer; border-bottom: 2px solid transparent; }
-.part-cs .cs-flow-steps button:hover { color: var(--cs-ink); }
-.part-cs .cs-flow-steps button[aria-current="step"] { color: var(--cs-ink); font-weight: 750; border-bottom-color: var(--cs-ink); }
-.part-cs .cs-flow-guide { margin: 0; font-size: 13px; color: var(--cs-ink); }
 /* 단계 안 보기 탭 (전체 · 긴급 · 기한 초과) — core .linetabs */
 .part-cs .cs-viewtabs { align-self: end; }
 .part-cs .cs-viewtabs[hidden] { display: none; }
-.part-cs .cs-gmailbar { display: grid; gap: 6px; padding: 0 2px; }
-.part-cs .cs-gmailbar .cs-btn { width: 100%; }
-.part-cs .cs-gmailbar .cs-muted { font-size: 11px; }
+/* Gmail 받기 · 답장 설정은 한 줄, 안내 문구는 그 아래 */
+.part-cs .cs-gmailbar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 2px; }
+.part-cs .cs-gmailbar .cs-btn { width: 100%; white-space: nowrap; }
+.part-cs .cs-gmailbar .cs-muted { font-size: 11px; grid-column: 1 / -1; }
+.part-cs .cs-gmailbar .cs-muted:empty { display: none; }
 .part-cs .cs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; max-height: 72vh; overflow-y: auto; }
 .part-cs .cs-item {
   width: 100%; text-align: left; font: inherit; color: inherit; background: transparent;
@@ -261,9 +253,11 @@
 .part-cs .cs-trblock { display: grid; gap: 6px; justify-items: start; }
 .part-cs .cs-btn.cs-btn-sm { font-size: 11px; padding: 7px 10px; border-radius: var(--radius-sm); }
 .part-cs .cs-btn.cs-btn-tr::before { content: "가A"; font-weight: 700; color: var(--cs-link); }
-.part-cs .cs-tr { border-left: 2px solid var(--cs-accent); padding: 4px 12px; display: grid; gap: 4px; }
-.part-cs .cs-tr-tag { font-size: 11px; font-weight: 650; color: var(--cs-link); letter-spacing: .3px; }
-.part-cs .cs-tr-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+/* 번역 결과 = 차트 말풍선과 같은 모양 (컴플라이언스 .cmp-tr · 인사이트 .ins-sw-tip과 같은 값) */
+.part-cs .cs-tr { display: grid; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--surface); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.part-cs .cs-tr-tag { font-size: 11px; font-weight: 700; color: inherit; }
+.part-cs .cs-tr-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; color: inherit; }
+.part-cs .cs-tr .cs-muted { margin: 0; font-size: 11px; color: inherit; opacity: .7; }
 .part-cs .cs-warn a { color: inherit; font-weight: 700; }
 
 @media (max-width: 1200px) {
@@ -372,7 +366,7 @@
 .part-cs .cs-contact { align-items: flex-end; }
 /* 받은편지함 목록 화면: 보기 · 정렬 · Gmail 불러오기를 한 줄로 */
 .part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; align-items: end; padding: 18px 16px; }
-.part-cs .cs-inbox[data-view="list"] .cs-listcol > :nth-child(n+5) { grid-column: 1 / -1; }
+.part-cs .cs-inbox[data-view="list"] .cs-listcol > :nth-child(n+4) { grid-column: 1 / -1; }
 /* 버튼은 보기·정렬 칸과 같은 줄·같은 높이, 불러오기 결과 문구는 그 아래 줄 오른쪽 */
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar { display: contents; }
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar .cs-btn { align-self: end; min-height: 0; padding-top: 0; padding-bottom: 0; height: 40px; }
@@ -388,8 +382,11 @@
 .part-cs .cs-subpanel[hidden] { display: none; }
 .part-cs .cs-subtabs { margin-bottom: 4px; }
 .part-cs [data-el="setupnote"]:empty { display: none; }
-.part-cs .cs-setupnote { margin: 0; background: var(--cs-orange-bg); color: var(--cs-orange); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* 답장 기본값 빈칸 알림: 한 줄 버튼 (누르면 답장 설정) */
+.part-cs .cs-setupnote { font: inherit; font-size: 12px; font-weight: 600; color: var(--cs-orange); background: none; border: 0; padding: 0 2px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-align: left; }
+.part-cs .cs-setupnote:hover { text-decoration: underline; }
 .part-cs .cs-setupnote b { color: inherit; }
+.part-cs .cs-setupnote svg { width: 14px; height: 14px; flex: none; }
 .part-cs .cs-sec.is-warn { border-color: var(--cs-orange); }
 .part-cs .cs-sec.is-warn > summary { background: var(--cs-orange-bg); }
 .part-cs .cs-linkbtn { font: inherit; font-weight: 650; color: var(--cs-link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
@@ -424,9 +421,12 @@
 
 /* 작성기 | 검토 패널 (넓으면 두 칸) */
 .part-cs .cs-work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+/* 넓으면 단계 카드(할 일 · 주 버튼)를 문의 맨 위 오른쪽에 붙여 스크롤 없이 보이게 */
 @container (min-width: 860px) {
-  .part-cs .cs-work { grid-template-columns: minmax(0, 1fr) 300px; }
-  .part-cs .cs-review { position: sticky; top: 12px; }
+  .part-cs .cs-thread[data-id] { grid-template-columns: minmax(0, 1fr) 300px; column-gap: 16px; }
+  .part-cs .cs-thread[data-id] > *, .part-cs .cs-thread[data-id] .cs-composer { grid-column: 1; }
+  .part-cs .cs-thread[data-id] .cs-work { display: contents; }
+  .part-cs .cs-thread[data-id] .cs-review { grid-column: 2; grid-row: 1 / span 4; align-self: start; position: sticky; top: 12px; }
 }
 .part-cs .cs-composer { border: 1.5px solid var(--cs-ink); border-radius: var(--radius); background: var(--cs-card); overflow: hidden; min-width: 0; }
 .part-cs .cs-ctabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 0 12px; background: var(--cs-soft); border-bottom: 1px solid var(--cs-rule); }
@@ -460,7 +460,6 @@
 .part-cs .cs-steps button { padding: 14px 18px 16px 6px; }
 .part-cs .cs-step-no { font-size: 10px; margin-right: 10px; }
 .part-cs .cs-step-ok { margin-left: 6px; color: var(--cs-link); font-weight: 750; }
-.part-cs .cs-step-guide { margin: -4px 0 0; font-size: 13px; color: var(--cs-muted); }
 .part-cs [data-step-pane][hidden] { display: none; }
 .part-cs .cs-sendbox .cs-actions { flex-wrap: wrap; }
 .part-cs .cs-sendbox p { margin: 0; flex-basis: 100%; }
