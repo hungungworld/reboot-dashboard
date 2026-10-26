@@ -52,13 +52,14 @@
 .part-cs .cs-kpi.is-alert:not(.is-featured) .cs-kpi-num { color: var(--red); }
 
 /* 하위 탭 (시안 .subtabs) */
-.part-cs .cs-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 밑줄 탭 (파트너 제안 작성 단계 .ptn-v2-steps와 같은 모양) */
+.part-cs .cs-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--cs-rule); }
 .part-cs .cs-tab {
-  font: inherit; font-size: 12px; font-weight: 550; background: none; border: 0; color: var(--cs-muted);
-  padding: 9px 14px; border-radius: var(--radius-sm); cursor: pointer; transition: background .15s;
+  font: inherit; font-size: 13px; font-weight: 550; background: none; border: 0; color: var(--cs-muted);
+  padding: 12px 14px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color .15s;
 }
-.part-cs .cs-tab:hover { background: var(--cs-code); color: var(--cs-ink); }
-.part-cs .cs-tab[aria-selected="true"] { background: var(--cs-dark); color: var(--cs-dark-ink); }
+.part-cs .cs-tab:hover { color: var(--cs-ink); }
+.part-cs .cs-tab[aria-selected="true"] { color: var(--cs-ink); font-weight: 750; border-bottom-color: var(--cs-ink); }
 .part-cs .cs-panel[hidden] { display: none; }
 .part-cs .cs-panel[data-panel="templates"] { background: var(--cs-card); border: 1px solid var(--cs-rule); border-radius: var(--radius); padding: 22px; }
 
