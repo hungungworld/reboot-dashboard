@@ -5,7 +5,7 @@
   "surgeMinRecent": 5,
   "areas": [
     {"id": "category", "label": "숙취 카테고리", "kind": "signal"},
-    {"id": "competitor", "label": "경쟁사", "kind": "signal"},
+    {"id": "competitor", "label": "경쟁 브랜드", "kind": "signal"},
     {"id": "regulation", "label": "규제", "kind": "signal"},
     {"id": "behavior", "label": "음주 행태", "kind": "flow"},
     {"id": "nonalc", "label": "무알코올 · 기능성", "kind": "flow"},
@@ -15,7 +15,7 @@
   ],
   "groups": [
     {"id": "category", "area": "category", "label": "숙취 제품 · 성분", "query": "hangover (supplement OR electrolyte OR DHM OR probiotic)"},
-    {"id": "competitors", "area": "competitor", "label": "경쟁사 (큰 브랜드)", "query": "ZBiotics OR \"Liquid I.V.\" OR DripDrop OR \"Cheers Restore\"", "_메모": "경쟁사 분석 상위 브랜드로 월 1회 갱신"},
+    {"id": "competitors", "area": "competitor", "label": "주요 경쟁 브랜드", "query": "ZBiotics OR \"Liquid I.V.\" OR DripDrop OR \"Cheers Restore\"", "_메모": "경쟁사 분석 상위 브랜드로 월 1회 갱신"},
     {"id": "fda", "area": "regulation", "label": "FDA · 영양제 규제", "query": "FDA \"dietary supplement\""},
     {"id": "sober", "area": "behavior", "label": "절주 · 음주 감소", "query": "\"sober curious\" OR \"drinking less\" OR \"Gen Z drinking\""},
     {"id": "consumption", "area": "behavior", "label": "음주 조사 · 연구", "query": "\"alcohol consumption\" (survey OR study OR Gallup)"},

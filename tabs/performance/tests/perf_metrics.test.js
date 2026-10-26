@@ -116,7 +116,7 @@ test('숫자 기준 문구: 최고·최저 채널과 퍼널 단계', () => {
   assert.match(t.improve, /^TikTok의 ROAS가/);
   assert.match(t.improve, /클릭 → 전환 단계/);   // TikTok은 CVR이 가장 약함
   const empty = M.insights(M.summarize(sample.rows, '2027-01-01', '2027-01-07'));
-  assert.match(empty.good, /비교할 수 없습니다/);
+  assert.match(empty.good, /비교할 수 없어요/);
 });
 
 test('보고서용 주 목록 · 기간 표시', () => {

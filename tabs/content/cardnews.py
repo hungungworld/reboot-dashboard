@@ -216,7 +216,7 @@ def generate(source, opts, *, campaign_id, sheet, decisions, facts, labels):
                  bgAi=c.get("bg_ai"), bgReason=c.get("bg_reason_ko"))
         cards.append(c)
     if not cards:
-        raise AIError("AI가 카드를 돌려주지 않았습니다. 다시 요청하세요.")
+        raise AIError("AI가 카드를 돌려주지 않았어요. 다시 요청하세요.")
     deck = norm_deck({"deckTitle": out.get("deckTitle"), "caption": out.get("caption"), "hashtags": out.get("hashtags"),
                       "needsCheck": out.get("needs_check"), "cards": cards, "template": opts["template"],
                       "ratio": opts["ratio"], "language": opts["language"], "tone": opts["tone"], "bgPlanned": True},
@@ -373,7 +373,7 @@ def start_backgrounds(c, items, deck, *, user):
                          instructions=visual, created_by=user)
         job.snapshot = {"provider": "openai", "card_id": card["id"], "visual": visual, "template": deck["template"],
                         "ratio": deck["ratio"], "layout": card["layout"], "product_ids": sheet["product_ids"],
-                        "per_product": per_product, "character": character}
+                        "per_product": per_product, "character": character, "ref_skip": assets.ref_skip_of(decisions)}
         db.session.add(job)
         out.append(job)
     db.session.commit()
@@ -405,7 +405,7 @@ def run_bg_job(job_id):
     try:
         pids = snap.get("product_ids") or []
         refs = (assets.pick_refs(pids, per_product=snap.get("per_product") or {}, character=bool(snap.get("character")),
-                                 limit=BG_REFS) if providers.image_supports_edit(job.model) else [])
+                                 limit=BG_REFS, skip=snap.get("ref_skip") or ()) if providers.image_supports_edit(job.model) else [])
         job.prompt = bg_prompt(snap, refs, brandkit.product_facts(pids))
         db.session.commit()  # 프롬프트가 있으면 '제공사에 보냄'으로 봄 (멈추면 자동 재제출 없이 결과 확인 불가)
         if refs:
@@ -418,17 +418,17 @@ def run_bg_job(job_id):
         return _bg_fail(job, str(e))
     except Exception:  # 원문은 서버 로그에만
         current_app.logger.exception("카드뉴스 AI 배경 작업 실패")
-        return _bg_fail(job, "배경 생성 중 알 수 없는 오류가 났습니다.")
+        return _bg_fail(job, "배경 생성 중 알 수 없는 오류가 났어요.")
     job.status = "saving"
     db.session.commit()
     ext = media.file_ext(png)
     if ext not in (".png", ".jpg", ".webp"):
-        return _bg_fail(job, "배경 결과 파일 형식을 알 수 없어 저장하지 않았습니다.")
+        return _bg_fail(job, "배경 결과 파일 형식을 알 수 없어 저장하지 않았어요.")
     name = f"c{job.campaign_id}-cnbg-{secrets.token_hex(8)}{ext}"
     try:
         (media.upload_dir() / name).write_bytes(png)
     except OSError:
-        return _bg_fail(job, "배경은 생성됐지만 파일을 저장하지 못했습니다 (서버 저장 공간 확인).")
+        return _bg_fail(job, "배경은 생성됐지만 파일을 저장하지 못했어요 (서버 저장 공간 확인).")
     job.snapshot = dict(snap, file=name, references=[a["id"] for a in refs], usage=usage, seconds=round(time.time() - started, 1))
     job.status, job.finished_at = "succeeded", utcnow()
     db.session.commit()

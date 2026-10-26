@@ -24,7 +24,7 @@ from . import assets, brandkit, drafts, heuristics, higgsfield, media, prompts, 
 from . import options as O
 from .models import ContentCampaign, ContentMessage, ContentVersion
 
-NO_KEY = ("OpenAI 키가 없어 AI 대화를 쓸 수 없습니다. 설정 › 연결에서 OPENAI_API_KEY를 넣으면 사용 가능합니다. "
+NO_KEY = ("OpenAI 키가 없어 AI 대화를 쓸 수 없어요. 설정 › 연결에서 OpenAI 키를 넣어 주세요. "
           "지금은 시트·결정 사항 정리와 초안 직접 작성으로 진행할 수 있어요.")
 TURN_BUDGET = 150  # 초 — 이 시간이 지나면 선택 단계(자동 재작성)는 건너뜀 (gunicorn timeout 300초 안에서)
 REQ_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,64}$")
@@ -272,7 +272,7 @@ def decide_action(turn, sig, sheet, base, versions, force, settings=None):
             return out
         if force == "video" and not higgsfield.ready():
             out.update(status="skipped", note="Higgsfield 키가 없거나 확인되지 않아 영상을 만들지 않았어요. "
-                                              "설정 › 연결에서 HIGGSFIELD_API_KEY(KEY_ID:KEY_SECRET)를 확인해 주세요.")
+                                              "설정 › 연결에서 Higgsfield 키를 넣어 주세요.")
             return out
         if force == "video" or video_ready(settings):
             # 기준: 가리킨·기준 영상(수정 = 새로 생성) → 구성안 → 텍스트 초안 → 가장 최근 구성안 (없으면 시트·결정만으로)
@@ -293,13 +293,13 @@ def decide_action(turn, sig, sheet, base, versions, force, settings=None):
             return out
         if (settings or {}).get("image_provider") == "higgsfield" and not higgsfield.ready():
             out.update(status="skipped", note="이미지 AI가 Higgsfield인데 키가 없어 만들지 않았어요. "
-                                              "AI 설정에서 OpenAI로 바꾸거나 HIGGSFIELD_API_KEY를 넣어 주세요.")
+                                              "AI 설정에서 OpenAI로 바꾸거나 설정 › 연결에서 Higgsfield 키를 넣어 주세요.")
             return out
         img = target if (target is not None and target.kind == "image") else (base if base is not None and base.kind == "image" else None)
         if t == "edit_image" and img is None:
-            t, out["note"] = "generate_image", "기준 이미지가 없어 새 시안으로 만들어요."
+            t, out["note"] = "generate_image", "기준 이미지가 없어 새 초안으로 만들어요."
         elif t == "edit_image" and not image_edit_supported(settings):
-            t, out["note"] = "generate_image", "선택한 이미지 모델은 기준 이미지 편집을 지원하지 않아 새 시안으로 만들어요 (원본 수정 아님)."
+            t, out["note"] = "generate_image", "선택한 이미지 모델은 기준 이미지 편집을 지원하지 않아 새 초안으로 만들어요 (원본 수정 아님)."
         # 새 시안은 카피 초안을 먼저 만들었으면 그 문구로: 가리킨·기준 텍스트 버전 → 가장 최근 텍스트 버전
         copy = None
         if t == "generate_image":
@@ -331,7 +331,7 @@ def parse_revision(data):
     try:
         return int(raw)
     except (TypeError, ValueError):
-        raise ApiError("expected_revision(현재 리비전)이 필요합니다. 새로고침 후 다시 시도하세요.")
+        raise ApiError("현재 리비전 정보가 없어요. 새로고침 후 다시 시도하세요.")
 
 
 def run_turn(c, data, user):
@@ -340,7 +340,7 @@ def run_turn(c, data, user):
     kickoff = bool(data.get("kickoff"))
     message = clip(data.get("message"), 4000).strip()
     if not kickoff and not message:
-        raise ApiError("메시지를 입력하세요.")
+        raise ApiError("메시지를 입력해 주세요.")
     expected = parse_revision(data)
     if expected != c.revision:
         raise repository.Conflict(c.id)
@@ -453,7 +453,7 @@ def _persist(cid, rev0, *, user, message, kickoff, req_id, base, force, plan, se
              draft_meta, job_spec, turn, text, candidates, questions, sig):
     c = db.session.get(ContentCampaign, cid)
     if c is None:
-        raise ApiError("캠페인이 삭제되었습니다.", 404)
+        raise ApiError("캠페인이 삭제됐어요.", 404)
     if plan["applied"] and c.revision != rev0:
         raise repository.Conflict(cid)
     new_sheet, new_dec = plan["sheet"], plan["decisions"]
@@ -718,7 +718,7 @@ def run_interview(c, data, user):
     """action: start(첫 질문) · answer(답 → 결정 확정 → 다음 질문) · skip(건너뛰기) · finish(바로 끝내기)."""
     action = data.get("action")
     if action not in ("start", "answer", "skip", "finish"):
-        raise ApiError("인터뷰 동작은 start · answer · skip · finish 중 하나입니다.")
+        raise ApiError("인터뷰 동작이 올바르지 않아요.")
     expected = parse_revision(data)
     if expected != c.revision:
         raise repository.Conflict(c.id)
@@ -750,7 +750,7 @@ def run_interview(c, data, user):
         else:
             value = clip(data.get("value"), 300).strip()
             if not value:
-                raise ApiError("답을 고르거나 직접 입력하세요.")
+                raise ApiError("답을 고르거나 직접 입력해 주세요.")
             answer = {"value": value, "label": value[:40], "option": None}
             user_text = value
         plan = repository.plan_changes(sheet, decisions, [{"field": iv["field"], "value": value_of(answer), "status": "confirmed"}],
@@ -773,7 +773,7 @@ def run_interview(c, data, user):
     # 저장 (짧은 트랜잭션)
     c = db.session.get(ContentCampaign, cid)
     if c is None:
-        raise ApiError("캠페인이 삭제되었습니다.", 404)
+        raise ApiError("캠페인이 삭제됐어요.", 404)
     if c.revision != rev0:
         raise repository.Conflict(cid)
     applied = bool(plan and plan["applied"])

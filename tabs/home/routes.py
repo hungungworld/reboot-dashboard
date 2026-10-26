@@ -50,13 +50,13 @@ def news_status():
 @bp.post("/news/collect")
 def news_collect():
     if news.running_run() is not None or jobs.is_running("home-news-collect"):
-        raise ApiError("이미 수집 중입니다. 끝나면 화면이 바뀝니다 (보통 2~5분).", 409)
-    run = news.start_run("manual", _who())
+        raise ApiError("이미 받는 중이에요. 끝나면 화면이 바뀌어요 (보통 2~5분).", 409)
+    run =news.start_run("manual", _who())
     if jobs.run_background(current_app._get_current_object(), "home-news", news.collect,
                            run_id=run.id, user_name=_who()) is None:
         # 확인과 시작 사이에 다른 요청이 먼저 시작한 경우 → 이 실행 기록은 닫음
         news._finish_failed(run, "이미 수집 중이라 건너뜀")
-        raise ApiError("이미 수집 중입니다. 끝나면 화면이 바뀝니다 (보통 2~5분).", 409)
+        raise ApiError("이미 받는 중이에요. 끝나면 화면이 바뀌어요 (보통 2~5분).", 409)
     return jsonify(started=True, runId=run.id), 202
 
 
@@ -79,11 +79,11 @@ def saved_add():
     data = json_body()
     url = clip(data.get("url"), 1000).strip()
     if not re.match(r"^https?://", url, re.I):
-        raise ApiError("기사 주소(http/https)가 필요합니다.")
+        raise ApiError("기사 주소(http/https)가 필요해요.")
     title = clip(data.get("title"), 500).strip()
     title_ko = clip(data.get("titleKo"), 300).strip()
     if not (title or title_ko):
-        raise ApiError("기사 제목이 필요합니다.")
+        raise ApiError("기사 제목이 필요해요.")
     s = HomeNewsSaved.query.filter_by(url=url).first()
     created = s is None
     if created:
@@ -103,7 +103,7 @@ def saved_add():
 def saved_delete(sid):
     s = db.session.get(HomeNewsSaved, sid)
     if s is None:
-        raise ApiError("없는 보관 기사입니다.", 404)
+        raise ApiError("없는 보관 기사예요.", 404)
     db.session.delete(s)
     db.session.commit()
     return jsonify(ok=True)
@@ -120,7 +120,7 @@ def daily_briefing():
 def _todo(tid):
     t = db.session.get(HomeTodo, tid)
     if t is None:
-        raise ApiError("없는 할 일입니다.", 404)
+        raise ApiError("없는 할 일이에요.", 404)
     return t
 
 
@@ -131,7 +131,7 @@ def todos_get():
         try:
             ws = todos.week_start(date.fromisoformat(request.args["week"][:10]))
         except ValueError:
-            raise ApiError("week는 YYYY-MM-DD 형식이어야 합니다.")
+            raise ApiError("주 시작일은 YYYY-MM-DD 형식이어야 해요.")
     return jsonify(todos.week_payload(ws))
 
 

@@ -56,7 +56,7 @@ DECISION_LABELS = {
     "featured_product": "메인 제품", "slide_count": "장 수", "duration": "영상 길이", "lighting": "조명",
     "composition": "구도", "mood": "분위기", "caption": "캡션", "hashtags": "해시태그", "subtitle": "자막",
     "use_character": "캐릭터 Rebu", "flavor": "맛", "product_flavors": "제품별 맛",
-    "story": "스토리", "design_note": "시안 설명", "emphasis": "강조할 내용", "content_points": "담을 내용", "hook": "멘트",
+    "ref_skip": "뺀 참고 사진", "story": "스토리", "design_note": "초안 설명", "emphasis": "강조할 내용", "content_points": "담을 내용", "hook": "멘트",
     "slogan_choice": "쓸 슬로건",
 }
 
@@ -118,7 +118,7 @@ DECISION_ALIASES = {
     "구도": "composition", "조명": "lighting", "분위기": "mood", "자막": "subtitle",
     "캐릭터": "use_character", "리부": "use_character", "rebu": "use_character", "character": "use_character",
     "mascot": "use_character", "맛": "flavor",
-    "스토리": "story", "시안": "design_note", "시안설명": "design_note", "시안 설명": "design_note", "강조": "emphasis",
+    "스토리": "story", "시안": "design_note", "시안설명": "design_note", "시안 설명": "design_note", "초안 설명": "design_note", "강조": "emphasis",
     "강조점": "emphasis", "담을내용": "content_points", "담을 내용": "content_points", "멘트": "hook", "훅": "hook",
     "크기": "ratio", "사이즈": "ratio", "size": "ratio", "aspect_ratio": "ratio",
     "슬로건선택": "slogan_choice", "쓸 슬로건": "slogan_choice", "슬로건 선택": "slogan_choice",

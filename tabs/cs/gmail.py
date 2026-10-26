@@ -99,8 +99,7 @@ def service(interactive=False):
             creds = None  # 테스트 모드 7일 만료 → 다시 로그인
     if not creds or not creds.valid:
         if not interactive:
-            raise LoginRequired("Gmail 로그인이 필요합니다. 설정 › 연결에서 Google로 로그인하거나, "
-                                "로컬에서 flask --app server gmail-login 을 실행하세요.")
+            raise LoginRequired("Gmail 로그인이 필요해요. 설정 › 연결에서 Google로 로그인해 주세요.")
         from google_auth_oauthlib.flow import InstalledAppFlow
         if not credentials_path().exists():
             raise LoginRequired(f"{credentials_path()} 가 없습니다. Google Cloud에서 데스크톱 앱 클라이언트 JSON을 받아 "

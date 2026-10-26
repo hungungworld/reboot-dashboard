@@ -76,28 +76,28 @@
     const head = (lines[0] || []).map(c => c.trim().replace(/^\ufeff/, ''));
     while (head.length && head[head.length - 1] === '') head.pop();
     if (head.join(',') !== HEADER.join(',')) {
-      return { ok: false, error: `첫 줄은 "${HEADER.join(',')}" 이어야 합니다.`, errors: [], rows: [] };
+      return { ok: false, error: `첫 줄은 "${HEADER.join(',')}" 이어야 해요.`, errors: [], rows: [] };
     }
     const found = new Map();
     const errors = [];
     lines.slice(1).forEach((cells, i) => {
       const line = i + 2;
       if (!cells.some(c => String(c).trim())) return;
-      if (cells.length < HEADER.length) { errors.push(`${line}번째 줄: 칸이 ${cells.length}개입니다 (7개 필요).`); return; }
-      if (cells.slice(HEADER.length).some(c => String(c).trim())) { errors.push(`${line}번째 줄: 칸이 7개보다 많습니다.`); return; }
+      if (cells.length < HEADER.length) { errors.push(`${line}번째 줄: 칸이 ${cells.length}개예요 (7개 필요).`); return; }
+      if (cells.slice(HEADER.length).some(c => String(c).trim())) { errors.push(`${line}번째 줄: 칸이 7개보다 많아요.`); return; }
       const date = parseDate(cells[0]);
       const channel = String(cells[1]).trim();
-      if (!date) { errors.push(`${line}번째 줄: 날짜를 읽지 못했습니다.`); return; }
-      if (!channel) { errors.push(`${line}번째 줄: 채널 이름이 비어 있습니다.`); return; }
+      if (!date) { errors.push(`${line}번째 줄: 날짜를 읽지 못했어요.`); return; }
+      if (!channel) { errors.push(`${line}번째 줄: 채널 이름이 비어 있어요.`); return; }
       const row = { date, channel: channel.slice(0, 40) };
       for (let k = 2; k < FIELDS.length; k++) {
         const n = parseNumber(cells[k]);
-        if (isNaN(n)) { errors.push(`${line}번째 줄: ${HEADER[k]} 값이 숫자가 아닙니다.`); return; }
+        if (isNaN(n)) { errors.push(`${line}번째 줄: ${HEADER[k]} 값이 숫자가 아니에요.`); return; }
         row[FIELDS[k]] = n;
       }
       found.set(date + '\u0000' + row.channel, row);
     });
-    if (!errors.length && !found.size) errors.push('데이터 행이 없습니다.');
+    if (!errors.length && !found.size) errors.push('데이터 행이 없어요.');
     return { ok: !errors.length, error: errors[0] || '', errors, rows: sortRows(Array.from(found.values())) };
   }
 
@@ -249,27 +249,27 @@
   /** 숫자 기준 문구 (AI 응답 전 · 키가 없을 때). 주어진 숫자만 씀 */
   function insights(sum) {
     const best = sum && sum.best;
-    if (!best) return { good: '이 기간에는 광고비가 있는 채널이 없어 비교할 수 없습니다.', improve: '' };
+    if (!best) return { good: '이 기간에는 광고비가 있는 채널이 없어 비교할 수 없어요.', improve: '' };
     const t = sum.totals;
     const label = sum.compare ? sum.compare.label : '';
-    const good = [`${best.channel}의 ROAS가 ${f.pct(best.roas, 0)}로 가장 높습니다 (광고비 ${f.krw(best.spend)} → 매출 ${f.krw(best.revenue)}).`];
+    const good = [`${best.channel}의 ROAS가 ${f.pct(best.roas, 0)}로 가장 높아요 (광고비 ${f.krw(best.spend)} → 매출 ${f.krw(best.revenue)}).`];
     if (best.change && best.change.roas != null) good.push(`${label} ROAS ${f.signed(best.change.roas)}.`);
-    if (best.cvr != null && t.cvr != null && best.cvr > t.cvr) good.push(`전환율(CVR) ${f.pct(best.cvr, 2)}가 전체 ${f.pct(t.cvr, 2)}보다 높아 클릭이 구매로 잘 이어지고 있습니다.`);
-    else if (best.ctr != null && t.ctr != null && best.ctr > t.ctr) good.push(`클릭률(CTR) ${f.pct(best.ctr, 2)}가 전체 ${f.pct(t.ctr, 2)}보다 높아 소재 반응이 좋습니다.`);
-    good.push('효율이 유지되는지 보면서 예산을 조금씩 늘려 볼 수 있습니다.');
+    if (best.cvr != null && t.cvr != null && best.cvr > t.cvr) good.push(`전환율(CVR) ${f.pct(best.cvr, 2)}가 전체 ${f.pct(t.cvr, 2)}보다 높아 클릭이 구매로 잘 이어지고 있어요.`);
+    else if (best.ctr != null && t.ctr != null && best.ctr > t.ctr) good.push(`클릭률(CTR) ${f.pct(best.ctr, 2)}가 전체 ${f.pct(t.ctr, 2)}보다 높아 소재 반응이 좋아요.`);
+    good.push('효율이 유지되는지 보면서 예산을 조금씩 늘려 볼 수 있어요.');
 
     const worst = sum.worst;
-    if (!worst) return { good: good.join(' '), improve: '비교할 다른 채널이 없습니다.' };
-    const improve = [`${worst.channel}의 ROAS가 ${f.pct(worst.roas, 0)}로 가장 낮습니다.`];
+    if (!worst) return { good: good.join(' '), improve: '비교할 다른 채널이 없어요.' };
+    const improve = [`${worst.channel}의 ROAS가 ${f.pct(worst.roas, 0)}로 가장 낮아요.`];
     const ctrGap = worst.ctr != null && t.ctr ? worst.ctr / t.ctr : null;
     const cvrGap = worst.cvr != null && t.cvr ? worst.cvr / t.cvr : null;
     if (cvrGap != null && cvrGap < 1 && (ctrGap == null || cvrGap <= ctrGap)) {
-      improve.push(`클릭 → 전환 단계가 약합니다: CVR ${f.pct(worst.cvr, 2)} (전체 ${f.pct(t.cvr, 2)}). 랜딩 페이지·상품 상세·가격 노출을 점검해 보세요.`);
+      improve.push(`클릭 → 전환 단계가 약해요: CVR ${f.pct(worst.cvr, 2)} (전체 ${f.pct(t.cvr, 2)}). 랜딩 페이지·제품 상세·가격 노출을 점검해 보세요.`);
     } else if (ctrGap != null && ctrGap < 1) {
-      improve.push(`노출 → 클릭 단계가 약합니다: CTR ${f.pct(worst.ctr, 2)} (전체 ${f.pct(t.ctr, 2)}). 소재(썸네일·첫 문장)와 타깃을 점검해 보세요.`);
+      improve.push(`노출 → 클릭 단계가 약해요: CTR ${f.pct(worst.ctr, 2)} (전체 ${f.pct(t.ctr, 2)}). 소재(썸네일·첫 문장)와 타깃을 점검해 보세요.`);
     }
-    if (worst.cpa != null && t.cpa != null) improve.push(`전환 1건에 ${f.krw(worst.cpa)}이 들었습니다 (전체 ${f.krw(t.cpa)}).`);
-    if (worst.roas != null && worst.roas < 100) improve.push('광고비보다 매출이 적습니다.');
+    if (worst.cpa != null && t.cpa != null) improve.push(`전환 1건에 ${f.krw(worst.cpa)}이 들었어요 (전체 ${f.krw(t.cpa)}).`);
+    if (worst.roas != null && worst.roas < 100) improve.push('광고비보다 매출이 적어요.');
     return { good: good.join(' '), improve: improve.join(' ') };
   }
 

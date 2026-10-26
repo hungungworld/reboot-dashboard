@@ -21,7 +21,6 @@
     draft: `outreach.draft.u${me.id || 0}`,
     guide: `outreach.guide.u${me.id || 0}`,
     filters: `outreach.filters.u${me.id || 0}`,
-    fold: `outreach.fold.u${me.id || 0}`,
     prompts: 'outreach.prompts'
   };
   const TYPES = D.types;
@@ -31,7 +30,7 @@
   (RD.progress || []).forEach(x => { PROG[x.v] = x; });
   const MAILS = {};
   (RD.mailStatus || []).forEach(x => { MAILS[x.v] = x; });
-  const VERDICT = { BLOCK: ['사용 불가', 'red'], REVISE: ['수정 필요', 'orange'], COND: ['조건부', 'purple'], REVIEW: ['검토 필요', 'blue'], PASS: ['규칙 미탐지', 'green'] };
+  const VERDICT = { BLOCK: ['사용 불가', 'red'], REVISE: ['수정 필요', 'orange'], COND: ['조건부', 'purple'], REVIEW: ['검토 필요', 'blue'], PASS: ['걸린 표현 없음', 'green'] };
   const COND_FIELDS = ['purpose', 'proposal', 'requests'];
 
   /* ───────── 도우미 ───────── */
@@ -176,20 +175,6 @@
     store.set(K.prompts, all);
   }
 
-  // 협업 메일 1 · 2 · 3 카드 접기 · 펴기 (사용자별로 기억)
-  function folded(k) { const f = store.get(K.fold, null); return !!(f && f[k]); }
-  function foldTitle(k, title) {
-    return `<h2><button type="button" class="ptn-fold" data-act="fold" data-k="${k}" aria-expanded="${!folded(k)}" aria-controls="ptn-fold-${k}">${esc(title)}</button></h2>`;
-  }
-  function toggleFold(btn) {
-    const k = btn.dataset.k;
-    const f = Object.assign({}, store.get(K.fold, null) || {});
-    f[k] = !f[k];
-    store.set(K.fold, f);
-    btn.setAttribute('aria-expanded', String(!f[k]));
-    btn.closest('.ptn-fold-card').classList.toggle('is-folded', f[k]);
-  }
-
   function getFilters() {
     const f = store.get(K.filters, null);
     const out = Object.assign({ types: [], tags: [], q: '', view: 'list', selected: '' }, f && typeof f === 'object' ? f : {});
@@ -240,7 +225,7 @@
       [data, ov] = await Promise.all([contacts(true), REBOOT.api('/api/partners/overview')]);
     } catch (e) {
       if (!el.isConnected) return;
-      el.innerHTML = errorBox(e.message);
+      el.innerHTML = errorBox(`업체 목록을 불러오지 못했어요. ${e.message}`);
       el.querySelector('[data-act="retry"]').addEventListener('click', () => renderContacts(fresh(el)));
       return;
     }
@@ -261,41 +246,43 @@
     const c = ov.contacts || {};
     const b = ov.activeBreakdown || {};
     const pct = ov.contacted ? Math.min(100, Math.round(ov.active / ov.contacted * 100)) : 0;
-    const rate = ov.sentPartners ? `발송 ${fmt.num(ov.sentPartners)}곳 중 · 회신율 ${fmt.pct(ov.replyRate)}` : '아직 발송한 메일이 없습니다';
-    const sample = (ov.partners || []).some(p => p.sample) ? ' · 예시(샘플) 기록은 숫자에서 뺌' : '';
+    const rate = ov.sentPartners ? `발송 ${fmt.num(ov.sentPartners)}곳 중 · 회신율 ${fmt.pct(ov.replyRate)}` : '아직 발송한 메일이 없어요';
+    const sample = (ov.partners || []).some(p => p.sample) ? ' · 예시 기록은 숫자에서 뺌' : '';
     return `<section class="ptn-out-hero" aria-label="협업 현황 (실제 기록 기준 · 예시 제외)">
-      <div><h3>컨택 업체 수</h3><div class="number">${fmt.num(ov.contacted)} <span class="small">곳</span></div>
-        <p>가져온 업체 ${fmt.num(c.total)}곳 · 이메일 보유 ${fmt.num(c.withEmail)}곳${sample}</p></div>
+      <div><h3>연락한 업체 수</h3><div class="number">${fmt.num(ov.contacted)} <span class="small">곳</span></div>
+        <p>올린 업체 ${fmt.num(c.total)}곳 · 이메일 보유 ${fmt.num(c.withEmail)}곳${sample}</p></div>
       <div><h3>진행 중인 협업</h3><div class="number ptn-out-lime">${fmt.num(ov.active)} <span class="small">곳</span></div>
         <p>협의 ${fmt.num(b['협의 중'] || 0)} · 협업 ${fmt.num(b['협업 중'] || 0)} · 마케팅 ${fmt.num(b['마케팅 진행 중'] || 0)}</p>
-        <div class="progress-track" role="img" aria-label="컨택 업체 중 진행 중 ${pct}%"><i style="width:${pct}%"></i></div></div>
+        <div class="progress-track" role="img" aria-label="연락한 업체 중 진행 중 ${pct}%"><i style="width:${pct}%"></i></div></div>
       <div><h3>회신 받음</h3><div class="number">${fmt.num(ov.replied)} <span class="small">곳</span></div>
         <p>${rate} · 회신 대기 ${fmt.num(ov.awaiting)}건</p></div>
     </section>`;
   }
 
-  /* 업체 파일 가져오기 (업체 목록 맨 아래 접기/펼치기 · 비어 있거나 scroll이면 펼쳐서 보여 줌) */
+  /* 업체 파일 가져오기 (업체가 0곳일 때만 · 평소엔 파트너 목록의 업로드 · 다운로드 팝업을 씀) */
   function paintImport(st, empty, scroll) {
     const box = st.el.querySelector('[data-ref="import"]');
+    if (!empty) { box.innerHTML = ''; return; }
     const im = st.data.imports || {};
     const file = s => String(s || '').replace(/ · [0-9a-f]{8}$/, '');   // 기본 파일 표시에서 내용 해시는 뺌
     const now = t => (im[t] && im[t].count ? `${fmt.num(im[t].count)}곳 · ${esc(file(im[t].file))} · ${esc(fmt.datetime(im[t].at))}` : '아직 없음');
     st.files = {};
     box.innerHTML = `<details class="card ptn-out-import${empty ? ' is-empty' : ''}"${empty || scroll ? ' open' : ''}>
-      <summary class="card-head"><h2>${empty ? '업체 파일을 올려 주세요' : '업체 파일 가져오기'}</h2>
+      <summary class="card-head"><h2>${empty ? '업체 목록을 업로드해 주세요' : '업체 목록 업로드'}</h2>
         ${empty ? badge('업체 0곳', 'orange') : `<span class="small muted">케이터링 ${now('케이터링')} · 인플루언서 ${now('인플루언서')}</span>`}</summary>
-      <p class="panel-note">기본 업체 파일(tabs/partners/data/contacts/)은 따로 올리지 않아도 자동으로 불러옵니다. 케이터링 CSV와 인플루언서 XLSX·CSV를 직접 올리면 그 구분 목록만 새 파일로 바뀌고, 협업 이력은 그대로 남습니다.</p>
+      <p class="panel-note">기본 업체 파일은 따로 올리지 않아도 자동으로 불러와요. 케이터링 CSV와 인플루언서 XLSX·CSV를 직접 올리면 그 구분 목록만 새 파일로 바뀌고, 협업 기록은 그대로 남아요.</p>
       <div class="grid-2 ptn-out-drops mt-16">
         ${dropzone('catering', '케이터링 CSV', D.importHelp.catering, '.csv', now('케이터링'))}
         ${dropzone('influencer', '인플루언서 XLSX·CSV', D.importHelp.influencer, '.xlsx,.csv', now('인플루언서'))}
       </div>
       <div class="flex wrap mt-16">
-        <button type="button" class="btn lime" data-act="import-upload" disabled>${icon('upload')} 가져오기</button>
         ${empty ? '<button type="button" class="btn soft" data-act="example">예시 데이터로 둘러보기</button>' : ''}
-        <a class="link" href="/api/partners/template/catering.csv" download>${icon('download')} 케이터링 양식</a>
-        <a class="link" href="/api/partners/template/influencer.xlsx" download>${icon('download')} 인플루언서 양식</a>
+        ${ui.fileActions(
+          ui.fileBtn('upload', { label: '업로드', type: 'CSV · XLSX', act: 'import-upload', disabled: true }) +
+          ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv' }) +
+          ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx' }))}
       </div>
-      <p class="panel-note mt-8">공개된 업체 연락처만 올립니다. 예시 데이터는 가상 업체(example.com)이며 화면에 '예시' 배지로 표시되고, 판매 실적에는 쓰이지 않습니다.</p>
+      <p class="panel-note mt-8">공개된 업체 연락처만 올려요. 예시 데이터는 지어낸 업체(example.com)이고 화면에 '예시' 배지로 표시되며, 판매 실적에는 쓰이지 않아요.</p>
     </details>`;
     if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -330,16 +317,16 @@
       const out = await REBOOT.upload('/api/partners/import', fd);
       const warns = [];
       out.results.forEach(r => (r.warnings || []).forEach(w => warns.push(`${r.type}: ${w}`)));
-      importNote = `<p class="note lime mb-16">가져왔습니다 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>` +
+      importNote = `<p class="note lime mb-16">파일을 올렸어요 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>` +
         (warns.length ? `<p class="note warn mb-16">${warns.map(esc).join('<br>')}</p>` : '');
-      toast('업체 파일을 가져왔습니다.');
+      toast('업체 파일을 올렸어요.');
       const f = getFilters();
       f.selected = '';
       saveFilters(f);
       contactsP = null;
       if (st.el.isConnected) renderContacts(fresh(st.el));   // 새 요소로 (이벤트 중복 방지)
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`업체 파일을 올리지 못했어요: ${e.message}`, 'error');
       ui.busy(btn, false);
     }
   }
@@ -352,28 +339,27 @@
     const body = doc.createElement('div');
     body.className = 'part-partners ptn-csv';
     body.innerHTML = `
-      <h3 class="ptn-csv-h">내보내기 (꺼내기)</h3>
-      <p class="small muted">지금 업체 목록을 가져오기와 같은 형식의 CSV로 받습니다. 엑셀에서 열어 줄을 추가 · 수정할 수 있어요.</p>
-      <div class="flex wrap mt-8">
-        <a class="btn small" href="/api/partners/export/catering.csv" download>${icon('download')}케이터링 CSV (${n('케이터링')}곳)</a>
-        <a class="btn small" href="/api/partners/export/influencer.csv" download>${icon('download')}인플루언서 CSV (${n('인플루언서')}곳)</a>
-      </div>
-      <h3 class="ptn-csv-h mt-24">가져오기 (추가 · 바꾸기)</h3>
-      <p class="small muted">CSV 또는 XLSX를 고르면 머리글을 보고 케이터링 · 인플루언서를 알아서 구분합니다.
-        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 위에서 내보낸 파일에 줄을 더해 올리세요. 협업 이력은 그대로 남습니다.</p>
+      <h3 class="ptn-csv-h">업로드 (추가 · 바꾸기)</h3>
+      <p class="small muted">CSV 또는 XLSX를 고르면 머리글을 보고 케이터링 · 인플루언서를 알아서 구분해요.
+        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 아래에서 다운로드한 파일에 줄을 더해 업로드하세요. 협업 기록은 그대로 남아요.</p>
       <label class="dropzone ptn-out-drop mt-8">${icon('upload')}<span data-ref="csv-picked">파일을 눌러 고르세요</span>
         <input type="file" class="sr-only" accept=".csv,.xlsx" data-ref="csv-file" aria-label="업체 CSV · XLSX 고르기"></label>
-      <p class="small muted mt-8">양식: <a class="link" href="/api/partners/template/catering.csv" download>케이터링 CSV</a> ·
-        <a class="link" href="/api/partners/template/influencer.xlsx" download>인플루언서 XLSX</a></p>`;
+      <h3 class="ptn-csv-h mt-24">다운로드</h3>
+      <p class="small muted">지금 업체 목록을 업로드와 같은 형식의 CSV로 받아요. 엑셀에서 열어 줄을 추가 · 수정할 수 있어요.</p>
+      ${ui.fileActions(
+        ui.fileBtn('download', { label: `케이터링 업체 다운로드 (${n('케이터링')}곳)`, type: 'CSV', href: '/api/partners/export/catering.csv' }) +
+        ui.fileBtn('download', { label: `인플루언서 업체 다운로드 (${n('인플루언서')}곳)`, type: 'CSV', href: '/api/partners/export/influencer.csv' }) +
+        ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv' }) +
+        ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx' }))}`;
     let file = null;
     const ok = ui.modal({
-      title: 'CSV — 업체 목록 내보내기 · 가져오기', body,
+      title: '업체 목록 업로드 · 다운로드 (CSV)', body,
       onOpen: b => b.querySelector('[data-ref="csv-file"]').addEventListener('change', e => {
         file = e.target.files && e.target.files[0];
         b.querySelector('[data-ref="csv-picked"]').textContent = file ? `선택: ${file.name} (${fmtBytes(file.size)})` : '파일을 눌러 고르세요';
       }),
-      actions: [{ label: '닫기', value: false }, { label: '가져오기', value: true, tone: 'lime', onClick: () => {
-        if (!file) { toast('가져올 파일을 고르세요.', 'error'); return false; }
+      actions: [{ label: '닫기', value: false }, { label: '업로드', value: true, tone: 'lime', onClick: () => {
+        if (!file) { toast('올릴 파일을 고르세요.', 'error'); return false; }
         return true;
       } }]
     });
@@ -383,12 +369,12 @@
       fd.append('file', file, file.name);
       try {
         const out = await REBOOT.upload('/api/partners/import', fd);
-        importNote = `<p class="note lime mb-16">가져왔습니다 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>`;
-        toast('업체 파일을 가져왔습니다.');
+        importNote = `<p class="note lime mb-16">파일을 올렸어요 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>`;
+        toast('업체 파일을 올렸어요.');
         contactsP = null;
         if (st.el.isConnected) renderContacts(fresh(st.el));
       } catch (e) {
-        toast(e.message, 'error');
+        toast(`업체 파일을 올리지 못했어요: ${e.message}`, 'error');
       }
     });
   }
@@ -397,25 +383,22 @@
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/example', {});
-      importNote = `<p class="note lime mb-16">예시 데이터(가상 업체 · example.com)를 불러왔습니다${out.samples ? ` — 협업 이력 샘플 ${out.samples}건 포함` : ''}. 실제 파일을 올리면 같은 구분의 예시는 바뀝니다.</p>`;
+      importNote = `<p class="note lime mb-16">예시 데이터(지어낸 업체 · example.com)를 불러왔어요${out.samples ? ` — 협업 기록 예시 ${out.samples}건 포함` : ''}. 실제 파일을 올리면 같은 구분의 예시는 바뀌어요.</p>`;
       contactsP = null;
       refreshSummary();
       if (st.el.isConnected) renderContacts(fresh(st.el));   // 새 요소로 (이벤트 중복 방지)
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`예시 데이터를 불러오지 못했어요: ${e.message}`, 'error');
       ui.busy(btn, false);
     }
   }
 
   function paintMain(st) {
     const f = st.f;
+    if (f.view === 'board') f.view = 'list';   // 협업 보드는 협업 관리 메뉴로 옮김 (2026-10-26)
     st.el.querySelector('[data-ref="main"]').innerHTML = `
       <div class="filters ptn-out-bar">
         <div class="flex wrap">
-          <div class="seg" role="group" aria-label="보기">
-            <button type="button" data-view="list" aria-pressed="${f.view !== 'board'}">업체 목록</button>
-            <button type="button" data-view="board" aria-pressed="${f.view === 'board'}">협업 보드</button>
-          </div>
           <span class="ptn-out-count" data-ref="count" aria-live="polite"></span>
         </div>
       </div>
@@ -435,22 +418,22 @@
       try {
         REBOOT.use('partners.records').board(body.firstChild, {
           onPick: id => {
-            if (!st.data.items.some(c => c.id === id)) { toast('업체 목록에 없는 업체입니다 (직접 입력했거나 다시 가져온 파일에 없음).'); return; }
+            if (!st.data.items.some(c => c.id === id)) { toast('업체 목록에 없는 업체예요 (직접 입력했거나 다시 올린 파일에 없음).'); return; }
             Object.assign(st.f, { view: 'list', selected: id, types: [], tags: [], q: '' });
             saveFilters(st.f);
             paintMain(st);
           }
         });
       } catch (e) {
-        body.innerHTML = ui.empty('협업 보드를 불러오지 못했습니다 (records.js 확인).', 'grid');
+        body.innerHTML = ui.empty('협업 보드를 불러오지 못했어요. 새로고침해 주세요.', 'grid');
       }
       return;
     }
     // 시장·고객 인사이트 › 경쟁사 비교와 같은 짜임: 제목 줄(제목 · 개수 / 버튼) → 한 줄 필터 바 → 한 줄 행 표 → 페이지
     body.innerHTML = `<div class="workbench ptn-out-bench">
       <section class="card ptn-out-listcard ptn-cf-card">
-        <div class="card-head wrap"><div class="ptn-head-title"><h2>업체 목록</h2><span data-ref="total"></span></div>
-          <div class="flex wrap"><button type="button" class="btn small" data-act="csv-open" title="업체 목록 CSV 내보내기 · 가져오기">${icon('download')}CSV</button></div></div>
+        <div class="card-head wrap"><div class="ptn-head-title"><h2>파트너 목록</h2><span data-ref="total"></span></div>
+          ${ui.fileActions(ui.fileBtn('upload', { label: '업체 목록 업로드 · 다운로드', type: 'CSV', act: 'csv-open' }))}</div>
         <div data-ref="bar"></div>
         <div data-ref="rows"></div>
         <p class="panel-note mt-8" data-ref="foot"></p>
@@ -505,7 +488,7 @@
   }
 
   /* ───────── 한 줄 필터 바 · 정렬 머리글 · 페이지 (시장·고객 인사이트 › 경쟁사 비교와 같은 모양) ───────── */
-  const PAGE = 5, SLOTS = 5;   // 한 화면 줄 수: 업체 목록 · 유튜브 크리에이터 모두 5
+  const PAGE = 5, SLOTS = 5;   // 한 화면 줄 수: 유튜브 크리에이터 5 · 업체 목록은 최소 5 (fitRows가 상세 박스 높이만큼 늘림)
   function cfSelect(key, all, opts, cur) {
     return `<select class="ptn-cf${cur ? ' on' : ''}" data-cf="${key}" aria-label="${esc(all)}"><option value="">${esc(all)}</option>${opts.map(([v, l]) =>
       `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
@@ -541,11 +524,30 @@
     return `<div class="ptn-pg-row"><span class="small muted">${total ? `${fmt.num(total)}${unit} 중 ${fmt.num(from)}–${fmt.num(to)}` : `0${unit}`}</span>
       <nav class="ptn-pg-nav" aria-label="표 페이지">${btn(cur - 1, '‹', '이전 페이지')}${Array.from({ length: SLOTS }, (_, k) => first + k).map(p => btn(p, p)).join('')}${btn(cur + 1, '›', '다음 페이지')}</nav></div>`;
   }
-  function pageOf(list, page) {
-    const pages = Math.max(1, Math.ceil(list.length / PAGE));
+  function pageOf(list, page, size) {
+    size = size || PAGE;
+    const pages = Math.max(1, Math.ceil(list.length / size));
     const cur = Math.min(Math.max(1, page || 1), pages);
-    return { cur, pages, shown: list.slice((cur - 1) * PAGE, cur * PAGE), from: (cur - 1) * PAGE + 1 };
+    return { cur, pages, shown: list.slice((cur - 1) * size, cur * size), from: (cur - 1) * size + 1 };
   }
+  // 업체 목록 줄 수: 목록 카드가 오른쪽 상세 박스 높이(최대 화면 높이)를 넘지 않을 만큼 채움 — 상세를 다시 그릴 때마다 맞춤
+  function fitRows(st) {
+    const box = st.el.querySelector('[data-ref="detail"]');
+    const card = box && box.parentElement.querySelector('.ptn-out-listcard');
+    const body = card && card.querySelector('[data-ref="rows"] tbody');
+    const row = body && body.querySelector('tr');
+    if (!row) return;
+    const cs = getComputedStyle(box);
+    const n = cs.position === 'sticky'   // 좁은 화면(한 줄 배치)은 기본 줄 수
+      ? Math.max(PAGE, Math.floor((box.offsetHeight - (card.offsetHeight - body.offsetHeight)) / row.offsetHeight) || PAGE)
+      : PAGE;
+    if (n !== (st.rowsN || PAGE)) { st.rowsN = n; paintRows(st); }
+  }
+  let fitSt = null, fitTimer = 0;
+  global.addEventListener('resize', () => {
+    clearTimeout(fitTimer);
+    fitTimer = setTimeout(() => { if (fitSt && fitSt.el.isConnected) fitRows(fitSt); }, 150);
+  });
 
   function paintFilters(st) {
     const f = st.f;
@@ -556,7 +558,7 @@
       [s.key, `${s.emoji} ${s.label} (${fmt.num(base.filter(c => c.tags.includes(s.key)).length)})`]));
     const any = f.types.length || f.tags.length || f.hasEmail || f.q;
     st.el.querySelector('[data-ref="bar"]').innerHTML = cfBar([
-      `<label class="search ptn-cf-q">${icon('search')}<input class="input" type="search" data-ref="q" placeholder="업체 검색" aria-label="업체 검색 (업체명 · 지역 · 카테고리 · 이메일)" value="${esc(f.q)}"></label>`,
+      `<label class="search ptn-cf-q">${icon('search')}<input class="input" type="search" data-ref="q" placeholder="이름, 분야, 지역으로 검색" aria-label="파트너 검색 (이름 · 지역 · 분야 · 이메일)" value="${esc(f.q)}"></label>`,
       typeSelect(st), cfSelect('tag', '세부 카테고리', tagOpts, f.tags[0] && meta[f.tags[0]] ? f.tags[0] : ''),
       cfToggle('hasEmail', '이메일 있는 것만', f.hasEmail)
     ], any, cfSort(CONTACT_SORTS, sortState(f, false)));
@@ -566,10 +568,11 @@
   function paintRows(st) {
     const list = filtered(st);
     const subs = tagMeta(st);
-    const p = pageOf(list, st.page);
+    const size = st.rowsN || PAGE;
+    const p = pageOf(list, st.page, size);
     st.page = p.cur;
     const ss = sortState(st.f, false);
-    const pad = p.pages > 1 ? '<tr class="ptn-pad" aria-hidden="true"><td colspan="4"></td></tr>'.repeat(PAGE - p.shown.length) : '';   // 마지막 페이지도 표 높이 그대로
+    const pad = p.pages > 1 ? '<tr class="ptn-pad" aria-hidden="true"><td colspan="4"></td></tr>'.repeat(size - p.shown.length) : '';   // 마지막 페이지도 표 높이 그대로
     st.el.querySelector('[data-ref="rows"]').innerHTML = list.length ? `<div class="table-wrap"><table class="data-table ptn-cf-table">
       <thead><tr>${sortTh('업체', 'name', ss)}${sortTh('구분', 'type', ss)}${sortTh('세부 카테고리', 'tag', ss)}${sortTh('이메일', 'email', ss)}</tr></thead>
       <tbody>${p.shown.map(c => `
@@ -578,12 +581,14 @@
           <b class="ptn-1l-name" title="${esc(c.name)} · ${esc(c.location || '지역 정보 없음')}">${esc(c.name)}</b>${c.example ? badge('예시', 'orange') : ''}</div></td>
         <td>${typeBadge(c.type)}</td>
         <td><div class="ptn-1l">${c.tags.map(k => (subs[k] ? `<span class="ptn-out-tag">${esc(subs[k].emoji)} ${esc(subs[k].label)}</span>` : '')).join('') || '<span class="faint">—</span>'}</div></td>
-        <td><div class="ptn-1l">${c.email ? `<button type="button" class="link ptn-out-emailbtn" data-act="compose" data-id="${esc(c.id)}" title="이 주소로 협업 메일 쓰기">${icon('mail')}${esc(c.email)}</button>` : '<span class="faint">없음</span>'}</div></td>
+        <td><div class="ptn-1l">${c.email ? `<button type="button" class="link ptn-out-emailbtn" data-act="compose" data-id="${esc(c.id)}" title="이 주소로 제안 작성">${icon('mail')}${esc(c.email)}</button>` : '<span class="faint">없음</span>'}</div></td>
       </tr>`).join('')}${pad}</tbody></table></div>${pager(p.cur, p.pages, list.length, p.from, p.from + p.shown.length - 1, '곳')}`
-      : `<div class="mt-16">${ui.empty('조건에 맞는 업체가 없습니다. 검색어나 필터를 바꿔 보세요.', 'search')}</div>`;
+      : `<div class="mt-16">${ui.empty('조건에 맞는 업체가 없어요. 검색어나 필터를 바꿔 보세요.', 'search')}</div>`;
     logoFallback(st.el.querySelector('[data-ref="rows"]'));
-    st.el.querySelector('[data-ref="foot"]').textContent = '행을 누르면 오른쪽에 업체 카드가 열려요. 이메일을 누르면 협업 메일 작성으로 이동하고 수신자가 자동으로 들어갑니다. 로고는 공식 사이트 아이콘이며, 예시 업체는 가상 로고입니다.';
+    st.el.querySelector('[data-ref="foot"]').textContent = '행을 누르면 오른쪽에 업체 카드가 열려요. 이메일을 누르면 제안 작성으로 이동하고 수신자가 자동으로 들어가요. 로고는 공식 사이트 아이콘이고, 예시 업체는 지어낸 로고예요.';
     paintCount(st, list);
+    fitSt = st;
+    fitRows(st);
   }
 
   function paintCount(st, list) {
@@ -598,7 +603,7 @@
     if (!box) return;
     const c = st.data.items.find(x => x.id === st.f.selected);
     if (!c) {
-      box.innerHTML = `<div class="ptn-out-detail-empty">${ui.empty('목록에서 업체를 고르면 연락처와 협업 이력이 여기에 표시됩니다.', 'users')}</div>`;
+      box.innerHTML = `<div class="ptn-out-detail-empty">${ui.empty('목록에서 파트너를 고르면 다음 할 일과 최근 활동이 여기에 보여요.', 'users')}</div>`;
       return;
     }
     const subs = tagMeta(st);
@@ -606,9 +611,9 @@
     box.innerHTML = `
       <div class="between">${contactAvatar(c, true)}${typeBadge(c.type)}</div>
       <h2 class="ptn-out-dname">${esc(c.name)}</h2>
-      <p class="small muted">${esc(c.location || '지역 정보 없음')} · ${esc(c.id)}${c.example ? ' · 예시 (가상 업체)' : ''}</p>
+      <p class="small muted">${esc(c.location || '지역 정보 없음')} · ${esc(c.id)}${c.example ? ' · 예시 업체' : ''}</p>
       <div class="ptn-out-stats" data-ref="dstats">
-        <div><strong>—</strong><small>협업 이력</small></div><div><strong class="is-text">—</strong><small>진행 상태</small></div><div><strong class="is-text">—</strong><small>최근 메일</small></div>
+        <div><strong>—</strong><small>협업 기록</small></div><div><strong class="is-text">—</strong><small>진행 상태</small></div><div><strong class="is-text">—</strong><small>최근 메일</small></div>
       </div>
       <div class="ptn-out-info">
         ${ui.row('이메일', c.email ? `<button type="button" class="link" data-act="compose" data-id="${esc(c.id)}">${esc(c.email)}</button>` : '<span class="faint">없음</span>')}
@@ -617,10 +622,11 @@
       </div>
       ${c.category ? `<div class="ptn-out-block"><h3>카테고리</h3><p>${esc(c.category)}</p>${c.tags.length ? `<div class="ptn-out-tags mt-8">${c.tags.map(k => (subs[k] ? `<span class="ptn-out-tag">${esc(subs[k].emoji)} ${esc(subs[k].label)}</span>` : '')).join('')}</div>` : ''}</div>` : ''}
       ${c.note ? `<div class="ptn-out-block"><h3>비고</h3><p>${esc(c.note)}</p></div>` : ''}
-      <div class="ptn-out-block"><h3>협업 이력</h3><div data-ref="dhist"><div class="skeleton ptn-skel-sm"></div></div></div>
-      <button type="button" class="btn dark block mt-16" data-act="compose" data-id="${esc(c.id)}">협업 제안 메일 작성</button>
-      ${c.email ? '' : '<p class="panel-note mt-8">이메일이 없는 업체입니다. 메일 화면에서 수신자를 직접 넣거나, 전화·미팅은 협업 이력에 수기로 남기세요.</p>'}`;
+      <div class="ptn-out-block"><h3>최근 활동</h3><div data-ref="dhist"><div class="skeleton ptn-skel-sm"></div></div></div>
+      <button type="button" class="btn dark block mt-16" data-act="compose" data-id="${esc(c.id)}">제안 작성 ↗</button>
+      ${c.email ? '' : '<p class="panel-note mt-8">이메일이 없는 업체예요. 메일 화면에서 수신자를 직접 넣거나, 전화·미팅은 협업 기록에 직접 남기세요.</p>'}`;
     logoFallback(box);
+    fitRows(st);
     try {
       const h = await REBOOT.api('/api/partners/history?partner_id=' + encodeURIComponent(c.id));
       if (!box.isConnected || st.f.selected !== c.id) return;
@@ -628,17 +634,18 @@
       const last = items[0];
       const lastMail = items.find(x => x.mailStatus);
       box.querySelector('[data-ref="dstats"]').innerHTML = `
-        <div><strong>${fmt.num(items.length)}</strong><small>협업 이력</small></div>
+        <div><strong>${fmt.num(items.length)}</strong><small>협업 기록</small></div>
         <div><strong class="is-text">${last ? `${PROG[last.progress] ? PROG[last.progress].emoji + ' ' : ''}${esc(last.progress)}` : '—'}</strong><small>진행 상태</small></div>
         <div><strong class="is-text">${lastMail ? esc(lastMail.mailStatus) : '—'}</strong><small>최근 메일</small></div>`;
       box.querySelector('[data-ref="dhist"]').innerHTML = items.length ? `<ul class="activity">${items.slice(0, 5).map(x => `
           <li><b>${esc(x.activity || '기록')}</b> ${mailBadge(x.mailStatus)} ${progressBadge(x.progress)}${x.kind === '샘플' ? ' ' + badge('예시', 'orange') : ''}
             <small>${esc(fmt.datetime(x.at))} · ${esc(x.owner || '—')}${x.subject ? ' · ' + esc(x.subject) : ''}</small></li>`).join('')}</ul>
-          <button type="button" class="link mt-8" data-act="goto-history" data-id="${esc(c.id)}">협업 이력에서 ${fmt.num(items.length)}건 모두 보기 ${icon('arrow')}</button>`
-        : '<p class="small muted">아직 기록이 없습니다.</p>';
+          <button type="button" class="link mt-8" data-act="goto-history" data-id="${esc(c.id)}">협업 관리에서 ${fmt.num(items.length)}건 모두 보기 ${icon('arrow')}</button>`
+        : '<p class="small muted">아직 기록이 없어요.</p>';
     } catch (e) {
-      if (box.isConnected) box.querySelector('[data-ref="dhist"]').innerHTML = `<p class="small muted">이력을 불러오지 못했습니다: ${esc(e.message)}</p>`;
+      if (box.isConnected) box.querySelector('[data-ref="dhist"]').innerHTML = `<p class="small muted">협업 기록을 불러오지 못했어요. ${esc(e.message)}</p>`;
     }
+    if (box.isConnected && st.f.selected === c.id) fitRows(st);
   }
 
   /* ───────── 유튜브 크리에이터 추천 (서버 youtube.py — 소개란 공개 이메일만, 30일 안에 갱신 · 못 하면 삭제) ───────── */
@@ -693,14 +700,14 @@
       st.yt = await REBOOT.api('/api/partners/youtube');
     } catch (e) {
       const box = st.el.querySelector('[data-ref="yt"]');
-      if (box) box.innerHTML = `<p class="note error">${esc(e.message)}</p>`;
+      if (box) box.innerHTML = `<p class="note error">유튜브 크리에이터를 불러오지 못했어요. ${esc(e.message)}</p>`;
       return;
     }
     if (!st.el.isConnected || !st.f.yt) return;
     const msgs = [];
     if (note) msgs.push(note);
-    if (st.yt.refreshed) msgs.push(`오래된 값 ${fmt.num(st.yt.refreshed)}개를 다시 받았습니다.`);
-    if (st.yt.removed) msgs.push(`보관 기간(${st.yt.maxDays}일)이 지난 ${fmt.num(st.yt.removed)}개를 지웠습니다.`);
+    if (st.yt.refreshed) msgs.push(`오래된 값 ${fmt.num(st.yt.refreshed)}개를 다시 받았어요.`);
+    if (st.yt.removed) msgs.push(`보관 기간(${st.yt.maxDays}일)이 지난 ${fmt.num(st.yt.removed)}개를 삭제했어요.`);
     st.ytNote = msgs.join(' ') + (st.yt.warning ? `<!--w-->${st.yt.warning}` : '');
     paintYtTable(st);
   }
@@ -717,11 +724,11 @@
     const tools = st.el.querySelector('[data-ref="yt-tools"]');
     if (tools) tools.innerHTML = `
       <button type="button" class="btn small" data-act="yt-kw" title="추천 받기에 쓸 검색 키워드: ${esc(kws.join(', '))}">${icon('edit')}검색 키워드 · 추천</button>
-      <button type="button" class="btn small dark" data-act="yt-search"${d.ready ? '' : ' disabled title="설정 › 연결에서 YOUTUBE_API_KEY를 넣어 주세요"'}>${icon('search')}추천 받기</button>
+      <button type="button" class="btn small dark" data-act="yt-search"${d.ready ? '' : ' disabled title="설정 › 연결에서 YouTube 키를 넣어 주세요"'}>${icon('search')}추천 받기</button>
       <button type="button" class="btn small ghost" data-act="yt-delete" disabled>선택 삭제</button>
-      <details class="ptn-export"><summary class="btn small ghost" aria-label="CSV 내보내기 · 가져오기" title="CSV 내보내기 · 가져오기">${icon('download')}</summary>
-        <div class="ptn-export-menu"><a href="/api/partners/youtube/export.csv" download>CSV 내보내기</a>
-          <label>CSV 가져오기<input type="file" class="sr-only" accept=".csv" data-yt-file aria-label="유튜브 크리에이터 CSV 가져오기"></label></div></details>`;
+      <details class="ptn-export"><summary class="btn small file-btn">${icon('upload')}크리에이터 목록 업로드 · 다운로드 <span class="tiny muted">CSV</span></summary>
+        <div class="ptn-export-menu"><label>${icon('upload')} 업로드<input type="file" class="sr-only" accept=".csv" data-yt-file aria-label="유튜브 크리에이터 CSV 업로드"></label>
+          <a href="/api/partners/youtube/export.csv" download>${icon('download')} 다운로드</a></div></details>`;
     const total = st.el.querySelector('[data-ref="total"]');
     if (total) total.innerHTML = badge(`${fmt.num(d.items.length)}명`);
     const tgCur = Array.isArray(f.ytTargets) && f.ytTargets[0] ? f.ytTargets[0] : '';
@@ -733,12 +740,12 @@
       cfToggle('ytEmail', '이메일 공개만', f.ytEmail)
     ], any, cfSort(YT_SORTS, sortState(f, true)));
     box.innerHTML = `
-      ${d.ready ? '' : `<p class="note warn mb-16">YouTube 키가 없어 새로 추천 받을 수 없습니다. ${settingsLink}에서 YOUTUBE_API_KEY를 넣어 주세요. (CSV 가져오기는 됩니다)</p>`}
+      ${d.ready ? '' : `<p class="note warn mb-16">YouTube 키가 없어 새로 추천 받을 수 없어요. ${settingsLink}에서 YouTube 키를 넣어 주세요. (CSV 업로드는 돼요)</p>`}
       ${note ? `<p class="note lime mb-16">${esc(note)}</p>` : ''}${warn ? `<p class="note warn mb-16">${esc(warn)}</p>` : ''}
       ${bar}<div data-ref="yt-rows"></div>
-      <p class="panel-note mt-8">유튜브 공개 정보입니다. 이메일은 크리에이터가 채널 소개란에 직접 공개한 주소만 가져오고, 숨겨진 비즈니스 이메일은 가져오지 않습니다.
-        구독자·조회수는 기준일 값이며 ${d.staleDays}일이 지나면 다시 받고, ${d.maxDays}일 안에 다시 받지 못하면 지웁니다 (YouTube API 정책).
-        크리에이터가 삭제를 요청하면 체크 후 선택 삭제를 누르세요. CSV는 팀 노션에만 공유하고 ${d.maxDays}일이 지나면 지워 주세요.</p>`;
+      <p class="panel-note mt-8">유튜브 공개 정보예요. 이메일은 크리에이터가 채널 소개란에 직접 공개한 주소만 가져오고, 숨겨진 비즈니스 이메일은 가져오지 않아요.
+        구독자·조회수는 기준일 값이고 ${d.staleDays}일이 지나면 다시 받으며, ${d.maxDays}일 안에 다시 받지 못하면 삭제해요 (YouTube API 정책).
+        크리에이터가 삭제를 요청하면 체크 후 선택 삭제를 누르세요. CSV는 팀 노션에만 공유하고 ${d.maxDays}일이 지나면 삭제해 주세요.</p>`;
     paintYtRows(st);
   }
 
@@ -751,7 +758,7 @@
     const cnt = st.el.querySelector('[data-ref="count"]');
     if (cnt) cnt.innerHTML = `크리에이터 <b>${fmt.num(list.length)}</b>명 · 이메일 공개 <b>${fmt.num(list.filter(c => c.email).length)}</b>명`;
     if (!list.length) {
-      box.innerHTML = `<div class="mt-16">${ui.empty(!d.items.length ? (d.ready ? '아직 추천 받은 크리에이터가 없습니다. 추천 받기를 눌러 주세요.' : '아직 크리에이터가 없습니다.') : '조건에 맞는 크리에이터가 없습니다. 검색어나 필터를 바꿔 보세요.', 'search')}</div>`;
+      box.innerHTML = `<div class="mt-16">${ui.empty(!d.items.length ? (d.ready ? '아직 추천 받은 크리에이터가 없어요. 추천 받기를 눌러 시작하세요.' : '아직 크리에이터가 없어요.') : '조건에 맞는 크리에이터가 없어요. 검색어나 필터를 바꿔 보세요.', 'search')}</div>`;
       ytSelState(st);
       return;
     }
@@ -781,7 +788,7 @@
       <td class="num">${c.subscribers != null ? fmt.num(c.subscribers) : '<span class="faint">비공개</span>'}</td>
       <td class="num">${c.avgViews != null ? fmt.num(c.avgViews) : '—'}</td>
       <td class="num">${eng >= 0 ? fmt.pct(eng * 100, 1) : '—'}</td>
-      <td>${c.email ? `<button type="button" class="link ptn-out-emailbtn" data-act="yt-compose" data-id="${esc(c.id)}" title="이 주소로 협업 메일 쓰기">${icon('mail')}${esc(c.email)}</button><small class="ptn-yt-sub2">가져온 날짜 ${esc(ytDate(c.emailAt))}</small>`
+      <td>${c.email ? `<button type="button" class="link ptn-out-emailbtn" data-act="yt-compose" data-id="${esc(c.id)}" title="이 주소로 제안 작성">${icon('mail')}${esc(c.email)}</button><small class="ptn-yt-sub2">가져온 날짜 ${esc(ytDate(c.emailAt))}</small>`
         : `<span class="faint">공개 안 함</span>${url ? `<small class="ptn-yt-sub2"><a class="link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">채널에서 확인 ↗</a></small>` : ''}`}</td>
       <td><div class="ptn-out-tags">${(c.keywords || []).map(k => `<span class="ptn-out-tag">${esc(k)}</span>`).join('') || '<span class="faint">—</span>'}</div></td>
       <td class="nowrap">${esc(ytDate(c.statsAt))}${old ? ' ' + badge('갱신 필요', 'orange') : ''}</td>
@@ -827,7 +834,7 @@
         body: `<div class="part-partners">
           <label class="field"><span>쉼표로 구분 · 최대 8개 (키워드 하나에 약 100 units, 하루 10,000 units)</span>
             <input class="input" data-yt-kwinput value="${esc(ytKeywords(st).join(', '))}" maxlength="500"></label>
-          <p class="small muted mt-16">누르면 위 칸에 추가됩니다.</p>
+          <p class="small muted mt-16">누르면 위 칸에 추가돼요.</p>
           ${D.ytSuggest.map(g => `<div class="ptn-yt-sgroup"><span class="ptn-out-flabel">${esc(g.label)}</span><div class="chips">${g.items.map(k => `<button type="button" class="chip" data-kwadd="${esc(k)}">＋ ${esc(k)}</button>`).join('')}</div></div>`).join('')}
           <div class="ptn-yt-sgroup"><span class="ptn-out-flabel">AI 관련 키워드</span>
             <div data-kwai><button type="button" class="btn small soft" data-kwai-go>지금 키워드로 관련 키워드 추천 받기</button></div></div>
@@ -844,24 +851,24 @@
       ui.busy(btn, true);
       try {
         const out = await REBOOT.api('/api/partners/youtube/search', { keywords: kws });
-        toast(`채널 ${out.found}개를 찾았습니다 (새로 ${out.added}개).`);
-        paintYoutube(st, `키워드 ${out.keywords.length}개로 채널 ${fmt.num(out.found)}개를 찾았습니다 (새로 ${fmt.num(out.added)}개).`);
+        toast(`채널 ${out.found}개를 찾았어요 (새로 ${out.added}개).`);
+        paintYoutube(st, `키워드 ${out.keywords.length}개로 채널 ${fmt.num(out.found)}개를 찾았어요 (새로 ${fmt.num(out.added)}개).`);
       } catch (e) {
-        toast(e.message, 'error');
+        toast(`크리에이터를 추천 받지 못했어요: ${e.message}`, 'error');
         ui.busy(btn, false);
       }
     } else if (a === 'yt-delete') {
       const ids = Array.from(st.ytSel);
       if (!ids.length) return;
-      const ok = await ui.confirm(`선택한 크리에이터 ${ids.length}명의 정보(이메일 포함)를 지울까요? 되돌릴 수 없습니다.`, { title: '삭제 확인', ok: '삭제', danger: true });
+      const ok = await ui.confirm(`선택한 크리에이터 ${ids.length}명의 정보(이메일 포함)를 삭제할까요? 되돌릴 수 없어요.`, { title: '삭제 확인', ok: '삭제', danger: true });
       if (!ok) return;
       try {
         const out = await REBOOT.api('/api/partners/youtube/delete', { ids });
         st.ytSel.clear();
-        toast(`${out.deleted}명을 지웠습니다.`);
+        toast(`${out.deleted}명을 삭제했어요.`);
         paintYoutube(st);
       } catch (e) {
-        toast(e.message, 'error');
+        toast(`삭제하지 못했어요: ${e.message}`, 'error');
       }
     }
   }
@@ -876,7 +883,7 @@
         const list = words();
         const k = add.dataset.kwadd;
         if (list.some(x => x.toLowerCase() === k.toLowerCase())) return;
-        if (list.length >= 8) { toast('키워드는 최대 8개입니다. 하나를 지운 뒤 추가하세요.', 'error'); return; }
+        if (list.length >= 8) { toast('키워드는 최대 8개예요. 하나를 삭제한 뒤 추가하세요.', 'error'); return; }
         input.value = list.concat(k).join(', ');
         return;
       }
@@ -889,9 +896,9 @@
         box.innerHTML = out.keywords.length
           ? `<div class="flex"><span>${badge('AI', 'purple')}</span><span class="small muted">참고용 · ${esc(out.model || '')} · 마우스를 올리면 이유가 보여요</span></div>
              <div class="chips mt-8">${out.keywords.map(k => `<button type="button" class="chip" data-kwadd="${esc(k.keyword)}" title="${esc(k.reason)}">＋ ${esc(k.keyword)}</button>`).join('')}</div>`
-          : '<p class="small muted">새로 추천할 키워드가 없습니다.</p>';
+          : '<p class="small muted">새로 추천할 키워드가 없어요.</p>';
       } catch (err) {
-        box.innerHTML = `<p class="note error">${esc(err.message)}</p>`;
+        box.innerHTML = `<p class="note error">관련 키워드를 추천 받지 못했어요: ${esc(err.message)}</p>`;
       }
     });
   }
@@ -901,9 +908,9 @@
     fd.append('file', file, file.name);
     try {
       const out = await REBOOT.upload('/api/partners/youtube/import', fd);
-      paintYoutube(st, `CSV를 가져왔습니다 — 새로 ${fmt.num(out.added)} · 갱신 ${fmt.num(out.updated)} · 건너뜀 ${fmt.num(out.skipped)} (기준일이 30일 넘은 값·형식이 틀린 줄은 건너뜀)`);
+      paintYoutube(st, `CSV를 업로드했어요 — 새로 ${fmt.num(out.added)} · 갱신 ${fmt.num(out.updated)} · 건너뜀 ${fmt.num(out.skipped)} (기준일이 30일 넘은 값·형식이 틀린 줄은 건너뜀)`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`CSV를 업로드하지 못했어요: ${e.message}`, 'error');
     }
   }
 
@@ -1057,21 +1064,22 @@
       [cfg, list] = await Promise.all([config(), contacts()]);
     } catch (e) {
       if (!el.isConnected) return;
-      el.innerHTML = errorBox(e.message);
+      el.innerHTML = errorBox(`협업 메일 화면을 불러오지 못했어요. ${e.message}`);
       el.querySelector('[data-act="retry"]').addEventListener('click', () => renderMail(fresh(el)));
       return;
     }
     if (!el.isConnected) return;
     const d = getDraft();
     const st = { el, cfg, contacts: list.items || [], atts: null };
+    pickOpen = null;   // 파트너 찾기에서 고르고 들어오면 한 줄로 접힌 채 시작
     el.innerHTML = `
       <div class="ptn-out-statusline" aria-label="연결 상태">${statusLine(cfg.status)}</div>
       <div class="between ptn-out-subbar">
-        <div class="seg" role="group" aria-label="협업 메일 화면">
-          <button type="button" data-sub="compose" aria-pressed="${d.sub !== 'guide'}">메일 작성</button>
+        <div class="seg" role="group" aria-label="제안 작성 화면">
+          <button type="button" data-sub="compose" aria-pressed="${d.sub !== 'guide'}">제안 메일</button>
           <button type="button" data-sub="guide" aria-pressed="${d.sub === 'guide'}">협업 가이드</button>
         </div>
-        <span class="panel-note">입력값은 탭이나 메뉴를 옮겨도 그대로 남습니다 (내 계정에 저장).</span>
+        <span class="panel-note">입력값은 탭이나 메뉴를 옮겨도 그대로 남아요 (내 계정에 저장).</span>
       </div>
       <div data-ref="sub"></div>`;
     el.addEventListener('click', e => {
@@ -1094,7 +1102,7 @@
       : `규제 DB 연결 안 됨${r.error ? ' — ' + esc(r.error) : ''}`;
     return pill(s.regulationDb, reg) +
       pill(s.openai, s.openai ? `OpenAI 연결 · ${esc(s.model)}` : `OpenAI 키 없음 — ${settingsLink}`) +
-      pill(s.smtp, s.smtp ? `Gmail 발송 · ${esc(s.sender)}` : `Gmail 미연결 — ${settingsLink}`);
+      pill(s.smtp, s.smtp ? `Gmail 발송 · ${esc(s.sender)}` : `Gmail 연결 안 됨 — ${settingsLink}`);
   }
 
   function paintSub(st) {
@@ -1107,126 +1115,159 @@
 
   /* ───────── 메일 작성 ───────── */
 
+  // 제안 작성 단계 (V2 시안): 1 대상·조건 → 2 메일 작성 → 3 확인 · 발송. 메뉴를 옮겨도 이번 접속 동안은 그 단계 유지
+  const STEPS = ['대상·조건', '메일 작성', '확인'];
+  let composeStep = 1;
+  let pickOpen = null;   // 받는 파트너 목록 펼침 (null이면 아직 아무것도 안 골랐을 때만 펼침)
+
   function renderCompose(box, st) {
     const d = getDraft();
     const cfg = st.cfg;
     const s = cfg.status || {};
     const cond = d.cond[d.type];
-    const opts = st.contacts.filter(c => c.type === d.type);
     const custom = promptCustom(d.type);
     box.innerHTML = `
-    <div class="workbench ptn-out-mailbench">
-      <div class="stack tight">
-        ${d.reply ? replyBanner(d.reply) : ''}
-        <section class="card ptn-fold-card${folded('s3') ? ' is-folded' : ''}">
-          <div class="card-head">${foldTitle('s3', '3. 메일 검토')}<span data-ref="ai-badge">${d.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
-          <div class="ptn-fold-body" id="ptn-fold-s3">
-          <label class="field"><span>수신자</span><input class="input" type="text" inputmode="email" data-f="to" value="${esc(d.to)}" placeholder="partner@example.com (여러 명은 쉼표로, 5명까지)" autocomplete="off"></label>
-          <label class="field"><span>제목</span><input class="input" data-f="subject" value="${esc(d.subject)}" maxlength="300"></label>
-          <label class="field"><span>본문</span><textarea class="input ptn-out-body" rows="14" data-f="body">${esc(d.body)}</textarea><small data-ref="wc"></small></label>
-          <div class="flex wrap mt-16">
-            <button type="button" class="btn soft small" data-act="to-ko"${s.openai ? '' : ' disabled'}>한국어로 보기</button>
-            <button type="button" class="btn soft small" data-act="to-en"${s.openai ? '' : ' disabled'}>영어로 변환</button>
-            <button type="button" class="btn soft small" data-act="review">문구 점검</button>
-          </div>
-          <div data-ref="ko">${d.ko ? koBox(d.ko) : ''}</div>
-          </div>
-        </section>
-
-        <section class="card">
-          <div class="card-head"><h2>첨부파일</h2><span data-ref="att-sum"></span></div>
-          <label class="dropzone ptn-out-attdrop" data-drop="attach">${icon('upload')}
-            <span>파일을 끌어다 놓거나 눌러서 고르세요 — 보관함에 저장되고 다음 메일에도 기본으로 체크됩니다</span>
-            <small class="muted">PDF · CSV · Word · Excel · PowerPoint · PNG · JPG · ZIP · TXT (파일당 ${D.attach.maxFileMB}MB)</small>
-            <input type="file" class="sr-only" multiple accept="${esc(D.attach.accept)}" data-ref="att-input" aria-label="첨부파일 고르기"></label>
-          <ul class="ptn-out-attlist" data-ref="att-list"><li class="small muted">보관함을 불러오는 중…</li></ul>
-          <div data-ref="att-warn"></div>
-        </section>
-
-        <section class="card ptn-out-send">
-          <div class="card-head"><h2>4. 확인 · 발송</h2>${badge('사람이 최종 확인', 'dark')}</div>
-          <div class="field-grid">
-            <label class="field"><span>담당자</span><input class="input" data-f="owner" value="${esc(d.owner)}" placeholder="이름" maxlength="60"></label>
-            <div class="field"><span class="field-label">발송 계정</span><p class="small${s.smtp ? '' : ' muted'}">${s.smtp ? esc(s.sender) : 'Gmail 미연결'}</p></div>
-          </div>
-          <label class="check mt-16"><input type="checkbox" data-ref="confirm"${s.smtp ? '' : ' disabled'}> 수신자 · 제목 · 본문 · 첨부파일을 확인했고, 이 내용으로 보냅니다.</label>
-          <div class="flex wrap mt-16">
-            <button type="button" class="btn dark" data-act="send" disabled>확인 — Gmail 발송</button>
-            <span class="hint" data-ref="send-hint"></span>
-          </div>
-        </section>
-      </div>
-
-      <aside class="stack tight ptn-out-aside">
-        <section class="card ptn-fold-card${folded('s1') ? ' is-folded' : ''}">
-          <div class="card-head">${foldTitle('s1', '1. 받는 업체 · 원하는 파트너')}
-            <div class="seg" role="group" aria-label="업체 구분">${TYPES.map(t => `<button type="button" data-mtype="${esc(t)}" aria-pressed="${d.type === t}">${D.typeIcon[t]} ${esc(t)}</button>`).join('')}</div></div>
-          <div class="ptn-fold-body" id="ptn-fold-s1">
-          <div class="field-grid">
-            <label class="field"><span>받는 업체 (${esc(d.type)})</span>
-              <select class="input" data-f="partnerId">
-                <option value="">직접 입력</option>
-                ${opts.map(c => `<option value="${esc(c.id)}"${c.id === d.partnerId ? ' selected' : ''}>${esc(c.name)}${c.email ? '' : ' (이메일 없음)'}</option>`).join('')}
-              </select></label>
+    <div class="ptn-v2-compose">
+      ${d.reply ? replyBanner(d.reply) : ''}
+      <section class="card ptn-v2-pick">
+        <div class="ptn-v2-pick-head">
+          <h2>받는 파트너</h2>
+          <div class="seg" role="group" aria-label="업체 구분">${TYPES.map(t => `<button type="button" data-mtype="${esc(t)}" aria-pressed="${d.type === t}">${D.typeIcon[t]} ${esc(t)} <span class="ptn-v2-count">${st.contacts.filter(c => c.type === t).length}</span></button>`).join('')}</div>
+          <span class="ptn-v2-tag">파트너별 초안 유지 · 내 계정에 저장</span>
+        </div>
+        <div data-ref="pick"></div>
+      </section>
+      <nav class="ptn-v2-steps" aria-label="제안 작성 단계">${STEPS.map((x, i) =>
+        `<button type="button" data-step="${i + 1}" aria-current="${composeStep === i + 1 ? 'step' : 'false'}"><span>0${i + 1}</span>${x}</button>`).join('')}</nav>
+      <div class="ptn-v2-compose-layout">
+        <div class="ptn-v2-step-body">
+          <section class="card ptn-v2-paper" data-step-panel="1"${composeStep === 1 ? '' : ' hidden'}>
+            <div class="between"><h2>어떤 협업을 제안할까요?</h2><button type="button" class="btn small ghost" data-act="reset-cond">↺ ${esc(d.type)} 기본 문구</button></div>
             <label class="field"><span>업체 이름</span><input class="input" data-f="partnerName" value="${esc(d.partnerName)}" placeholder="직접 입력할 때 업체 이름"${d.partnerId ? ' readonly' : ''}></label>
-          </div>
-          <label class="field"><span>우리가 원하는 ${d.type === '케이터링' ? '케이터링 업체' : '인플루언서'}</span>
-            <textarea class="input" rows="3" data-f="ideal">${esc(d.ideal[d.type] || '')}</textarea><small>생성 프롬프트의 {ideal} 자리에 들어갑니다.</small></label>
-          <details class="ptn-out-prompt mt-16">
-            <summary>생성 프롬프트 · ${esc(d.type)} <span data-ref="prompt-badge">${custom ? badge('팀에서 수정함', 'orange') : badge('기본')}</span></summary>
-            <div class="ptn-out-steps" aria-label="메일 구조"><span class="ptn-out-steps-title">메일 구조</span>
-              ${(cfg.mailSteps || D.mailSteps).map((x, i) => `<span class="ptn-out-step"><b>${i + 1}</b>${esc(x)}</span>`).join('<span class="ptn-out-arrow" aria-hidden="true">→</span>')}</div>
-            <textarea class="input mono ptn-out-prompttext" rows="9" data-f="prompt" aria-label="생성 프롬프트 원문">${esc(promptFor(d.type, cfg))}</textarea>
-            <div class="between mt-8 ptn-out-wrap">
-              <small class="hint">자리표시자: <code>{product}</code> 제품 설명 · <code>{ideal}</code> 원하는 파트너 · <code>{partner}</code> 업체명. 팀 공용으로 저장됩니다. 공통 규칙(150–200단어 · 섹션 이름 미출력 · 의학 주장·과음 조장 금지 · 모든 항목 반영)은 서버가 항상 덧붙입니다.</small>
-              <button type="button" class="btn small ghost" data-act="reset-prompt">↺ 기본 프롬프트로 되돌리기</button>
+            <label class="field"><span>협업 목적</span><input class="input" data-f="purpose" value="${esc(cond.purpose)}"></label>
+            <div class="ptn-v2-dates">
+              <label class="field"><span>시작일</span><input type="date" class="input" data-f="start" value="${esc(d.start)}"></label>
+              <label class="field"><span>종료일</span><input type="date" class="input" data-f="end" value="${esc(d.end)}"></label>
             </div>
-            <details class="mt-8"><summary class="small">{product}에 들어가는 제품 설명</summary><p class="small muted mt-8">${esc(cfg.productDesc || '')}</p></details>
-          </details>
-          </div>
-        </section>
+            <label class="field"><span>제안 내용</span><textarea class="input" rows="3" data-f="proposal">${esc(cond.proposal)}</textarea></label>
+            <label class="field"><span>요청사항</span><textarea class="input" rows="2" data-f="requests">${esc(cond.requests)}</textarea><small>한국어로 써도 돼요 — 목적 · 제안 · 요청의 모든 항목이 영어 메일에 반영돼요.</small></label>
+            <label class="field"><span>우리가 원하는 ${d.type === '케이터링' ? '케이터링 업체' : '인플루언서'}</span>
+              <textarea class="input" rows="2" data-f="ideal">${esc(d.ideal[d.type] || '')}</textarea></label>
+            <div class="flex wrap ptn-v2-step-acts">
+              <button type="button" class="btn dark" data-step="2">메일 작성으로 →</button>
+            </div>
+          </section>
 
-        <section class="card ptn-fold-card${folded('s2') ? ' is-folded' : ''}">
-          <div class="card-head">${foldTitle('s2', '2. 협업 조건')}<button type="button" class="btn small ghost" data-act="reset-cond">↺ ${esc(d.type)} 기본 문구</button></div>
-          <div class="ptn-fold-body" id="ptn-fold-s2">
-          <label class="field"><span>협업 목적</span><textarea class="input" rows="2" data-f="purpose">${esc(cond.purpose)}</textarea></label>
-          <div class="field"><span class="field-label">기간</span>
-            <div class="flex ptn-out-period"><input type="date" class="input" data-f="start" value="${esc(d.start)}" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input" data-f="end" value="${esc(d.end)}" aria-label="종료일"></div></div>
-          <label class="field"><span>제안 내용</span><textarea class="input" rows="4" data-f="proposal">${esc(cond.proposal)}</textarea></label>
-          <label class="field"><span>요청사항</span><textarea class="input" rows="3" data-f="requests">${esc(cond.requests)}</textarea><small>한국어로 써도 됩니다 — 목적 · 제안 · 요청의 모든 항목이 영어 메일에 반영됩니다.</small></label>
-          <div class="flex wrap mt-16">
-            <button type="button" class="btn lime" data-act="generate"${s.openai ? '' : ' disabled'}>영문 제목·본문 생성</button>
-            <span class="hint">${s.openai ? (d.reply ? '답장 모드: 상대방 회신을 반영해 답장을 씁니다.' : 'OpenAI가 JSON(subject · body)으로 만듭니다.') : `${settingsLink}에서 OPENAI_API_KEY를 넣으면 사용 가능 · 지금은 아래에 직접 쓸 수 있습니다.`}</span>
-          </div>
-          </div>
-        </section>
-        <section class="card" data-ref="review">
-          <div class="card-head"><h2>문구 점검</h2>${badge('B2B 기준', 'blue')}</div>
-          <p class="panel-note">‘문구 점검’을 누르면 제목·본문의 금지·주의 표현을 찾아 등급 · 사유 · 수정 후보를 보여 줍니다. 1차 참고용이며 최종 판단은 담당자가 합니다.</p>
-        </section>
-        <section class="card tinted" data-ref="target"></section>
-        <section class="card">
-          <div class="card-head"><h2>발송 안내</h2></div>
-          <ul class="ptn-out-tips">
-            <li>발송 성공·실패 모두 협업 이력에 자동 저장됩니다 (첨부 이름 · 발송 계정 또는 오류 · Message-ID).</li>
-            <li>답장 · 반송은 협업 이력의 답장 확인으로 갱신합니다.</li>
-            <li>첨부 합계가 ${D.attach.maxTotalMB}MB(Gmail 한도)를 넘으면 보낼 수 없습니다.</li>
-            <li>개인 Gmail은 하루 약 500통까지 보낼 수 있습니다.</li>
-          </ul>
-        </section>
-      </aside>
+          <section class="card ptn-v2-paper" data-step-panel="2"${composeStep === 2 ? '' : ' hidden'}>
+            <div class="between"><h2>제안 메일 <span data-ref="ai-badge">${d.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></h2>
+              <button type="button" class="btn small soft" data-act="generate"${s.openai ? '' : ` disabled title="설정 › 연결에서 OpenAI 키를 넣으면 쓸 수 있어요"`}>AI 초안 넣기</button></div>
+            ${s.openai ? '' : `<p class="panel-note">${settingsLink}에서 OpenAI 키를 넣으면 AI 초안을 쓸 수 있어요 · 지금은 직접 쓸 수 있어요.</p>`}
+            <label class="field"><span>수신자</span><input class="input" type="text" inputmode="email" data-f="to" value="${esc(d.to)}" placeholder="partner@example.com (여러 명은 쉼표로, 5명까지)" autocomplete="off"></label>
+            <label class="field"><span>제목</span><input class="input" data-f="subject" value="${esc(d.subject)}" maxlength="300" placeholder="협업 제안 제목"></label>
+            <label class="field"><span>본문</span><textarea class="input ptn-out-body" rows="12" data-f="body" placeholder="메일을 직접 작성하거나 AI 초안을 넣으세요.">${esc(d.body)}</textarea><small data-ref="wc"></small></label>
+            <details class="ptn-v2-tools">
+              <summary>첨부파일 · 번역 · 문구 심의 도구 <span data-ref="att-sum"></span></summary>
+              <div class="flex wrap mt-8">
+                <button type="button" class="btn soft small" data-act="to-ko"${s.openai ? '' : ' disabled'}>한국어로 보기</button>
+                <button type="button" class="btn soft small" data-act="to-en"${s.openai ? '' : ' disabled'}>영어로 변환</button>
+                <button type="button" class="btn soft small" data-act="review">문구 심의</button>
+              </div>
+              <label class="dropzone ptn-out-attdrop mt-8" data-drop="attach">${icon('upload')}
+                <span>첨부파일 업로드 — 끌어다 놓거나 눌러서 고르세요. 보관함에 저장되고 다음 메일에도 기본으로 체크돼요</span>
+                <small class="muted">PDF · CSV · Word · Excel · PowerPoint · PNG · JPG · ZIP · TXT (파일당 ${D.attach.maxFileMB}MB)</small>
+                <input type="file" class="sr-only" multiple accept="${esc(D.attach.accept)}" data-ref="att-input" aria-label="첨부파일 고르기"></label>
+              <ul class="ptn-out-attlist" data-ref="att-list"><li class="small muted">보관함을 불러오는 중…</li></ul>
+              <div data-ref="att-warn"></div>
+            </details>
+            <details class="ptn-v2-tools">
+              <summary>AI 초안 작성 기준 · 고급 설정 <span data-ref="prompt-badge">${custom ? badge('팀에서 수정함', 'orange') : badge('기본')}</span></summary>
+              <div class="ptn-out-steps" aria-label="메일 구조"><span class="ptn-out-steps-title">메일 구조</span>
+                ${(cfg.mailSteps || D.mailSteps).map((x, i) => `<span class="ptn-out-step"><b>${i + 1}</b>${esc(x)}</span>`).join('<span class="ptn-out-arrow" aria-hidden="true">→</span>')}</div>
+              <textarea class="input mono ptn-out-prompttext" rows="9" data-f="prompt" aria-label="생성 프롬프트 원문">${esc(promptFor(d.type, cfg))}</textarea>
+              <small class="hint">중괄호 자리는 보낼 때 실제 값으로 바뀌어요 · 팀 공용으로 저장 · 공통 규칙(150–200단어 · 의학 주장·과음 조장 금지 등)은 서버가 항상 덧붙여요.</small>
+              <div class="flex wrap">
+                <button type="button" class="btn small ghost" data-act="reset-prompt">↺ 기본 프롬프트로 되돌리기</button>
+                <details><summary class="small">프롬프트에 들어가는 제품 설명</summary><p class="small muted mt-8">${esc(cfg.productDesc || '')}</p></details>
+              </div>
+            </details>
+            <div data-ref="ko">${d.ko ? koBox(d.ko) : ''}</div>
+            <div class="flex wrap ptn-v2-step-acts"><button type="button" class="btn dark" data-step="3">확인 단계로 →</button></div>
+          </section>
+
+          <section class="card ptn-v2-paper ptn-out-send" data-step-panel="3"${composeStep === 3 ? '' : ' hidden'}>
+            <h2>제안 내용을 확인하세요.</h2>
+            <div data-ref="check"></div>
+            <div data-ref="review" class="ptn-v2-review"><div class="card-head"><h2>문구 심의</h2>${badge('B2B 기준', 'blue')}</div>
+              <p class="panel-note">‘문구 심의’를 누르면 제목·본문의 금지·주의 표현을 찾아 등급 · 사유 · 수정 후보를 보여 줘요. 1차 참고용이고 최종 판단은 담당자가 해요.</p>
+              <button type="button" class="btn soft small" data-act="review">문구 심의</button></div>
+            <div class="field-grid">
+              <label class="field"><span>담당자</span><input class="input" data-f="owner" value="${esc(d.owner)}" placeholder="이름" maxlength="60"></label>
+              <div class="field"><span class="field-label">발송 계정</span><p class="small${s.smtp ? '' : ' muted'}">${s.smtp ? esc(s.sender) : 'Gmail 연결 안 됨'}</p></div>
+            </div>
+            <label class="check"><input type="checkbox" data-ref="confirm"${s.smtp ? '' : ' disabled'}> 수신자 · 제목 · 본문 · 첨부파일을 확인했고, 이 내용으로 보내요.</label>
+            <div class="flex wrap">
+              <button type="button" class="btn dark" data-act="send" disabled>Gmail로 보내기</button>
+              <span class="hint" data-ref="send-hint"></span>
+            </div>
+            <details class="ptn-v2-tools"><summary>발송 안내</summary>
+              <ul class="ptn-out-tips">
+                <li>발송 성공·실패 모두 협업 기록에 자동 저장돼요 (첨부 이름 · 발송 계정 또는 오류 · Message-ID).</li>
+                <li>회신 · 반송은 협업 관리의 새 회신 확인으로 갱신해요.</li>
+                <li>첨부 합계가 ${D.attach.maxTotalMB}MB(Gmail 한도)를 넘으면 보낼 수 없어요.</li>
+                <li>개인 Gmail은 하루 약 500통까지 보낼 수 있어요.</li>
+              </ul></details>
+          </section>
+        </div>
+
+        <aside class="stack tight ptn-v2-side">
+          <section class="card ptn-v2-paper ptn-v2-guide-card">
+            <h2>협업 가이드</h2>
+            <p class="panel-note">01 단계 조건으로 이어서 만들어요.</p>
+            <button type="button" class="btn soft block" data-sub="guide">가이드 만들기 →</button>
+          </section>
+          <section class="card ptn-v2-paper tinted" data-ref="target"></section>
+        </aside>
+      </div>
     </div>`;
+    paintPick(st, box);
     paintTarget(st, box);
     wordCount(box, d.body);
     wireCompose(st, box);
     updateSend(st, box);
     loadAttachments(st, box);
+    paintCheck(box);
+    box.addEventListener('click', e => {
+      const b = e.target.closest('[data-step]');
+      if (b) showStep(box, Number(b.dataset.step));
+      else if (e.target.closest('[data-act="review"]') && composeStep !== 3) showStep(box, 3);   // 심의 결과는 확인 단계에 보임
+    });
+  }
+
+  /** 단계 바꾸기 (날짜가 거꾸로면 막음) */
+  function showStep(box, n) {
+    const d = getDraft();
+    if (n > 1 && d.start && d.end && d.start > d.end) { toast('종료일은 시작일 이후로 선택하세요.', 'error'); return; }
+    composeStep = n;
+    box.querySelectorAll('[data-step-panel]').forEach(x => { x.hidden = Number(x.dataset.stepPanel) !== n; });
+    box.querySelectorAll('.ptn-v2-steps [data-step]').forEach(x => x.setAttribute('aria-current', Number(x.dataset.step) === n ? 'step' : 'false'));
+    if (n === 3) paintCheck(box);
+  }
+
+  /** 3단계 확인: 지금 초안의 파트너 · 목적 · 일정 · 제목 · 본문 */
+  function paintCheck(box) {
+    const el = box.querySelector('[data-ref="check"]');
+    if (!el) return;
+    const d = getDraft();
+    const cond = d.cond[d.type] || {};
+    el.innerHTML = `<dl class="ptn-v2-check"><dt>파트너</dt><dd>${esc(d.partnerName || '미정')}</dd><dt>수신자</dt><dd>${esc(d.to || '미작성')}</dd>
+      <dt>협업 목적</dt><dd>${esc(cond.purpose || '미작성')}</dd><dt>일정</dt><dd>${esc(d.start || '미정')} ~ ${esc(d.end || '미정')}</dd></dl>
+      <h3>${esc(d.subject || '제목 미작성')}</h3><p class="ptn-v2-email-preview">${esc(d.body || '본문 미작성')}</p>`;
   }
 
   function replyBanner(r) {
     return `<section class="card ptn-out-reply">
       <div class="card-head"><h2>↩️ 답장 모드</h2><button type="button" class="btn small ghost" data-act="reply-cancel">답장 취소</button></div>
-      <p class="small">${esc(r.partnerName || '상대방')}의 회신에 같은 Gmail 대화로 답장합니다. 첨부파일도 함께 보낼 수 있습니다.</p>
+      <p class="small">${esc(r.partnerName || '상대방')}의 회신에 같은 Gmail 대화로 답장해요. 첨부파일도 함께 보낼 수 있어요.</p>
       <details class="ptn-out-quote mt-8" open><summary class="small">상대방 회신 · ${esc(r.from || '')} · ${esc(fmt.datetime(r.at))}</summary>
         <pre class="ptn-out-pre">${esc(r.body || '(본문 없음)')}</pre></details>
     </section>`;
@@ -1240,20 +1281,60 @@
     </div>`;
   }
 
+  // 받는 파트너: 고르기 전에는 검색 + 목록, 고른 뒤에는 한 줄(바꾸기)
+  function paintPick(st, box) {
+    const d = getDraft();
+    const el = box.querySelector('[data-ref="pick"]');
+    const c = st.contacts.find(x => x.id === d.partnerId);
+    if (pickOpen === null) pickOpen = !c && !d.partnerName;
+    if (!pickOpen) {
+      el.innerHTML = `<div class="ptn-v2-picked">
+        ${c ? `${contactAvatar(c)}<div class="ptn-out-name"><strong>${esc(c.name)}</strong>${c.email ? `<small>${esc(c.email)}</small>` : badge('이메일 없음', 'orange')}</div>`
+          : `<div class="ptn-out-name"><strong>직접 입력${d.partnerName ? ` · ${esc(d.partnerName)}` : ''}</strong><small>업체 이름은 01 단계, 수신자는 02 단계에서 써요.</small></div>`}
+        <button type="button" class="btn small soft" data-act="pick-open">${c ? '바꾸기' : '목록에서 고르기'}</button></div>`;
+      logoFallback(el);
+      return;
+    }
+    const opts = st.contacts.filter(x => x.type === d.type);
+    const row = x => `<li data-search="${esc(`${x.name} ${x.email || ''}`.toLowerCase())}">
+      <button type="button" data-pick="${esc(x.id)}" aria-pressed="${x.id === d.partnerId}">${contactAvatar(x)}
+        <span class="ptn-out-name"><strong>${esc(x.name)}</strong>${x.email ? `<small>${esc(x.email)}</small>` : ''}</span>
+        ${x.email ? '' : badge('이메일 없음', 'orange')}${x.example ? badge('예시', 'orange') : ''}</button></li>`;
+    el.innerHTML = `<input class="input" type="search" data-ref="pick-q" placeholder="${esc(d.type)} ${opts.length}곳에서 이름·이메일 검색" aria-label="받는 파트너 검색" autocomplete="off">
+      <ul class="ptn-v2-picklist">
+        <li data-search=""><button type="button" data-pick="" class="ptn-v2-pick-manual">✏️ 직접 입력 <small>목록에 없는 업체</small></button></li>
+        ${opts.map(row).join('')}
+        <li class="small muted ptn-v2-pick-none" hidden>찾는 업체가 없어요. 직접 입력을 고르세요.</li>
+      </ul>`;
+    logoFallback(el);
+  }
+
+  function filterPick(box, q) {
+    const s = q.trim().toLowerCase();
+    let shown = 0;
+    box.querySelectorAll('.ptn-v2-picklist li[data-search]').forEach(li => {
+      const ok = !s || !li.dataset.search || li.dataset.search.includes(s);
+      li.hidden = !ok;
+      if (ok && li.dataset.search) shown += 1;
+    });
+    const none = box.querySelector('.ptn-v2-pick-none');
+    if (none) none.hidden = !s || shown > 0;
+  }
+
   function paintTarget(st, box) {
     const d = getDraft();
     const el = box.querySelector('[data-ref="target"]');
     const c = st.contacts.find(x => x.id === d.partnerId);
     if (c) {
-      el.innerHTML = `<div class="card-head"><h2>받는 업체</h2>${typeBadge(c.type)}</div>
+      el.innerHTML = `<div class="card-head"><h2>받는 파트너</h2>${typeBadge(c.type)}</div>
         <div class="flex"><span class="initial ptn-av${avIndex(c.id)}" aria-hidden="true">${esc(initials(c.name))}</span>
           <div class="ptn-out-name"><strong>${esc(c.name)}</strong>${c.example ? ' ' + badge('예시', 'orange') : ''}<small>${esc(c.location || '지역 정보 없음')}</small></div></div>
         ${c.category ? `<p class="small mt-8">${esc(c.category)}</p>` : ''}
         ${c.note ? `<p class="small muted mt-8">${esc(c.note)}</p>` : ''}`;
     } else {
-      el.innerHTML = `<div class="card-head"><h2>받는 업체</h2></div>
-        <p class="panel-note">업체 컨택 탭에서 업체를 고르거나 이메일을 누르면 수신자가 자동으로 들어갑니다. 직접 입력해도 됩니다.</p>
-        <button type="button" class="btn small soft mt-8" data-act="goto-contacts">업체 컨택으로</button>`;
+      el.innerHTML = `<div class="card-head"><h2>받는 파트너</h2></div>
+        <p class="panel-note">파트너 찾기에서 파트너를 고르거나 이메일을 누르면 수신자가 자동으로 들어가요. 직접 입력해도 돼요.</p>
+        <button type="button" class="btn small soft mt-8" data-act="goto-contacts">파트너 찾기로</button>`;
     }
   }
 
@@ -1278,7 +1359,7 @@
     const card = box.querySelector('[data-ref="review"]');
     if (card && card.dataset.done) {
       delete card.dataset.done;
-      card.innerHTML = `<div class="card-head"><h2>문구 점검</h2>${badge('B2B 기준', 'blue')}</div><p class="panel-note">내용이 바뀌었습니다. 발송 전에 다시 점검하세요.</p>`;
+      card.innerHTML = `<div class="card-head"><h2>문구 심의</h2>${badge('B2B 기준', 'blue')}</div><p class="panel-note">내용이 바뀌었어요. 발송 전에 다시 심의하세요.</p>`;
     }
   }
 
@@ -1304,26 +1385,29 @@
     updateSend(st, box);
   }
 
-  async function pickPartner(st, box, sel) {
+  async function pickPartner(st, box, id) {
     const d = getDraft();
-    const id = sel.value;
-    if (id === d.partnerId) return;
-    if ((d.subject.trim() || d.body.trim()) && !(await ui.confirm('다른 업체를 고르면 작성 중인 제목·본문·번역이 지워집니다. 계속할까요?', { ok: '업체 바꾸기' }))) {
-      sel.value = d.partnerId;
+    if (id === d.partnerId) {   // 같은 업체(또는 이미 직접 입력)면 목록만 닫음
+      pickOpen = false;
+      paintPick(st, box);
       return;
     }
+    if ((d.subject.trim() || d.body.trim()) && !(await ui.confirm('다른 업체를 고르면 작성 중인 제목·본문·번역이 지워져요. 계속할까요?', { ok: '업체 바꾸기' }))) return;
     const c = st.contacts.find(x => x.id === id);
     Object.assign(d, { partnerId: c ? c.id : '', partnerName: c ? c.name : '', to: c ? (c.email || '') : '', subject: '', body: '', ko: '', ai: false, reply: null });
     saveDraft(d);
+    pickOpen = false;
     paintSub(st);
   }
 
   function wireCompose(st, box) {
-    box.addEventListener('input', e => onField(st, box, e.target));
+    box.addEventListener('input', e => {
+      if (e.target.matches('[data-ref="pick-q"]')) filterPick(box, e.target.value);
+      else onField(st, box, e.target);
+    });
     box.addEventListener('change', e => {
       const t = e.target;
-      if (t.matches('[data-f="partnerId"]')) pickPartner(st, box, t);
-      else if (t.matches('[data-ref="att-input"]')) { uploadFiles(st, box, Array.from(t.files || [])); t.value = ''; }
+      if (t.matches('[data-ref="att-input"]')) { uploadFiles(st, box, Array.from(t.files || [])); t.value = ''; }
       else if (t.matches('[data-ref="confirm"]')) updateSend(st, box);
       else if (t.matches('[data-att]')) toggleAttach(st, box, t.dataset.att, t.checked);
       else if (t.matches('[data-f="start"], [data-f="end"]')) onField(st, box, t);
@@ -1331,6 +1415,8 @@
     box.addEventListener('click', e => {
       const typeBtn = e.target.closest('[data-mtype]');
       if (typeBtn) return switchType(st, typeBtn.dataset.mtype);
+      const pick = e.target.closest('[data-pick]');
+      if (pick) return pickPartner(st, box, pick.dataset.pick);
       const b = e.target.closest('[data-act]');
       if (!b || b.disabled) return;
       const a = b.dataset.act;
@@ -1343,9 +1429,14 @@
       else if (a === 'att-del') deleteAttachment(st, box, b.dataset.id);
       else if (a === 'reset-prompt') resetPrompt(st, box);
       else if (a === 'reset-cond') resetCond(st);
-      else if (a === 'fold') toggleFold(b);
       else if (a === 'reply-cancel') cancelReply(st);
       else if (a === 'goto-contacts') go('contacts');
+      else if (a === 'pick-open') {
+        pickOpen = true;
+        paintPick(st, box);
+        const q = box.querySelector('[data-ref="pick-q"]');
+        if (q) q.focus();
+      }
     });
     const zone = box.querySelector('[data-drop="attach"]');
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
@@ -1365,6 +1456,7 @@
     const c = st.contacts.find(x => x.id === d.partnerId);
     if (c && c.type !== type) d.partnerId = '';   // 다른 구분의 업체는 '직접 입력'으로 (이름·수신자는 남김)
     saveDraft(d);
+    pickOpen = true;   // 구분을 바꾸면 그 구분 목록을 바로 보여 줌
     paintSub(st);
   }
 
@@ -1374,7 +1466,7 @@
     setField(box, 'prompt', promptFor(d.type, st.cfg));
     const b = box.querySelector('[data-ref="prompt-badge"]');
     if (b) b.innerHTML = badge('기본');
-    toast(`${d.type} 기본 프롬프트로 되돌렸습니다.`);
+    toast(`${d.type} 기본 프롬프트로 되돌렸어요.`);
   }
 
   function resetCond(st) {
@@ -1390,7 +1482,7 @@
 
   async function cancelReply(st) {
     const d = getDraft();
-    if (d.body.trim() && !(await ui.confirm('답장 모드를 끝내면 작성 중인 본문이 지워집니다. 계속할까요?', { ok: '답장 취소' }))) return;
+    if (d.body.trim() && !(await ui.confirm('답장 모드를 끝내면 작성 중인 본문이 지워져요. 계속할까요?', { ok: '답장 취소' }))) return;
     Object.assign(d, { reply: null, subject: '', body: '', ko: '', ai: false });
     saveDraft(d);
     paintSub(st);
@@ -1421,9 +1513,9 @@
         clearReview(box);
         updateSend(st, box);
       }
-      toast(`AI 초안을 만들었습니다 (${out.words}단어). 검토하고 고친 뒤 보내세요.`);
+      toast(`AI 초안을 만들었어요 (${out.words}단어). 검토하고 고친 뒤 보내세요.`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`AI 초안을 만들지 못했어요: ${e.message}`, 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -1432,7 +1524,7 @@
   async function toKo(box, btn) {
     const d = getDraft();
     const text = [d.subject, d.body].filter(x => String(x || '').trim()).join('\n\n');
-    if (!text) return toast('번역할 제목·본문이 없습니다.', 'error');
+    if (!text) return toast('번역할 제목·본문이 없어요.', 'error');
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/translate', { text, to: 'ko' });
@@ -1441,7 +1533,7 @@
       saveDraft(dd);
       if (box.isConnected) box.querySelector('[data-ref="ko"]').innerHTML = koBox(out.text);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`번역하지 못했어요: ${e.message}`, 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -1449,7 +1541,7 @@
 
   async function toEn(st, box, btn) {
     const d = getDraft();
-    if (!d.subject.trim() && !d.body.trim()) return toast('바꿀 제목·본문이 없습니다.', 'error');
+    if (!d.subject.trim() && !d.body.trim()) return toast('바꿀 제목·본문이 없어요.', 'error');
     ui.busy(btn, true);
     try {
       const tr = text => (String(text || '').trim() ? REBOOT.api('/api/partners/translate', { text, to: 'en' }).then(r => r.text) : Promise.resolve(''));
@@ -1469,9 +1561,9 @@
         clearReview(box);
         updateSend(st, box);
       }
-      toast('영어로 바꿨습니다. 검토한 뒤 보내세요.');
+      toast('영어로 바꿨어요. 검토한 뒤 보내세요.');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`영어로 바꾸지 못했어요: ${e.message}`, 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -1483,8 +1575,8 @@
   }
 
   function findingsHtml(r, what) {
-    if (!r) return ui.empty('컴플라이언스 파트를 불러오지 못해 점검할 수 없습니다.', 'shield');
-    if (!r.findings.length) return `<p class="small">${esc(what)}에서 금지·주의 표현을 찾지 못했습니다.</p>`;
+    if (!r) return ui.empty('컴플라이언스 탭을 불러오지 못해 문구 심의를 할 수 없어요.', 'shield');
+    if (!r.findings.length) return `<p class="small">${esc(what)}에서 금지·주의 표현을 찾지 못했어요.</p>`;
     return `<ul class="ptn-out-findings">${r.findings.map(f => {
       const fv = VERDICT[f.verdict] || [f.verdict, ''];
       return `<li><div class="between"><strong>${esc(f.code)} · ${esc(f.name)}</strong>${badge(fv[0], fv[1])}</div>
@@ -1497,14 +1589,14 @@
   function reviewMail(box) {
     const d = getDraft();
     const text = [d.subject, d.body].filter(x => String(x || '').trim()).join('\n');
-    if (!text) return toast('점검할 제목·본문이 없습니다.', 'error');
+    if (!text) return toast('심의할 제목·본문이 없어요.', 'error');
     const r = complianceReview(text);
     const card = box.querySelector('[data-ref="review"]');
     const v = r ? (VERDICT[r.verdict] || [r.verdict, '']) : null;
     card.dataset.done = '1';
-    card.innerHTML = `<div class="card-head"><h2>문구 점검</h2>${v ? badge(`${r.verdict} · ${v[0]}`, v[1]) : ''}</div>
+    card.innerHTML = `<div class="card-head"><h2>문구 심의</h2>${v ? badge(v[0], v[1]) : ''}</div>
       ${findingsHtml(r, '제목·본문')}
-      <p class="panel-note mt-8">컴플라이언스 파트 규칙 · B2B 바이어 자료 기준 · 1차 참고용이며 PASS는 법적 승인이 아닙니다.</p>`;
+      <p class="panel-note mt-8">컴플라이언스 탭 규칙 · B2B 바이어 자료 기준 · 1차 참고용이고, 걸린 표현 없음은 법적 승인이 아니에요.</p>`;
     if (global.matchMedia && global.matchMedia('(max-width: 950px)').matches) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -1516,7 +1608,7 @@
       st.atts = r.items || [];
     } catch (e) {
       st.atts = [];
-      toast(e.message, 'error');
+      toast(`첨부파일 보관함을 불러오지 못했어요. ${e.message}`, 'error');
     }
     if (box.isConnected) paintAttachments(st, box);
   }
@@ -1533,15 +1625,15 @@
     list.innerHTML = st.atts.length ? st.atts.map(a => `<li class="ptn-out-att">
         <label class="check"><input type="checkbox" data-att="${esc(a.id)}"${off.has(a.id) ? '' : ' checked'}><span>${a.source === 'guide' ? '' : ''} ${esc(a.name)}</span></label>
         <span class="small muted nowrap">${fmtBytes(a.size)}</span>
-        <a class="icon-btn ptn-out-iconbtn" href="/api/partners/attachments/${esc(a.id)}" download title="내려받기" aria-label="${esc(a.name)} 내려받기">${icon('download')}</a>
+        <a class="icon-btn ptn-out-iconbtn" href="/api/partners/attachments/${esc(a.id)}" download title="다운로드" aria-label="${esc(a.name)} 다운로드">${icon('download')}</a>
         <button type="button" class="icon-btn ptn-out-iconbtn" data-act="att-del" data-id="${esc(a.id)}" title="보관함에서 삭제" aria-label="${esc(a.name)} 삭제">${icon('trash')}</button>
-      </li>`).join('') : '<li class="small muted">보관함이 비어 있습니다.</li>';
+      </li>`).join('') : '<li class="small muted">아직 보관함에 파일이 없어요. 위에서 첨부파일을 올려 시작하세요.</li>';
     const sel = selectedAtts(st, d);
     const total = sel.reduce((n, a) => n + a.size, 0);
     const over = total > D.attach.maxTotalMB * MB;
     box.querySelector('[data-ref="att-sum"]').innerHTML = badge(`선택 ${sel.length}개 · ${fmtBytes(total)}`, over ? 'red' : sel.length ? 'green' : '');
     box.querySelector('[data-ref="att-warn"]').innerHTML = over
-      ? `<p class="note warn mt-8">선택한 첨부파일 합계가 ${fmtBytes(total)}로 Gmail 한도 ${D.attach.maxTotalMB}MB를 넘습니다. 일부 파일의 체크를 해제하세요.</p>` : '';
+      ? `<p class="note warn mt-8">선택한 첨부파일 합계가 ${fmtBytes(total)}로 Gmail 한도 ${D.attach.maxTotalMB}MB를 넘어요. 일부 파일의 체크를 해제하세요.</p>` : '';
     updateSend(st, box);
   }
 
@@ -1560,9 +1652,9 @@
     const ok = [];
     for (const f of files) {
       const ext = String(f.name).split('.').pop().toLowerCase();
-      if (!D.attach.exts.includes(ext)) { toast(`올릴 수 없는 형식입니다: ${f.name}`, 'error'); return; }
-      if (f.size > D.attach.maxFileMB * MB) { toast(`파일이 너무 큽니다: ${f.name} (${D.attach.maxFileMB}MB까지)`, 'error'); return; }
-      if (!f.size) { toast(`빈 파일입니다: ${f.name}`, 'error'); return; }
+      if (!D.attach.exts.includes(ext)) { toast(`올릴 수 없는 형식이에요: ${f.name}`, 'error'); return; }
+      if (f.size > D.attach.maxFileMB * MB) { toast(`파일이 너무 커요: ${f.name} (${D.attach.maxFileMB}MB까지)`, 'error'); return; }
+      if (!f.size) { toast(`빈 파일이에요: ${f.name}`, 'error'); return; }
       ok.push(f);
     }
     const fd = new FormData();
@@ -1572,10 +1664,10 @@
     try {
       const out = await REBOOT.upload('/api/partners/attachments', fd);
       st.atts = (out.items || []).concat(st.atts || []);
-      toast(`${ok.length}개 파일을 보관함에 올렸습니다 (이번 메일에 체크됨).`);
+      toast(`${ok.length}개 파일을 보관함에 올렸어요 (이번 메일에 체크됨).`);
       unconfirm(box);
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`첨부파일을 올리지 못했어요: ${e.message}`, 'error');
     } finally {
       if (zone) zone.classList.remove('is-busy');
     }
@@ -1584,16 +1676,16 @@
 
   async function deleteAttachment(st, box, id) {
     const a = (st.atts || []).find(x => x.id === id);
-    if (!a || !(await ui.confirm(`'${a.name}'을(를) 첨부파일 보관함에서 지울까요? 이미 보낸 메일에는 영향이 없습니다.`, { ok: '삭제', danger: true }))) return;
+    if (!a || !(await ui.confirm(`'${a.name}'을(를) 첨부파일 보관함에서 삭제할까요? 이미 보낸 메일에는 영향이 없어요.`, { ok: '삭제', danger: true }))) return;
     try {
       await REBOOT.api('/api/partners/attachments/' + encodeURIComponent(id), undefined, { method: 'DELETE' });
       st.atts = st.atts.filter(x => x.id !== id);
       const d = getDraft();
       d.attachOff = (d.attachOff || []).filter(x => x !== id);
       saveDraft(d);
-      toast('보관함에서 지웠습니다.');
+      toast('보관함에서 삭제했어요.');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`삭제하지 못했어요: ${e.message}`, 'error');
     }
     if (box.isConnected) paintAttachments(st, box);
   }
@@ -1608,13 +1700,13 @@
     const confirmEl = box.querySelector('[data-ref="confirm"]');
     const total = selectedAtts(st, d).reduce((n, a) => n + a.size, 0);
     let why = '';
-    if (!s.smtp) why = `Gmail이 연결되지 않았습니다 — ${settingsLink}에서 GMAIL_ADDRESS · GMAIL_APP_PASSWORD를 넣으면 발송할 수 있습니다.`;
+    if (!s.smtp) why = `Gmail이 연결되지 않았어요 — ${settingsLink}에서 Gmail 주소와 앱 비밀번호를 넣으면 보낼 수 있어요.`;
     else if (!emailsOk(d.to)) why = '수신자 이메일을 확인하세요.';
     else if (!d.subject.trim() || !d.body.trim()) why = '제목과 본문을 입력하세요.';
     else if (!String(d.owner || '').trim()) why = '담당자를 입력하세요.';
-    else if (st.atts === null) why = '첨부파일 보관함을 불러오는 중입니다.';
-    else if (total > D.attach.maxTotalMB * MB) why = `첨부파일 합계가 ${D.attach.maxTotalMB}MB를 넘습니다.`;
-    else if (!confirmEl || !confirmEl.checked) why = '확인 체크를 하면 발송할 수 있습니다.';
+    else if (st.atts === null) why = '첨부파일 보관함을 불러오는 중이에요.';
+    else if (total > D.attach.maxTotalMB * MB) why = `첨부파일 합계가 ${D.attach.maxTotalMB}MB를 넘어요.`;
+    else if (!confirmEl || !confirmEl.checked) why = '확인 체크를 하면 보낼 수 있어요.';
     btn.disabled = !!why;
     box.querySelector('[data-ref="send-hint"]').innerHTML = why;
   }
@@ -1633,7 +1725,7 @@
       });
       refreshSummary();
       if (out.ok) {
-        toast(`발송했습니다 — ${d.partnerName || d.to}. 협업 이력에 저장했습니다.`);
+        toast(`보냈어요 — ${d.partnerName || d.to}. 협업 기록에 저장했어요.`);
         const dd = getDraft();
         Object.assign(dd, { subject: '', body: '', ko: '', ai: false, reply: null, attachOff: [] });   // 다음 메일은 보관함 파일 모두 기본 체크
         saveDraft(dd);
@@ -1641,17 +1733,17 @@
         if (box.isConnected) paintSub(st);
         return;
       }
-      toast(`발송 실패: ${out.error} (협업 이력에 '발송 실패'로 저장했습니다)`, 'error');
+      toast(`보내지 못했어요: ${out.error} (협업 기록에 '발송 실패'로 저장했어요)`, 'error');
       confirmEl.checked = false;
     } catch (e) {
       if (e.data && e.data.sent && e.data.record) {
         if (await ui.confirm(`${e.message} 기록만 다시 저장할까요?`, { ok: '기록만 다시 저장' })) {
           try {
             await REBOOT.api('/api/partners/history', { restore: e.data.record });
-            toast('발송 기록을 저장했습니다.');
-          } catch (e2) { toast(e2.message, 'error'); }
+            toast('발송 기록을 저장했어요.');
+          } catch (e2) { toast(`발송 기록을 저장하지 못했어요: ${e2.message}`, 'error'); }
         }
-      } else toast(e.message, 'error');
+      } else toast(`보내지 못했어요: ${e.message}`, 'error');
       confirmEl.checked = false;
     }
     ui.busy(btn, false);
@@ -1703,10 +1795,10 @@
     <div class="workbench ptn-out-guide">
       <div class="stack tight">
         <section class="card">
-          <div class="card-head"><h2>협업 가이드 초안</h2>
+          <div class="card-head"><h2>협업 가이드 조건</h2>
             <div class="seg" role="group" aria-label="협업 유형">${TYPES.slice().reverse().map(t => `<button type="button" data-gtype="${esc(t)}" aria-pressed="${g.type === t}">${D.typeIcon[t]} ${esc(t)}</button>`).join('')}</div></div>
           <div class="field"><span class="field-label">협업 개요 · 제품 <small class="muted">(여러 개 선택 · 안 고르면 전체)</small></span>
-            <div class="chips" role="group" aria-label="제품">${(cfg.products || []).map(p => `<button type="button" class="chip" data-gproduct="${esc(p.id)}" aria-pressed="${(g.products || []).includes(p.id)}" title="${esc(p.form)}">${esc(p.name)}</button>`).join('') || '<span class="small muted">설정 › 팩트시트에 제품이 없습니다.</span>'}</div></div>
+            <div class="chips" role="group" aria-label="제품">${(cfg.products || []).map(p => `<button type="button" class="chip" data-gproduct="${esc(p.id)}" aria-pressed="${(g.products || []).includes(p.id)}" title="${esc(p.form)}">${esc(p.name)}</button>`).join('') || '<span class="small muted">설정 › 팩트시트에 제품이 없어요.</span>'}</div></div>
           <div class="field"><span class="field-label">협업 목적</span>
             <div class="chips" role="group" aria-label="협업 목적">${purposes.map(p => `<button type="button" class="chip" data-purpose="${esc(p)}" aria-pressed="${current === p}">${esc(p)}</button>`).join('')}
               <button type="button" class="chip" data-purpose="__custom" aria-pressed="${current === '__custom'}">직접 입력</button></div>
@@ -1715,13 +1807,13 @@
           <label class="field"><span>필수 전달사항</span><textarea class="input" rows="4" data-g="must">${esc(g.must)}</textarea></label>
           <label class="field"><span>결과물 · 제출 기준</span><textarea class="input" rows="3" data-g="deliverables">${esc(g.deliverables)}</textarea></label>
           <div class="flex wrap mt-16">
-            <button type="button" class="btn lime" data-act="g-generate"${s.openai ? '' : ' disabled'}>가이드 초안 생성</button>
-            <span class="hint">${s.openai ? '구성은 고정입니다 (오른쪽). 금지 표현은 Do & Don\'t 표에 들어갑니다.' : `${settingsLink}에서 OPENAI_API_KEY를 넣으면 사용 가능 · 아래 원문 편집에서 직접 써도 됩니다.`}</span>
+            <button type="button" class="btn lime" data-act="g-generate"${s.openai ? '' : ' disabled'}>협업 가이드 초안 생성</button>
+            <span class="hint">${s.openai ? '구성은 고정이에요 (오른쪽). 금지 표현은 Do & Don\'t 표에 들어가요.' : `${settingsLink}에서 OpenAI 키를 넣으면 쓸 수 있어요 · 아래 원문 편집에서 직접 써도 돼요.`}</span>
           </div>
         </section>
 
         <section class="card">
-          <div class="card-head"><h2>가이드 문서</h2><span data-ref="g-badge">${g.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
+          <div class="card-head"><h2>협업 가이드 <span class="tiny muted">같은 조건으로 만드는</span></h2><span data-ref="g-badge">${g.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
           <div class="seg" role="group" aria-label="보기">
             <button type="button" data-gview="preview" aria-pressed="${g.view !== 'edit'}">문서 미리보기</button>
             <button type="button" data-gview="edit" aria-pressed="${g.view === 'edit'}">원문 편집</button>
@@ -1733,18 +1825,19 @@
             <button type="button" class="btn ghost small" data-act="g-undo"${g.prev ? '' : ' hidden'}>↶ 번역 전으로</button>
           </div>
           <details class="ptn-out-gcheck mt-16">
-            <summary>금지 표현 점검</summary>
-            <label class="check mt-8"><input type="checkbox" data-ref="g-exclude" checked> 'Do &amp; Don't' 표는 빼고 점검 (금지 표현 예시가 들어 있어 항상 걸림)</label>
-            <div><button type="button" class="btn small soft mt-8" data-act="g-check">점검하기</button></div>
+            <summary>문구 심의</summary>
+            <label class="check mt-8"><input type="checkbox" data-ref="g-exclude" checked> 'Do &amp; Don't' 표는 빼고 심의 (금지 표현 예시가 들어 있어 항상 걸림)</label>
+            <div><button type="button" class="btn small soft mt-8" data-act="g-check">문구 심의</button></div>
             <div class="mt-8" data-ref="g-findings"></div>
           </details>
           <div class="flex wrap mt-16 ptn-out-gactions">
-            <button type="button" class="btn lime" data-act="g-attach">확인 — 이메일에 첨부</button>
-            <button type="button" class="btn soft" data-act="g-docx">Word 다운로드</button>
-            <button type="button" class="btn soft" data-act="g-md">Markdown</button>
+            <button type="button" class="btn lime" data-act="g-attach">이메일에 첨부하기</button>
+            ${ui.fileActions(
+              ui.fileBtn('download', { label: '가이드 다운로드', type: 'Word', act: 'g-docx' }) +
+              ui.fileBtn('download', { label: '가이드 다운로드', type: 'MD', act: 'g-md' }))}
           </div>
           <div data-ref="g-attached">${g.attached ? attachedNote(g.attached) : ''}</div>
-          <p class="panel-note mt-8">첨부하면 REBOOT_${esc(g.type)}_협업가이드_날짜.docx로 첨부파일 보관함에 저장되고, 메일 작성 탭에서 체크된 상태로 함께 발송됩니다. 내려받기는 보관함에 저장하지 않습니다.</p>
+          <p class="panel-note mt-8">첨부하면 REBOOT_${esc(g.type)}_협업가이드_날짜.docx로 첨부파일 보관함에 저장되고, 메일 작성 탭에서 체크된 상태로 함께 보내져요. 다운로드는 보관함에 저장하지 않아요.</p>
         </section>
       </div>
 
@@ -1755,8 +1848,8 @@
         </section>
         <section class="card">
           <div class="card-head"><h2>Do &amp; Don't 기준</h2>${badge('컴플라이언스', 'blue')}</div>
-          <p class="small">금지·수정 표현 ${fmt.num(banned.length)}개와 대신 쓸 표현을 AI에 넘겨 Don't 칸에 넣습니다.</p>
-          <div class="ptn-out-terms mt-8">${banned.slice(0, 14).map(t => `<span class="ptn-out-term">${esc(t.term)}</span>`).join('') || '<span class="small muted">컴플라이언스 파트를 불러오지 못했습니다.</span>'}</div>
+          <p class="small">금지·수정 표현 ${fmt.num(banned.length)}개와 대신 쓸 표현을 AI에 넘겨 Don't 칸에 넣어요.</p>
+          <div class="ptn-out-terms mt-8">${banned.slice(0, 14).map(t => `<span class="ptn-out-term">${esc(t.term)}</span>`).join('') || '<span class="small muted">컴플라이언스 탭을 불러오지 못했어요.</span>'}</div>
           <p class="panel-note mt-8">Word 서식: 표지(제목·발행일) · 브랜드 색 머리행 표 · 요약 콜아웃 · 머리글 REBOOT · 바닥글 Confidential · 페이지 번호 · 맑은 고딕</p>
         </section>
       </aside>
@@ -1766,7 +1859,7 @@
   }
 
   function attachedNote(name) {
-    return `<p class="note lime mt-16">${esc(name)} — 첨부파일 보관함에 넣었습니다 (메일 작성 탭에서 체크됨). <button type="button" class="link" data-act="g-tocompose">메일 작성으로</button></p>`;
+    return `<p class="note lime mt-16">${esc(name)} — 첨부파일 보관함에 넣었어요 (메일 작성 탭에서 체크됨). <button type="button" class="link" data-act="g-tocompose">메일 작성으로</button></p>`;
   }
 
   function paintGuideView(box) {
@@ -1778,9 +1871,9 @@
     } else {
       // 미리보기에서 바로 고치기: 문서를 눌러 고치면 Markdown 원문으로 바꿔 저장 (Word 변환 · 문구 점검이 그대로 씀)
       view.innerHTML = g.md.trim()
-        ? `<p class="small muted mb-8">문서를 눌러 바로 고칠 수 있어요. 표 칸 · 제목 · 문단 모두 됩니다. 줄 추가 · 표 모양 바꾸기는 원문 편집에서 하세요.</p>
+        ? `<p class="small muted mb-8">문서를 눌러 바로 고칠 수 있어요. 표 칸 · 제목 · 문단 모두 돼요. 줄 추가 · 표 모양 바꾸기는 원문 편집에서 하세요.</p>
            <article class="prose ptn-out-prose ptn-out-editable" contenteditable="true" spellcheck="false" data-gedit aria-label="가이드 문서 (바로 수정)">${ui.markdown(g.md)}</article>`
-        : ui.empty('아직 가이드가 없습니다. 위에서 가이드 초안 생성을 누르거나 원문 편집에서 직접 쓰세요.', 'doc');
+        : ui.empty('아직 협업 가이드가 없어요. 위에서 협업 가이드 초안 생성을 눌러 시작하거나 원문 편집에서 직접 쓰세요.', 'doc');
     }
   }
 
@@ -1914,7 +2007,7 @@
       else if (a === 'g-docx') guideDocx(st, box, b, false);
       else if (a === 'g-md') {
         const g = getGuide();
-        if (!g.md.trim()) return toast('내려받을 가이드가 없습니다.', 'error');
+        if (!g.md.trim()) return toast('내려받을 협업 가이드가 없어요.', 'error');
         ui.download(`reboot-partners-guide-${REBOOT.today().replace(/-/g, '')}.md`, g.md, 'text/markdown;charset=utf-8');
       } else if (a === 'g-tocompose') {
         const d = getDraft();
@@ -1942,7 +2035,7 @@
     const g = getGuide();
     const purpose = purposeText(g, st.cfg);
     if (!purpose) return toast('협업 목적을 고르거나 입력하세요.', 'error');
-    if (g.md.trim() && !(await ui.confirm('지금 가이드 문서를 새 AI 초안으로 바꿀까요?', { ok: '바꾸기' }))) return;
+    if (g.md.trim() && !(await ui.confirm('지금 협업 가이드를 새 AI 초안으로 바꿀까요?', { ok: '바꾸기' }))) return;
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/guide/generate', {
@@ -1958,9 +2051,9 @@
         if (u) u.hidden = true;
         paintGuideView(box);
       }
-      toast('가이드 초안을 만들었습니다. 미리보기에서 확인하고 원문 편집에서 고치세요.');
+      toast('협업 가이드 초안을 만들었어요. 미리보기에서 확인하고 원문 편집에서 고치세요.');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`협업 가이드 초안을 만들지 못했어요: ${e.message}`, 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -1968,7 +2061,7 @@
 
   async function guideTranslate(box, btn, to) {
     const g = getGuide();
-    if (!g.md.trim()) return toast('번역할 가이드가 없습니다.', 'error');
+    if (!g.md.trim()) return toast('번역할 협업 가이드가 없어요.', 'error');
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/translate', { text: g.md, to });
@@ -1981,9 +2074,9 @@
         box.querySelector('[data-ref="g-badge"]').innerHTML = badge('AI 번역 · 참고용', 'purple');
         paintGuideView(box);
       }
-      toast(to === 'en' ? '영어로 번역했습니다.' : '한국어로 번역했습니다.');
+      toast(to === 'en' ? '영어로 번역했어요.' : '한국어로 번역했어요.');
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`번역하지 못했어요: ${e.message}`, 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -1991,17 +2084,17 @@
 
   function guideCheck(box) {
     const g = getGuide();
-    if (!g.md.trim()) return toast('점검할 가이드가 없습니다.', 'error');
+    if (!g.md.trim()) return toast('심의할 협업 가이드가 없어요.', 'error');
     const exclude = box.querySelector('[data-ref="g-exclude"]').checked;
     const r = complianceReview(exclude ? stripDoDont(g.md) : g.md);
     const v = r ? (VERDICT[r.verdict] || [r.verdict, '']) : null;
-    box.querySelector('[data-ref="g-findings"]').innerHTML = (v ? `<p class="mb-8">${badge(`${r.verdict} · ${v[0]}`, v[1])}</p>` : '') + findingsHtml(r, '가이드') +
-      '<p class="panel-note mt-8">B2B 기준 · 1차 참고용입니다. 최종 판단은 담당자가 합니다.</p>';
+    box.querySelector('[data-ref="g-findings"]').innerHTML = (v ? `<p class="mb-8">${badge(v[0], v[1])}</p>` : '') + findingsHtml(r, '협업 가이드') +
+      '<p class="panel-note mt-8">B2B 기준 · 1차 참고용이고, 걸린 표현 없음은 법적 승인이 아니에요. 최종 판단은 담당자가 해요.</p>';
   }
 
   async function guideDocx(st, box, btn, attach) {
     const g = getGuide();
-    if (!g.md.trim()) return toast('가이드 내용이 없습니다. 먼저 초안을 만들거나 원문을 입력하세요.', 'error');
+    if (!g.md.trim()) return toast('협업 가이드 내용이 없어요. 먼저 초안을 만들거나 원문을 입력하세요.', 'error');
     const body = { markdown: g.md, type: g.type, purpose: purposeText(g, st.cfg), attach };
     ui.busy(btn, true);
     try {
@@ -2014,13 +2107,13 @@
         d.attachOff = (d.attachOff || []).filter(x => x !== out.attachment.id);
         saveDraft(d);
         if (box.isConnected) box.querySelector('[data-ref="g-attached"]').innerHTML = attachedNote(out.attachment.name);
-        toast('가이드를 Word로 만들어 첨부파일 보관함에 넣었습니다.' + ((out.replaced || []).length ? ' (같은 이름의 예전 가이드는 새 파일로 바꿨습니다)' : ''));
+        toast('협업 가이드를 Word로 만들어 첨부파일 보관함에 넣었어요.' + ((out.replaced || []).length ? ' (같은 이름의 예전 가이드는 새 파일로 바꿨어요)' : ''));
       } else {
         const res = await REBOOT.api('/api/partners/guide/docx', body, { raw: true });
         ui.download(`reboot-partners-guide-${REBOOT.today().replace(/-/g, '')}.docx`, await res.blob());
       }
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`Word 파일을 만들지 못했어요: ${e.message}`, 'error');
     } finally {
       ui.busy(btn, false);
     }

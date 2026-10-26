@@ -808,7 +808,7 @@
     // 규제 모니터링 출처 안내 (2026-10-24): 기관 · 통로(어디서 받나) · 방식 · 가져오는 정보(입력) · 대시보드에서 쓰는 곳(출력) · 필요한 키
     // id는 refresh.py SOURCES의 id와 같아야 함. agency가 'FDA·FTC'인 출처는 항목의 firm 앞부분(FDA/FTC)으로 기관을 나눔
     monitorSources: [
-      { id: 'fda-warning-letters', range: '최근 1년 · 최대 80건 (본문 문구가 있는 경고장은 개수와 상관없이 남김)', agency: 'FDA', name: 'FDA 경고장', via: 'FDA Data Dashboard API (공식) · 직접 올리기', modes: ['auto', 'manual'],
+      { id: 'fda-warning-letters', range: '최근 1년 · 최대 80건 (본문 문구가 있는 경고장은 개수와 상관없이 남김)', agency: 'FDA', name: 'FDA 경고장', via: 'FDA Data Dashboard API (공식) · 직접 업로드', modes: ['auto', 'manual'],
         key: 'FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY',
         gets: '식품 분야 경고장 목록 (회사 · 발행일 · 담당 부서 · 나라). 직접 올리면 경고장 제목과 본문 속 광고 문구까지',
         gives: '목록 · 🆕 새 경고장 표시 → 본문 문구는 사례집 후보 → 승인하면 경고장 사례·규칙 검증에 반영' },

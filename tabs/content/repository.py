@@ -77,14 +77,14 @@ def norm_sheet_value(field, value, products):
         if not v:
             raise ValueError("만들 콘텐츠를 골라 주세요.")
         if v not in O.CONTENT_TYPES:
-            raise ValueError(f"알 수 없는 콘텐츠 종류입니다: {v[:30]}")
+            raise ValueError(f"알 수 없는 콘텐츠 종류예요: {v[:30]}")
         return v
     if field == "channels":
         out = []
         for x in _as_list(value):
             x = str(x).strip().lower()
             if x not in O.CHANNELS:
-                raise ValueError(f"알 수 없는 채널입니다: {x[:30]}")
+                raise ValueError(f"알 수 없는 채널이에요: {x[:30]}")
             if x not in out:
                 out.append(x)
         return out
@@ -93,13 +93,13 @@ def norm_sheet_value(field, value, products):
             return value
         if isinstance(value, str) and value.strip().lower() in ("true", "false"):
             return value.strip().lower() == "true"
-        raise ValueError("'Reboot 브랜드 자체' 선택은 예/아니요 값이어야 합니다.")
+        raise ValueError("'Reboot 브랜드 자체' 선택은 예/아니요 값이어야 해요.")
     if field == "product_ids":
         wanted = []
         for x in _as_list(value):
             x = str(x).strip()
             if x not in products:
-                raise ValueError(f"알 수 없는 제품입니다: {x[:40]}")
+                raise ValueError(f"알 수 없는 제품이에요: {x[:40]}")
             if x not in wanted:
                 wanted.append(x)
         return [pid for pid in products if pid in wanted]
@@ -107,7 +107,7 @@ def norm_sheet_value(field, value, products):
         return clip_text(value, GOAL_MAX)
     if field == "extra_request":
         return clip_text(value, EXTRA_MAX)
-    raise ValueError("허용되지 않은 시트 항목입니다.")
+    raise ValueError("허용되지 않은 시트 항목이에요.")
 
 
 def check_sheet(s):
@@ -150,24 +150,24 @@ def norm_settings(data, base=None):
     s = dict(base or O.DEFAULT_SETTINGS)
     if "answer_length" in data:
         if data["answer_length"] not in O.ANSWER_LENGTHS:
-            raise ValueError("답변 길이는 짧게 · 보통 · 자세히 중 하나입니다.")
+            raise ValueError("답변 길이는 짧게 · 보통 · 자세히 중 하나예요.")
         s["answer_length"] = data["answer_length"]
     for key, lo, hi, label in (("candidates", 1, 3, "제안 수"), ("rewrite_max", 0, 2, "자동 재작성 횟수")):
         if key in data:
             try:
                 v = int(data[key])
             except (TypeError, ValueError):
-                raise ValueError(f"{label}는 숫자입니다.")
+                raise ValueError(f"{label}는 숫자여야 해요.")
             if not lo <= v <= hi:
-                raise ValueError(f"{label}는 {lo}~{hi} 사이입니다.")
+                raise ValueError(f"{label}는 {lo}~{hi} 사이여야 해요.")
             s[key] = v
     if "video_mode" in data:
         if data["video_mode"] not in O.VIDEO_MODES:
-            raise ValueError("영상 모드는 구성안만 · 실제 영상 중 하나입니다.")
+            raise ValueError("영상 모드는 구성안만 · 실제 영상 중 하나예요.")
         s["video_mode"] = data["video_mode"]
     if "image_provider" in data:
         if data["image_provider"] not in O.IMAGE_PROVIDERS:
-            raise ValueError("이미지 AI는 OpenAI · Higgsfield 중 하나입니다.")
+            raise ValueError("이미지 AI는 OpenAI · Higgsfield 중 하나예요.")
         s["image_provider"] = data["image_provider"]
     return s
 
@@ -186,7 +186,7 @@ def decision_key(raw):
     if k in O.FACT_KEYS:
         raise FactChange()
     if not DECISION_KEY_RE.match(k):
-        raise ValueError("허용되지 않은 결정 항목 이름입니다.")
+        raise ValueError("허용되지 않은 결정 항목 이름이에요.")
     if k in SHEET_FIELDS or k in ("title", "status", "owner", "revision", "created_by", "id"):
         raise ValueError("시트·캠페인 정보는 결정 항목으로 바꿀 수 없어요.")
     return k
@@ -239,7 +239,7 @@ def plan_changes(sheet, decisions, changes, *, user, source, revision, vague=Fal
             if field.startswith("sheet."):
                 key = field[6:]
                 if key not in SHEET_FIELDS:
-                    raise ValueError("허용되지 않은 시트 항목입니다.")
+                    raise ValueError("허용되지 않은 시트 항목이에요.")
                 if not allow_sheet or status != "confirmed" or vague:
                     if key in ("goal", "extra_request") and value:
                         demoted.append({"field": field, "value": decision_value(value)})
@@ -276,7 +276,7 @@ def plan_changes(sheet, decisions, changes, *, user, source, revision, vague=Fal
             elif field.split(".")[0] in ("facts", "fact", "product", "products", "brand"):
                 raise FactChange()
             else:
-                raise ValueError("허용되지 않은 항목입니다.")
+                raise ValueError("허용되지 않은 항목이에요.")
         except FactChange:
             fact_requests.append({"field": field, "value": decision_value(value)})
             rejected.append({"field": field, "label": field_label(field),
@@ -443,12 +443,12 @@ def settle_stale_jobs(campaign_id=None):
     changed = False
     for j in q.all():
         if j.status == "queued" or (j.status == "running" and not j.prompt):  # 제공사에 보내기 전에 멈춤 → 비용 없음
-            j.status, j.error = "failed", "이미지 요청을 보내기 전에 멈췄습니다 (서버 재시작 등). 필요하면 다시 요청하세요."
+            j.status, j.error = "failed", "이미지 요청을 보내기 전에 멈췄어요 (서버 재시작 등). 필요하면 다시 요청하세요."
         elif j.status == "saving":  # 결과는 받았지만 파일 보관 전에 멈춤 (결과 데이터는 메모리에만 있었음)
-            j.status, j.error = "failed", "이미지는 생성됐지만 파일을 보관하기 전에 멈췄습니다. 자동으로 다시 생성하지 않으니 필요하면 다시 요청하세요."
+            j.status, j.error = "failed", "이미지는 생성됐지만 파일을 보관하기 전에 멈췄어요. 자동으로 다시 생성하지 않으니 필요하면 다시 요청하세요."
         else:  # 제공사에 보낸 뒤 응답을 못 받음 → 생성 여부 불명
             j.status = "submission_unknown"
-            j.error = "결과를 확인하지 못한 채 오래 멈춰 있습니다 (서버 재시작 등). 자동으로 다시 제출하지 않으니 필요하면 다시 요청하세요."
+            j.error = "결과를 확인하지 못한 채 오래 멈춰 있어요 (서버 재시작 등). 자동으로 다시 제출하지 않으니 필요하면 다시 요청하세요."
         j.finished_at = utcnow()
         changed = True
     if changed:
@@ -542,6 +542,7 @@ def campaign_state(c, *, message_limit=200):
         "recentChanges": [event_dict(e) for e in events],
         "facts": brandkit.product_facts(sheet["product_ids"]),
         "productFlavors": assets.product_flavors_of(decisions, sheet["product_ids"], products),
+        "refSkip": assets.ref_skip_of(decisions),
         "references": [reference_dict(r) for r in references_of(c.id)],
         "flow": O.flow_of(sheet),
         "currentHash": snapshot_hash(cur),

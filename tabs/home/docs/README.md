@@ -10,8 +10,8 @@
 |---|---|---|---|
 | 📅 시즌 캘린더 | `data/seasons.csv` (수동 관리) | CSV 로드 → D-day 계산 | 페이지 로드 시 |
 | 📈 다음 급등 예상 (콘텐츠 캘린더 맨 아래 · 접기) | 인사이트 검색 트렌드 (`/api/insights/data/trends`) | 작년 같은 시기 검색 vs 12개월 평균 | 인사이트 데이터 업데이트 (주 1회) |
-| 📰 미국 주류 업계 뉴스 | 구글 뉴스 RSS (키 없음) | 수집 → 중복·노이즈 제거 → AI 필터링·기사별 한국어 요약 | 1일 1회 자동 + '지금 수집' |
-| ✅ 이번 주 To-Do | 위 두 섹션의 결과 | AI가 종합해 생성 | 주 1회 (월요일) + 수동 재생성 |
+| 📰 미국 주류 업계 뉴스 | 구글 뉴스 RSS (키 없음) | 수집 → 중복·노이즈 제거 → AI 필터링·기사별 한국어 요약 | 1일 1회 자동 + '최신 데이터 받기' |
+| ✅ 이번 주 할 일 | 위 두 섹션의 결과 | AI가 종합해 생성 | 주 1회 (월요일) + 수동 재생성 |
 
 ---
 
@@ -59,7 +59,7 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 | 분야 | 종류 | 검색어 |
 |---|---|---|
 | 숙취 카테고리 | signal | `hangover (supplement OR electrolyte OR DHM OR probiotic)` |
-| 경쟁사 | signal | `ZBiotics OR "Liquid I.V." OR DripDrop OR "Cheers Restore"` (경쟁사 분석 상위 브랜드로 월 1회 갱신) |
+| 경쟁 브랜드 | signal | `ZBiotics OR "Liquid I.V." OR DripDrop OR "Cheers Restore"` (경쟁사 분석 상위 브랜드로 월 1회 갱신) |
 | 규제 | signal | `FDA "dietary supplement"` |
 | 음주 행태 | flow | `"sober curious" OR "drinking less" OR "Gen Z drinking"` · `"alcohol consumption" (survey OR study OR Gallup)` |
 | 무알코올 · 기능성 | flow | `"non-alcoholic" (beer OR spirits OR beverage)` · `"functional beverage" OR "functional drinks"` |
@@ -72,7 +72,7 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 
 ### 수집 방식
 
-- **하루 1회 자동**(하루 1회 작업) + 화면의 **"지금 수집"** 버튼. 화면을 열 때는 저장된 결과만 읽습니다
+- **하루 1회 자동**(하루 1회 작업) + 화면의 **"최신 데이터 받기"** 버튼. 화면을 열 때는 저장된 결과만 읽습니다
 - **규칙으로 먼저 거름 (무료, `queries.json`의 `exclude` · `filters`)**
   - 사고 · 범죄: DUI · drunk driving · crash · arrest · killed · fatal · underage · minors
   - 비유 hangover: AI · tariff · election · market … + hangover (진짜 숙취인 holiday hangover는 남김)
@@ -80,7 +80,7 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
   - 미국 밖 시장: UK · India · China … 가 있고 US · America가 없는 제목
   - 한국어 제목: K-푸드 검색어만 허용
 - URL · 제목 기준 중복 제거, 최근 7일 기사로 정리
-- 실패하면 마지막 결과를 그대로 보여 주고 "업데이트 실패" 배지 표시. 연달아 3번 실패하면 남은 검색어는 건너뜀
+- 실패하면 마지막 결과를 그대로 보여 주고 "받기 실패" 배지 표시. 연달아 3번 실패하면 남은 검색어는 건너뜀
 
 ### AI 처리 (OpenAI 1회)
 
@@ -100,7 +100,7 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 
 ### 검색어 점검 (월 1회)
 
-뉴스 카드 아래 **"검색어 점검 (최근 60일)"**: 검색어마다 찾은 기사 · 규칙 통과 · 카드로 고른 수. 30일 넘게 돌렸는데 카드가 0개면 **교체 후보**로 표시합니다. 교체는 `queries.json`을 고치고 '지금 수집'으로 확인합니다.
+뉴스 카드 아래 **"검색어 점검 (최근 60일)"**: 검색어마다 찾은 기사 · 규칙 통과 · 카드로 고른 수. 30일 넘게 돌렸는데 카드가 0개면 **교체 후보**로 표시합니다. 교체는 `queries.json`을 고치고 '최신 데이터 받기'로 확인합니다.
 
 ### 보도 급증 시그널
 
@@ -112,7 +112,7 @@ Super Bowl LXI,2027-02-14,2027-02-14,sports,1,30,
 
 ---
 
-## 3. ✅ 이번 주 To-Do
+## 3. ✅ 이번 주 할 일
 
 시즌 캘린더(다가오는 시즌·준비 기간)와 뉴스 동향 요약·급증 시그널을 AI에 함께 넘겨 이번 주 실행 항목을 생성합니다.
 
@@ -158,7 +158,7 @@ OPENAI_API_KEY=     # 없으면 AI 요약 없이 최근 기사 제목만 표시
 ## 실행 · 확인
 
 ```cmd
-python -m server                          # 데일리 브리핑 → 뉴스 '지금 수집'
+python -m server                          # 데일리 브리핑 → 뉴스 '최신 데이터 받기'
 python -m pytest tabs\home               # 홈 테스트 (인터넷 · 키 없이)
 ```
 

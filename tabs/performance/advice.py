@@ -19,7 +19,7 @@ SYSTEM = """당신은 10년 경력의 해외 마케팅 담당자이자 성과분
 - 사용자 메시지(JSON)에 있는 숫자만 근거로 씁니다. 업계 평균·시장 규모·경쟁사 수치처럼 주어지지 않은 숫자나 사실을 만들지 않습니다.
 - 퍼널(노출 → 클릭 → 전환) 단계별로 원인을 찾습니다: CTR(클릭÷노출), CVR(전환÷클릭), CPA(광고비÷전환), ROAS(매출÷광고비).
 - compare가 null이면 증감·추세를 말하지 않습니다.
-- data_source가 "sample"이면 샘플(가상) 데이터라는 점을 overview 첫 문장에 밝힙니다.
+- data_source가 "sample"이면 예시 데이터라는 점을 overview 첫 문장에 밝힙니다.
 - 제품 효능(숙취 해소·예방 등)을 단정하는 문구를 제안하지 않습니다 (미국 식품 광고 규제).
 - 모든 문장은 한국어로, 짧고 구체적으로 씁니다. 금액은 원 단위.
 
@@ -136,7 +136,7 @@ def normalize_budget(items, summary):
     notes = []
     for n in names:
         if n not in got:
-            got[n] = {"amount": current[n], "reason": "AI 제안에 빠져 이번 기간 광고비를 그대로 두었습니다."}
+            got[n] = {"amount": current[n], "reason": "AI 제안에 빠져 이번 기간 광고비를 그대로 두었어요."}
             notes.append(f"{n}: AI 제안 없음 → 유지")
     total = sum(v["amount"] for v in got.values())
     lo, hi = base["min"], base["max"]
@@ -144,7 +144,7 @@ def normalize_budget(items, summary):
     if base["weekly_spend"] > 0 and total <= 0:
         for n in names:
             got[n]["amount"] = current[n]
-        notes.insert(0, "AI 제안 금액이 0원이라 이번 기간 광고비를 그대로 두었습니다.")
+        notes.insert(0, "AI 제안 금액이 0원이라 이번 기간 광고비를 그대로 두었어요.")
         total = sum(v["amount"] for v in got.values())
     if base["weekly_spend"] > 0 and total > 0 and not lo <= total <= hi:
         target = hi if total > hi else lo
@@ -163,7 +163,7 @@ def normalize_budget(items, summary):
             biggest["amount"] += lo - total
         total = sum(v["amount"] for v in got.values())
     if adjusted:
-        notes.insert(0, "AI 제안 총액이 기준의 ±20%를 벗어나 채널 비율을 유지한 채 맞췄습니다.")
+        notes.insert(0, "AI 제안 총액이 기준의 ±20%를 벗어나 채널 비율을 유지한 채 맞췄어요.")
     out_items = []
     for n in names:
         v = got[n]
@@ -179,7 +179,7 @@ def normalize_budget(items, summary):
 
 def advise(summary, source, today=None):
     if not summary["channels"] or summary["totals"]["spend"] <= 0:
-        raise AIError("이 기간에는 광고비 데이터가 없어 AI 제안을 만들 수 없습니다.", 400)
+        raise AIError("이 기간에는 광고비 데이터가 없어 AI 제안을 만들 수 없어요.", 400)
     data = build_input(summary, source, today)
     raw = openai_json(SYSTEM, data, schema=SCHEMA, schema_name="performance_advice", max_tokens=3000,
                       part="performance", action=f"성과 AI 해석·예산 제안 ({summary['start']} ~ {summary['end']})")
@@ -206,7 +206,7 @@ INSIGHT_SYSTEM = """당신은 10년 경력의 전략 마케팅 전문가입니�
 규칙
 - 사용자 메시지(JSON)에 있는 숫자만 근거로 씁니다. 주어지지 않은 숫자나 사실을 만들지 않습니다. 비중(%)처럼 계산한 값은 주어진 숫자로 직접 계산합니다.
 - compare가 null이면 증감·추세를 말하지 않습니다.
-- data_source가 "sample"이면 headline을 "샘플 데이터 기준,"으로 시작합니다.
+- data_source가 "sample"이면 headline을 "예시 데이터 기준,"으로 시작합니다.
 - 제품 효능(숙취 해소·예방 등)을 단정하는 문구를 쓰지 않습니다.
 - 숫자 형식: ROAS·CTR·CVR은 %를 붙이고 ROAS는 정수(예: 365%), CTR·CVR은 소수 둘째 자리까지(예: 0.99%). 금액은 ₩와 천 단위 쉼표(예: ₩7,295,000). 개수는 천 단위 쉼표.
 - 숫자와 핵심 어휘(채널 이름, 지표 이름, 핵심 판단)는 **이렇게** 굵게 감쌉니다. 한 문장에 굵게는 3곳 이하.
@@ -238,7 +238,7 @@ INSIGHT_SCHEMA = {
 
 def insight(summary, source, today=None):
     if not summary["channels"] or summary["totals"]["spend"] <= 0:
-        raise AIError("이 기간에는 광고비 데이터가 없어 AI 인사이트를 만들 수 없습니다.", 400)
+        raise AIError("이 기간에는 광고비 데이터가 없어 AI 인사이트를 만들 수 없어요.", 400)
     data = build_input(summary, source, today)
     data.pop("budget_base", None)
     data.pop("upcoming_seasons", None)
@@ -250,5 +250,5 @@ def insight(summary, source, today=None):
         if isinstance(p, dict) and _txt(p.get("text"), 300):
             points.append({"label": _txt(p.get("label"), 10), "text": _txt(p.get("text"), 300)})
     if not headline:
-        raise AIError("AI가 인사이트를 돌려주지 않았습니다. 다시 만들기를 눌러 주세요.")
+        raise AIError("AI가 인사이트를 돌려주지 않았어요. 다시 만들기를 눌러 주세요.")
     return {"headline": headline, "points": points, "model": openai_model()}

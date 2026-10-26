@@ -25,22 +25,22 @@ from .util import review_month, week_key
 JOB = "insights-update"
 ITEMS = [
     {"id": "weee", "label": "Weee! 진열대 · 리뷰", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
-     "desc": "목록 · 상품 페이지에서 가격 · 품절 · 핵심 메시지 · 상품별 구매자 리뷰"},
+     "desc": "목록 · 제품 페이지에서 가격 · 품절 · 핵심 메시지 · 제품별 구매자 리뷰"},
     {"id": "amazon", "label": "Amazon 진열대 · 리뷰", "group": "weekly", "needs": ["SERPAPI_KEY"],
-     "desc": "검색 상위(광고 제외) · 리뷰 많은 상품 상세 · 대표 리뷰"},
+     "desc": "검색 상위(광고 제외) · 리뷰 많은 제품 상세 · 대표 리뷰"},
     {"id": "yami", "label": "Yami 진열대", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
      "desc": "숙취 검색 결과 첫 페이지: 브랜드 · 가격 · 정가 · 판매량"},
-    {"id": "channel_reviews", "label": "채널 리뷰 (Olive Young · Amazon · Yami)", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
-     "desc": "알디콤 상품의 구매자 리뷰 · 별점 (Olive Young 영어 리뷰 전부 · Amazon 대표 리뷰는 SerpApi)"},
+    {"id": "channel_reviews", "label": "판매처 리뷰 (Olive Young · Amazon · Yami)", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
+     "desc": "알디콤 제품의 구매자 리뷰 · 별점 (Olive Young 영어 리뷰 전부 · Amazon 대표 리뷰는 SerpApi)"},
     {"id": "trends", "label": "검색 트렌드", "group": "weekly", "needs": ["SERPAPI_KEY"],
      "desc": "트렌드 키워드마다 미국 12개월 (키가 없으면 CSV 올리기)"},
     {"id": "reviews", "label": "리뷰 분류", "group": "weekly", "needs": [], "ai": True,
      "desc": "주제(효과 · 맛·향 · 복용 편의 · 부작용 · 가격) · 칭찬/불만"},
-    {"id": "competitors", "label": "경쟁사 분석", "group": "weekly", "needs": [], "ai": True,
-     "desc": "새 경쟁사 등록 · 제형 분류 · 리뷰 상위 15개 브랜드 분석(진열대 · 홈페이지 · 뉴스 → AI 웹 검색, 25일 지난 것만)"},
+    {"id": "competitors", "label": "경쟁 브랜드 분석", "group": "weekly", "needs": [], "ai": True,
+     "desc": "새 경쟁 브랜드 등록 · 제형 분류 · 리뷰 상위 15개 브랜드 분석(진열대 · 홈페이지 · 뉴스 → AI 웹 검색, 25일 지난 것만)"},
     {"id": "actions", "label": "이번 주 액션", "group": "weekly", "needs": [], "ai": True,
      "desc": "규칙으로 신호를 고르고, AI 키가 있으면 문장을 다듬음"},
-    {"id": "youtube", "label": "유튜브 수집", "group": "monthly", "needs": ["YOUTUBE_API_KEY"],
+    {"id": "youtube", "label": "유튜브 댓글", "group": "monthly", "needs": ["YOUTUBE_API_KEY"],
      "desc": "검색어 세트 A · B · K → 영상 · 댓글"},
     {"id": "voc", "label": "VOC 분류", "group": "monthly", "needs": [], "ai": True,
      "desc": "댓글의 관련 여부 · 질문 주제 (사람 정답 예시 24건을 함께 줌)"},
@@ -140,10 +140,12 @@ def plan():
         note, ready = "", not missing
         if it.get("ai") and not keys["OPENAI_API_KEY"]:
             note = "AI 키가 없어 규칙으로만 처리해요 (무료)."
-        if it["id"] == "weee" and not cfg.get("weee_urls"):
+        if (cfg.get("enabled") or {}).get(it["id"]) is False:
+            ready, note = False, "설정 › 수집 설정에서 꺼 두었어요."
+        elif it["id"] == "weee" and not cfg.get("weee_urls"):
             ready, note = False, "설정 › 수집 설정에 Weee! 주소가 없어요."
         if it["id"] == "channel_reviews" and not channel_reviews.load_sources():
-            ready, note = False, "리뷰 상품 주소가 없어요 (data/review_sources.json)."
+            ready, note = False, "리뷰를 받을 알디콤 제품 주소가 없어요. 인사이트 담당자에게 알려 주세요."
         items.append(dict(it, ready=ready, missing=missing, cost=estimate(it["id"], cfg), note=note))
     return {"items": items, "keys": keys, "usage": month_usage(), "limits": LIMITS, "running": jobs.is_running(JOB),
             "lastRun": service.last_run(), "reviewMonth": review_month(service.today()), "week": week_key(service.today())}
@@ -153,7 +155,7 @@ def start(items, user, options=None):
     """options: 경쟁사 분석용 {force: 상위 15개 모두 다시 조사, only: 경쟁사 id 한 곳}."""
     items = [i for i in ORDER if i in set(items)]
     if not items:
-        raise ValueError("업데이트할 항목을 하나 이상 고르세요.")
+        raise ValueError("받을 항목을 하나 이상 고르세요.")
     # 잠금 파일은 뒤 작업이 시작돼야 생겨서, 막 시작한 실행 기록(2분 안)도 함께 확인 (두 번 누름 방지)
     fresh = Run.query.filter(Run.status == "running", Run.started_at >= utcnow() - timedelta(minutes=2)).first()
     if jobs.is_running(JOB) or fresh is not None:

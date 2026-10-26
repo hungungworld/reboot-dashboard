@@ -308,7 +308,7 @@ def _references(snap, job, plan, include_char, has_base):
     picked = assets.product_flavors_of(dec, pids, repository.products_index())
     per_product = {pid: f if len(f) < len(assets.FLAVOR_ORDER) else plan.get("flavors") or [] for pid, f in picked.items()}
     return assets.pick_refs(pids, flavors=said, per_product=per_product, character=include_char,
-                            limit=cap - (1 if has_base else 0))
+                            limit=cap - (1 if has_base else 0), skip=assets.ref_skip_of(dec))
 
 
 def _ref_lines(refs, facts, first_index):

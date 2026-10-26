@@ -117,4 +117,4 @@ def report(names, today, start=None, end=None):
     return {"dummy": True, "source": source, "start": start.isoformat(), "end": end.isoformat(),
             "range": {"min": lo.isoformat(), "max": hi.isoformat()}, "unitPrice": UNIT_PRICE, "currency": "USD",
             "creators": rows, "daily": [daily[d] for d in days], "totals": totals,
-            "note": "더미 데이터 — Shopify 할인코드 주문·UTM 방문 연동 전 가상값입니다 (환불 주문 제외)."}
+            "note": "Shopify · UTM 연동 전 (환불 주문 제외)"}

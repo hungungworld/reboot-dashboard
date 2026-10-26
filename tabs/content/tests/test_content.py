@@ -709,7 +709,7 @@ def test_manual_version_final_and_export(auth_client):
     names = z.namelist()
     assert {"00_README.txt", "campaign.md", "facts.json", "versions.json", "settings.json"} <= set(names)
     every = "\n".join(z.read(n).decode("utf-8") for n in names)
-    assert "승인본이 아닙니다" in every and "final-2026-10-25" in every and "최종본으로 지정됨 (승인 아님)" in every
+    assert "승인본이 아니에요" in every and "final-2026-10-25" in every and "최종본으로 지정됨 (승인 아님)" in every
     assert '"zero_sugar": true' in every and "+kit-2026-10-25" in every  # 브랜드 키트 값 (Balance = Zero Sugar)
     assert "sk-" not in every and "OPENAI_API_KEY" not in every and "password" not in every.lower()
     one = auth_client.get(f"/api/content/campaigns/{cid}/export?version={v['id']}")
@@ -784,7 +784,7 @@ def test_meta_connections_and_check(auth_client, monkeypatch):
     assert meta["connections"]["higgsfield"]["key"] is False and meta["video"]["resolution"] == "720p"
     assert set(meta["imageProviders"]) == {"openai", "higgsfield"} and set(meta["video"]["modes"]) == {"plan_only", "higgsfield"}
     out = auth_client.get("/api/content/meta/check").get_json()
-    assert out["openai"]["ok"] is False and "키가 없습니다" in out["openai"]["message"]  # 키 없으면 네트워크 호출 없음
+    assert out["openai"]["ok"] is False and "키가 없어요" in out["openai"]["message"]  # 키 없으면 네트워크 호출 없음
     assert out["higgsfield"]["checked"] is False and out["higgsfield"]["ok"] is False
     monkeypatch.setattr(providers, "check_connection", lambda: {"ok": True, "message": "확인", "models": {"m": True}})
     assert auth_client.get("/api/content/meta/check").get_json()["openai"]["ok"] is True
@@ -1030,6 +1030,19 @@ def test_product_flavors_from_sheet_and_patch(auth_client):
     res = auth_client.patch(f"/api/content/campaigns/{c['id']}", json={
         "expected_revision": c["revision"], "sheet": {"brand_focus": True, "product_ids": [], "product_flavors": {}}})
     assert res.status_code == 200 and "product_flavors" not in res.get_json()["campaign"]["decisions"]
+
+
+def test_ref_skip_from_sheet_and_pick_refs(auth_client):
+    ids = lambda refs: [a["id"] for a in refs]
+    assert "jelly-original-pouch-front" not in ids(assets.pick_refs(["jelly_original"], skip=["jelly-original-pouch-front"]))
+    camp = create(auth_client, brand_focus=False, product_ids=["jelly_original"], ref_skip=["jelly-original-pouch-front"])
+    assert camp["refSkip"] == ["jelly-original-pouch-front"] and camp["decisions"]["ref_skip"]["status"] == "confirmed"
+    for bad in (["no-such-photo"], "jelly-original-pouch-front"):
+        res = auth_client.post("/api/content/campaigns", json=sheet(product_ids=["jelly_original"], ref_skip=bad))
+        assert res.status_code == 400, bad
+    res = auth_client.patch(f"/api/content/campaigns/{camp['id']}", json={
+        "expected_revision": camp["revision"], "sheet": {"ref_skip": []}})
+    assert res.status_code == 200 and res.get_json()["campaign"]["refSkip"] == []
 
 
 def test_image_uses_sheet_flavor_photos(auth_client, ai, sync_jobs, monkeypatch):

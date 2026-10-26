@@ -5,7 +5,8 @@
   rawHtml에서 별점(채운 반쪽 별 수 ÷ 2) · 본문 · 날짜를 읽고, 리뷰가 10개를 넘으면 'More' 버튼을 (리뷰 수 ÷ 10 − 1)번 눌러 끝까지 받음
   (Firecrawl 'click' 동작은 이 버튼에 먹지 않아 executeJavascript로 누름 — 2026-10 실측)
   영어 리뷰가 0개인 상품은 사이트가 한국 리뷰를 대신 보여 주므로 아무것도 읽지 않음. 읽은 수도 영어 리뷰 수를 넘지 않게 자름
-- Amazon: SerpApi 상품 조회의 대표 리뷰(최대 8개) + 별점 · 평가 수. 아마존 전체 리뷰 목록은 로그인해야 보여서 대표 리뷰만
+- Amazon: SerpApi 상품 조회의 대표 리뷰 + 별점 · 평가 수 + 전체 리뷰 기준 별점 분포 · 주제(amazon.save_stats).
+  아마존 전체 리뷰 목록은 로그인해야 보여서 리뷰 본문은 대표 리뷰만
   (매주 대표 리뷰가 바뀌면 새 것만 더해짐). 진열대 수집이 같은 리뷰를 경쟁사로 먼저 넣었어도 자사로 바꿔 둠
 - Yami: 리뷰가 없으면 'containerNoComment' 표시만 확인 (1크레딧). 있으면 Firecrawl JSON 추출로 읽음
 - 작성자 이름은 저장하지 않음. 전체 리뷰 수 · 평균 별점은 kv 'channel_review_stats'
@@ -173,6 +174,8 @@ def _amazon(serp_key, asin):
     det = amazon.product(serp_key, asin)
     if det is None:
         raise CollectError("SerpApi가 상품을 찾지 못했어요.")
+    amazon.save_stats([{"asin": asin, "title": det["title"], "brand": det.get("brand", ""), "own": True, "rating": det["rating"],
+                        "reviews": det["reviews"], "stars": det.get("stars") or [], "aspects": det.get("aspects") or []}])
     return {"id": asin, "title": det["title"], "total": det["reviews"], "avg": det["rating"], "calls": 1, "credits": 0,
             "warnings": [], "reviews": [{"rating": r["rating"], "title": r["title"], "text": r["text"], "date": r["date_text"]}
                                         for r in det["review_rows"]]}

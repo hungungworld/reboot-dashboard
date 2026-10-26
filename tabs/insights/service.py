@@ -140,12 +140,12 @@ def shelf_view():
     oos = [x for x in now if x["in_stock"] is False]
     if now:
         parts = [f"{BUCKET_LABEL[k]} {len(v)}개" for k, v in groups.items()]
-        one = f"진열대 상품 {len(now)}개 · 1회분 단가 " + " / ".join(parts)
+        one = f"진열대 제품 {len(now)}개 · 1회분 단가 " + " / ".join(parts)
         if own:
             ps = [x["perServing"] for x in own if x["perServing"] is not None]
-            one += f" · 자사 {len(own)}개" + (f" (1회분 {'$%.2f' % min(ps)}~)" if ps else "")
+            one += f" · 알디콤 {len(own)}개" + (f" (1회분 {'$%.2f' % min(ps)}~)" if ps else "")
         else:
-            one += " · 자사 상품은 아직 진열대에서 찾지 못했어요"
+            one += " · 알디콤 제품은 아직 진열대에서 찾지 못했어요"
         if oos:
             one += f" · 품절 {len(oos)}개"
     else:
@@ -535,7 +535,7 @@ def monthly_view(month=None, t=None):
 
 SEVERITY = {"부작용": 3, "효과": 2}   # 나머지 주제는 1
 CHECK_TOPICS = {"부작용"}              # 순위와 따로 CS · 컴플라이언스가 확인
-PRIORITY_BASIS = "자사 불만 리뷰 건수 × 심각도(부작용 3 · 효과 2 · 나머지 1) · 규칙 계산 · 참고용"
+PRIORITY_BASIS = "알디콤 불만 리뷰 건수 × 심각도(부작용 3 · 효과 2 · 나머지 1) · 규칙 계산 · 참고용"
 
 
 def _recent_reviews():
@@ -689,12 +689,12 @@ def _analysis_view(now, prev, cols, watch, total):
     own_items = [x for x in now if x["own"]]
     own = None
     if own_items:
-        own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤 (자사)", own=True,
-                   tierLabel="자사", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
+        own = dict(competitors.brand_facts(own_items, stored, yt, "aldicom"), id=None, brand="알디콤", own=True,
+                   tierLabel="알디콤", analysis={}, analyzed=False, status="active", watched=False, deep=False, onShelf=True)
     changes, changes_demo = comp_changes(now, prev)
     analyzed = sum(1 for d in rows if d["analyzed"])
     chans = sorted({ch["label"] for d in rows for ch in d["channels"]})
-    one = (f"경쟁사 {len(rows)}개 (분석 {analyzed}개) · 판매 채널 {' · '.join(chans) or '없음'}"
+    one = (f"경쟁 브랜드 {len(rows)}개 (분석 {analyzed}개) · 판매처 {' · '.join(chans) or '없음'}"
            + (f" · 이번 주 변화 {len(changes)}건" + (" (예시)" if changes_demo else "") if changes else "")
            + (f" · 주시 중 {len(watch)}개" if watch else "")) if total or rows else ""
     return {"oneLine": one, "own": own, "table": rows, "substitutes": subs, "archived": archived, "changes": changes, "changesDemo": changes_demo,
@@ -703,7 +703,7 @@ def _analysis_view(now, prev, cols, watch, total):
             "aiReady": insights_ai.ready(), "firecrawlReady": envkeys.has("FIRECRAWL_API_KEY"), "deepTop": competitors.DEEP_TOP}
 
 
-EXPORT_HEAD = [("brand", "브랜드"), ("tier", "구분"), ("status", "상태"), ("channels", "판매 채널 (최저가)"),
+EXPORT_HEAD = [("brand", "브랜드"), ("tier", "구분"), ("status", "상태"), ("channels", "판매처 (최저가)"),
                ("perServing", "1회분 최저 ($)"), ("forms", "제형"), ("reviews", "진열대 리뷰 수"), ("praise", "고객 칭찬"),
                ("complaint", "고객 불만"), ("youtube", "유튜브 언급")] + list(competitors.FIELDS) + [
                ("website", "홈페이지"), ("sources", "출처"), ("researched_at", "조사일(UTC)")]
@@ -761,13 +761,128 @@ def _channel_stats():
     return sorted(out, key=lambda x: (x.get("channel", ""), x.get("line", "")))
 
 
+# 아마존 'Customers say' 주제 → 우리 주제 (낱말이 들어 있으면). 없는 주제는 셈에서 뺌
+ASPECT_TOPIC = (("효과", ("effective", "hangover", "life-saving", "energy", "recovery", "works", "feel")),
+                ("맛·향", ("taste", "flavor", "drink", "refresh", "smell")),
+                ("가격", ("value", "price", "cost")),
+                ("부작용", ("side effect", "digest", "stomach", "headache")),
+                ("복용 편의", ("ease", "easy", "convenien", "portab", "size", "swallow")))
+
+
+def aspect_topic(name):
+    n = str(name or "").lower()
+    return next((t for t, words in ASPECT_TOPIC if any(w in n for w in words)), None)
+
+
+def _clip(s, n):
+    s = str(s or "").strip()
+    return s if len(s) <= n else s[:n - 1].rstrip() + "…"
+
+
+def _quote(rows, topic, s):
+    """그 주제 · 반응의 가장 최근 리뷰 한 개 (한국어 요약이 있으면 화면이 그것을 먼저)."""
+    r = next((r for r in rows if r.sentiment == s and topic in r.topic_list()), None)
+    return {"id": r.id, "ko": r.summary_ko, "text": _clip(f"{r.title} — {r.text}" if r.title else r.text, 160),
+            "rating": r.rating, "s": s} if r else None
+
+
+def _side(rows, amazon_items, site):
+    """고객 화면 맨 위 카드 한쪽(알디콤 · 경쟁사): 평점 · 별점 분포 · 주제별 칭찬/불만 · 한 줄 답 · 인용.
+    amazon_items가 있으면 별점 · 주제는 아마존 전체 리뷰 기준(같은 숫자를 받은 옵션 상품은 한 번만), 없으면 모은 리뷰로."""
+    topics = {t: {"pos": 0, "neg": 0} for t in TOPICS}
+    if amazon_items:
+        seen, uniq = set(), []
+        for x in amazon_items:   # 옵션(색 · 개수)만 다른 상품은 아마존이 같은 숫자를 줌
+            k = (x.get("brand"), x.get("reviews"), x.get("rating"))
+            if k not in seen:
+                seen.add(k)
+                uniq.append(x)
+        weight = sum(x.get("reviews") or 0 for x in uniq) or 1
+        rated = [x for x in uniq if x.get("rating") is not None]
+        rating = round(sum(x["rating"] * (x.get("reviews") or 0) for x in rated) / weight, 1) if rated else None
+        stars = {s: 0.0 for s in range(5, 0, -1)}
+        for x in uniq:
+            for s in x.get("stars") or []:
+                stars[s["stars"]] += (s.get("percent") or 0) * (x.get("reviews") or 0) / weight
+        for x in uniq:
+            best = {}   # 한 상품 안에서 같은 우리 주제는 언급이 가장 많은 것 하나만 (Effectiveness · Hangover relief 겹침)
+            for a in x.get("aspects") or []:
+                t = aspect_topic(a["name"])
+                if t and (a.get("total") or 0) > (best.get(t, {}).get("total") or 0):
+                    best[t] = a
+            for t, a in best.items():
+                topics[t]["pos"] += a.get("pos") or 0
+                topics[t]["neg"] += a.get("neg") or 0
+        count, basis = sum(x.get("reviews") or 0 for x in uniq), f"아마존 {len({x.get('brand') for x in uniq})}개 브랜드"
+        star_list = [{"stars": s, "percent": round(p)} for s, p in stars.items()]
+    else:
+        for r in rows:
+            for t in r.topic_list():
+                if t in topics and r.sentiment in ("+", "-"):
+                    topics[t]["pos" if r.sentiment == "+" else "neg"] += 1
+        rs = [round(r.rating) for r in rows if r.rating is not None]
+        star_list = [{"stars": s, "percent": round(rs.count(s) / len(rs) * 100) if rs else 0} for s in range(5, 0, -1)]
+        tot = sum(v.get("total") or 0 for v in site if v.get("avg") is not None)
+        rating = (round(sum(v["avg"] * (v.get("total") or 0) for v in site if v.get("avg") is not None) / tot, 1) if tot
+                  else round(sum(rs) / len(rs), 1) if rs else None)
+        count = len(rows)
+        basis = " · ".join(dict.fromkeys(REVIEW_SOURCE_LABEL.get(r.source, r.source) for r in rows))
+    tl = [{"name": t, **v, "pct": round(v["pos"] / (v["pos"] + v["neg"]) * 100)} for t, v in topics.items() if v["pos"] or v["neg"]]
+    # 한 줄 답: 칭찬 비율이 가장 높은 주제 · 불만 비율이 가장 높은 주제 (언급이 전체의 5% · 5개 이상인 주제 중)
+    floor = max(5, sum(x["pos"] + x["neg"] for x in tl) * 0.05)
+    big = [x for x in tl if x["pos"] + x["neg"] >= floor]
+    top_pos = max(big, key=lambda x: (x["pct"], x["pos"]), default=None)
+    top_neg = min((x for x in big if x is not top_pos and x["neg"]), key=lambda x: (x["pct"], -x["neg"]), default=None)
+    return {"rating": rating, "count": count, "basis": basis, "stars": star_list, "topics": tl,
+            "topPos": {"name": top_pos["name"], "n": top_pos["pos"], "pct": top_pos["pct"]} if top_pos else None,
+            "topNeg": {"name": top_neg["name"], "n": top_neg["neg"], "pct": 100 - top_neg["pct"]} if top_neg else None,
+            "quotes": [q for q in (top_pos and _quote(rows, top_pos["name"], "+"),
+                                   top_neg and _quote(rows, top_neg["name"], "-")) if q]}
+
+
+# 한 줄 답에 쓰는 고객 말투: 주제 → (칭찬, 불만)
+VOICE = {"효과": ("효과가 좋다", "효과를 못 느꼈다"), "맛·향": ("맛이 좋다", "맛이 별로다"),
+         "복용 편의": ("먹기 편하다", "먹기 불편하다"), "가격": ("값어치를 한다", "비싸다"), "부작용": ("부작용이 없다", "몸이 불편했다")}
+
+
+def _voice(side):
+    """'먹기 편하다'는 평이 85%, '맛이 별로다'는 불만이 38%예요 — 쪽(side)에 voicePos · voiceNeg · line을 붙임."""
+    p, n = side["topPos"], side["topNeg"]
+    side["voicePos"] = p and {"text": VOICE[p["name"]][0], "pct": p["pct"], "topic": p["name"]}
+    side["voiceNeg"] = n and {"text": VOICE[n["name"]][1], "pct": n["pct"], "topic": n["name"]}
+    parts = [f"'{v['text']}'는 {k}이 {v['pct']}%" for v, k in ((side["voicePos"], "평"), (side["voiceNeg"], "불만")) if v]
+    side["line"] = ", ".join(parts) + "예요" if parts else ""
+    return side
+
+
+def customer_summary(rows):
+    """{own, brands, compareDefault}: 알디콤은 우리가 모은 리뷰 (평점은 사이트 숫자),
+    경쟁사는 브랜드마다 따로 (아마존 전체 리뷰 기준). 제품이 서로 달라 평균으로 묶지 않음."""
+    site = list(kv_get("channel_review_stats", {}).values())
+    by_brand = defaultdict(list)
+    for x in kv_get("amazon_review_stats", {}).values():
+        if not x.get("own") and x.get("brand"):
+            by_brand[x["brand"]].append(x)
+    watch = _watch_set()
+    brands = []
+    for name, items in by_brand.items():
+        b = _voice(_side([], items, []))
+        if b["topics"]:   # 아마존이 주제를 안 주는 (리뷰 적은) 상품만 있는 브랜드는 뺌
+            brands.append({"brand": name, "watched": name.lower() in watch, **{k: b[k] for k in (
+                "rating", "count", "stars", "topics", "voicePos", "voiceNeg", "line")}})
+    brands.sort(key=lambda b: -(b["count"] or 0))
+    pick = next((b for b in brands if b["watched"]), brands[0] if brands else None)
+    return {"own": _voice(_side([r for r in rows if r.own], [], site)), "brands": brands,
+            "compareDefault": pick["brand"] if pick else None}
+
+
 def reviews_view():
     rows = Review.query.order_by(Review.collected_at.desc()).limit(2000).all()
     watch = _watch_set()
     brands = {}
     items = []
     for r in rows:
-        key = "자사 (알디콤)" if r.own else (r.brand or guess_brand(r.product_title) or "브랜드 미상")
+        key = "알디콤" if r.own else (r.brand or guess_brand(r.product_title) or "브랜드 미상")
         b = brands.setdefault(key, {"brand": key, "own": r.own, "watched": key.lower() in watch, "total": 0,
                                     "topics": {t: {"pos": 0, "neg": 0, "neu": 0} for t in TOPICS}, "ratings": []})
         b["total"] += 1
@@ -781,11 +896,13 @@ def reviews_view():
                           "sourceLabel": REVIEW_SOURCE_LABEL.get(r.source, r.source), "product": r.product_title[:200],
                           "rating": r.rating, "title": r.title, "text": r.text[:1500], "summaryKo": r.summary_ko,
                           "topics": r.topic_list(), "sentiment": r.sentiment, "date": r.date_text, "by": r.classified_by})
-    table = sorted(brands.values(), key=lambda b: (not b["own"], not b["watched"], -b["total"]))[:12]
+    table = sorted(brands.values(), key=lambda b: (not b["own"], not b["watched"], -b["total"]))
     for b in table:
         b["avgRating"] = round(sum(b["ratings"]) / len(b["ratings"]), 2) if b["ratings"] else None
         b.pop("ratings")
     summaries = [{"asin": k, **v} for k, v in kv_get("amazon_summaries", {}).items()]
+    # 아마존 전체 리뷰로 낸 별점 분포 · 주제 (상품별) — 자사 먼저, 평가 많은 순
+    amazon_stats = sorted(kv_get("amazon_review_stats", {}).values(), key=lambda x: (not x.get("own"), -(x.get("reviews") or 0)))
     one = ""
     if rows:
         neg = Counter(t for r in rows if r.sentiment == "-" for t in r.topic_list())
@@ -801,7 +918,7 @@ def reviews_view():
         s = shared.get(str(x["id"])) or {}
         x["slackBy"], x["slackAt"] = s.get("by", ""), s.get("at")
     return {"oneLine": one, "table": table, "topics": list(TOPICS), "items": items, "summaries": summaries,
-            "cs": cs, "csStatus": list(CS_STATUS.items()), "lines": list(channel_reviews.LINES), "channels": _channel_stats(),
+            "amazonStats": amazon_stats, "summary": customer_summary(rows), "cs": cs, "csStatus": list(CS_STATUS.items()), "lines": list(channel_reviews.LINES), "channels": _channel_stats(),
             "stats": {"total": len(rows), "amazon": sum(1 for r in rows if r.source == "amazon"),
                       "oliveyoung": sum(1 for r in rows if r.source == "oliveyoung"),
                       "yami": sum(1 for r in rows if r.source == "yami"),

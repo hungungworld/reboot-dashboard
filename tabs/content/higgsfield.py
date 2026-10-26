@@ -38,7 +38,7 @@ def ready():
 def _headers():
     key = (envkeys.get("HIGGSFIELD_API_KEY") or "").strip()
     if not key:
-        raise ProviderError("Higgsfield 키가 없습니다. 설정 › 연결에서 HIGGSFIELD_API_KEY를 넣어 주세요.", 503)
+        raise ProviderError("Higgsfield 키가 없어요. 설정 › 연결에서 Higgsfield 키를 넣어 주세요.", 503)
     if key.lower().startswith("key "):
         key = key[4:].strip()
     return {"Authorization": f"Key {key}", "Content-Type": "application/json", "Accept": "application/json"}
@@ -58,16 +58,16 @@ def _check(res, what):
         return
     detail = _detail(res)
     if res.status_code in (401, 403):
-        raise ProviderError(f"Higgsfield 키가 올바르지 않거나 권한이 없습니다 ({res.status_code}"
+        raise ProviderError(f"Higgsfield 키가 올바르지 않거나 권한이 없어요 ({res.status_code}"
                             + (f" · {detail}" if detail else "") + " · 설정 › 연결 확인).", 503)
     if res.status_code == 402:
-        raise ProviderError("Higgsfield 크레딧이 부족합니다. 충전 후 다시 요청하세요.", 402)
+        raise ProviderError("Higgsfield 크레딧이 부족해요. 충전 후 다시 요청하세요.", 402)
     if res.status_code == 404:
-        raise ProviderError(f"Higgsfield에서 {what}을 찾지 못했습니다.", 404)
+        raise ProviderError(f"Higgsfield에서 {what}을 찾지 못했어요.", 404)
     if res.status_code == 429:
-        raise ProviderError("Higgsfield 요청이 많거나 사용 한도를 넘었습니다. 잠시 뒤 다시 요청하세요.", 429)
+        raise ProviderError("Higgsfield 요청이 많거나 사용 한도를 넘었어요. 잠시 뒤 다시 요청하세요.", 429)
     if res.status_code < 500:
-        raise ProviderError(f"Higgsfield가 {what} 요청을 받지 않았습니다" + (f" ({detail})." if detail else "."), 400)
+        raise ProviderError(f"Higgsfield가 {what} 요청을 받지 않았어요" + (f" ({detail})." if detail else "."), 400)
     raise ProviderError(f"Higgsfield 서버 오류 ({res.status_code}). 잠시 뒤 다시 요청하세요.", 502)
 
 
@@ -76,14 +76,14 @@ def submit(model_path, body):
     try:
         res = requests.post(f"{BASE}/{model_path}", json=body, headers=_headers(), timeout=TIMEOUT)
     except (requests.Timeout, requests.ConnectionError):
-        raise SubmissionUnknown("Higgsfield 응답을 받지 못했습니다. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않습니다.", 504)
+        raise SubmissionUnknown("Higgsfield 응답을 받지 못했어요. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않아요.", 504)
     _check(res, "생성")
     try:
         rid = res.json().get("request_id")
     except ValueError:
         rid = None
     if not rid:
-        raise SubmissionUnknown("Higgsfield가 요청 ID를 주지 않았습니다. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않습니다.", 502)
+        raise SubmissionUnknown("Higgsfield가 요청 ID를 주지 않았어요. 생성 여부를 확인할 수 없어 자동으로 다시 제출하지 않아요.", 502)
     return str(rid)
 
 
@@ -102,7 +102,7 @@ def cancel(request_id):
     try:
         res = requests.post(f"{BASE}/requests/{request_id}/cancel", headers=_headers(), timeout=TIMEOUT)
     except (requests.Timeout, requests.ConnectionError):
-        raise ProviderError("Higgsfield에 연결하지 못해 취소 요청을 보내지 못했습니다.", 502)
+        raise ProviderError("Higgsfield에 연결하지 못해 취소 요청을 보내지 못했어요.", 502)
     if res.status_code == 400:
         return False
     _check(res, "취소")
@@ -119,11 +119,11 @@ def upload_ref(path, content_type):
         with open(path, "rb") as f:
             put = requests.put(d["upload_url"], data=f.read(), headers=d.get("upload_headers") or {}, timeout=60)
     except (requests.Timeout, requests.ConnectionError):
-        raise ProviderError("참고 사진을 Higgsfield에 올리지 못했습니다 (연결 확인). 생성 요청은 보내지 않았습니다.", 502)
+        raise ProviderError("참고 사진을 Higgsfield에 올리지 못했어요 (연결 확인). 생성 요청은 보내지 않았어요.", 502)
     except (KeyError, ValueError, TypeError):
-        raise ProviderError("Higgsfield 업로드 주소를 읽지 못했습니다. 생성 요청은 보내지 않았습니다.", 502)
+        raise ProviderError("Higgsfield 파일 올리기 주소를 읽지 못했어요. 생성 요청은 보내지 않았어요.", 502)
     if put.status_code >= 300:
-        raise ProviderError(f"참고 사진 업로드 실패 ({put.status_code}). 생성 요청은 보내지 않았습니다.", 502)
+        raise ProviderError(f"참고 사진을 올리지 못했어요 ({put.status_code}). 생성 요청은 보내지 않았어요.", 502)
     return d["public_url"]
 
 
@@ -132,15 +132,15 @@ def download(url):
     try:
         with requests.get(url, timeout=120, stream=True) as res:
             if res.status_code >= 400:
-                raise ProviderError(f"결과 파일을 받지 못했습니다 ({res.status_code}).", 502)
+                raise ProviderError(f"결과 파일을 받지 못했어요 ({res.status_code}).", 502)
             data = bytearray()
             for chunk in res.iter_content(1024 * 256):
                 data.extend(chunk)
                 if len(data) > DOWNLOAD_MAX:
-                    raise ProviderError("결과 파일이 너무 큽니다.", 502)
+                    raise ProviderError("결과 파일이 너무 커요.", 502)
             return bytes(data)
     except (requests.Timeout, requests.ConnectionError):
-        raise ProviderError("결과 파일을 받는 중 연결이 끊겼습니다.", 502)
+        raise ProviderError("결과 파일을 받는 중 연결이 끊겼어요.", 502)
 
 
 def nearest_ratio(ratio_text, allowed, default):
@@ -162,13 +162,13 @@ def nearest_ratio(ratio_text, allowed, default):
 def check_connection():
     """키가 실제로 동작하는지 — 없는 요청 ID 상태 조회 (생성 비용 없음). 반환: {ok, checked, message}"""
     if not ready():
-        return {"ok": False, "checked": False, "message": "HIGGSFIELD_API_KEY가 없어요 (설정 › 연결)."}
+        return {"ok": False, "checked": False, "message": "Higgsfield 키가 없어요. 설정 › 연결에서 Higgsfield 키를 넣어 주세요."}
     try:
         res = requests.get(f"{BASE}/requests/{uuid.uuid4()}/status", headers=_headers(), timeout=15)
     except (requests.Timeout, requests.ConnectionError):
-        return {"ok": False, "checked": False, "message": "Higgsfield 서버에 연결하지 못했습니다 (인터넷 확인)."}
+        return {"ok": False, "checked": False, "message": "Higgsfield 서버에 연결하지 못했어요 (인터넷 확인)."}
     if res.status_code in (401, 403):
-        return {"ok": False, "checked": True, "message": "Higgsfield 키가 올바르지 않습니다 (KEY_ID:KEY_SECRET 형식 확인)."}
+        return {"ok": False, "checked": True, "message": "Higgsfield 키가 올바르지 않아요 (설정 › 연결에서 키 형식 확인)."}
     if res.status_code in (200, 404):
         return {"ok": True, "checked": True, "message": "Higgsfield 키를 확인했어요."}
     return {"ok": False, "checked": True, "message": f"Higgsfield 서버 오류 ({res.status_code})."}

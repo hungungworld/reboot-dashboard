@@ -214,7 +214,7 @@
           <div class="weekdays home-cal-weekdays" aria-hidden="true">${['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => `<span>${d}</span>`).join('')}</div>
           <div class="calendar-large" aria-label="${y}년 ${m}월 콘텐츠 캘린더 (미국 시즌 · 준비 시작일)">${html.join('')}</div>
         </div>
-        <p class="source-label">시즌 일정은 설정 › 수집 설정의 시즌 캘린더에서 고칩니다. 준비 시작일 = 시즌 시작일 − 준비 기간.</p>
+        <p class="source-label">시즌 일정은 설정 › 수집 설정의 시즌 캘린더에서 고쳐요. 준비 시작일 = 시즌 시작일 − 준비 기간.</p>
       </section>
       <section class="card section-gap"><div class="card-head"><h2>다가오는 일정</h2>${badge(`시즌 ${upcoming.length}개`)}</div>
         <div class="home-sched-grid">${upcoming.length ? upcoming.map(item).join('') : '<p class="panel-note">다가오는 시즌이 없어요. 설정 › 수집 설정에서 추가하세요.</p>'}</div></section>`;
@@ -237,12 +237,12 @@
       <div class="home-surge-body">${inner}<a class="link" href="/dashboard/settings#collect">시즌 편집 (설정)</a></div></details>`;
     let d;
     try { d = await REBOOT.api('/api/insights/data/trends'); } catch (e) {
-      box.innerHTML = fold(`<p class="panel-note">불러오지 못했어요: ${esc(e.message)}</p>`);
+      box.innerHTML = fold(`<p class="panel-note">급등 예상을 불러오지 못했어요. ${esc(e.message)}</p>`);
       delete box.dataset.loaded;
       return;
     }
     const next = ((d && d.next) || []).map(n => `<li><div class="between"><b>${esc(n.name)}</b><span class="flex">${n.opportunity ? badge('기회', 'green') : ''}<span class="small muted">${esc(fmt.dday(n.start))}</span></span></div>
-      <small>${n.lift ? esc(`작년 같은 시기 '${n.lift.keyword}' 검색이 12개월 평균 대비 ${fmt.signed(n.lift.pct, 0, '%')} (${n.lift.date} 주)`) : '작년 같은 시기 데이터 없음'}</small></li>`).join('');
+      <small>${n.lift ? esc(`작년 같은 시기 '${n.lift.keyword}' 검색이 12개월 평균 대비 ${fmt.signed(n.lift.pct, 0, '%')} (${n.lift.date} 주)`) : '작년 같은 시기 데이터가 없어요.'}</small></li>`).join('');
     box.innerHTML = fold(next ? `<ul class="home-surge-list">${next}</ul>` : '<p class="panel-note">모니터링 중인 다가오는 시즌이 없어요.</p>');
   }
 
@@ -253,9 +253,9 @@
       const { items } = await REBOOT.api('/api/worklog?limit=5');
       box.innerHTML = (items || []).length
         ? items.map(x => `<li>${esc(x.action)}${x.status === '실패' ? ` ${badge('실패', 'red')}` : ''}<small>${esc(partLabel(x.part))} · ${esc(fmt.relative(x.at))} · ${esc(x.user)}</small></li>`).join('')
-        : '<li>아직 기록이 없습니다.<small>작업을 하면 여기에 쌓입니다.</small></li>';
+        : '<li>아직 기록이 없어요.<small>작업을 하면 여기에 쌓여요.</small></li>';
     } catch (e) {
-      box.innerHTML = `<li>활동을 불러오지 못했습니다.<small>${esc(e.message)}</small></li>`;
+      box.innerHTML = `<li>활동을 불러오지 못했어요.<small>${esc(e.message)}</small></li>`;
     }
   }
 
@@ -309,7 +309,7 @@
     const sig = S.signals ? S.signals.items.slice().sort((a, b) => (a.grade === '긴급' ? 0 : 1) - (b.grade === '긴급' ? 0 : 1)) : [];
     const open = t.items.filter(i => !i.done).length;
     ref('todo-count').textContent = t.items.length || sig.length ? `${open + sig.length}개` : '';
-    const how = !t.generated ? '아직 만들지 않음' : t.origin === 'ai' ? 'AI 할 일은 시즌·뉴스·현황 종합 (참고용)' : `규칙으로 생성${t.aiReady ? '' : ' (AI 미연결)'}`;
+    const how = !t.generated ? '아직 만들지 않음' : t.origin === 'ai' ? 'AI 할 일은 시즌·뉴스·현황 종합 (참고용)' : `규칙으로 생성${t.aiReady ? '' : ' (AI 연결 안 됨)'}`;
     ref('todo-meta').textContent = `${md(t.week.start)} — ${md(t.week.end)} · ${sig.length ? '긴급 → 기회 → 홈 할 일 · ' : ''}${how}`;
     const sigBlock = sig.length ? `<div class="home-signals">${sig.map(signalHtml).join('')}</div>` : '';
     list.innerHTML = t.items.length || sig.length ? sigBlock + t.items.map(todoHtml).join('') : ui.empty('이번 주 할 일이 없어요. + 로 추가하거나 다시 만들기를 누르세요.', 'check');
@@ -334,19 +334,19 @@
       S.todos = data;
       paintTodos();
     } catch (e) {
-      ref('todos').innerHTML = `<p class="note error">할 일을 불러오지 못했습니다: ${esc(e.message)}</p>`;
+      ref('todos').innerHTML = `<p class="note error">할 일을 불러오지 못했어요. ${esc(e.message)}</p>`;
     }
   }
   async function regenerate(btn) {
-    const ok = await ui.confirm('완료하지 않은 자동 항목을 새로 만듭니다. 직접 추가한 항목과 완료한 항목은 그대로 둡니다.', { ok: '다시 만들기' });
+    const ok = await ui.confirm('완료하지 않은 자동 항목을 새로 만들어요. 직접 추가한 항목과 완료한 항목은 그대로 둬요.', { ok: '다시 만들기' });
     if (!ok) return;
     busy(btn, true);
     try {
       const data = await REBOOT.api('/api/home/todos/generate', { auto: false, context: await buildContext() });
       S.todos = data;
       paintTodos();
-      toast(data.warning || (data.origin === 'ai' ? 'AI가 이번 주 할 일을 다시 만들었습니다 (참고용).' : '규칙으로 이번 주 할 일을 다시 만들었습니다.'), data.warning ? 'error' : undefined);
-    } catch (e) { toast(e.message, 'error'); }
+      toast(data.warning || (data.origin === 'ai' ? 'AI가 이번 주 할 일을 다시 만들었어요 (참고용).' : '규칙으로 이번 주 할 일을 다시 만들었어요.'), data.warning ? 'error' : undefined);
+    } catch (e) { toast(`할 일을 다시 만들지 못했어요: ${e.message}`, 'error'); }
     busy(btn, false);
   }
   async function toggleTodo(id, done, box) {
@@ -359,17 +359,17 @@
       paintTodos();
     } catch (e) {
       if (box) box.checked = !done;
-      toast(e.message, 'error');
+      toast(`완료 표시를 바꾸지 못했어요: ${e.message}`, 'error');
     }
   }
   async function deleteTodo(id) {
     const item = S.todos.items.find(i => String(i.id) === String(id));
-    if (!item || !(await ui.confirm(`'${item.title}'을(를) 지울까요?`, { ok: '지우기', danger: true }))) return;
+    if (!item || !(await ui.confirm(`'${item.title}'을(를) 삭제할까요?`, { ok: '삭제', danger: true }))) return;
     try {
       await REBOOT.api(`/api/home/todos/${encodeURIComponent(id)}`, undefined, { method: 'DELETE' });
       S.todos.items = S.todos.items.filter(i => i !== item);
       paintTodos();
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(`할 일을 삭제하지 못했어요: ${e.message}`, 'error'); }
   }
   async function addTodo(form) {
     const title = form.querySelector('[name="title"]').value.trim();
@@ -383,19 +383,19 @@
       form.reset();
       form.hidden = true;
       paintTodos();
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(`할 일을 추가하지 못했어요: ${e.message}`, 'error'); }
     busy(btn, false);
   }
 
   /* ───────── 미국 시장 브리핑 (업계 뉴스 · 트렌드) ───────── */
   function newsBadges(n) {
     const out = [];
-    if (n.running) out.push(badge('수집 중…', 'blue'));
-    else if (n.status === 'failed') out.push(badge('업데이트 실패', 'red'));
-    else if (n.status === 'partial') out.push(badge('일부 실패', 'orange'));
-    else if (n.status === 'never') out.push(badge('수집 전', 'orange'));
+    if (n.running) out.push(badge('받는 중…', 'blue'));
+    else if (n.status === 'failed') out.push(badge('받기 실패', 'red'));
+    else if (n.status === 'partial') out.push(badge('일부 받기 실패', 'orange'));
+    else if (n.status === 'never') out.push(badge('받기 전', 'orange'));
     if (n.ai) out.push(badge('AI 요약 · 참고용', 'purple'));
-    else if (!n.aiReady) out.push(badge('AI 요약 미연결'));
+    else if (!n.aiReady) out.push(badge('AI 요약 연결 안 됨'));
     else if (n.aiStatus === 'error') out.push(badge('AI 요약 실패', 'orange'));
     return out.join(' ');
   }
@@ -404,7 +404,7 @@
   }
   // 규제 기사는 컴플라이언스 탭으로 바로 (표시 문구 점검)
   const isRegulation = a => a.area === 'regulation' || a.topic === '규제·정책';
-  const compLink = a => (isRegulation(a) ? `<a class="home-comp-link" href="/dashboard/compliance">컴플라이언스에서 점검 ${icon('arrow')}</a>` : '');
+  const compLink = a => (isRegulation(a) ? `<a class="home-comp-link" href="/dashboard/compliance">컴플라이언스에서 문구 심의 ${icon('arrow')}</a>` : '');
 
   /* 기사 보관 (책갈피): /api/home/news/saved — 브리핑 아래 '보관함 N건'을 누르면 창으로 모아 봄 (openSaved) */
   const BOOKMARK = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17l-6-4.2-6 4.2z"/></svg>';
@@ -435,7 +435,7 @@
         S.saved = [s].concat(S.saved.filter(x => x.url !== url));
         toast('보관했어요. 브리핑 아래 보관함에서 볼 수 있어요.');
       }
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(`보관 상태를 바꾸지 못했어요: ${e.message}`, 'error'); }
     paintNews();
   }
 
@@ -488,7 +488,7 @@
         toast('보관을 해제했어요.');
         paint();
         paintNews();
-      } catch (err) { toast(err.message, 'error'); busy(u, false); }
+      } catch (err) { toast(`보관을 해제하지 못했어요: ${err.message}`, 'error'); busy(u, false); }
     });
     paint();
     ui.modal({ title: `보관한 기사 ${fmt.num((S.saved || []).length)}건`, body: box, wide: true, actions: [{ label: '닫기', value: null }] });
@@ -511,12 +511,12 @@
     const change = q => { const s = sig[q.id]; return !s ? '' : `${s.surge ? badge('급증', 'orange') + ' ' : ''}${s.changePct != null ? esc(fmt.signed(s.changePct, 0, '%')) : '—'}`; };
     const flagged = list.filter(q => q.replace).length;
     const rows = list.map(q => `<tr><td>${esc(q.areaLabel)}${q.kind === 'signal' ? ' ' + badge('자리 보장', 'lime') : ''}</td>
-      <td>${q.feed ? `${badge('RSS')} ${esc(q.label)}` : `<code>${esc(q.query)}</code>`}</td><td class="num">${fmt.num(q.found)}</td><td class="num">${fmt.num(q.kept)}</td>
+      <td>${q.feed ? `${badge('업계지 피드')} ${esc(q.label)}` : `<code>${esc(q.query)}</code>`}</td><td class="num">${fmt.num(q.found)}</td><td class="num">${fmt.num(q.kept)}</td>
       <td class="num">${fmt.num(q.picked)}</td><td class="num">${change(q)}</td><td>${q.replace ? badge('교체 후보', 'orange') : ''}</td></tr>`).join('');
     return `<details class="home-qstats"><summary>검색어 점검 (최근 60일)${flagged ? ` · 교체 후보 ${flagged}개` : ''}</summary>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>분야</th><th>검색어 · 피드</th><th class="num">찾은 기사</th><th class="num">규칙 통과</th><th class="num">카드</th><th class="num" title="최근 7일 vs 그 전 7일 기사 수">보도 변화</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-      <p class="panel-note">30일 동안 고른 기사가 0개면 교체 후보예요. 검색어 · 피드는 tabs/home/data/queries.json에서 바꿔요.</p></details>`;
+      <p class="panel-note">30일 동안 고른 기사가 0개면 교체 후보예요. 검색어 · 피드를 바꾸려면 홈 담당자에게 요청해 주세요.</p></details>`;
   }
 
   /* 미국 시장 브리핑 — 3초 안에 훑어보기 (2026-10-25 다시 설계)
@@ -579,8 +579,8 @@
     ref('news-sub').textContent = sub;
     if (!n.lastSuccessAt && !(n.articles || []).length) {
       const msg = n.running ? '첫 브리핑을 준비하고 있어요 (보통 1분 안팎).'
-        : n.status === 'never' ? '아직 받은 브리핑이 없어요. 오른쪽 위 새로고침을 누르면 보통 1분 안팎 걸려요.'
-          : '아직 받은 브리핑이 없어요 (마지막 수집 실패). 잠시 뒤 새로고침을 다시 눌러 주세요.';
+        : n.status === 'never' ? '아직 받은 브리핑이 없어요. 오른쪽 위 최신 데이터 받기를 누르면 보통 1분 안팎 걸려요.'
+          : '아직 받은 브리핑이 없어요 (마지막 받기 실패). 잠시 뒤 최신 데이터 받기를 다시 눌러 주세요.';
       body.innerHTML = ui.empty(msg, 'mail');
     } else if (!list.length) {
       body.innerHTML = `<p class="panel-note home-brief-empty">${n.ai ? '이번에는 마케팅과 관련된 기사를 찾지 못했어요.' : '최근 7일 기사가 없어요.'}</p>`;
@@ -590,7 +590,7 @@
       const rest = list.filter(a => a !== lead);
       const rows = rest.map((a, i) => rowHtml(a, i + (lead ? 2 : 1), read.has(a.url)));
       body.innerHTML = `${lead ? leadHtml(lead, read.has(lead.url)) : ''}${rows.length ? `<div class="home-rows">${newsList(rows, k)}</div>` : ''}
-        ${!n.ai ? (n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약 실패: ${esc(n.aiError)} — 다음 수집 때 다시 시도합니다.</p>` : '')
+        ${!n.ai ? (n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약을 만들지 못했어요: ${esc(n.aiError)} — 다음에 받을 때 다시 시도해요.</p>` : '')
           : '<p class="panel-note mt-8">지금은 최근 기사 제목만 보여 줘요(관련 없는 기사가 섞일 수 있어요). 설정 › 연결에 OpenAI 키를 넣으면 관련 기사만 골라 정리해요.</p>') : ''}`;
     }
     ref('news-tabs').innerHTML = n.ai && all.length ? kindTabs(k, flow.length, trend.length) : '';
@@ -619,7 +619,7 @@
       paintNews();
       if (S.news.running) startPolling();
     } catch (e) {
-      ref('news-body').innerHTML = `<p class="note error">뉴스를 불러오지 못했습니다: ${esc(e.message)}</p>`;
+      ref('news-body').innerHTML = `<p class="note error">뉴스를 불러오지 못했어요. ${esc(e.message)}</p>`;
     }
   }
   function startPolling() {
@@ -633,7 +633,7 @@
       S.poll = null;
       await loadNews();
       const ok = st.lastRun && st.lastRun.status !== 'failed';
-      toast(ok ? '뉴스 수집을 마쳤습니다.' : '뉴스를 새로 받지 못했습니다. 마지막 결과를 그대로 보여 줍니다.', ok ? undefined : 'error');
+      toast(ok ? '최신 뉴스를 받았어요.' : '뉴스를 새로 받지 못했어요. 마지막 결과를 그대로 보여 줘요.', ok ? undefined : 'error');
       paintActivity();
     }, 4000);
   }
@@ -641,12 +641,12 @@
     busy(btn, true);
     try {
       await REBOOT.api('/api/home/news/collect', {});
-      toast('뉴스 수집을 시작했습니다. 보통 1분 안팎 걸립니다.');
+      toast('최신 뉴스를 받기 시작했어요. 보통 1분 안팎 걸려요.');
       S.news = Object.assign({}, S.news, { running: true });
       paintNews();
       startPolling();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`최신 뉴스를 받지 못했어요: ${e.message}`, 'error');
       busy(btn, false);
       if (e.status === 409) startPolling();
     }
@@ -741,7 +741,7 @@
             </section>
             <section class="card home-brief" aria-label="미국 시장 브리핑">
               <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="home-brief-sub" data-ref="news-sub"></span></div>
-                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="지금 받기" title="지금 받기">${icon('refresh')}</button></div>
+                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button></div>
               <div class="home-brief-tabs" data-ref="news-tabs"></div>
               <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
               <div data-ref="news-errors"></div>
@@ -845,7 +845,7 @@
         D.todos = t;
         D.signals = sig;
       }
-      catch (e) { const list = q('list'); if (list) list.innerHTML = `<p class="note error">할 일을 불러오지 못했습니다: ${esc(e.message)}</p>`; return; }
+      catch (e) { const list = q('list'); if (list) list.innerHTML = `<p class="note error">할 일을 불러오지 못했어요. ${esc(e.message)}</p>`; return; }
       finally { D.loading = false; }
       paint();
     }
@@ -866,18 +866,18 @@
           if (it) { Object.assign(it, u); t.items.sort((a, b) => (a.done - b.done)); }
         });
         if (S.root && S.todos) paintTodos(); else paint();
-      } catch (e) { box.checked = !done; toast(e.message, 'error'); }
+      } catch (e) { box.checked = !done; toast(`완료 표시를 바꾸지 못했어요: ${e.message}`, 'error'); }
     }
     function mount() {
       if (D.el || !doc.body || !REBOOT.user || !REBOOT.user()) return;
       D.el = doc.createElement('div');
       D.el.className = 'home-dock';
       D.el.innerHTML = `
-        <button type="button" class="home-fab" data-dock="fab" aria-expanded="false" aria-controls="home-dock-panel" aria-label="이번 주 To-Do 열기">
+        <button type="button" class="home-fab" data-dock="fab" aria-expanded="false" aria-controls="home-dock-panel" aria-label="이번 주 할 일 열기">
           ${icon('check')}<span class="home-fab-count" data-dock="count" hidden></span></button>
         <div class="home-dock-scrim" data-dock="scrim" hidden></div>
         <aside class="home-dock-panel" id="home-dock-panel" data-dock="panel" role="dialog" aria-modal="true" aria-labelledby="home-dock-title" hidden>
-          <div class="home-dock-head"><h2 id="home-dock-title">이번 주 To-Do <span class="muted small" data-dock="left"></span></h2>
+          <div class="home-dock-head"><h2 id="home-dock-title">이번 주 할 일 <span class="muted small" data-dock="left"></span></h2>
             <button type="button" class="home-dock-close" data-dock="close" aria-label="닫기">${icon('x')}</button></div>
           <p class="panel-note" data-dock="meta"></p>
           <div class="home-dock-list" data-dock="list"></div>
