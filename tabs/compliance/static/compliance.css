@@ -250,7 +250,9 @@
 .part-compliance .cmp-agency h5 { margin: 6px 0 0; font-size: 12px; font-weight: 550; color: var(--cmp-faint); letter-spacing: .2px; }
 .part-compliance .cmp-agency ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12px; line-height: 1.65; }
 .part-compliance .cmp-agency a, .part-compliance .cmp-terms a { color: var(--cmp-link); }
-.part-compliance .cmp-ex { margin: 0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.part-compliance .cmp-ex { margin: 0; font-size: 12px; display: flex; gap: 6px; align-items: flex-start; }
+.part-compliance .cmp-ex .cmp-badge { flex: none; min-width: 92px; justify-content: center; box-sizing: border-box; }
+.part-compliance .cmp-ex code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .part-compliance .cmp-terms { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
 .part-compliance .cmp-terms div { background: var(--cmp-soft); border-radius: var(--radius-sm); padding: 14px 16px; }
 .part-compliance .cmp-terms dt { font-weight: 650; font-size: 13px; }

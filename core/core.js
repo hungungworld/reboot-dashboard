@@ -492,6 +492,8 @@
      - 옮긴 탭 줄은 화면에서 숨김 (.is-subnav-mirrored). 탭이 바뀌면(aria-selected · class) 왼쪽도 따라 바뀜
      - 탭 패널 안의 두 번째 탭 줄(예: 인사이트 › 데이터의 세부 탭)은 고른 항목 아래에 들여 써서 보여 줌
      - 옮기지 않을 탭 줄: data-subnav="off" · 아이콘 없이 순서대로 01, 02 … 번호를 붙임
+     - 탭에 data-group="이름"이 있으면 묶음이 바뀌는 자리에 회색 작은 이름표를 넣음 (누르는 항목 아님)
+     - data-quiet가 있는 탭은 흐린 글씨 (자주 안 가는 관리 화면)
      - 탭이 없는 파트는 서버가 그린 기본 항목(파트 이름) 하나가 그대로 보임 */
   const isOn = el => el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' ||
     el.classList.contains('active') || el.classList.contains('selected') || el.classList.contains('is-active');
@@ -510,7 +512,7 @@
     });
     let label = c.textContent.replace(/\s+/g, ' ').trim() || el.textContent.replace(/\s+/g, ' ').trim();
     label = label.replace(/^[^\p{L}\p{N}]+/u, '').trim();  // 앞의 이모지·기호 (🔎 업체 컨택 → 업체 컨택)
-    return { el, label, count, on: isOn(el), disabled: !!el.disabled };
+    return { el, label, count, on: isOn(el), disabled: !!el.disabled, group: el.dataset.group || '', quiet: 'quiet' in el.dataset };
   }
   function hiddenUpTo(el, root) {
     for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (p.hidden) return true;
@@ -527,16 +529,17 @@
     [primary, nested].forEach(l => { if (l && !l.classList.contains('is-subnav-mirrored')) l.classList.add('is-subnav-mirrored'); });
     const items = Array.from(primary.querySelectorAll('[role="tab"]')).map(tabInfo);
     const subs = nested ? Array.from(nested.querySelectorAll('[role="tab"]')).map(tabInfo) : [];
-    const sig = JSON.stringify([items.map(i => [i.label, i.count, i.on, i.disabled]), subs.map(i => [i.label, i.on, i.disabled])]);
+    const sig = JSON.stringify([items.map(i => [i.label, i.count, i.on, i.disabled, i.group]), subs.map(i => [i.label, i.on, i.disabled])]);
     navState.items = items;
     navState.subs = subs;
     if (sig === navState.sig) return;
     navState.sig = sig;
     // 아이콘 없이 이름 + 오른쪽 번호(01, 02 …). 세부 메뉴는 번호 없이 이름만
-    const btn = (it, key, no) => `<button type="button" data-subnav="${key}" class="${it.on ? 'active' : ''}${it.count ? ' has-count' : ''}"` +
+    const btn = (it, key, no) => `<button type="button" data-subnav="${key}" class="${it.on ? 'active' : ''}${it.count ? ' has-count' : ''}${it.quiet ? ' sub-quiet' : ''}"` +
       `${it.on ? ' aria-current="page"' : ''}${it.disabled ? ' disabled' : ''}><span class="label">${esc(it.label)}</span>` +
       `${it.count ? `<span class="sub-count">${esc(it.count)}</span>` : ''}${no ? `<span class="sub-no" aria-hidden="true">${no}</span>` : ''}</button>`;
-    box.innerHTML = items.map((it, i) => btn(it, 'p' + i, String(i + 1).padStart(2, '0')) +
+    const groupLabel = (it, i) => it.group && (i === 0 || items[i - 1].group !== it.group) ? `<div class="sub-section-label">${esc(it.group)}</div>` : '';
+    box.innerHTML = items.map((it, i) => groupLabel(it, i) + btn(it, 'p' + i, String(i + 1).padStart(2, '0')) +
       (it.on && subs.length ? `<div class="nested">${subs.map((s, j) => btn(s, 's' + j)).join('')}</div>` : '')).join('');
     const on = items.find(x => x.on);
     const subOn = subs.find(x => x.on);
@@ -572,6 +575,114 @@
     const toggle = $('menu-toggle');
     if (side) side.classList.remove('open');
     if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  /* ───────── 표: 머리글 끝을 끌어 칸 너비 조절 · 마우스 휠로 가로 스크롤 (모든 탭 공통) ─────────
+     - 탭이 직접 너비 조절을 붙인 표(data-cols)는 건드리지 않음
+     - 너비는 이 브라우저에 표(머리글 이름)별로 기억, 손잡이를 두 번 누르면 처음 너비로 */
+  const COLW_KEY = 'reboot-colw';
+  const colwAll = () => { try { return JSON.parse(global.localStorage.getItem(COLW_KEY)) || {}; } catch (e) { return {}; } };
+  const colwSave = (key, w) => {
+    const all = colwAll();
+    if (w) all[key] = w; else delete all[key];
+    try { global.localStorage.setItem(COLW_KEY, JSON.stringify(all)); } catch (e) { /* 저장 못 해도 화면은 그대로 */ }
+  };
+  const headRow = t => (t.tHead && t.tHead.rows.length === 1 ? t.tHead.rows[0] : null);
+  const tableKey = t => (current || '') + ':' + [...headRow(t).cells].map(c => c.textContent.trim()).join('|');
+  function setColWidths(table, w) {
+    let group = table.querySelector(':scope > colgroup');
+    if (!group || group.children.length !== w.length) {
+      if (group) group.remove();
+      group = doc.createElement('colgroup');
+      group.innerHTML = w.map(() => '<col>').join('');
+      table.insertBefore(group, table.firstChild);
+    }
+    [...group.children].forEach((c, i) => { c.style.width = w[i] + 'px'; });
+    table.style.width = w.reduce((a, b) => a + b, 0) + 'px';
+    table.classList.add('rb-fixed');
+  }
+  function enhanceTable(table) {
+    if (table.dataset.rbCols || table.dataset.cols) return;
+    table.dataset.rbCols = '1';
+    const row = headRow(table);
+    if (!row || [...row.cells].some(c => c.colSpan > 1)) return;
+    const box = table.parentElement;
+    if (box && !/auto|scroll/.test(getComputedStyle(box).overflowX)) {
+      const wrap = doc.createElement('div');
+      wrap.className = 'table-wrap';
+      box.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    }
+    [...row.cells].forEach((th, i) => {
+      th.classList.add('rb-col-th');
+      th.insertAdjacentHTML('beforeend', `<span class="rb-col-rs" data-col="${i}" title="끌어서 칸 너비 조절 · 두 번 누르면 처음대로" aria-hidden="true"></span>`);
+    });
+    const saved = colwAll()[tableKey(table)];
+    if (Array.isArray(saved) && saved.length === row.cells.length) setColWidths(table, saved);
+  }
+  function enhanceTables() {
+    doc.querySelectorAll('#part-root table, .modal table, dialog table').forEach(enhanceTable);
+  }
+  function watchTables() {
+    enhanceTables();
+    let queued = false;
+    if (global.MutationObserver) {
+      new global.MutationObserver(() => {
+        if (queued) return;
+        queued = true;
+        setTimeout(() => { queued = false; enhanceTables(); }, 30);
+      }).observe(doc.body, { subtree: true, childList: true });
+    }
+    doc.addEventListener('mousedown', e => {
+      const h = e.target.closest && e.target.closest('.rb-col-rs');
+      if (!h) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const table = h.closest('table');
+      const i = Number(h.dataset.col);
+      const w = [...headRow(table).cells].map(c => Math.round(c.getBoundingClientRect().width));
+      setColWidths(table, w);
+      const x0 = e.clientX, w0 = w[i];
+      let moved = false;
+      h.classList.add('on');
+      const move = ev => {
+        moved = true;
+        w[i] = Math.max(48, Math.round(w0 + ev.clientX - x0));
+        setColWidths(table, w);
+      };
+      const up = () => {
+        doc.removeEventListener('mousemove', move);
+        doc.removeEventListener('mouseup', up);
+        h.classList.remove('on');
+        if (moved) colwSave(tableKey(table), w);
+      };
+      doc.addEventListener('mousemove', move);
+      doc.addEventListener('mouseup', up);
+    }, true);
+    // 손잡이를 눌러도 머리글 정렬 등이 같이 눌리지 않게
+    doc.addEventListener('click', e => { if (e.target.closest && e.target.closest('.rb-col-rs')) { e.preventDefault(); e.stopPropagation(); } }, true);
+    doc.addEventListener('dblclick', e => {
+      const h = e.target.closest && e.target.closest('.rb-col-rs');
+      if (!h) return;
+      const table = h.closest('table');
+      colwSave(tableKey(table), null);
+      const group = table.querySelector(':scope > colgroup');
+      if (group) group.remove();
+      table.style.width = '';
+      table.classList.remove('rb-fixed');
+    }, true);
+    // 표가 옆으로 넘치면 휠(위아래)을 가로 스크롤로 — 끝에 닿으면 원래대로 화면이 내려감
+    doc.addEventListener('wheel', e => {
+      if (e.ctrlKey || e.shiftKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      const wrap = e.target.closest && e.target.closest('.table-wrap');
+      if (!wrap || wrap.scrollHeight > wrap.clientHeight + 1) return;
+      const max = wrap.scrollWidth - wrap.clientWidth;
+      if (max < 2) return;
+      const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? wrap.clientWidth : 1);
+      if ((dy > 0 && wrap.scrollLeft >= max - 1) || (dy < 0 && wrap.scrollLeft <= 0)) return;
+      e.preventDefault();
+      wrap.scrollLeft += dy;
+    }, { passive: false });
   }
 
   /* ───────── 시작: 현재 파트 그리기 · 메뉴 숫자 · 상단 바 ───────── */
@@ -696,6 +807,7 @@
         watchNav(root);
       }
     }
+    watchTables();
     updateCounts();
     // 파트가 비동기로 값을 바꿀 수 있어 한 번 더
     setTimeout(updateCounts, 1500);
