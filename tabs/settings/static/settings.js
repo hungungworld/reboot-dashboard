@@ -16,7 +16,7 @@
   const TAB_IDS = TABS.map(t => t[0]);
   const BRAND_FIELDS = ['name', 'base_company', 'market', 'founded', 'intro', 'slogan', 'colors', 'character', 'cm_song', 'category'];
   const PRODUCT_EDIT = ['category', 'form', 'flavors', 'pack', 'direction', 'ingredients', 'allergens', 'volume',
-    'usage', 'consumer_name', 'price', 'cost', 'evidence', 'notes'];
+    'usage', 'consumer_name', 'price', 'cost', 'evidence', 'notes', 'pack_count', 'price_box', 'sugar', 'calories'];
   const SRC_FIELDS = [['flavors', '맛'], ['ingredients', '성분'], ['allergens', '알레르기 성분'], ['volume', '용량'], ['pack', '포장'],
     ['usage', '섭취법'], ['form', '제형'], ['category', '제품 분류'], ['etc', '기타']];
   const CORE_KEYS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'SERPAPI_KEY', 'YOUTUBE_API_KEY', 'FIRECRAWL_API_KEY'];
@@ -457,12 +457,13 @@
       ? `근거 확인 ${list.filter(p => p.evidence === '확인 완료').length}/${list.length}`
       : '';
     box.innerHTML = list.length ? `
-      <div class="table-wrap"><table class="data-table set-ptable"><thead><tr><th>제품</th><th>제형</th><th>맛</th><th>가격 ${badge('예시', 'orange')}</th><th>원가 ${badge('예시', 'orange')}</th><th>근거</th><th></th></tr></thead><tbody>
+      <div class="table-wrap"><table class="data-table set-ptable"><thead><tr><th>제품</th><th>제형 · 포장</th><th>맛</th><th>가격</th><th>당류 · 열량</th><th>원가 ${badge('예시', 'orange')}</th><th>근거</th><th></th></tr></thead><tbody>
       ${list.map(p => `<tr>
-        <td><strong>${esc(p.ko || p.name)}</strong><span class="set-sub">${esc(p.code || p.id)}</span></td>
-        <td>${esc(p.form || '미정')}</td>
+        <td><strong>${esc(p.ko || p.name)}</strong><span class="set-sub">${esc(p.code || p.id)}${p.zero_sugar ? ' · Zero Sugar' : ''}</span></td>
+        <td>${esc(p.form || '미정')}<span class="set-sub">${esc([p.pack, p.volume].filter(Boolean).join(' · ') || '포장 미정')}</span></td>
         <td>${esc(p.flavors || '미정')}</td>
-        <td>${money(p.price)}</td>
+        <td>${money(p.price)}${p.price_box != null && p.price_box !== '' ? `<span class="set-sub">3병 박스 ${esc(fmt.usd(Number(p.price_box)))}</span>` : ''}</td>
+        <td><span class="set-sub">당류 ${esc(p.sugar || '미정')}</span><span class="set-sub">열량 ${esc(p.calories || '미정')}</span></td>
         <td>${money(p.cost)}</td>
         <td>${evidenceBadge(p)}</td>
         <td><button type="button" class="btn small" data-act="product" data-id="${esc(p.id)}">${icon('edit')}수정</button></td>
@@ -491,12 +492,15 @@
         <div class="field-grid">${field('제품 분류', inp('category', p.category))}${field('제형', inp('form', p.form))}</div>
         <div class="field-grid">${field('맛', inp('flavors', p.flavors), '기사 · 공식 정보 기준')}${field('포장', inp('pack', p.pack))}</div>
         <div class="field-grid">${field('용량', inp('volume', p.volume))}${field('개발 방향', inp('direction', p.direction))}</div>
+        <div class="field-grid">${field('개수 (1봉지 · 묶음)', inp('pack_count', p.pack_count))}${group('Zero Sugar 표시', toggle('name="zero_sugar"', !!p.zero_sugar, 'Zero Sugar 사용'), "Balance 2종만 · 'Not a low calorie food'와 함께")}</div>
+        <div class="field-grid">${field('당류', inp('sugar', p.sugar), '측정 전이면 비워 두세요')}${field('열량', inp('calories', p.calories), '측정 전이면 비워 두세요')}</div>
         ${field('성분', area('ingredients', p.ingredients, 2), '모르면 비워 두세요 (출처 필수)')}
         ${field('알레르기 성분', inp('allergens', p.allergens))}
         ${field('섭취법', area('usage', p.usage, 2))}
         <div class="field-grid">${field('소비자용 영문명', inp('consumer_name', p.consumer_name), '미정이면 "미정"')}${group('근거 상태', toggle('name="evidence"', p.evidence === '확인 완료', '근거 확인 완료'), '출처가 하나도 없으면 켤 수 없어요')}</div>
         <div class="field-grid">
-          <label class="set-fld"><span class="field-label">가격 (USD) ${badge('예시', 'orange')}</span>${inp('price', p.price, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
+          <label class="set-fld"><span class="field-label">가격 (USD · 낱개 · 1봉지)</span>${inp('price', p.price, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
+          <label class="set-fld"><span class="field-label">3병 박스 가격 (USD)</span>${inp('price_box', p.price_box, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
           <label class="set-fld"><span class="field-label">원가 (USD) ${badge('예시', 'orange')}</span>${inp('cost', p.cost, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
         </div>
         <div class="set-fld">
@@ -532,7 +536,9 @@
     const body = {};
     PRODUCT_EDIT.forEach(k => { const f = el.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
     body.evidence = el.querySelector('[name="evidence"]').checked ? '확인 완료' : '확인 필요';
-    for (const k of ['price', 'cost']) {
+    body.zero_sugar = el.querySelector('[name="zero_sugar"]').checked;
+    if (/^\d+$/.test(body.pack_count)) body.pack_count = Number(body.pack_count);   // 10 → 숫자 · '1 (낱개) · 3 (박스)'는 글자 그대로
+    for (const k of ['price', 'cost', 'price_box']) {
       if (body[k] !== '' && !(Number(body[k]) >= 0)) throw new Error('가격 · 원가는 0 이상의 숫자(달러)로 입력하세요.');
     }
     const sources = $$(el, '.set-src-row').map(r => ({
