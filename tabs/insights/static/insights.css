@@ -864,3 +864,8 @@
   .part-insights .ins-rh-t { grid-template-columns: 72px minmax(0, 1fr) 84px; }
   .part-insights .ins-rh-b { grid-template-columns: 1fr auto; }
 }
+
+/* 처리할 일 배지 (진열대 수집 · 고치기): 누르면 그 행만 · 다시 누르면 전체 */
+.part-insights button.ins-todo { border: 1px solid transparent; font-family: inherit; cursor: pointer; }
+.part-insights button.ins-todo:hover { border-color: currentColor; }
+.part-insights button.ins-todo[aria-pressed="true"] { background: var(--orange); color: #fff; }
