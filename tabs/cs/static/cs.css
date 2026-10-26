@@ -205,7 +205,7 @@
 .part-cs .cs-ok { color: var(--cs-green); font-weight: 650; margin: 0; font-size: 12px; }
 .part-cs .cs-warn { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--cs-orange-bg); color: var(--cs-orange); font-size: 12px; line-height: 1.7; }
 .part-cs .cs-warn-text { color: var(--cs-orange); font-size: 12px; }
-.part-cs .cs-summary { margin: 0; font-size: 12px; }
+.part-cs .cs-summary { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0; font-size: 12px; }
 
 /* 부작용 접수 */
 .part-cs .cs-adverse { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
@@ -247,9 +247,11 @@
 .part-cs .cs-trblock { display: grid; gap: 6px; justify-items: start; }
 .part-cs .cs-btn.cs-btn-sm { font-size: 11px; padding: 7px 10px; border-radius: var(--radius-sm); }
 .part-cs .cs-btn.cs-btn-tr::before { content: "가A"; font-weight: 700; color: var(--cs-link); }
-.part-cs .cs-tr { border-left: 2px solid var(--cs-accent); padding: 4px 12px; display: grid; gap: 4px; }
-.part-cs .cs-tr-tag { font-size: 11px; font-weight: 650; color: var(--cs-link); letter-spacing: .3px; }
-.part-cs .cs-tr-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+/* 번역 결과 = 차트 말풍선과 같은 모양 (컴플라이언스 .cmp-tr · 인사이트 .ins-sw-tip과 같은 값) */
+.part-cs .cs-tr { display: grid; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--surface); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.part-cs .cs-tr-tag { font-size: 11px; font-weight: 700; color: inherit; }
+.part-cs .cs-tr-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; color: inherit; }
+.part-cs .cs-tr .cs-muted { margin: 0; font-size: 11px; color: inherit; opacity: .7; }
 .part-cs .cs-warn a { color: inherit; font-weight: 700; }
 
 @media (max-width: 1200px) {

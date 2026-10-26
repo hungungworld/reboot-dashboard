@@ -161,7 +161,7 @@ def daily_monitor():
     _collect_and_save(bodies=True)
 
 
-# ───────── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 1회용 링크로 회신 받음 ─────────
+# ───────── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 팀별 링크(14일)로 회신 받음 ─────────
 #   POST /api/compliance/review-requests   {text, ko?, channel, product?, aiVerdict?, teams:[legal|regulatory|quality], memo?}
 #                                          → {request, links:{팀: 링크}, slack:{ok, error}} (링크는 이 응답에서만 보임)
 #   GET  /api/compliance/review-requests   최근 요청과 팀별 회신 상태

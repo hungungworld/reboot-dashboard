@@ -179,7 +179,8 @@ def campaigns_create():
                      if data.get("use_character") and sheet["content_type"] in assets.CHARACTER_TYPES else None)
         flavors = (assets.norm_product_flavors(data["product_flavors"], sheet["product_ids"], products)
                    if data.get("product_flavors") is not None and sheet["product_ids"] else None)
-        ref_skip = assets.norm_ref_skip(data["ref_skip"]) if data.get("ref_skip") and sheet["product_ids"] else None
+        ref_skip = (assets.norm_ref_skip(data["ref_skip"])
+                    if data.get("ref_skip") and repository.ref_product_ids(sheet) else None)
     except ValueError as e:
         raise ApiError(str(e))
     try:  # 브라우저에 저장된 새 캠페인 기본값 — 이상하면 기본값으로
@@ -986,17 +987,23 @@ def cardnews_bg_start(cid):
         raise ApiError("배경을 만들 카드를 하나 이상 골라 주세요.")
     if len(items) > cardnews.BG_MAX:
         raise ApiError(f"한 번에 {cardnews.BG_MAX}장까지 만들 수 있어요.")
-    if not providers.ready():
+    provider = data.get("provider") or repository.settings_of(c).get("image_provider") or "openai"
+    if provider not in O.IMAGE_PROVIDERS:
+        raise ApiError("이미지 AI는 OpenAI · Higgsfield 중에서 골라 주세요.")
+    if provider == "higgsfield" and not higgsfield.ready():   # OpenAI로 자동 전환하지 않음
+        raise ApiError("Higgsfield 키가 없어요. 설정 › 연결에서 키를 넣거나 이미지 AI를 OpenAI로 바꿔 주세요.", 503)
+    if provider == "openai" and not providers.ready():
         raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 AI 배경을 만들 수 있어요.", 503)
     busy = {j.snapshot.get("card_id") for j in cardnews.bg_jobs(cid) if j.status in repository.ACTIVE_JOB}
     items = [x for x in items if x["id"] not in busy]   # 이미 만드는 중인 카드는 다시 제출하지 않음 (중복 과금 방지)
     if not items:
         raise ApiError("고른 카드는 이미 배경을 만드는 중이에요.", 409)
-    made = cardnews.start_backgrounds(c, items, deck, user=_who())
+    made = cardnews.start_backgrounds(c, items, deck, user=_who(), provider=provider)
     if not made:
         raise ApiError("고른 카드를 덱에서 찾지 못했어요.")
     app = current_app._get_current_object()
     for j in made:
         cardnews.launch(app, j.id)
-    worklog.add("content", "기타", f"카드뉴스 AI 배경 요청 {len(made)}장: {c.title}", detail={"campaign": cid, "jobs": len(made)})
+    worklog.add("content", "기타", f"카드뉴스 AI 배경 요청 {len(made)}장: {c.title}",
+                detail={"campaign": cid, "jobs": len(made), "provider": provider})
     return jsonify(jobs=[cardnews.bg_dict(j) for j in made]), 202

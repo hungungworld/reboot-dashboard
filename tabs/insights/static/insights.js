@@ -98,7 +98,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit' }, weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1 }, chg: 'all',
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1, f: '' }, chg: 'all',
     rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, pf: 'all',
     sum: { q: '', dir: 1, page: 1 },   // 아마존 리뷰 요약 표 (제품 이름순)
     rvm: { sort: '', dir: 1 },         // 브랜드 × 주제 표 ('' = 서버 순서: 주시 중 → 리뷰 많은 순)
@@ -371,6 +371,7 @@
       case 'run-close': S.showResult = false; drawRun(S.run); break;
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'tbl-page': S.tbl.page = Number(d.p) || 1; drawShelfTable(); break;
+      case 'tbl-todo': S.tbl.f = S.tbl.f === d.f ? '' : d.f; S.tbl.page = 1; drawSub('edit'); break;
       case 'pf-tier': S.pf = d.k; drawSub('price'); break;
       case 'sw-zoom': if (S.swarm) zoomSwarm(d.z === 'fit' ? 1 : d.z === 'in' ? S.swarm.zoom * 1.5 : S.swarm.zoom / 1.5); break;
       case 'brand-go': openBrand(d.brand); break;
@@ -381,7 +382,7 @@
       case 'mk-more': S.mk.more = !S.mk.more; drawBrandTable(); break;
       case 'mk-ftog': S.mk[d.k] = !S.mk[d.k]; S.mk.page = 1; drawBrandTable(); break;
       case 'mk-fclear': Object.assign(S.mk, MK_F_EMPTY, { page: 1 }); drawBrandTable(); break;
-      case 'mk-fix': S.tbl.q = d.q || ''; S.tbl.page = 1; show('manage', 'edit'); toTop(); break;
+      case 'mk-fix': S.tbl.q = d.q || ''; S.tbl.f = ''; S.tbl.page = 1; show('manage', 'edit'); toTop(); break;
       case 'watch': toggleWatch(b, d.brand, d.on === '1'); break;
       case 'comp-discover': compAction(b, 'discover'); break;
       case 'comp-research-all': compAction(b, 'all'); break;
@@ -1347,14 +1348,17 @@
 
   // 표로 보기: 검색(상품명 · 브랜드 · 판매처) + 한 페이지 TABLE_PAGE개 — 검색창은 그대로 두고 표만 다시 그림
   const TABLE_PAGE = 5;
+  // 할 일 배지로 거르기: 회분을 못 읽은 행 · 묶음을 아직 확인 안 한 행
+  const TBL_TODO = { serv: x => x.servingsSource === 'default', line: x => x.line && !x.line.confirmed };
   function shelfTable(d) {
     const q = S.tbl.q.trim().toLowerCase();
-    const list = q ? d.items.filter(x => `${x.title} ${x.brand} ${x.sourceLabel}`.toLowerCase().includes(q)) : d.items;
+    const base = TBL_TODO[S.tbl.f] ? d.items.filter(TBL_TODO[S.tbl.f]) : d.items;
+    const list = q ? base.filter(x => `${x.title} ${x.brand} ${x.sourceLabel}`.toLowerCase().includes(q)) : base;
     const pages = Math.max(1, Math.ceil(list.length / TABLE_PAGE));
     S.tbl.page = Math.min(Math.max(1, S.tbl.page), pages);
     const cur = S.tbl.page;
     const shown = list.slice((cur - 1) * TABLE_PAGE, cur * TABLE_PAGE);
-    if (!shown.length) return `<p class="small muted">${q ? `'${esc(S.tbl.q.trim())}'에 맞는 제품이 없어요.` : '아직 받은 제품이 없어요. 위 최신 데이터 받기를 눌러 시작하세요.'}</p>`;
+    if (!shown.length) return `<p class="small muted">${q ? `'${esc(S.tbl.q.trim())}'에 맞는 제품이 없어요.` : base !== d.items ? '이 항목은 모두 처리했어요.' : '아직 받은 제품이 없어요. 위 최신 데이터 받기를 눌러 시작하세요.'}</p>`;
     const pager = compPager(cur, pages, list.length, (cur - 1) * TABLE_PAGE + 1, (cur - 1) * TABLE_PAGE + shown.length, 'tbl-page', '표 페이지');
     return `${q ? `<p class="small muted mb-8">검색 결과 ${list.length}개 (전체 ${d.items.length}개)</p>` : ''}
       <div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>제품</th><th>묶음 (브랜드 · 제형)</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>알디콤</th><th>변화</th><th></th></tr></thead><tbody>${shown.map(x => shelfRow(x, d)).join('')}</tbody></table></div>${pager}`;
@@ -1365,11 +1369,13 @@
   }
 
   // 데이터 관리 › 진열대 수집 · 고치기: 판매처별 수집 · 묶음 확인 · 표에서 바로 고치기 (시장 화면 숫자의 원본)
+  // 수량 표시 규칙: 총 개수는 제목 옆 작은 글씨, 처리할 일은 0보다 클 때만 배지(누르면 그 행만), 0이면 숨김
   function editHtml(d) {
-    const unserved = d.items.filter(x => x.servingsSource === 'default').length;
-    const unchecked = d.items.filter(x => x.line && !x.line.confirmed).length;
-    const one = d.items.length ? `제품 ${d.items.length}개 · 회분 확인 필요 ${unserved}개 · 묶음 확인 필요 ${unchecked}개` : '';
-    return qHead('edit', one) + runStatus() + `<section class="card mt-24">
+    const todo = [['serv', '회분 입력'], ['line', '묶음 확인']].map(([f, l]) => [f, l, d.items.filter(TBL_TODO[f]).length]).filter(t => t[2]);
+    if (!todo.some(t => t[0] === S.tbl.f)) S.tbl.f = '';
+    const chips = todo.map(([f, l, n]) => `<button type="button" class="badge orange ins-todo" data-act="tbl-todo" data-f="${f}" aria-pressed="${S.tbl.f === f}" title="${S.tbl.f === f ? '다시 누르면 전체 보기' : `${l}할 제품만 보기`}">${esc(l)} ${n}</button>`).join('');
+    return qHead('edit', '', '', d.items.length ? ' ' : '') + runStatus() + `<section class="card mt-24">
+      <div class="card-head"><h2>진열대 제품${d.items.length ? `<span class="head-cap">${d.items.length}개</span>` : ''}</h2>${chips ? `<div class="flex wrap">${chips}</div>` : ''}</div>
       <div class="flex wrap mb-16">
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 최신 데이터 받기</button>
         <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 최신 데이터 받기</button>
