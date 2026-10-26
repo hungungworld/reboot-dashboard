@@ -341,7 +341,9 @@
     redo: '<path d="M20 12a8 8 0 1 1-2.3-5.6L20 8.5"/><path d="M20 4v4.5h-4.5"/>',
     translate: '<path d="M4 6h9M8.5 4v2c0 4-2 7-4.5 8.5M6 9.5c1.3 2.2 3.3 3.8 5.5 4.5"/><path d="m13 20 4-9 4 9M14.5 17h5"/>',
     search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
-    chevron: '<path d="m6 9 6 6 6-6"/>'
+    chevron: '<path d="m6 9 6 6 6-6"/>',
+    sheet: '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16M4 15h16M10 9v12"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>'
   };
   function icon(name) {
     return `<svg class="cmp-icon" viewBox="0 0 24 24" aria-hidden="true">${ICON_PATH[name] || ''}</svg>`;
@@ -806,15 +808,20 @@
     <div class="cmp-ed-bottom"><span data-el="cattag">일반식품 기준 · 입력 즉시 점검</span>
       <span class="cmp-ed-links"><button type="button" class="cmp-link-btn" data-act="ko-toggle" aria-expanded="false">한국어로 쓰기</button>
         <button type="button" class="cmp-link-btn" data-act="sample">예시 넣기 ↗</button></span></div>
-    <details class="cmp-help"><summary>추가 검토가 필요할 때</summary>
-      <p class="cmp-muted">규칙이 놓친 위험은 AI 2차 심의로, 법무·인허가·품질팀 확인은 검토 요청으로 받아요.</p>
-      <div class="cmp-side-acts">
-        <button type="button" class="cmp-btn" data-act="ai" disabled title="먼저 문구를 입력하세요">${icon('spark')} AI 2차 심의</button>
-        <button type="button" class="cmp-btn" data-act="rq-open" disabled title="먼저 문구를 입력하세요">검토 요청</button>
-      </div>
-      <p class="cmp-side-note">AI 페르소나: <span data-el="persona-now"></span>
-        <button type="button" class="cmp-btn cmp-btn-sm" data-act="goto" data-goto="admin">페르소나 바꾸기</button></p>
-    </details>
+    <div class="cmp-more-acts" role="group" aria-labelledby="cmp-more-title">
+      <p class="cmp-more-title" id="cmp-more-title">더 확인하기</p>
+      <button type="button" class="cmp-act-row" data-act="ai" disabled title="영어 문구를 입력하면 쓸 수 있어요">
+        <span class="cmp-act-ico">${icon('spark')}</span>
+        <span class="cmp-act-txt"><b>AI 2차 심의</b><small>규칙이 놓친 위험을 AI가 한 번 더 확인해요</small></span>
+        <span class="cmp-act-go" aria-hidden="true">›</span></button>
+      <button type="button" class="cmp-act-row" data-act="rq-open" disabled title="영어 문구를 입력하면 쓸 수 있어요">
+        <span class="cmp-act-ico">${icon('sheet')}</span>
+        <span class="cmp-act-txt"><b>검토 요청 보내기 <span class="cmp-act-tag" data-el="rq-rec" hidden>권장</span></b>
+          <small>걸린 규칙을 담당 팀에 Slack으로 보내 회신을 받아요</small></span>
+        <span class="cmp-act-go" aria-hidden="true">›</span></button>
+      <p class="cmp-side-note">AI 검토 관점 · <b data-el="persona-now"></b>
+        <button type="button" class="cmp-link-btn right" data-act="goto" data-goto="admin">바꾸기</button></p>
+    </div>
   </section>
   <section class="cmp-card cmp-result-card" aria-label="점검 결과" aria-live="polite">
     <div data-el="sum"></div>
@@ -1184,11 +1191,12 @@
       el('ai').innerHTML = ai ? aiHTML(ai, s.r.verdict) : '';
       el('ai').dataset.key = aiKey;
     }
-    const rqBtn = p.querySelector('.cmp-side-acts [data-act="rq-open"]');
+    const rqBtn = p.querySelector('.cmp-more-acts [data-act="rq-open"]');
     rqBtn.disabled = !s.r;
-    rqBtn.title = s.r ? 'Slack으로 법무·인허가·품질팀에 이 문구 검토를 요청하고, 팀마다 회신 링크를 만들어요' : '먼저 문구를 입력하세요';
+    rqBtn.title = s.r ? 'Slack으로 법무·인허가·품질팀에 이 문구 검토를 요청하고, 팀마다 회신 링크를 만들어요' : '영어 문구를 입력하면 쓸 수 있어요';
+    el('rq-rec').hidden = !(s.r && s.r.legal === 'yellow');   // 법무 확인(회색지대)이면 검토 요청 권장
     paintReviews(p, j);
-    const aiBtn = p.querySelector('.cmp-side-acts [data-act="ai"]');
+    const aiBtn = p.querySelector('.cmp-more-acts [data-act="ai"]');
     serverHealth().then(h => {
       const busy = p.dataset.aiBusy === '1';
       const aiOk = !!(h && h.ai);
@@ -1196,7 +1204,7 @@
       aiBtn.disabled = busy || !s.r || !aiOk;
       aiBtn.title = !h ? '서버 상태를 확인하지 못했어요. 새로고침해 주세요 (키는 서버에만 있음)'
         : !h.ai ? 'AI 연결 안 됨 · 설정 › 연결에서 Claude(Anthropic) 키를 넣어 주세요'
-        : !s.r ? '먼저 문구를 입력하세요 (입력하면 자동 심의)' : 'Claude가 규칙이 놓친 위험과 더 안전한 문장을 참고용으로 제안해요';
+        : !s.r ? '영어 문구를 입력하면 쓸 수 있어요' : 'Claude가 규칙이 놓친 위험과 더 안전한 문장을 참고용으로 제안해요';
     });
     paintKpis(root);
   }

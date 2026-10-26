@@ -610,6 +610,25 @@
 .part-compliance .cmp-ed-links { display: flex; gap: 14px; }
 .part-compliance .cmp-link-btn { border: 0; background: none; padding: 0; color: var(--cmp-muted); font: inherit; font-size: 12px; cursor: pointer; justify-self: start; }
 .part-compliance .cmp-link-btn:hover { color: var(--cmp-ink); text-decoration: underline; }
+/* 추가 검토 (2026-10-26): ERP 메뉴처럼 한 줄씩 — 아이콘 · 이름 + 설명 · › */
+.part-compliance .cmp-more-acts { margin-top: 24px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); overflow: hidden; }
+.part-compliance .cmp-more-title { margin: 0; padding: 9px 14px; font-size: 12px; font-weight: 650; color: var(--cmp-muted); background: var(--cmp-soft); border-bottom: 1px solid var(--cmp-rule); }
+.part-compliance .cmp-act-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--cmp-rule);
+  background: var(--cmp-card); color: var(--cmp-ink); font: inherit; text-align: left; cursor: pointer; }
+.part-compliance .cmp-act-row:hover:not(:disabled) { background: var(--cmp-soft); }
+.part-compliance .cmp-act-row:disabled { cursor: not-allowed; }
+.part-compliance .cmp-act-row:disabled > * { opacity: .45; }
+.part-compliance .cmp-act-row:focus-visible { outline: 3px solid var(--cmp-focus); outline-offset: -3px; }
+.part-compliance .cmp-act-ico { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border-radius: var(--radius-xs); background: var(--cmp-soft); color: var(--cmp-ink); }
+.part-compliance .cmp-act-ico .cmp-icon { width: 17px; height: 17px; }
+.part-compliance .cmp-act-txt { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.part-compliance .cmp-act-txt b { font-size: 13px; font-weight: 650; display: flex; align-items: center; gap: 6px; }
+.part-compliance .cmp-act-txt small { font-size: 12px; color: var(--cmp-muted); line-height: 1.5; }
+.part-compliance .cmp-act-go { flex-shrink: 0; font-size: 18px; color: var(--cmp-faint); }
+.part-compliance .cmp-act-tag { padding: 1px 6px; border-radius: var(--radius-xs); background: var(--cmp-accent-soft); border: 1px solid var(--cmp-accent-line); color: var(--cmp-link); font-size: 11px; font-weight: 650; }
+.part-compliance .cmp-act-tag[hidden] { display: none; }
+.part-compliance .cmp-more-acts .cmp-side-note { padding: 9px 14px; font-size: 12px; gap: 6px; }
+.part-compliance .cmp-more-acts .cmp-side-note b { font-weight: 600; color: var(--cmp-ink); }
 .part-compliance .cmp-help { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--cmp-rule); display: grid; gap: 12px; }
 .part-compliance .cmp-help > summary { cursor: pointer; font-size: 12px; color: var(--cmp-muted); }
 .part-compliance .cmp-result-card { min-height: 424px; display: grid; gap: 14px; align-content: start; }
