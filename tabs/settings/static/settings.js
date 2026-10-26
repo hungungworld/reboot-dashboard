@@ -897,7 +897,7 @@
         <div class="flex wrap">
           ${toggle('data-act="season-past"', S.showPast, '지난 시즌도 보기')}
           ${ui.fileBtn('upload', { label: '시즌 목록 업로드', type: 'CSV', act: 'season-import' })}
-          <a class="btn small file-btn" href="/api/seasons/export.csv" download="reboot-settings-seasons.csv">${icon('download')}시즌 목록 다운로드 <span class="tiny muted">CSV</span></a>
+          ${ui.fileBtn('download', { label: '시즌 목록 다운로드', type: 'CSV', href: '/api/seasons/export.csv', download: 'reboot-settings-seasons.csv' })}
           <button type="button" class="btn small lime" data-act="season-add">${icon('plus')}시즌 추가</button>
         </div>
       </div>
@@ -1246,9 +1246,8 @@ GOOGLE_CLIENT_SECRET=...</pre>
               <option value="">모든 탭</option>${parts.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('')}
             </select>
           </div>
-          ${ui.fileActions(
-            ui.fileBtn('download', { label: '작업 기록 다운로드', type: 'CSV', act: 'wl-csv' }) +
-            ui.fileBtn('download', { label: '작업 기록 다운로드', type: 'XLSX', act: 'wl-xlsx', title: '구분별로 시트를 나눠 다운로드해요' }))}
+          ${ui.fileActions(ui.fileMenu('download', { label: '작업 기록 다운로드', items: [
+            { label: 'CSV', act: 'wl-csv' }, { label: 'XLSX (구분별 시트)', act: 'wl-xlsx', title: '구분별로 시트를 나눠 다운로드해요' }] }))}
         </div>
         <div class="table-wrap">${fixedTable('worklog', ['일시', '구분', '작업', '상태', '승인', '상세'], [160, 110, 360, 100, 120, 120], 'set-wl')}
           <tbody data-ref="wl-body"></tbody></table></div>

@@ -2034,8 +2034,8 @@
     const tools = `<div class="flex wrap">
       <button type="button" class="btn small" data-act="comp-discover" title="진열대에 새로 보인 브랜드를 경쟁 브랜드로 넣어요 (무료)">${icon('refresh')}새 브랜드 넣기</button>
       <button type="button" class="btn small dark" data-act="comp-research-all"${cp.aiReady ? '' : ' disabled'} title="리뷰 상위 ${cp.deepTop}개 브랜드의 핵심 메시지 · 성분을 AI로 새로 채워요 (API 사용)">${icon('spark')}AI 분석 실행</button>
-      <details class="ins-export"><summary class="btn small file-btn">${icon('download')}브랜드 비교 다운로드 <span class="tiny muted">CSV · JSON</span></summary>
-        <div class="ins-export-menu"><a href="/api/insights/competitors.csv" download>CSV 다운로드</a><a href="/api/insights/competitors.json" download>JSON 다운로드</a></div></details></div>`;
+      ${ui.fileMenu('download', { label: '브랜드 비교 다운로드', items: [
+        { label: 'CSV', href: '/api/insights/competitors.csv' }, { label: 'JSON', href: '/api/insights/competitors.json' }] })}</div>`;
     const arch = (cp.archived || []).length ? fold('comp-arch', `보관함 ${cp.archived.length}개 · 브랜드 카드에서 '보관'한 브랜드 (표에 안 올라와요)`, compTableHtml(cp.archived)) : '';
     return `${notes}<section class="card mt-24"><div class="card-head wrap"><div class="ins-head-title"><h2>브랜드 비교</h2>${badge(`${brandRows().length}개`)}</div>${tools}</div>
       <div data-ref="brand-body">${brandTable()}</div>

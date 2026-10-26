@@ -259,7 +259,7 @@
     </section>`;
   }
 
-  /* 업체 파일 가져오기 (업체가 0곳일 때만 · 평소엔 파트너 목록의 업로드 · 다운로드 팝업을 씀) */
+  /* 업체 파일 가져오기 (업체가 0곳일 때만 · 평소엔 파트너 목록의 업로드 팝업 · 다운로드 메뉴를 씀) */
   function paintImport(st, empty, scroll) {
     const box = st.el.querySelector('[data-ref="import"]');
     if (!empty) { box.innerHTML = ''; return; }
@@ -282,29 +282,19 @@
     if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /* 업체 목록 › CSV 팝업: 지금 목록 내보내기 · CSV(또는 XLSX) 가져오기
+  /* 업체 목록 › 업로드 팝업: CSV(또는 XLSX) 가져오기 (내보내기는 목록 머리의 다운로드 메뉴)
      내보낸 파일에 줄을 추가해 다시 가져오면 그 구분 목록이 파일 내용으로 바뀜 (협업 이력은 그대로) */
   function csvModal(st) {
-    const im = st.data.imports || {};
-    const n = t => fmt.num((im[t] && im[t].count) || 0);
     const body = doc.createElement('div');
     body.className = 'part-partners ptn-csv';
     body.innerHTML = `
-      <h3 class="ptn-csv-h">업로드 (추가 · 바꾸기)</h3>
       <p class="small muted">CSV 또는 XLSX를 고르면 머리글을 보고 케이터링 · 인플루언서를 알아서 구분해요.
-        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 아래에서 다운로드한 파일에 줄을 더해 업로드하세요. 협업 기록은 그대로 남아요.</p>
+        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 파트너 목록의 '다운로드'로 받은 파일에 줄을 더해 업로드하세요. 협업 기록은 그대로 남아요.</p>
       <label class="dropzone ptn-out-drop mt-8">${icon('upload')}<span data-ref="csv-picked">파일을 눌러 고르세요</span>
-        <input type="file" class="sr-only" accept=".csv,.xlsx" data-ref="csv-file" aria-label="업체 CSV · XLSX 고르기"></label>
-      <h3 class="ptn-csv-h mt-24">다운로드</h3>
-      <p class="small muted">지금 업체 목록을 업로드와 같은 형식의 CSV로 받아요. 엑셀에서 열어 줄을 추가 · 수정할 수 있어요.</p>
-      ${ui.fileActions(
-        ui.fileBtn('download', { label: `케이터링 업체 다운로드 (${n('케이터링')}곳)`, type: 'CSV', href: '/api/partners/export/catering.csv' }) +
-        ui.fileBtn('download', { label: `인플루언서 업체 다운로드 (${n('인플루언서')}곳)`, type: 'CSV', href: '/api/partners/export/influencer.csv' }) +
-        ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv' }) +
-        ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx' }))}`;
+        <input type="file" class="sr-only" accept=".csv,.xlsx" data-ref="csv-file" aria-label="업체 CSV · XLSX 고르기"></label>`;
     let file = null;
     const ok = ui.modal({
-      title: '업체 목록 업로드 · 다운로드 (CSV)', body,
+      title: '업체 목록 업로드', body,
       onOpen: b => b.querySelector('[data-ref="csv-file"]').addEventListener('change', e => {
         file = e.target.files && e.target.files[0];
         b.querySelector('[data-ref="csv-picked"]').textContent = file ? `선택: ${file.name} (${fmtBytes(file.size)})` : '파일을 눌러 고르세요';
@@ -387,7 +377,11 @@
     body.innerHTML = `<div class="workbench ptn-out-bench">
       <section class="card ptn-out-listcard ptn-cf-card">
         <div class="card-head wrap"><div class="ptn-head-title"><h2>파트너 목록</h2><span data-ref="total"></span></div>
-          ${ui.fileActions(ui.fileBtn('upload', { label: '업체 목록 업로드 · 다운로드', type: 'CSV', act: 'csv-open' }))}</div>
+          ${ui.fileActions(ui.fileBtn('upload', { type: 'CSV · XLSX', act: 'csv-open' }) + ui.fileMenu('download', { items: [
+            { label: '케이터링 업체 (CSV)', href: '/api/partners/export/catering.csv' },
+            { label: '인플루언서 업체 (CSV)', href: '/api/partners/export/influencer.csv' },
+            { label: '케이터링 양식 (CSV)', href: '/api/partners/template/catering.csv' },
+            { label: '인플루언서 양식 (XLSX)', href: '/api/partners/template/influencer.xlsx' }] }))}</div>
         <div data-ref="bar"></div>
         <div data-ref="rows"></div>
         <p class="panel-note mt-8" data-ref="foot"></p>
@@ -680,9 +674,8 @@
       <button type="button" class="btn small" data-act="yt-kw" title="추천 받기에 쓸 검색 키워드: ${esc(kws.join(', '))}">${icon('edit')}검색 키워드 · 추천</button>
       <button type="button" class="btn small dark" data-act="yt-search"${d.ready ? '' : ' disabled title="설정 › 연결에서 YouTube 키를 넣어 주세요"'}>${icon('search')}추천 받기</button>
       <button type="button" class="btn small ghost" data-act="yt-delete" disabled>선택 삭제</button>
-      <details class="ptn-export"><summary class="btn small file-btn">${icon('upload')}크리에이터 목록 업로드 · 다운로드 <span class="tiny muted">CSV</span></summary>
-        <div class="ptn-export-menu"><button type="button" data-act="yt-upload">${icon('upload')} 업로드</button>
-          <a href="/api/partners/youtube/export.csv" download>${icon('download')} 다운로드</a></div></details>`;
+      ${ui.fileBtn('upload', { type: 'CSV', act: 'yt-upload', title: '크리에이터 목록' })}
+      ${ui.fileBtn('download', { type: 'CSV', href: '/api/partners/youtube/export.csv', title: '크리에이터 목록' })}`;
     const total = st.el.querySelector('[data-ref="total"]');
     if (total) total.innerHTML = badge(`${fmt.num(d.items.length)}명`);
     const tgCur = Array.isArray(f.ytTargets) && f.ytTargets[0] ? f.ytTargets[0] : '';
@@ -1772,9 +1765,8 @@
           </details>
           <div class="flex wrap mt-16 ptn-out-gactions">
             <button type="button" class="btn lime" data-act="g-attach">이메일에 첨부하기</button>
-            ${ui.fileActions(
-              ui.fileBtn('download', { label: '가이드 다운로드', type: 'Word', act: 'g-docx', cls: 'ptn-btn-full' }) +
-              ui.fileBtn('download', { label: '가이드 다운로드', type: 'MD', act: 'g-md', cls: 'ptn-btn-full' }))}
+            ${ui.fileActions(ui.fileMenu('download', { label: '가이드 다운로드', cls: 'ptn-btn-full', items: [
+              { label: 'Word (.docx)', act: 'g-docx' }, { label: 'Markdown (.md)', act: 'g-md' }] }))}
           </div>
           <div data-ref="g-attached">${g.attached ? attachedNote(g.attached) : ''}</div>
           <p class="panel-note mt-8">첨부하면 REBOOT_${esc(g.type)}_협업가이드_날짜.docx로 첨부파일 보관함에 저장되고, 메일 작성 탭에서 체크된 상태로 함께 보내져요. 다운로드는 보관함에 저장하지 않아요.</p>
