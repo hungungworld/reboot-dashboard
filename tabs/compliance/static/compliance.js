@@ -780,7 +780,7 @@
 
   /** 입력 방식 전환 (직접 입력 · CSV 업로드) — 두 화면의 카드 머리에 같은 버튼 */
   function modeSegHTML(cur) {
-    return `<div class="cmp-seg" role="group" aria-label="입력 방식">${SUBS.review.map(([id, label]) =>
+    return `<div class="linetabs cmp-modetabs" role="group" aria-label="입력 방식">${SUBS.review.map(([id, label]) =>
       `<button type="button" class="cmp-subtab" data-subtab="${id}" aria-pressed="${id === cur}">${label}</button>`).join('')}</div>`;
   }
 
@@ -866,7 +866,7 @@
     const verdicts = loadHistory().map(x => recheck(x).verdict);
     const hp = root.querySelector('[data-panel="history"]');
     const cur = hp && hp.dataset.filter ? hp.dataset.filter : 'all';
-    box.innerHTML = HIST_FILTERS.map(([id, label]) => `<button type="button" class="cmp-filter" data-act="kpi" data-filter="${id}" aria-pressed="${id === cur}">${label} <b>${verdicts.filter(v => matchFilter(v, id)).length}</b></button>`).join('');
+    box.innerHTML = HIST_FILTERS.map(([id, label]) => `<button type="button" data-act="kpi" data-filter="${id}" aria-pressed="${id === cur}">${label} <span class="n">${verdicts.filter(v => matchFilter(v, id)).length}</span></button>`).join('');
   }
 
   /** 한 문구 결과: 확인할 항목 카드 (판정 · 이름 · 걸린 표현 · 수정 방향 → 이유와 근거는 자세히 창) */
@@ -1873,7 +1873,7 @@ ${rest.length ? `<div class="cmp-hist-rest" data-day="${esc(day)}"${open ? '' : 
     const p = root.querySelector('[data-panel="history"]');
     p.innerHTML = `
 <div class="cmp-hist-tools">
-  <div class="cmp-filters" data-el="kpis" role="group" aria-label="판정별 점검 기록 · 누르면 그 판정만"></div>
+  <div class="linetabs cmp-filters" data-el="kpis" role="group" aria-label="판정별 점검 기록 · 누르면 그 판정만"></div>
   <label class="cmp-hist-search">${icon('search')}<input type="search" data-el="hist-q" value="${esc(p.dataset.q || '')}" placeholder="문구 · 채널 · 제품 · 걸린 표현 검색" aria-label="점검 기록 검색"></label>
 </div>
 <section class="cmp-card cmp-paper cmp-hist-table" data-el="hist-list"></section>
@@ -2337,8 +2337,8 @@ ${monHead('manual')}
     return `
 <div class="cmp-mon-filter2">
   <label class="cmp-mon-search"><span class="cmp-sr">검색어 (제목·회사·요약·한글 요약)</span><input class="cmp-input" type="search" data-monf="q" value="${esc(MON_F.q)}" placeholder="검색 · jelly · hangover · 젤리 · Korea"></label>
-  <div class="cmp-seg" role="group" aria-label="기관">
-    ${[['all', '전체']].concat(ag.map(a => [a.code, a.code])).map(([v, l]) => `<button type="button" class="cmp-pill${MON_F.agency === v ? ' is-on' : ''}" data-act="mon-agency" data-v="${esc(v)}" aria-pressed="${MON_F.agency === v}"${v === 'all' ? '' : ` title="${esc((ag.find(a => a.code === v) || {}).ko || '')}"`}>${esc(l)}</button>`).join('')}
+  <div class="linetabs cmp-agtabs" role="group" aria-label="기관">
+    ${[['all', '전체']].concat(ag.map(a => [a.code, a.code])).map(([v, l]) => `<button type="button" class="${MON_F.agency === v ? 'is-on' : ''}" data-act="mon-agency" data-v="${esc(v)}" aria-pressed="${MON_F.agency === v}"${v === 'all' ? '' : ` title="${esc((ag.find(a => a.code === v) || {}).ko || '')}"`}>${esc(l)}</button>`).join('')}
   </div>
   <label class="cmp-check cmp-mon-hot"><input type="checkbox" data-monf="hot"${MON_F.hot ? ' checked' : ''}> 새 항목·변경만</label>
   <details class="cmp-more cmp-mon-more"${more ? ' open' : ''}><summary>필터 더 보기${more ? ' · 적용 중' : ''}</summary>

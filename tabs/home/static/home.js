@@ -538,7 +538,7 @@
     box.className = 'part-home home-saved';
     const ai = (S.saved || []).some(x => x.summaryKo || x.whyKo);
     box.innerHTML = `<div class="home-saved-tools"><input class="input" type="search" data-ref="saved-q" placeholder="제목 · 요약 · 마케터의 시선 · 매체 · 분야 검색" aria-label="보관한 기사 검색">
-        <div class="chips" data-ref="saved-kinds"></div></div><div data-ref="saved-list"></div>
+        <div class="linetabs" data-ref="saved-kinds" role="group" aria-label="기사 종류"></div></div><div data-ref="saved-list"></div>
       ${ai ? '<p class="panel-note mt-8">제목 · 요약 · 마케터의 시선은 AI가 정리했어요. 사실은 원문으로 확인해 주세요.</p>' : ''}`;
     const paint = () => {
       const items = S.saved || [];
@@ -548,7 +548,7 @@
       const title = box.closest('.modal') && box.closest('.modal').querySelector('.modal-head h2');
       if (title) title.textContent = `보관한 기사 ${fmt.num(items.length)}건`;   // 보관 해제 뒤 숫자
       box.querySelector('[data-ref="saved-kinds"]').innerHTML = SAVED_KINDS.map(([k, l]) =>
-        `<button type="button" class="chip${f.kind === k ? ' selected' : ''}" aria-pressed="${f.kind === k}" data-kind="${k}">${esc(l)}<span class="n">${k ? items.filter(x => x.kind === k).length : items.length}</span></button>`).join('');
+        `<button type="button" aria-pressed="${f.kind === k}" data-kind="${k}">${esc(l)} <span class="n">${k ? items.filter(x => x.kind === k).length : items.length}</span></button>`).join('');
       // 찾은 낱말 강조: 원문을 낱말로 나눠 조각마다 esc (HTML 엔티티가 깨지지 않게)
       const re = words.length ? new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi') : null;
       const mark = text => (re ? String(text == null ? '' : text).split(re).map((p, i) => (i % 2 ? `<mark>${esc(p)}</mark>` : esc(p))).join('') : esc(text));
@@ -629,8 +629,8 @@
   const NEWS_KINDS = [['flow', '업계'], ['trend', '트렌드'], ['season', '시즌']];
   const newsKind = () => { const k = store.get('newsKind', 'flow'); return NEWS_KINDS.some(([id]) => id === k) ? k : 'flow'; };
   function kindTabs(k, counts) {
-    const chip = (id, label, count) => `<button type="button" class="chip${k === id ? ' selected' : ''}" aria-pressed="${k === id}" data-act="news-kind" data-kind="${id}"${count ? '' : ' disabled'}>${label}<span class="n">${count}</span></button>`;
-    return `<div class="chips home-kind" role="group" aria-label="뉴스 종류">${NEWS_KINDS.map(([id, label]) => chip(id, label, counts[id] || 0)).join('')}</div>`;
+    const chip = (id, label, count) => `<button type="button" aria-pressed="${k === id}" data-act="news-kind" data-kind="${id}"${count ? '' : ' disabled'}>${label} <span class="n">${count}</span></button>`;
+    return `<div class="linetabs home-kind" role="group" aria-label="뉴스 종류">${NEWS_KINDS.map(([id, label]) => chip(id, label, counts[id] || 0)).join('')}</div>`;
   }
   const viewLabel = a => (a.kind === 'trend' || a.kind === 'season' ? '적용점' : '마케터의 시선');
   // 분야 표시: 시즌 기사는 '🎃 Halloween'처럼 시즌 이모지 + 이름

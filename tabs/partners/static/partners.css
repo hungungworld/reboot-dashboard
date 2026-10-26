@@ -403,4 +403,6 @@
   .part-partners .ptn-v2-dates { grid-template-columns: 1fr; }
   .part-partners .ptn-v2-tag { margin-left: 0; }
   .part-partners .ptn-v2-steps button { padding-right: 10px; }
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-partners .linetabs { overflow-y: hidden; }
 }

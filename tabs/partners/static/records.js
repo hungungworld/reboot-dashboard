@@ -142,7 +142,7 @@
       <div class="filters ptn-rec-bar">
         <div class="flex wrap">
           <label class="ptn-rec-sel"><span class="sr-only">파트너</span><select class="input" data-ref="partner" aria-label="파트너로 거르기"></select></label>
-          <div class="chips" data-ref="kinds" role="group" aria-label="출처"></div>
+          <div class="linetabs" data-ref="kinds" role="group" aria-label="출처"></div>
           <button type="button" class="btn small dark" data-rec-act="check"${smtp ? '' : ' disabled'}>새 회신 확인 (Gmail)</button>
         </div>
         <div class="flex wrap">
@@ -179,7 +179,7 @@
     st.el.querySelector('[data-ref="partner"]').innerHTML = `<option value="">전체 업체 (${opts.length})</option>` +
       opts.map(([k, name]) => `<option value="${esc(k)}"${k === st.f.partner ? ' selected' : ''}>${esc(name)}</option>`).join('');
     st.el.querySelector('[data-ref="kinds"]').innerHTML = [['', '전체']].concat(R.kinds.map(k => [k.v, k.v === '샘플' ? '예시' : k.v])).map(([v, label]) =>
-      `<button type="button" class="chip" data-rec-kind="${esc(v)}" aria-pressed="${st.f.kind === v}" title="${esc((KINDS[v] || {}).help || '모든 출처')}">${esc(label)}<span class="n">${fmt.num(v ? st.items.filter(h => h.kind === v).length : st.items.length)}</span></button>`).join('');
+      `<button type="button" data-rec-kind="${esc(v)}" aria-pressed="${st.f.kind === v}" title="${esc((KINDS[v] || {}).help || '모든 출처')}">${esc(label)} <span class="n">${fmt.num(v ? st.items.filter(h => h.kind === v).length : st.items.length)}</span></button>`).join('');
   }
 
   function filteredItems(st) {

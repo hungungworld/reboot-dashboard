@@ -132,3 +132,5 @@
   .part-settings [data-panel="brand"] .card-head h2 { white-space: nowrap; }
   .part-settings .set-kv { grid-template-columns: 1fr; gap: 4px; }
 }
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-settings .linetabs { overflow-y: hidden; }

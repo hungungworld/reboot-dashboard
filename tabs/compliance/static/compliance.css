@@ -534,8 +534,7 @@
 .part-compliance .cmp-mon-filter2 { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 8px; }
 .part-compliance .cmp-mon-search { flex: 1 1 260px; }
 .part-compliance .cmp-mon-search .cmp-input { width: 100%; border-radius: 999px; padding-left: 16px; }
-.part-compliance .cmp-seg { display: flex; flex-wrap: wrap; gap: 6px; }
-.part-compliance .cmp-seg .cmp-pill { padding: 6px 12px; min-height: 32px; font-size: 13px; }
+.part-compliance .cmp-agtabs { flex: 1 1 100%; }
 .part-compliance .cmp-mon-hot { padding-bottom: 0; }
 .part-compliance .cmp-mon-more { flex-basis: 100%; }
 .part-compliance .cmp-mon-more .cmp-mon-filter { margin: 8px 0 0; }
@@ -595,9 +594,9 @@
 .part-compliance .cmp-work .cmp-card { border-radius: 16px; padding: 28px; gap: 0; }
 .part-compliance .cmp-work-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .part-compliance .cmp-work-head h3 { margin: 0; font-size: 15px; }
-.part-compliance .cmp-seg { display: flex; gap: 4px; padding: 4px; background: var(--cmp-soft); border-radius: 8px; }
-.part-compliance .cmp-seg button { border: 0; background: none; color: var(--cmp-muted); padding: 9px 12px; border-radius: 6px; font: inherit; font-size: 12px; cursor: pointer; }
-.part-compliance .cmp-seg button[aria-pressed="true"] { background: var(--cmp-card); color: var(--cmp-ink); font-weight: 650; box-shadow: 0 1px 4px rgba(0, 0, 0, .07); }
+/* 입력 방식 (직접 입력 · CSV 업로드) — core .linetabs 모양 (.cmp-subtab 기본 모양을 덮음) */
+.part-compliance .cmp-modetabs .cmp-subtab { font-size: 13px; padding: 12px 14px 14px; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.part-compliance .cmp-modetabs .cmp-subtab[aria-pressed="true"] { color: var(--cmp-ink); font-weight: 750; border-bottom-color: var(--cmp-ink); }
 .part-compliance .cmp-selects { display: flex; gap: 12px; margin: 32px 0 24px; }
 .part-compliance .cmp-selects label { flex: 1; min-width: 0; font-size: 11px; color: var(--cmp-muted); }
 .part-compliance .cmp-select { display: block; width: 100%; margin-top: 8px; padding: 11px; border: 1px solid var(--cmp-rule); border-radius: 8px; background: var(--cmp-card); color: var(--cmp-ink); font: inherit; font-size: 12px; }
@@ -629,11 +628,8 @@
 .part-compliance .cmp-finding-terms { font-weight: 650; color: var(--cmp-BLOCK-ink); }
 .part-compliance .cmp-result-acts { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 18px; border-top: 1px solid var(--cmp-rule); }
 
-/* 점검 기록: 개수가 붙은 필터 칩 */
-.part-compliance .cmp-filters { display: flex; flex-wrap: wrap; gap: 8px; }
-.part-compliance .cmp-filter { border: 0; background: none; color: var(--cmp-muted); padding: 9px 12px; border-radius: 6px; font: inherit; font-size: 12px; cursor: pointer; }
-.part-compliance .cmp-filter b { margin-left: 8px; }
-.part-compliance .cmp-filter[aria-pressed="true"] { background: var(--cmp-dark); color: var(--cmp-dark-ink); }
+/* 점검 기록: 개수가 붙은 필터 — core .linetabs (밑줄 탭) */
+.part-compliance .cmp-filters { margin-bottom: 4px; }
 .part-compliance .cmp-paper .cmp-list { gap: 0; }
 .part-compliance .cmp-paper .cmp-hist { background: none; border: 0; border-bottom: 1px solid var(--cmp-rule); border-radius: 0; padding: 18px 0; }
 .part-compliance .cmp-paper .cmp-hist:last-child { border-bottom: 0; }
@@ -728,3 +724,5 @@
   .part-compliance .cmp-work .cmp-card, .part-compliance .cmp-paper, .part-compliance .cmp-panel[data-panel="monitor"] .cmp-subpanel { padding: 20px; }
   .part-compliance .cmp-selects { flex-direction: column; margin: 24px 0 18px; }
 }
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-compliance .linetabs { overflow-y: hidden; }

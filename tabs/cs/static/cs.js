@@ -203,7 +203,7 @@
     const who = String(approver || '').trim();
     const writer = inq.phrase && inq.phrase.by;
     const list = [
-      { id: 'phrase', ok: phraseDone(inq), label: '① 문구 검토 완료' },
+      { id: 'phrase', ok: phraseDone(inq), label: '문구 검토 완료' },
       { id: 'checks', ok: n === items.length, label: `확인 항목 ${n}/${items.length}` },
       { id: 'approver', ok: !!who && !samePerson(who, writer), label: !who ? '검토자 이름 입력' : `작성자(${writer || '—'})와 다른 사람이 검토` }
     ];
@@ -567,10 +567,27 @@
     new: '새로 온 문의가 없어요.', phrase: '문구 검토할 답장이 없어요.', cs: 'CS 검토를 기다리는 답장이 없어요.',
     ready: '보낼 답장이 없어요. CS 검토를 승인하면 여기로 와요.', sent: '보낸 답장이 없어요.'
   };
-  // 단계 안 보기 칩 ('all'은 고객 이력 → 문의 보기 전용이라 칩 없음)
+  // 목록 위 흐름 줄: 단계마다 지금 할 일 한 문장
+  const STAGE_GUIDE = {
+    new: '문의를 열어 초안을 읽고, 빈칸 [확인 필요]를 채워 문구 검토로 넘겨요.',
+    phrase: '걸린 표현을 고치고 빈칸을 모두 채운 뒤 「문구 검토 완료」를 눌러요.',
+    cs: '작성자가 아닌 사람이 확인 항목을 체크하고 승인해요. 고칠 게 있으면 의견을 적어 돌려보내요.',
+    ready: '두 검토를 마친 답장이에요. 받는 사람을 확인하고 보내요.',
+    sent: '보낸 답장이에요. 고객 답이 더 없으면 종결해요.'
+  };
+  // 문의 하나 처리 단계 (상세 화면 밑줄 탭) · 오른쪽 칸에 한 단계 카드만 보여 줌
+  const STEPS = [['reply', '답장 쓰기'], ['phrase', '문구 검토'], ['cs', 'CS 검토'], ['send', '보내기']];
+  const STEP_GUIDE = {
+    reply: '고객 메일을 읽고 왼쪽 초안을 고쳐요. 빈칸 [확인 필요]를 모두 채우면 문구 검토로 넘어가요.',
+    phrase: '자동 심의에 걸린 표현을 고치고 「문구 검토 완료」를 눌러요. 본문을 다시 고치면 이 단계로 돌아와요.',
+    cs: '작성자가 아닌 사람이 확인 항목을 체크하고 승인해요. 고칠 게 있으면 의견을 적어 돌려보내요.',
+    send: '두 검토를 마친 답장만 보낼 수 있어요. 받는 사람을 확인하고 보내요.'
+  };
+  // 단계 안 보기 탭 ('all'은 고객 이력 → 문의 보기 전용이라 탭 없음)
   const VIEWS = [['open', '전체'], ['urgent', '긴급 (C1)'], ['overdue', '기한 초과']];
-  // 답변 템플릿·부작용 접수 기록의 펼침 상태 (화면을 다시 그려도 유지 · 새로고침하면 기본값)
-  const TPL_OPEN = new Map();
+  // 답장 설정 밑줄 탭 · 템플릿 유형 탭 (화면을 다시 그려도 유지 · 새로고침하면 기본값)
+  let SET_TAB = null;
+  let TPL_CODE = null;
   const CUST_OPEN = new Map();   // 고객 이력 카드 펼침 (이메일 → 열림 · 새로고침하면 접힘)
   const REC_OPEN = new Map();
 
@@ -588,7 +605,8 @@
     <div class="cs-subpanel">
     <div class="cs-inbox" data-view="list">
       <div class="cs-listcol">
-        <div class="cs-viewchips" data-el="filter" role="group" aria-label="보기"></div>
+        <div class="cs-flow" data-el="flow"></div>
+        <div class="linetabs cs-viewtabs" data-el="filter" role="group" aria-label="보기"></div>
         <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="sort">
           <option value="priority" selected>처리 우선순위 (긴급·기한 순)</option><option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option></select></label>
         <div class="cs-gmailbar">
@@ -656,7 +674,9 @@
       }
       if (e.target.closest('[data-act="cust-clear"]')) { ui.custFilter = null; ui.filter = 'open'; renderList(ui); return; }
       if (e.target.closest('[data-act="open-settings"]')) { ui.showTab('templates'); return; }
-      if (e.target.closest('[data-act="edit-persona"]')) { TPL_OPEN.set('persona', true); ui.showTab('templates'); return; }
+      if (e.target.closest('[data-act="edit-persona"]')) { SET_TAB = 'persona'; ui.showTab('templates'); return; }
+      const go = e.target.closest('[data-act="go-sub"]');
+      if (go) { setView(ui, 'list'); ui.showSub(go.dataset.sub); return; }
       if (e.target.closest('[data-act="tpl-back"]')) { ui.showTab('inbox'); return; }
     });
 
@@ -786,21 +806,29 @@
     paintCounts(ui);
 
     const custMap = new Map(customers().map(c => [c.email, c]));
-    const shown = all.filter(i => {
+    const pass = (i, f) => {
       if (ui.custFilter && emailOf(i.from) !== ui.custFilter) return false;   // 고객 이력 → '문의 보기'
-      if (ui.filter === 'all') return true;   // 고객 이력 → '문의 보기'는 단계와 상관없이 그 고객 문의 전부
+      if (f === 'all') return true;   // 고객 이력 → '문의 보기'는 단계와 상관없이 그 고객 문의 전부
       if (stageOf(i) !== ui.sub) return false;
-      if (ui.filter === 'urgent') return i.type === 'C1';
-      if (ui.filter === 'overdue') return isOpen(i) && now > due(i);
+      if (f === 'urgent') return i.type === 'C1';
+      if (f === 'overdue') return isOpen(i) && now > due(i);
       return true;
-    }).sort((a, b) =>
+    };
+    const shown = all.filter(i => pass(i, ui.filter)).sort((a, b) =>
       ui.sort === 'newest' ? (b.receivedAt - a.receivedAt)
         : ui.sort === 'oldest' ? (a.receivedAt - b.receivedAt)
           : (isOpen(b) - isOpen(a)) || ((b.type === 'C1') - (a.type === 'C1')) || (due(a) - due(b)));   // priority: 미처리 → 긴급(C1) → 기한 빠른 순
 
     ui.shownIds = shown.map(i => i.id);   // 검토 화면의 이전·다음 메일
-    ui.root.querySelector('[data-el="filter"]').innerHTML = VIEWS.map(([v, l]) =>
-      `<button type="button" class="cs-btn cs-btn-sm" data-filter="${v}" aria-pressed="${v === ui.filter}">${l}</button>`).join('');
+    const fbox = ui.root.querySelector('[data-el="filter"]');
+    fbox.hidden = ui.filter === 'all';
+    fbox.innerHTML = VIEWS.map(([v, l]) =>
+      `<button type="button" data-filter="${v}" aria-pressed="${v === ui.filter}">${l} <span class="n">${all.filter(i => pass(i, v)).length}</span></button>`).join('');
+    // 흐름 줄: 다섯 단계 중 지금 단계 + 이 단계에서 할 일
+    const flow = ui.root.querySelector('[data-el="flow"]');
+    if (flow) flow.innerHTML = ui.filter === 'all' ? '' : `<ol class="cs-flow-steps" aria-label="문의 처리 흐름">${SUBS.map(([id, l]) =>
+      `<li><button type="button" data-act="go-sub" data-sub="${id}"${id === ui.sub ? ' aria-current="step"' : ''}>${l}</button></li>`).join('')}</ol>
+      <p class="cs-flow-guide">${esc(STAGE_GUIDE[ui.sub])}</p>`;
     const unread = i => !i.readAt && i.status === '답변 대기';
     // 처음엔 LIST_MAX건만 (선택한 메일이 뒤쪽이면 모두) · 단계·필터가 바뀌면 다시 접힘
     const moreKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
@@ -837,6 +865,10 @@
     const prod = PRODUCTS.find(x => x.id === inq.product);
     const subject = /^re:/i.test(inq.subject) ? inq.subject : `Re: ${inq.subject}`;
     const notes = inq.notes || [];
+
+    // 문의를 새로 열거나 단계가 바뀌면 지금 할 단계 탭으로 (같은 단계 안에서는 고른 탭 유지)
+    const stepKey = `${inq.id}|${stageOf(inq)}`;
+    if (ui.stepKey !== stepKey) { ui.stepKey = stepKey; ui.step = autoStep(inq); }
 
     const pos = (ui.shownIds || []).indexOf(inq.id);
     box.innerHTML = `
@@ -891,6 +923,8 @@
       <p class="cs-msg-text">${esc(n.text)}</p></article>`).join('')}
   </div>
 
+  <nav class="linetabs cs-steps" role="tablist" data-subnav="off" aria-label="답장 처리 단계" data-el="steps"></nav>
+  <p class="cs-step-guide" data-el="stepguide"></p>
   <div class="cs-work">
     <section class="cs-composer" aria-label="답장 쓰기">
       <div class="cs-ctabs">
@@ -911,16 +945,18 @@
           <div data-el="ainotes" aria-live="polite">${inq.aiNotes && inq.aiNotes.length ? aiNotesHTML(inq) : ''}</div>
           ${trBlock('', '초안 한글 번역 (보내기 전 뜻 확인)', 'draft')}
         </div>
-        <div class="cs-sendbar" data-el="sendbar" aria-live="polite"></div>
       </div>
       <div class="cs-cpane cs-notepane" data-ctab-pane="note"${ui.ctab === 'note' ? '' : ' hidden'}>
         <textarea class="cs-input" rows="4" data-el="note" aria-label="내부 메모" placeholder="팀에게만 보이는 메모예요. 고객에게는 가지 않아요."></textarea>
         <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="note-add">메모 남기기</button></div>
       </div>
     </section>
-    <aside class="cs-review" aria-label="보내기 전 검토">
-      <section class="cs-rcard" data-el="phrase" aria-live="polite"></section>
-      <section class="cs-rcard" data-el="cscard">${csCardHTML(ui, inq, t)}</section>
+    <aside class="cs-review" aria-label="처리 단계 카드">
+      <section class="cs-rcard" data-step-pane="reply" data-el="replycard" aria-live="polite"></section>
+      <section class="cs-rcard" data-step-pane="phrase" data-el="phrase" aria-live="polite"></section>
+      <section class="cs-rcard" data-step-pane="cs" data-el="cscard">${csCardHTML(ui, inq, t)}</section>
+      <section class="cs-rcard" data-step-pane="send"><header class="cs-rhead"><h4>04 보내기</h4></header>
+        <div class="cs-sendbox" data-el="sendbar" aria-live="polite"></div></section>
     </aside>
   </div>
   ${(inq.log || []).length ? `
@@ -947,7 +983,7 @@
     const g = phraseGates(inq, r);
     const state = done || after ? '<span class="cs-rstate is-ok">통과</span>'
       : r && r.verdict === 'BLOCK' ? '<span class="cs-rstate is-no">사용 불가 표현</span>' : '<span class="cs-rstate">진행 중</span>';
-    const head = `<header class="cs-rhead"><h4>① 문구 검토</h4>${state}</header>
+    const head = `<header class="cs-rhead"><h4>02 문구 검토</h4>${state}</header>
 <p class="cs-rsub">자동 심의(컴플라이언스 규칙) + 작성자 확인</p>
 <div class="cs-chips"><b>다시 심의</b> ${r ? badge(r.verdict) : '<span class="cs-badge">심의 불가</span>'}</div>`;
     const flags = r && r.findings.length ? `<ul class="cs-flags">${r.findings.map(f => `<li>${badge(f.verdict)}<span><b>${esc(f.name)}</b>
@@ -968,7 +1004,7 @@ ${revise ? '<p class="cs-muted">수정 필요·검토 필요 표현을 그대로
   /** ② CS 검토 카드의 고정 부분 (입력 칸이 있어 다시 그리지 않음 · 남은 조건·버튼 상태는 paintCsCard가 바꿈) */
   function csCardHTML(ui, inq, t) {
     const a = inq.approval || {};
-    const head = `<header class="cs-rhead"><h4>② CS 검토</h4><span class="cs-rstate" data-el="cs-state"></span></header>
+    const head = `<header class="cs-rhead"><h4>03 CS 검토</h4><span class="cs-rstate" data-el="cs-state"></span></header>
 <p class="cs-rsub">검토 ${esc(t.owner)} · 작성자와 다른 사람</p>`;
     if (inq.status === '승인' || DONE.includes(inq.status)) {
       return `${head}
@@ -1007,17 +1043,9 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     card.querySelector('[data-act="approve"]').disabled = waiting || need.length > 0;
   }
 
-  /** 작성기 아래 보내기 줄: 문구 검토 ─ CS 검토 ─ 보내기 (두 검토를 지나야 보내기가 열림) */
-  function sendbarHTML(ui, inq, r) {
+  /** 04 보내기 카드 (두 검토를 지나야 보내기가 열림) */
+  function sendbarHTML(ui, inq) {
     const st = stageOf(inq);
-    const pOk = ['cs', 'ready', 'sent'].includes(st);
-    const cOk = ['ready', 'sent'].includes(st);
-    const pCls = pOk ? 'is-ok' : r && r.verdict === 'BLOCK' ? 'is-no' : 'is-on';
-    const cCls = cOk ? 'is-ok' : pOk ? 'is-on' : '';
-    const track = `<div class="cs-track" aria-label="보내기 전 검토">
-  <span class="cs-gate ${pCls}"><span class="cs-gate-dot" aria-hidden="true">${pOk ? '✓' : pCls === 'is-no' ? '!' : '1'}</span>문구 검토</span><span class="cs-wire${pOk ? ' is-ok' : ''}"></span>
-  <span class="cs-gate ${cCls}"><span class="cs-gate-dot" aria-hidden="true">${cOk ? '✓' : '2'}</span>CS 검토</span><span class="cs-wire${cOk ? ' is-ok' : ''}"></span>
-</div>`;
     let act;
     if (inq.status === '종결') act = '<span class="cs-muted">종결된 문의예요.</span>';
     else if (inq.status === '발송 완료') {
@@ -1032,11 +1060,57 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
   title="${!ui.gmail ? '설정 › 연결에서 Google로 로그인한 뒤 사용' : '받는 사람을 확인한 뒤 Gmail로 바로 보내요'}">${icon('mail')} 보내기</button>`
         : `<button type="button" class="cs-btn cs-primary" data-act="mark-sent" ${c.ok ? '' : 'disabled'}
   title="예시 문의는 받는 주소가 example.com이라 실제로 보내지 않아요">보낸 것으로 표시 (시연)</button>`;
-    } else act = '<button type="button" class="cs-btn" disabled title="두 검토를 마쳐야 보낼 수 있어요">보내기</button>';
-    return `${track}<div class="cs-actions">${act}</div>`;
+    } else {
+      const left = [st === 'new' || st === 'phrase' ? '02 문구 검토' : '', st !== 'ready' ? '03 CS 검토' : ''].filter(Boolean);
+      act = `<p class="cs-muted">${left.join(' · ')}를 마치면 보낼 수 있어요.</p>
+<button type="button" class="cs-btn" disabled title="두 검토를 마쳐야 보낼 수 있어요">보내기</button>`;
+    }
+    return `<div class="cs-actions">${act}</div>`;
   }
 
-  /** 글을 고칠 때마다: 밑줄 · ① 문구 검토 카드 · ② CS 검토 남은 조건 · 보내기 줄 */
+  /** 01 답장 쓰기 카드: 빈칸·사용 불가 표현만 보고 다음 단계로 */
+  function replyCardHTML(inq, r) {
+    const todos = pendingTodos(inq.draft).length;
+    const block = !!r && r.verdict === 'BLOCK';
+    const ok = !todos && !block;
+    return `<header class="cs-rhead"><h4>01 답장 쓰기</h4><span class="cs-rstate${ok ? ' is-ok' : ''}">${ok ? '준비됨' : '작성 중'}</span></header>
+<ul class="cs-gates">
+  <li class="${todos ? 'is-no' : 'is-ok'}">${todos ? `✗ 빈칸 [확인 필요] ${todos}곳 남음` : '✓ 빈칸 모두 채움'}</li>
+  <li class="${block ? 'is-no' : 'is-ok'}">${block ? '✗ 사용 불가 표현 있음 (빨간 물결 밑줄)' : '✓ 사용 불가 표현 없음'}</li>
+</ul>
+${todoPanelHTML(inq.draft)}
+<p class="cs-muted">「AI로 초안 다듬기」로 문의에 맞게 다시 쓸 수 있어요. 팀에게만 남길 말은 「내부 메모」에 적어요.</p>
+<div class="cs-actions"><button type="button" class="cs-btn${ok ? ' cs-btn-dark' : ''}" data-act="step" data-step="phrase">다음: 문구 검토 →</button></div>`;
+  }
+
+  /** 문의를 열 때 고를 단계 탭: 새 문의·문구 검토 단계는 빈칸이 남았으면 01, 다 채웠으면 02 */
+  function autoStep(inq) {
+    const st = stageOf(inq);
+    if (st === 'cs') return 'cs';
+    if (st === 'ready' || st === 'sent') return 'send';
+    return pendingTodos(inq.draft).length ? 'reply' : 'phrase';
+  }
+
+  /** 단계 탭 (끝난 단계는 ✓) · 고른 단계 카드만 보이게 */
+  function paintSteps(ui, inq, r) {
+    const box = ui.root.querySelector('[data-el="detail"]');
+    const nav = box.querySelector('[data-el="steps"]');
+    if (!nav) return;
+    if (inq) {
+      const st = stageOf(inq);
+      const past = ['cs', 'ready', 'sent'].includes(st);
+      const done = {
+        reply: past || (!pendingTodos(inq.draft).length && !(r && r.verdict === 'BLOCK')),
+        phrase: past, cs: st === 'ready' || st === 'sent', send: st === 'sent'
+      };
+      nav.innerHTML = STEPS.map(([id, l], k) => `<button type="button" role="tab" data-act="step" data-step="${id}" aria-selected="${id === ui.step}">
+  <span class="cs-step-no">0${k + 1}</span>${l}${done[id] ? '<span class="cs-step-ok" aria-label="끝남">✓</span>' : ''}</button>`).join('');
+    } else nav.querySelectorAll('[data-step]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.step === ui.step)));
+    box.querySelector('[data-el="stepguide"]').textContent = STEP_GUIDE[ui.step];
+    box.querySelectorAll('[data-step-pane]').forEach(p => { p.hidden = p.dataset.stepPane !== ui.step; });
+  }
+
+  /** 글을 고칠 때마다: 밑줄 · 단계 탭 · 01 답장 · 02 문구 검토 카드 · 03 CS 검토 남은 조건 · 04 보내기 */
   function renderCheck(ui) {
     const box = ui.root.querySelector('[data-el="detail"]');
     const inq = load().find(x => x.id === ui.selected);
@@ -1044,11 +1118,14 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     const r = recheck(inq.draft, inq.product);
     const hl = box.querySelector('[data-el="hl"]');
     if (hl) hl.innerHTML = highlightHTML(inq.draft, r);
+    const rc = box.querySelector('[data-el="replycard"]');
+    if (rc) rc.innerHTML = replyCardHTML(inq, r);
     const pc = box.querySelector('[data-el="phrase"]');
     if (pc) pc.innerHTML = phraseCardHTML(inq, r);
     paintCsCard(ui, inq, r);
     const sb = box.querySelector('[data-el="sendbar"]');
-    if (sb) sb.innerHTML = sendbarHTML(ui, inq, r);
+    if (sb) sb.innerHTML = sendbarHTML(ui, inq);
+    paintSteps(ui, inq, r);
   }
 
   function wireDetail(ui) {
@@ -1120,6 +1197,13 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
         box.querySelectorAll('[data-act="ctab"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.ctab === ui.ctab)));
         box.querySelectorAll('[data-ctab-pane]').forEach(p => { p.hidden = p.dataset.ctabPane !== ui.ctab; });
         if (ui.ctab === 'reply') fitDraft(draftTa()); else box.querySelector('[data-el="note"]').focus();
+        return;
+      }
+      if (act === 'step') {
+        ui.step = btn.dataset.step;
+        paintSteps(ui);
+        const nav = box.querySelector('[data-el="steps"]');
+        if (nav && nav.getBoundingClientRect().top < 0) nav.scrollIntoView({ block: 'start' });
         return;
       }
       if (act === 'todo-jump') { showReply(); return jumpToTodo(draftTa(), Number(btn.dataset.idx) || 0); }
@@ -1382,16 +1466,13 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     const roles = [...new Set(DATA.types.map(t => String(t.owner || '').replace(/\s*\{.*\}\s*/, '').trim()).filter(Boolean).concat(['품질 담당', '규제 담당']))];
     const rows = CONTACTS.length ? CONTACTS : [{ role: '', name: '', email: '' }];
     return `
-<details class="cs-sec" data-tpl="contacts"${TPL_OPEN.get('contacts') ? ' open' : ''}>
-  <summary><span class="cs-sec-title">담당자 연락처 · 문의 전달용</span><span class="cs-sec-sum"><span class="cs-chip ${CONTACTS.length ? '' : 'cs-chip-warn'}">${CONTACTS.length}명</span></span></summary>
-  <div class="cs-sec-body">
+<section class="cs-setpane" data-setpane="contacts">
     <p class="cs-muted">문의 검토·승인 요청과 부작용 접수를 보낼 팀 담당자예요. <b>역할</b>을 답장 템플릿의 담당 이름과 같게 쓰면(예: 품질·규제 담당) 문의를 열 때 자동으로 골라져요. Gmail로 보내기는 여기 등록된 주소로만 돼요.</p>
     <datalist id="cs-roles">${roles.map(r => `<option value="${esc(r)}">`).join('')}</datalist>
     <div class="cs-contacts" data-el="contacts">${rows.map(contactRowHTML).join('')}</div>
     <div class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="contact-add">+ 담당자 추가</button>
       <button type="button" class="cs-btn cs-primary" data-act="contacts-save">저장</button></div>
-  </div>
-</details>`;
+</section>`;
   }
   function contactRowHTML(c) {
     return `<div class="cs-row cs-contact">
@@ -1858,21 +1939,27 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     const blocked = rows.filter(x => x.raw && x.raw.verdict === 'BLOCK').length;
     const unchecked = rows.filter(x => !x.raw).length;
 
-    // 페르소나·템플릿은 길어서 접어 두고, 제목 줄에 유형·판정·빈칸 수를 보여 줌 (펼침 상태는 탭을 옮겨도 유지)
-    const op = id => (TPL_OPEN.get(id) ? ' open' : '');
+    // 설정 다섯 가지를 밑줄 탭으로 하나씩 (고른 탭은 다시 그려도 유지 · 처음엔 기본값이 비었으면 기본값, 아니면 템플릿)
     const dv = replyDefaults();
     const dmeta = store.get(KEY.defaults, null) || {};
     const dFields = DATA.replyDefaults || [];
     const dFilled = dFields.filter(f => String(dv[f.key] || '').trim()).length;
-    const allTodos = rows.reduce((n, x) => n + x.todos.length, 0);
     const P = persona();
     const pmeta = store.get(KEY.persona, null) || {};
-    p.innerHTML = `<div class="cs-backbar"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-back">← 문의함</button><b>답장 설정</b>
-  <span class="cs-muted">담당자 연락처 · 답장 기본값 · 페르소나 · 템플릿</span></div>` + contactsHTML() + `
-<details class="cs-sec cs-defaults" data-tpl="defaults"${TPL_OPEN.has('defaults') ? op('defaults') : allTodos ? ' open' : ''}>
-  <summary><span class="cs-sec-title">답장 기본값 · 빈칸 한 번에 채우기</span>
-    <span class="cs-sec-sum"><span class="cs-chip ${dFilled < dFields.length ? 'cs-chip-warn' : ''}">${dFilled}/${dFields.length} 입력</span>${dmeta.at ? `<span class="cs-chip cs-chip-dim">${esc(dmeta.by || '')} · ${fmt(dmeta.at)}</span>` : ''}</span></summary>
-  <div class="cs-sec-body">
+    if (!SET_TAB) SET_TAB = dFilled < dFields.length ? 'defaults' : 'templates';
+    if (!rows.some(x => x.t.code === TPL_CODE)) TPL_CODE = rows.length ? rows[0].t.code : null;
+    const setTabs = [
+      ['defaults', '답장 기본값', `${dFilled}/${dFields.length}`],
+      ['persona', '페르소나', ''],
+      ['templates', '답변 템플릿', String(rows.length)],
+      ['contacts', '담당자 연락처', String(CONTACTS.length)],
+      ['voc', '자주 나오는 불만', '']
+    ];
+    p.innerHTML = `<div class="cs-backbar"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-back">← 문의함</button><b>답장 설정</b></div>
+<div class="linetabs cs-settabs" role="tablist" data-subnav="off" aria-label="답장 설정">${setTabs.map(([id, l, n]) =>
+  `<button type="button" role="tab" data-settab="${id}" aria-selected="${id === SET_TAB}">${l}${n ? ` <span class="n">${n}</span>` : ''}</button>`).join('')}</div>` + contactsHTML() + `
+<section class="cs-setpane cs-defaults" data-setpane="defaults">
+    ${dmeta.at ? `<p class="cs-muted">마지막 저장 ${esc(dmeta.by || '')} · ${fmt(dmeta.at)}</p>` : ''}
     <p class="cs-muted">여기 값이 모든 답장 템플릿의 같은 빈칸을 채워요 (팀 공용 · 고객에게 가는 <b>영어</b>로). <b>팀이 정한 값만</b> 넣고, 정하지 않은 값은 비워 두면 그 답장은 [확인 필요]로 남아 승인이 막혀요.
       저장하면 아직 손대지 않은 초안(직접 고치지 않은 · 승인 전)은 새 값으로 다시 만들어져요.</p>
     <div class="cs-defaults-grid">${dFields.map(f => `
@@ -1880,13 +1967,10 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
         ${f.long ? `<textarea class="cs-input" rows="2" data-def="${esc(f.key)}" placeholder="${esc(f.placeholder)}">${esc(dv[f.key] || '')}</textarea>`
           : `<input class="cs-input" data-def="${esc(f.key)}" value="${esc(dv[f.key] || '')}" placeholder="${esc(f.placeholder)}">`}</label>`).join('')}</div>
     <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="defaults-save">저장하고 초안에 반영</button></div>
-  </div>
-</details>
-<details class="cs-sec" data-tpl="persona"${op('persona')}>
-  <summary><span class="cs-avatar cs-persona-avatar cs-persona-mini" aria-hidden="true">${initials(P.name || 'AI')}</span>
-    <span class="cs-sec-title">답장 페르소나 · ${esc(P.name || '없음')}</span>
-    <span class="cs-sec-sum"><span class="cs-chip cs-chip-dim">${esc(P.title || '')}</span>${pmeta.at ? `<span class="cs-chip cs-chip-dim">${esc(pmeta.by || '')} · ${fmt(pmeta.at)}</span>` : '<span class="cs-chip cs-chip-dim">기본값</span>'}</span></summary>
-  <div class="cs-sec-body cs-persona-body">
+</section>
+<section class="cs-setpane cs-persona-body" data-setpane="persona">
+    <p class="cs-persona-head"><span class="cs-avatar cs-persona-avatar cs-persona-mini" aria-hidden="true">${initials(P.name || 'AI')}</span>
+      <b>${esc(P.name || '없음')}</b> <span class="cs-muted">${esc(P.title || '')} · ${pmeta.at ? `${esc(pmeta.by || '')} · ${fmt(pmeta.at)}` : '기본값'}</span></p>
     <div class="cs-defaults-grid">
       <label class="cs-field"><span>이름</span><input class="cs-input" data-p="name" maxlength="40" value="${esc(P.name || '')}" placeholder="예: Hana"></label>
       <label class="cs-field"><span>직함</span><input class="cs-input" data-p="title" maxlength="80" value="${esc(P.title || '')}" placeholder="예: REBOOT 고객경험 매니저"></label>
@@ -1896,31 +1980,44 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     <p class="cs-muted">문의함 → 답장 초안의 <b>[AI로 초안 다듬기]</b>가 이 인물로 써요 (팀 공용). 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버에서 따로 지키고, 결과는 문구 검토와 CS 검토를 다시 거쳐요.</p>
     <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="persona-save">저장</button>
       ${pmeta.at ? '<button type="button" class="cs-btn" data-act="persona-reset">기본값으로 되돌리기</button>' : ''}</div>
-  </div>
-</details>
-<details class="cs-sec" data-tpl="voc"${op('voc')}>
-  <summary><span class="cs-sec-title">자주 나오는 불만 (구매자 리뷰)</span>
-    <span class="cs-sec-sum" data-ref="cs-voc-sum">${vocSumHTML()}</span></summary>
-  <div class="cs-sec-body" data-ref="cs-voc">${vocHTML()}</div>
-</details>
-<div class="cs-secbar"><span class="cs-summary">템플릿 ${rows.length}개 · 사용 불가 <b class="${blocked ? 'cs-late' : 'cs-ok'}">${blocked}개</b> (목표 0개)
-  ${unchecked ? ` · <span class="cs-warn-text">컴플라이언스 탭이 없어 ${unchecked}개 심의 불가</span>` : ''}</span>
-  <span class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-all" data-open="1">모두 펼치기</button>
-    <button type="button" class="cs-btn cs-btn-sm" data-act="tpl-all" data-open="">모두 접기</button></span></div>
-<p class="cs-muted">템플릿이 사용 불가면 그 유형의 발송이 전부 막혀요. [확인 필요]는 현재 설정 값으로 채웠을 때 남는 빈칸 수예요 (고객 이름·주문번호는 예시값으로 채움).</p>
-<div class="cs-templates">${rows.map(x => `
-  <details class="cs-sec" data-tpl="${x.t.code}"${op(x.t.code)}>
-    <summary><span class="cs-type cs-type-${x.t.code}">${x.t.code} ${esc(x.t.name)}</span>
-      <span class="cs-sec-sum">${x.raw ? badge(x.raw.verdict) : '<span class="cs-badge">심의 불가</span>'}
-        <span class="cs-chip ${x.todos.length ? 'cs-chip-warn' : ''}">[확인 필요] ${x.todos.length}곳</span>
-        <span class="cs-chip cs-chip-dim">${esc(x.t.mode)} · 기한 ${x.t.dueHours}시간</span></span></summary>
-    <div class="cs-sec-body">
+</section>
+<section class="cs-setpane" data-setpane="voc">
+  <p class="cs-voc-sum" data-ref="cs-voc-sum">${vocSumHTML()}</p>
+  <div data-ref="cs-voc">${vocHTML()}</div>
+</section>
+<section class="cs-setpane" data-setpane="templates">
+  <p class="cs-summary"><span class="cs-muted">템플릿 ${rows.length}개</span>
+    ${blocked ? `<span class="badge red">사용 불가 ${blocked}</span>` : ''}
+    ${unchecked ? `<span class="badge orange" title="컴플라이언스 탭이 없어 심의하지 못했어요">심의 못 함 ${unchecked}</span>` : ''}</p>
+  <p class="cs-muted">템플릿이 사용 불가면 그 유형의 발송이 전부 막혀요. [확인 필요]는 현재 설정 값으로 채웠을 때 남는 빈칸 수예요 (고객 이름·주문번호는 예시값으로 채움).</p>
+  <div class="linetabs cs-tpltabs" role="tablist" data-subnav="off" aria-label="문의 유형">${rows.map(x =>
+    `<button type="button" role="tab" data-tplcode="${esc(x.t.code)}" aria-selected="${x.t.code === TPL_CODE}" title="${esc(x.t.name)}">${esc(x.t.code)} ${esc(x.t.name)}${x.raw && x.raw.verdict === 'BLOCK' ? ' <span class="cs-tpl-dot" aria-label="사용 불가">●</span>' : ''}</button>`).join('')}</div>
+  ${rows.map(x => `
+  <div class="cs-tplpane" data-tplpane="${esc(x.t.code)}"${x.t.code === TPL_CODE ? '' : ' hidden'}>
+    <p class="cs-summary">${x.raw ? badge(x.raw.verdict) : '<span class="cs-badge">심의 불가</span>'}
+      <span class="cs-chip ${x.todos.length ? 'cs-chip-warn' : ''}">[확인 필요] ${x.todos.length}곳</span>
+      <span class="cs-chip cs-chip-dim">${esc(x.t.mode)} · 기한 ${x.t.dueHours}시간</span></p>
     ${x.raw && x.raw.findings.length ? `<p class="cs-muted">${x.raw.findings.map(f => `${f.code} ${f.terms.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
     <pre class="cs-pre">${esc(x.t.template)}</pre>
     ${trBlock(x.t.template, '템플릿 한글 번역')}
-    </div>
-  </details>`).join('')}</div>`;
-    p.querySelectorAll('details[data-tpl]').forEach(d => d.addEventListener('toggle', () => TPL_OPEN.set(d.dataset.tpl, d.open)));
+  </div>`).join('')}
+</section>`;
+    const showSet = () => {
+      p.querySelectorAll('[data-settab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.settab === SET_TAB)));
+      p.querySelectorAll('[data-setpane]').forEach(s => { s.hidden = s.dataset.setpane !== SET_TAB; });
+    };
+    showSet();
+    p.querySelector('.cs-settabs').addEventListener('click', e => {
+      const b = e.target.closest('[data-settab]');
+      if (b) { SET_TAB = b.dataset.settab; showSet(); }
+    });
+    p.querySelector('.cs-tpltabs').addEventListener('click', e => {
+      const b = e.target.closest('[data-tplcode]');
+      if (!b) return;
+      TPL_CODE = b.dataset.tplcode;
+      p.querySelectorAll('[data-tplcode]').forEach(x => x.setAttribute('aria-selected', String(x.dataset.tplcode === TPL_CODE)));
+      p.querySelectorAll('[data-tplpane]').forEach(x => { x.hidden = x.dataset.tplpane !== TPL_CODE; });
+    });
     loadVoc(p);
     const cbox = p.querySelector('[data-el="contacts"]');
     p.querySelector('[data-act="contact-add"]').addEventListener('click', () => cbox.insertAdjacentHTML('beforeend', contactRowHTML({})));
@@ -1933,7 +2030,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
         const out = await apiPut('/api/cs/contacts', { items });
         CONTACTS = out.items || [];
         contactsP = Promise.resolve(CONTACTS);
-        TPL_OPEN.set('contacts', true);
+        SET_TAB = 'contacts';
         renderTemplates(p);
         toast(`담당자 ${CONTACTS.length}명을 저장했어요.`);
       } catch (e) { toast(`저장하지 못했어요: ${e.message}`); }
@@ -1948,7 +2045,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
         const next = draftFor(i);
         if (next !== i.draft) { patch(i.id, x => { x.draft = next; logTo(x, '답장 기본값으로 초안 다시 만듦'); }); n++; }
       });
-      TPL_OPEN.set('defaults', true);
+      SET_TAB = 'defaults';
       renderTemplates(p);
       toast(`답장 기본값을 저장했어요${n ? ` · 초안 ${n}건을 새 값으로 다시 만들었어요` : ''}.`);
     });
@@ -1959,7 +2056,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
       const text = val('text').slice(0, PERSONA_MAX);
       if (!text) { toast('설명을 입력해 주세요. 비워 두려면 [기본값으로 되돌리기]를 누르세요.'); return; }
       store.set(KEY.persona, { name: val('name').slice(0, 40), title: val('title').slice(0, 80), text, by: (REBOOT.user && REBOOT.user().name) || '', at: Date.now() });
-      TPL_OPEN.set('persona', true);
+      SET_TAB = 'persona';
       renderTemplates(p);
       toast('답장 페르소나를 저장했어요. 다음 [AI로 초안 다듬기]부터 적용돼요.');
     });
@@ -1967,13 +2064,10 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     if (preset) preset.addEventListener('click', () => {
       if (!global.confirm(`팀이 고친 페르소나를 지우고 기본값(${PERSONA_DEFAULT.name || '기본'})으로 되돌릴까요?`)) return;
       store.remove(KEY.persona);
-      TPL_OPEN.set('persona', true);
+      SET_TAB = 'persona';
       renderTemplates(p);
       toast('기본 페르소나로 되돌렸어요.');
     });
-    p.querySelectorAll('[data-act="tpl-all"]').forEach(b => b.addEventListener('click', () => {
-      p.querySelectorAll('.cs-templates details[data-tpl]').forEach(d => { d.open = !!b.dataset.open; });
-    }));
   }
 
   /* ───────── 공개 기능 · 등록 ───────── */

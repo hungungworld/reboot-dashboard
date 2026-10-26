@@ -2380,7 +2380,7 @@
   function campaignsHtml() {
     return `<div class="cnt-folders" data-ref="folder-chips" role="tablist" aria-label="콘텐츠별 폴더">${folderChipsHtml()}</div>
       <div class="filters cnt-filters">
-        <div class="chips" data-ref="filter-chips">${filterChipsHtml()}</div>
+        <div class="linetabs" data-ref="filter-chips" role="group" aria-label="진행 상태">${filterChipsHtml()}</div>
         <div class="flex wrap"><label class="search cnt-search">${icon('search')}<input class="input" data-ref="search" type="search" placeholder="캠페인명 · 제품 · 채널 · 콘텐츠 검색" value="${esc(S.query)}" aria-label="캠페인 검색"></label>
           <button type="button" class="btn lime" data-act="new-campaign">${icon('plus')}새 캠페인</button></div>
       </div>
@@ -2390,7 +2390,7 @@
   function filterChipsHtml() {
     const counts = (S.listMeta && S.listMeta.counts) || {};
     const total = S.listMeta ? S.listMeta.total : '';
-    return ['전체'].concat(DATA.statuses).map(st => `<button type="button" class="chip" data-act="filter" data-value="${esc(st)}" aria-pressed="${S.filter === st}">${esc(st)} <span class="n">${esc(st === '전체' ? total : counts[st] || 0)}</span></button>`).join('');
+    return ['전체'].concat(DATA.statuses).map(st => `<button type="button" data-act="filter" data-value="${esc(st)}" aria-pressed="${S.filter === st}">${esc(st)} <span class="n">${esc(st === '전체' ? total : counts[st] || 0)}</span></button>`).join('');
   }
 
   // 콘텐츠별 폴더 — 이미지 · 카드뉴스 · 숏폼 영상 · CRM 메시지 (개수는 지금 상태 필터·검색 결과 기준)

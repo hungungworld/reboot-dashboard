@@ -1241,7 +1241,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
         <div class="filters">
           <div class="flex wrap">
             <input class="input set-search" type="search" data-ref="wl-q" placeholder="작업 · 사람 · 탭 검색" aria-label="작업 기록 검색">
-            <div class="chips" role="group" aria-label="구분" data-ref="wl-kinds"></div>
+            <div class="linetabs" role="group" aria-label="구분" data-ref="wl-kinds"></div>
             <select class="input set-select" data-ref="wl-part" aria-label="탭">
               <option value="">모든 탭</option>${parts.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('')}
             </select>
@@ -1263,7 +1263,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
     const box = $(panel('worklog'), '[data-ref="wl-kinds"]');
     if (!box) return;
     box.innerHTML = [['', '전체']].concat(KINDS.map(k => [k, k])).map(([v, l]) =>
-      `<button type="button" class="chip${v === S.wl.kind ? ' selected' : ''}" data-act="wl-kind" data-v="${esc(v)}" aria-pressed="${v === S.wl.kind}">${esc(l)}</button>`).join('');
+      `<button type="button" data-act="wl-kind" data-v="${esc(v)}" aria-pressed="${v === S.wl.kind}">${esc(l)}</button>`).join('');
   }
 
   function wlQuery() {
