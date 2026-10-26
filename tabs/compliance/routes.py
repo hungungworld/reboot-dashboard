@@ -14,6 +14,7 @@
 from flask import Blueprint, current_app, jsonify, request
 
 from server import jobs, worklog
+from server.extensions import limiter
 from server.security import ApiError, clip, json_body
 
 bp = Blueprint("compliance", __name__, url_prefix="/api/compliance")
@@ -161,28 +162,112 @@ def daily_monitor():
     _collect_and_save(bodies=True)
 
 
-# ───────── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 1회용 링크로 회신 받음 ─────────
-#   POST /api/compliance/review-requests   {text, ko?, channel, product?, aiVerdict?, teams:[legal|regulatory|quality], memo?}
-#                                          → {request, links:{팀: 링크}, slack:{ok, error}} (링크는 이 응답에서만 보임)
+# ───────── 문구 검토 요청 — 법무·인허가·품질팀에 엑셀 요청서를 메일로 보내고 1회용 링크로 회신 받음 ─────────
+#   (2026-10-25 Slack 알림 → 2026-10-26 엑셀 첨부 Gmail)
+#   POST /api/compliance/review-requests   {text, ko?, channel, product?, aiVerdict?, teams:[legal|regulatory|quality], memo?,
+#                                           details?:{규칙: {say, todo, reason, alt, law, legalNote}}, attachment?: 고친 요청서 XLSX base64}
+#                                          → {request, links:{팀: 링크}} (링크는 이 응답에서만 보임)
+#   POST /api/compliance/review-requests/preview      (위와 같은 값) → 저장하지 않고 엑셀 미리 받기 (번호 없음)
+#   POST /api/compliance/review-requests/import       multipart file=팀이 [팀 회신]을 채워 돌려준 엑셀 → 팀별 상태 반영
 #   GET  /api/compliance/review-requests   최근 요청과 팀별 회신 상태
+#   GET  /api/compliance/review-requests/mail-setup   받는 사람 후보(CS 담당자 연락처) · Gmail 연결 여부
+#   GET  /api/compliance/review-requests/<id>.xlsx    엑셀 요청서 받기
+#   POST /api/compliance/review-requests/<id>/mail    {to:[메일], subject, body, links} → 엑셀을 첨부해 Gmail로 보냄
 #   GET·POST /review/<토큰>                 회신 페이지 (로그인 없음 · 14일 · /api 밖이라 화면 주소 그대로)
+
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _rq_args(data):
+    return (data.get("text"), data.get("ko"), clip(data.get("channel"), 20), clip(data.get("product"), 20),
+            clip(data.get("aiVerdict"), 10), data.get("teams") if isinstance(data.get("teams"), list) else [],
+            data.get("memo"))
+
+
+def _xlsx_response(content, name):
+    import io
+
+    from flask import send_file
+    return send_file(io.BytesIO(content), as_attachment=True, download_name=name, mimetype=XLSX_MIME)
+
+
+def _who():
+    from flask_login import current_user
+    return getattr(current_user, "name", "") or getattr(current_user, "email", "") or "담당자"
+
 
 @bp.post("/review-requests")
 def review_request_create():
-    from flask_login import current_user
     from . import review_requests as rr
-    data = json_body(max_bytes=32 * 1024)
-    who = getattr(current_user, "name", "") or getattr(current_user, "email", "") or "담당자"
+    import base64
+    import binascii
+    data = json_body(max_bytes=5 * 1024 * 1024)   # 고친 요청서 첨부(3MB) 포함
     try:
-        req, links, slack_error = rr.create(data.get("text"), data.get("ko"), clip(data.get("channel"), 20),
-                                            clip(data.get("product"), 20), clip(data.get("aiVerdict"), 10),
-                                            data.get("teams") if isinstance(data.get("teams"), list) else [],
-                                            data.get("memo"), who, request.host_url)
+        attachment = base64.b64decode(data["attachment"], validate=True) if data.get("attachment") else None
+    except (binascii.Error, TypeError, ValueError):
+        raise ApiError("첨부한 엑셀을 읽지 못했어요. 다시 올려 주세요.")
+    try:
+        req, links = rr.create(*_rq_args(data), _who(), request.host_url, data.get("details"), attachment)
     except rr.RequestError as e:
         raise ApiError(str(e), e.status)
-    worklog.add("compliance", "검토 요청", "문구 검토 요청 보냄", detail={
-        "id": req["id"], "teams": list(req["teams"]), "ruleVerdict": req["ruleVerdict"], "copy": clip(req["text"], 300)})
-    return jsonify(request=req, links=links, slack={"ok": not slack_error, "error": slack_error})
+    worklog.add("compliance", "검토 요청", "문구 검토 요청서 만듦", detail={
+        "id": req["id"], "no": req["no"], "teams": list(req["teams"]), "ruleVerdict": req["ruleVerdict"], "copy": clip(req["text"], 300)})
+    return jsonify(request=req, links=links)
+
+
+@bp.post("/review-requests/preview")
+def review_request_preview():
+    from . import review_requests as rr
+    data = json_body(max_bytes=64 * 1024)
+    try:
+        r = rr.draft(*_rq_args(data), _who(), data.get("details"))
+    except rr.RequestError as e:
+        raise ApiError(str(e), e.status)
+    return _xlsx_response(rr.workbook(r), rr.file_name(r))
+
+
+@bp.post("/review-requests/import")
+def review_request_import():
+    from . import review_requests as rr
+    f = request.files.get("file")
+    if f is None or not f.filename:
+        raise ApiError("회신 엑셀 파일을 골라 주세요.")
+    try:
+        req, updated, skipped = rr.import_replies(f.read(rr.MAX_XLSX + 1))
+    except rr.RequestError as e:
+        raise ApiError(str(e), e.status)
+    if updated:
+        worklog.add("compliance", "검토 회신", "회신 엑셀 올림", detail={"id": req["id"], "teams": updated})
+    return jsonify(request=req, updated=updated, skipped=skipped)
+
+
+@bp.get("/review-requests/mail-setup")
+def review_request_mail_setup():
+    from . import review_requests as rr
+    return jsonify(rr.mail_setup())
+
+
+@bp.get("/review-requests/<rid>.xlsx")
+def review_request_xlsx(rid):
+    from . import review_requests as rr
+    try:
+        r = rr.get(rid)
+    except rr.RequestError as e:
+        raise ApiError(str(e), e.status)
+    return _xlsx_response(rr.file_bytes(r), rr.file_name(r))
+
+
+@bp.post("/review-requests/<rid>/mail")
+@limiter.limit("20 per minute", methods=["POST"], error_message="보내기 요청이 너무 많아요. 1분 뒤 다시 시도하세요.")
+def review_request_mail(rid):
+    from . import review_requests as rr
+    data = json_body(max_bytes=64 * 1024)
+    try:
+        log = rr.send_mail(rid, data.get("to"), data.get("subject"), data.get("body"), data.get("links"), _who())
+    except rr.RequestError as e:
+        raise ApiError(str(e), e.status)
+    worklog.add("compliance", "검토 요청", "검토 요청서 메일 보냄 (Gmail)", detail={"id": rid, "to": log["to"], "subject": log["subject"]})
+    return jsonify(mail=log)
 
 
 @bp.get("/review-requests")
@@ -254,7 +339,6 @@ def _review_page(token):
 
 def _register_review_page(state):
     """회신 페이지는 /api 밖 주소(/review/<토큰>)라 로그인 없이 열림 (공용 security.py는 /api만 막음)."""
-    from server.extensions import limiter
     view = limiter.limit("30 per minute")(_review_page)
     state.app.add_url_rule("/review/<token>", "compliance_review_page", view, methods=["GET", "POST"])
 

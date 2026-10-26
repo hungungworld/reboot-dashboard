@@ -319,7 +319,7 @@
     const box = ref('insight');
     if (!box) return;
     const st = S.insight.state;
-    const tag = `<span class="flex">${badge('AI 인사이트', 'purple')}<span class="small muted">참고용</span></span>`;
+    const tag = badge('AI 인사이트', 'purple');
     let body;
     if (st === 'ok') {
       const d = S.insight.data;
@@ -434,7 +434,6 @@
       <div class="perf-info-item"><span>데이터</span><strong>${d.isSample ? badge('예시', 'orange') : '올린 데이터'}</strong>
         <small>${esc(M.fmtPeriod(S.rng.start, S.rng.end))} · ${esc(fmt.num(S.rows.length))}행${!d.isSample && m.updatedBy ? ` · ${esc(m.updatedBy)}` : ''}${!d.isSample && m.filename ? ` · ${esc(m.filename)}` : ''}</small>
         <div class="perf-info-actions">
-          ${ui.fileBtn('download', { label: '성과 데이터 다운로드', type: 'CSV', href: '/api/performance/export.csv' })}
           ${d.isSample ? '' : `<button type="button" class="btn small ghost" data-act="reset">${icon('trash')} 예시로 되돌리기</button>`}
         </div></div>`;
   }
@@ -590,7 +589,9 @@
           </div>
           ${ui.fileActions(
             ui.fileBtn('upload', { label: '매출 데이터 업로드', type: 'CSV', act: 'upload' }) +
-            ui.fileBtn('download', { label: '양식 다운로드', type: 'CSV', act: 'template' }) +
+            ui.fileMenu('download', { items: [
+              { label: '성과 데이터 (CSV)', href: '/api/performance/export.csv' },
+              { label: '업로드 양식 (CSV)', act: 'template' }] }) +
             ui.fileBtn('report', { type: 'PDF', act: 'report' }))}
         </div>
         <div class="perf-wrap" data-ref="body"></div>

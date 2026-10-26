@@ -513,7 +513,7 @@
      data-tr-text = 고정 원문, data-tr-from = 지금 입력 칸의 값을 번역 (예: 수정 중인 초안) */
   function trBlock(text, label, from) {
     return `<div class="cs-trblock" ${from ? `data-tr-from="${esc(from)}"` : `data-tr-text="${esc(text)}"`}>
-  <button type="button" class="cs-btn cs-btn-sm cs-btn-tr" data-act="translate">${esc(label || '한글로 번역')}</button>
+  ${REBOOT.ui.trBtn({ title: label })}
   <div data-tr-out aria-live="polite"></div></div>`;
   }
 
@@ -536,9 +536,8 @@
     });
     btn.disabled = false;
     if (r.ok) {
-      out.innerHTML = `<div class="cs-tr"><span class="cs-tr-tag">${r.engine === 'already-ko' ? '이미 한국어' : r.engine === 'ai' ? 'AI 번역 · 참고용' : '기계 번역 · 참고용'}</span>
-  <p class="cs-tr-text">${esc(r.text)}</p>${r.note ? `<p class="cs-muted">${esc(r.note)}</p>` : ''}
-  <p class="cs-muted">뜻 확인용이에요. 다시 심의·승인·발송은 영어 원문 기준이에요.</p></div>`;
+      out.innerHTML = `<div class="cs-tr"><span class="cs-tr-tag">${r.engine === 'already-ko' ? '이미 한국어' : r.engine === 'ai' ? 'AI 번역' : '기계 번역'}</span>
+  <p class="cs-tr-text">${esc(r.text)}</p>${r.note ? `<p class="cs-muted">${esc(r.note)}</p>` : ''}</div>`;
     } else if (r.reason === 'empty') {
       out.innerHTML = '<p class="cs-muted">번역할 내용이 없어요.</p>';
     } else {
@@ -662,7 +661,12 @@
     loadContacts().then(() => { if (ui.view === 'detail' && ui.selected) renderDetail(ui); });
     root.addEventListener('click', e => {
       const tr = e.target.closest('[data-act="translate"]');
-      if (tr && !tr.disabled) runTranslate(root, tr.closest('.cs-trblock'));
+      if (tr && !tr.disabled) {   // 다시 누르면 번역을 접음
+        const open = tr.getAttribute('aria-pressed') === 'true';
+        REBOOT.ui.trOn(tr, !open);
+        if (open) tr.closest('.cs-trblock').querySelector('[data-tr-out]').innerHTML = '';
+        else runTranslate(root, tr.closest('.cs-trblock'));
+      }
       const sh = e.target.closest('[data-act^="share-"]');
       if (sh && !sh.disabled) { runShare(ui, sh); return; }
       const pg = e.target.closest('[data-act="list-page"]');
@@ -916,7 +920,7 @@
       <div class="cs-from"><span class="cs-avatar" aria-hidden="true">${initials(inq.name)}</span>
         <span><b>${esc(inq.name)}</b><small>${esc(inq.from)} → REBOOT Support · ${fmt(inq.receivedAt)}</small></span></div>
       <blockquote class="cs-body">${esc(inq.body)}</blockquote>
-      ${trBlock(`${inq.subject}\n${inq.body}`, '문의 한글 번역')}
+      ${trBlock(`${inq.subject}\n${inq.body}`, '문의 한국어로 보기')}
     </article>
     ${notes.map(n => `<article class="cs-msg cs-msg-note"><p class="cs-msg-head"><b>내부 메모</b> ${esc(n.by)} <span class="cs-muted">${fmt(n.at)}</span></p>
       <p class="cs-msg-text">${esc(n.text)}</p></article>`).join('')}
@@ -941,7 +945,7 @@
         </div>
         <div class="cs-cextra">
           <div data-el="ainotes" aria-live="polite">${inq.aiNotes && inq.aiNotes.length ? aiNotesHTML(inq) : ''}</div>
-          ${trBlock('', '초안 한글 번역 (보내기 전 뜻 확인)', 'draft')}
+          ${trBlock('', '초안 한국어로 보기', 'draft')}
         </div>
       </div>
       <div class="cs-cpane cs-notepane" data-ctab-pane="note"${ui.ctab === 'note' ? '' : ' hidden'}>
@@ -1546,13 +1550,13 @@ ${todoPanelHTML(inq.draft)}
         : sort === 'signal' ? (b.signals.length + b.behavior.length) - (a.signals.length + a.behavior.length) || b.list.length - a.list.length
           : b.list.length - a.list.length || b.last - a.last);
     const count = fn => all.filter(fn).length;
+    const custPages = Math.max(1, Math.ceil(shown.length / LIST_MAX));
+    const custCur = Math.min(Math.max(1, ui.custPage || 1), custPages);
     const typeText = c => Object.entries(c.types).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${t}${n > 1 ? `×${n}` : ''}`).join(' ');
     p.innerHTML = `
 <div class="cs-outbox">
   <div class="cs-card-head"><h3>고객 기록 <span class="cs-chip">${all.length}명</span></h3>
     <span class="cs-muted">2건 이상 ${count(c => c.list.length > 1)}명 · 주의 신호 ${count(c => c.signals.length || c.behavior.length)}명 · 주의·응대 제한 분류 ${count(c => c.tag && ['watch', 'limit'].includes(c.tag.tag))}명</span></div>
-    const custPages = Math.max(1, Math.ceil(shown.length / LIST_MAX));
-    const custCur = Math.min(Math.max(1, ui.custPage || 1), custPages);
   <p class="cs-note">보낸 사람(이메일)별로 문의를 묶었어요. <b>주의 신호</b>는 문의 내용·횟수에서 찾은 사실이고, 신호가 있다고 악성 고객인 것은 아니에요. 분류는 담당자가 내용을 보고 이유와 함께 정하세요.
     분류는 <b>내부 응대 참고용</b>(고객에게 보이지 않음 · 외부 공유 금지)이고, 주의 고객이어도 <b>C1 부작용 신고는 정상 처리</b>해요.</p>
   <div class="cs-row">
@@ -1644,7 +1648,7 @@ ${todoPanelHTML(inq.draft)}
     <button type="button" class="cs-btn cs-btn-sm" data-act="thread-open" data-id="${esc(i.id)}">이 문의 열기</button></div>
     <p class="cs-mail-subject">${esc(i.subject)}</p><pre class="cs-mail-body">${esc(i.body)}</pre>
     ${trBlock(`${i.subject}
-${i.body}`, '받은 메일 한글 번역')}</div>
+${i.body}`, '받은 메일 한국어로 보기')}</div>
   ${reply}
 </li>`;
   }
@@ -1999,7 +2003,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
       <span class="cs-chip cs-chip-dim">${esc(x.t.mode)} · 기한 ${x.t.dueHours}시간</span></p>
     ${x.raw && x.raw.findings.length ? `<p class="cs-muted">${x.raw.findings.map(f => `${f.code} ${f.terms.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
     <pre class="cs-pre">${esc(x.t.template)}</pre>
-    ${trBlock(x.t.template, '템플릿 한글 번역')}
+    ${trBlock(x.t.template, '템플릿 한국어로 보기')}
   </div>`).join('')}
 </section>`;
     const showSet = () => {

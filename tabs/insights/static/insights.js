@@ -35,10 +35,6 @@
   const OLD_HASH = { data: 'market/changes', 'data/shelf': 'market/price', 'data/competitors': 'market/brands', 'data/reviews': 'customers/reviews',
     'data/audience': 'customers/audience', 'data/accuracy': 'manage/accuracy' };
   const NEWS_HASH = ['data/news', 'saved', 'saved/news'];
-  const QUESTIONS = {
-    market: '경쟁 제품은 이번 주 뭘 했고, 알디콤은 어디쯤 있나', reviews: '고객은 무엇에 만족하고, 무엇에 실망하나',
-    audience: '사기 전에 무엇을 궁금해하나', accuracy: 'AI 분류를 믿어도 되나', edit: '수집한 진열대가 맞게 읽혔나'
-  };
   const GRADE_TONE = { '긴급': 'red', '기회': 'green', '참고': 'blue' };
   const GRADE_CLASS = { '긴급': 'urgent', '기회': 'chance', '참고': 'info' };
   const BUCKETS = [['low', '$3 미만'], ['mid', '$3~6'], ['high', '$6 이상']];
@@ -98,7 +94,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit' }, weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1 }, chg: 'all',
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1, f: '' }, chg: 'all',
     rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, pf: 'all',
     sum: { q: '', dir: 1, page: 1 },   // 아마존 리뷰 요약 표 (제품 이름순)
     rvm: { sort: '', dir: 1 },         // 브랜드 × 주제 표 ('' = 서버 순서: 주시 중 → 리뷰 많은 순)
@@ -371,6 +367,7 @@
       case 'run-close': S.showResult = false; drawRun(S.run); break;
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'tbl-page': S.tbl.page = Number(d.p) || 1; drawShelfTable(); break;
+      case 'tbl-todo': S.tbl.f = S.tbl.f === d.f ? '' : d.f; S.tbl.page = 1; drawSub('edit'); break;
       case 'pf-tier': S.pf = d.k; drawSub('price'); break;
       case 'sw-zoom': if (S.swarm) zoomSwarm(d.z === 'fit' ? 1 : d.z === 'in' ? S.swarm.zoom * 1.5 : S.swarm.zoom / 1.5); break;
       case 'brand-go': openBrand(d.brand); break;
@@ -381,7 +378,7 @@
       case 'mk-more': S.mk.more = !S.mk.more; drawBrandTable(); break;
       case 'mk-ftog': S.mk[d.k] = !S.mk[d.k]; S.mk.page = 1; drawBrandTable(); break;
       case 'mk-fclear': Object.assign(S.mk, MK_F_EMPTY, { page: 1 }); drawBrandTable(); break;
-      case 'mk-fix': S.tbl.q = d.q || ''; S.tbl.page = 1; show('manage', 'edit'); toTop(); break;
+      case 'mk-fix': S.tbl.q = d.q || ''; S.tbl.f = ''; S.tbl.page = 1; show('manage', 'edit'); toTop(); break;
       case 'watch': toggleWatch(b, d.brand, d.on === '1'); break;
       case 'comp-discover': compAction(b, 'discover'); break;
       case 'comp-research-all': compAction(b, 'all'); break;
@@ -598,8 +595,8 @@
     const main = rows.filter(r => r.grade !== '참고'), refs = rows.filter(r => r.grade === '참고');
     const f = S.actF || 'all';
     const openKey = S.actOpen === undefined ? null : S.actOpen;   // 처음엔 모두 접힘
-    const seg = main.length ? `<div class="ins-aw-seg" role="group" aria-label="등급 고르기">${[['all', '전체', main.length], ['긴급', '긴급', rowCount(main, '긴급')], ['기회', '기회', rowCount(main, '기회')]]
-      .map(([k, l, n]) => `<button type="button" data-act="act-f" data-f="${k}" aria-pressed="${f === k}"${f === k ? ' class="on"' : ''}>${l}<b>${n}</b></button>`).join('')}</div>` : '';
+    const seg = main.length ? `<div class="linetabs ins-aw-seg" role="group" aria-label="등급 고르기">${[['all', '전체', main.length], ['긴급', '긴급', rowCount(main, '긴급')], ['기회', '기회', rowCount(main, '기회')]]
+      .map(([k, l, n]) => `<button type="button" data-act="act-f" data-f="${k}" aria-pressed="${f === k}"${f === k ? ' class="on"' : ''}>${l} <span class="n">${n}</span></button>`).join('')}</div>` : '';
     const head = `<div class="card-head"><h2>이번 주 액션<span class="head-cap">${esc(w.weekLabel)}</span></h2>
       <div class="flex">${w.aiUsed ? badge('AI 문장', 'purple') : ''}${seg}</div></div>`;
     let list;
@@ -899,7 +896,7 @@
         <span class="small muted">매월 첫 주(1~7일)에는 지난달을 보여줘요.</span>
       </div>
       <div class="ins-mstack">
-      <section class="card tinted ins-msummary"><div class="card-head"><h2>이달의 요약</h2>${m.summary.length ? badge('AI 분석', 'purple') : ''}</div>${summary}</section>
+      <section class="card ins-msummary"><div class="card-head"><h2>이달의 요약</h2>${m.summary.length ? badge('AI 분석', 'purple') : ''}</div>${summary}</section>
       <div class="ins-mrow">
         <section class="card"><div class="card-head"><h2>고객 인사이트</h2>${aiBadge(m.insightsAi)}</div>${insights}</section>
         <section class="card ins-mcomp"><div class="card-head"><h2>경쟁 브랜드 동향</h2>${aiBadge(m.competitorAi)}</div>
@@ -1054,12 +1051,15 @@
       `<button type="button" role="tab" data-sub="${k}" aria-selected="${sub === k}">${esc(l)}</button>`).join('')}</div></div>`;
   }
 
-  // more = 요약 줄 아래에 붙일 HTML (예: 시장 요약 숫자 칸) — oneLine 없이 more만 주면 요약 줄은 생략
+  // 화면 맨 위 요약 카드: 한 줄 요약 · 오른쪽 배지/버튼(extra) · 아래 HTML(more, 예: 시장 요약 숫자 칸)
+  // oneLine 없이 more만 주면 요약 줄은 생략, 보여 줄 것이 하나도 없으면 카드를 그리지 않음 (질문 제목은 2026-10-26 뺌)
   function qHead(sub, oneLine, extra, more) {
+    const line = oneLine ? esc(oneLine) : more ? '' : '<span class="muted">아직 모은 데이터가 없어요. 오른쪽 위 최신 데이터 받기를 눌러 시작하세요.</span>';
+    const body = (more || '').trim();
+    if (!line && !extra && !body) return '';
     return `<section class="card ins-q">
-      <div class="between"><div><div class="eyebrow">질문</div><h2>${esc(QUESTIONS[sub])}</h2></div><div class="flex wrap">${extra || ''}</div></div>
-      ${oneLine || !more ? `<p class="ins-oneline">${oneLine ? esc(oneLine) : '<span class="muted">아직 모은 데이터가 없어요. 오른쪽 위 최신 데이터 받기를 눌러 시작하세요.</span>'}</p>` : ''}
-      ${more || ''}
+      ${line || extra ? `<div class="between"><p class="ins-oneline">${line}</p>${extra ? `<div class="flex wrap">${extra}</div>` : ''}</div>` : ''}
+      ${body}
     </section>`;
   }
 
@@ -1337,14 +1337,17 @@
 
   // 표로 보기: 검색(상품명 · 브랜드 · 판매처) + 한 페이지 TABLE_PAGE개 — 검색창은 그대로 두고 표만 다시 그림
   const TABLE_PAGE = 5;
+  // 할 일 배지로 거르기: 회분을 못 읽은 행 · 묶음을 아직 확인 안 한 행
+  const TBL_TODO = { serv: x => x.servingsSource === 'default', line: x => x.line && !x.line.confirmed };
   function shelfTable(d) {
     const q = S.tbl.q.trim().toLowerCase();
-    const list = q ? d.items.filter(x => `${x.title} ${x.brand} ${x.sourceLabel}`.toLowerCase().includes(q)) : d.items;
+    const base = TBL_TODO[S.tbl.f] ? d.items.filter(TBL_TODO[S.tbl.f]) : d.items;
+    const list = q ? base.filter(x => `${x.title} ${x.brand} ${x.sourceLabel}`.toLowerCase().includes(q)) : base;
     const pages = Math.max(1, Math.ceil(list.length / TABLE_PAGE));
     S.tbl.page = Math.min(Math.max(1, S.tbl.page), pages);
     const cur = S.tbl.page;
     const shown = list.slice((cur - 1) * TABLE_PAGE, cur * TABLE_PAGE);
-    if (!shown.length) return `<p class="small muted">${q ? `'${esc(S.tbl.q.trim())}'에 맞는 제품이 없어요.` : '아직 받은 제품이 없어요. 위 최신 데이터 받기를 눌러 시작하세요.'}</p>`;
+    if (!shown.length) return `<p class="small muted">${q ? `'${esc(S.tbl.q.trim())}'에 맞는 제품이 없어요.` : base !== d.items ? '이 항목은 모두 처리했어요.' : '아직 받은 제품이 없어요. 위 최신 데이터 받기를 눌러 시작하세요.'}</p>`;
     const pager = compPager(cur, pages, list.length, (cur - 1) * TABLE_PAGE + 1, (cur - 1) * TABLE_PAGE + shown.length, 'tbl-page', '표 페이지');
     return `${q ? `<p class="small muted mb-8">검색 결과 ${list.length}개 (전체 ${d.items.length}개)</p>` : ''}
       <div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>제품</th><th>묶음 (브랜드 · 제형)</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>알디콤</th><th>변화</th><th></th></tr></thead><tbody>${shown.map(x => shelfRow(x, d)).join('')}</tbody></table></div>${pager}`;
@@ -1355,11 +1358,13 @@
   }
 
   // 데이터 관리 › 진열대 수집 · 고치기: 판매처별 수집 · 묶음 확인 · 표에서 바로 고치기 (시장 화면 숫자의 원본)
+  // 수량 표시 규칙: 총 개수는 제목 옆 작은 글씨, 처리할 일은 0보다 클 때만 배지(누르면 그 행만), 0이면 숨김
   function editHtml(d) {
-    const unserved = d.items.filter(x => x.servingsSource === 'default').length;
-    const unchecked = d.items.filter(x => x.line && !x.line.confirmed).length;
-    const one = d.items.length ? `제품 ${d.items.length}개 · 회분 확인 필요 ${unserved}개 · 묶음 확인 필요 ${unchecked}개` : '';
-    return qHead('edit', one) + pageTabs('manage', 'edit') + runStatus() + `<section class="card mt-24">
+    const todo = [['serv', '회분 입력'], ['line', '묶음 확인']].map(([f, l]) => [f, l, d.items.filter(TBL_TODO[f]).length]).filter(t => t[2]);
+    if (!todo.some(t => t[0] === S.tbl.f)) S.tbl.f = '';
+    const chips = todo.map(([f, l, n]) => `<button type="button" class="badge orange ins-todo" data-act="tbl-todo" data-f="${f}" aria-pressed="${S.tbl.f === f}" title="${S.tbl.f === f ? '다시 누르면 전체 보기' : `${l}할 제품만 보기`}">${esc(l)} ${n}</button>`).join('');
+    return qHead('edit', '', '', d.items.length ? ' ' : '') + pageTabs('manage', 'edit') + runStatus() + fold('edit-shelf', `진열대 제품${d.items.length ? ` · ${d.items.length}개` : ''}`, `
+      ${chips ? `<div class="flex wrap mb-16">${chips}</div>` : ''}
       <div class="flex wrap mb-16">
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 최신 데이터 받기</button>
         <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 최신 데이터 받기</button>
@@ -1368,7 +1373,7 @@
         <span class="small muted">회분 · 가격 · 재고 · 알디콤 · 묶음은 바로 고칠 수 있어요. 회분 수와 묶음은 한 번 고치면 모든 주차에 적용돼요.</span>
       </div>
       ${d.items.length ? `<input class="input ins-tbl-q mb-8" type="search" data-ref="tbl-q" value="${esc(S.tbl.q)}" placeholder="제품명 · 브랜드 · 판매처 검색" aria-label="표 검색">` : ''}
-      <div data-ref="tbl-body">${shelfTable(d)}</div></section>`;
+      <div data-ref="tbl-body">${shelfTable(d)}</div>`);
   }
 
   // 보기 바꾸기 버튼 줄 (진열대 · 구매자 리뷰 공통) — 질문 카드와 내용 사이, 왼쪽 끝 한 줄 · 크기 · 간격 같게
@@ -2008,7 +2013,7 @@
 
   function marketHtml(sub) {
     const sh = S.data.shelf, cp = S.data.competitors;
-    const head = demoNote(sh.demo) + qHead('market', sh.items.length ? '' : sh.oneLine, (cp.watch || []).length ? badge(`주시 ${cp.watch.length}개`, 'lime') : '',
+    const head = demoNote(sh.demo) + qHead('market', sh.items.length ? '' : sh.oneLine, '',
       sh.items.length ? marketKpis(sh, cp) : '');
     if (!sh.items.length) return head + `<div class="mt-24">${ui.empty('아직 진열대 데이터가 없어요. 최신 데이터 받기를 눌러 Weee! · Amazon · Yami 진열대를 받아 오세요 (설정 › 연결에 Firecrawl · SerpApi 키 필요).', 'grid')}</div>`;
     return head + pageTabs('market', sub) + (sub === 'changes' ? changesView(cp) : sub === 'price' ? priceView(sh) : brandsView(cp));
@@ -2422,8 +2427,8 @@
     const view = RV_VIEWS.some(([k]) => k === S.rv.view) ? S.rv.view : 'list';
     const n = { list: d.cs.length + d.items.filter(r => !r.own).length, compare: d.table.length };
     const tabs = viewSeg('rv-view', RV_VIEWS.map(([k, l]) => [k, l, n[k]]), view, '구매자 리뷰 보기');
-    // 한 줄 답은 맨 위 카드(rvHero)가 맡음 — 질문 카드에는 리뷰가 없을 때 안내만
-    return qHead('reviews', d.summary ? '' : d.oneLine, d.stats.total ? badge(`AI 분류 ${d.stats.ai} · 규칙 ${d.stats.total - d.stats.ai}`) : '', d.stats.total && d.summary ? ' ' : '') + pageTabs('customers', 'reviews') + rvHero(d) + tabs +
+    // 한 줄 답은 맨 위 카드(rvHero)가 맡음 — 질문 카드(qHead)는 두지 않음
+    return pageTabs('customers', 'reviews') + rvHero(d) + tabs +
       (view === 'list' ? rvListHtml(d) : compareHtml(d));
   }
 
@@ -2619,7 +2624,7 @@
         <p class="ins-quote mt-8">${esc(x.title ? x.title + ' — ' : '')}${esc(x.text)}</p>
         <div class="ins-quote ins-ko" data-ko hidden></div>
         <div class="ins-cs-bar">${seg ? `<div class="seg" role="group" aria-label="대응 상태">${seg}</div>` : ''}
-          <button type="button" class="btn small" data-rv="ko">번역 보기</button>
+          ${ui.trBtn({ act: false, attrs: 'data-rv="ko"' })}
           ${d.slackReady ? `<button type="button" class="btn small${x.slackBy ? ' ins-slack-done' : ''}" data-rv="slack"${slack ? ' aria-pressed="true"' : ''}${x.slackBy ? ' title="누르면 다시 보낼 수 있어요"' : ''}>${x.slackBy
             ? `${icon('check')}슬랙 공유됨 · ${esc(x.slackBy)} ${esc(fmt.date(x.slackAt))}` : `${icon('chat')}슬랙으로 보내기`}</button>` : ''}
           ${x.csBy ? `<span class="small muted">${esc(x.csBy)} · ${esc(fmt.datetime(x.csAt))}</span>` : ''}
@@ -2752,7 +2757,7 @@
     const box = document.createElement('div');
     box.className = 'part-insights ins-modal';
     box.innerHTML = `<p class="small muted">ASIN ${esc(s.asin)}</p><p class="ins-quote mt-8">${esc(s.text)}</p>
-      <div class="ins-sum-act"><button type="button" class="btn small" data-sum="ko">번역 보기</button>
+      <div class="ins-sum-act">${ui.trBtn({ act: false, attrs: 'data-sum="ko"' })}
         ${extLink(`https://www.amazon.com/dp/${encodeURIComponent(s.asin)}#customerReviews`, '아마존에서 리뷰 보기')}</div>
       <div class="ins-sum-ko" data-ko hidden></div>`;
     box.addEventListener('click', e => {
@@ -2792,7 +2797,7 @@
   // url을 주면 그 주소로 번역 (아마존 리뷰 요약), 없으면 리뷰 번호로
   async function showKo(btn, id, box, url) {
     if (!box) return;
-    if (box.dataset.loaded) { box.hidden = !box.hidden; btn.textContent = box.hidden ? '번역 보기' : '번역 숨기기'; return; }
+    if (box.dataset.loaded) { box.hidden = !box.hidden; ui.trOn(btn, !box.hidden); return; }
     ui.busy(btn, true);
     try {
       const res = await api(url || `/api/insights/reviews/${encodeURIComponent(id)}/translate`, {});
@@ -2800,7 +2805,7 @@
       box.dataset.loaded = '1';
       box.hidden = false;
       ui.busy(btn, false);
-      btn.textContent = '번역 숨기기';
+      ui.trOn(btn, true);
     } catch (e) {
       ui.busy(btn, false);
       toast('번역하지 못했어요: ' + e.message, 'error');

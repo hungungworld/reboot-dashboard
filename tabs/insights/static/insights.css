@@ -35,10 +35,9 @@
 .part-insights .ins-steps-list li.ok .ins-mark { color: var(--green); }
 
 /* 이번 주 액션: 한 줄 목록 (점 · 제목 · 회색 한 줄 · 오른쪽 숫자) → 누르면 근거 칩 · 할 일 단계 · 근거 보기 */
-.part-insights .ins-aw-seg { display: inline-flex; background: var(--soft); border-radius: 10px; padding: 3px; }
-.part-insights .ins-aw-seg button { border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
-.part-insights .ins-aw-seg button.on { background: var(--surface); color: var(--ink); font-weight: 650; box-shadow: 0 1px 3px rgba(21, 21, 36, .08); }
-.part-insights .ins-aw-seg b { font-weight: 650; margin-left: 3px; }
+/* 등급 고르기 — core .linetabs (카드 머리라 아래 회색 줄은 뺌) */
+.part-insights .ins-aw-seg { border-bottom: 0; }
+.part-insights .ins-aw-seg button { padding: 8px 10px 10px; font-size: 12px; }
 .part-insights .ins-aw { margin: 0 -10px; }
 .part-insights .ins-aw-row { border-top: 1px solid var(--line-3); }
 .part-insights .ins-aw-row:first-child { border-top: 0; }
@@ -173,6 +172,12 @@
 .part-insights .ins-msummary { padding-top: 16px; padding-bottom: 16px; }
 .part-insights .ins-msummary .card-head { margin-bottom: 8px; }
 .part-insights .ins-msummary .ins-summary { line-height: 1.7; }
+/* 이달의 요약: 연두 바탕 + 왼쪽 띠 + 번호 동그라미 */
+.part-insights .ins-msummary { background: linear-gradient(135deg, var(--lime-soft), var(--purple-bg)); border-color: var(--lime-soft-line); border-left: 4px solid var(--lime-dot); }
+.part-insights .ins-msummary .ins-summary { list-style: none; padding-left: 0; counter-reset: sum; display: grid; gap: 8px; }
+.part-insights .ins-msummary .ins-summary li { counter-increment: sum; display: flex; gap: 10px; align-items: baseline; }
+.part-insights .ins-msummary .ins-summary li::before { content: counter(sum); flex: none; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--lime); color: var(--lime-ink); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; transform: translateY(-1px); }
 .part-insights .ins-mrow { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 20px; align-items: stretch; }
 .part-insights .ins-mrow > .card { margin: 0; }
 /* 경쟁사 동향: 높이가 늘어나도 '경쟁사 보기' 링크는 카드 맨 아래 */
@@ -248,8 +253,7 @@
 @media (max-width: 640px) {
   .part-insights .ins-ptabs button { padding: 12px 10px 14px; }
 }
-.part-insights .ins-q h2 { font-size: 15px; margin-top: 6px; letter-spacing: -.5px; }
-.part-insights .ins-oneline { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.part-insights .ins-oneline { font-size: 13px; color: var(--ink-2); }
 /* 단가 박스 안 구간별 상품 (구간마다 2개 + 더 보기) */
 .part-insights .ins-bk-top { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); gap: 12px; flex-wrap: wrap; }
 .part-insights .ins-bk-top > b { font-size: 14px; color: var(--ink); }
@@ -859,5 +863,9 @@
   .part-insights .ins-rh-b { grid-template-columns: 1fr auto; }
 }
 
+/* 처리할 일 배지 (진열대 수집 · 고치기): 누르면 그 행만 · 다시 누르면 전체 */
+.part-insights button.ins-todo { border: 1px solid transparent; font-family: inherit; cursor: pointer; }
+.part-insights button.ins-todo:hover { border-color: currentColor; }
+.part-insights button.ins-todo[aria-pressed="true"] { background: var(--orange); color: #fff; }
 /* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
 .part-insights .linetabs { overflow-y: hidden; }

@@ -426,7 +426,7 @@
   // 번역 블록: 버튼을 누르면 data-tr-text의 영어 원문을 번역해 바로 아래에 보여 줌 (render의 위임 처리)
   function trBlock(text, label) {
     return `<div class="cmp-trblock" data-tr-text="${esc(text)}">
-  <button type="button" class="cmp-btn cmp-btn-sm cmp-btn-tr" data-act="translate" data-toggle="1" aria-pressed="false">${icon('translate')}<span>${esc(label || '한글로 번역')}</span></button>
+  ${REBOOT.ui.trBtn({ title: label })}
   <div data-tr-out aria-live="polite"></div></div>`;
   }
 
@@ -623,11 +623,9 @@
       if (tr && !tr.disabled) {
         const block = tr.closest('[data-tr-text]');
         const out = block.querySelector('[data-tr-out]');
-        if (tr.dataset.toggle) {   // 점검 기록의 번역 아이콘은 다시 누르면 접힘
-          const open = tr.getAttribute('aria-pressed') === 'true';
-          tr.setAttribute('aria-pressed', String(!open));
-          if (open) { out.innerHTML = ''; return; }
-        }
+        const open = tr.getAttribute('aria-pressed') === 'true';   // 번역 버튼은 다시 누르면 접힘
+        REBOOT.ui.trOn(tr, !open);
+        if (open) { out.innerHTML = ''; return; }
         const row = tr.closest('.cmp-hrow');   // 점검 기록 표: 번역은 펼친 칸 안에 나오니 줄을 펼침
         if (row) setHistOpen(row, true);
         runTranslate(block);
@@ -816,8 +814,8 @@
         <span class="cmp-act-go" aria-hidden="true">›</span></button>
       <button type="button" class="cmp-act-row" data-act="rq-open" disabled title="영어 문구를 입력하면 쓸 수 있어요">
         <span class="cmp-act-ico">${icon('sheet')}</span>
-        <span class="cmp-act-txt"><b>검토 요청 보내기 <span class="cmp-act-tag" data-el="rq-rec" hidden>권장</span></b>
-          <small>걸린 규칙을 담당 팀에 Slack으로 보내 회신을 받아요</small></span>
+        <span class="cmp-act-txt"><b>검토 요청서 보내기 <span class="cmp-act-tag" data-el="rq-rec" hidden>권장</span></b>
+          <small>걸린 규칙을 엑셀로 묶어 담당 팀에 메일로 보내요</small></span>
         <span class="cmp-act-go" aria-hidden="true">›</span></button>
       <p class="cmp-side-note">AI 검토 관점 · <b data-el="persona-now"></b>
         <button type="button" class="cmp-link-btn right" data-act="goto" data-goto="admin">바꾸기</button></p>
@@ -1193,7 +1191,7 @@
     }
     const rqBtn = p.querySelector('.cmp-more-acts [data-act="rq-open"]');
     rqBtn.disabled = !s.r;
-    rqBtn.title = s.r ? 'Slack으로 법무·인허가·품질팀에 이 문구 검토를 요청하고, 팀마다 회신 링크를 만들어요' : '영어 문구를 입력하면 쓸 수 있어요';
+    rqBtn.title = s.r ? '걸린 규칙을 엑셀 요청서로 정리하고, 메일로 보내 팀마다 회신 링크로 답을 받아요' : '영어 문구를 입력하면 쓸 수 있어요';
     el('rq-rec').hidden = !(s.r && s.r.legal === 'yellow');   // 법무 확인(회색지대)이면 검토 요청 권장
     paintReviews(p, j);
     const aiBtn = p.querySelector('.cmp-more-acts [data-act="ai"]');
@@ -1234,6 +1232,15 @@
     hl.innerHTML = out + esc(text.slice(last)) + ' ';
   }
 
+  /** AI 문장 → 문장마다 한 줄 (의미 단위 줄바꿈) */
+  const sentences = s => String(s || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean)
+    .map(x => `<span class="cmp-sent">${esc(x)}</span>`).join('');
+  /** 'AI가 확인한 것' 한 항목: '주제: 내용'이면 주제를 굵게 */
+  function checkItem(c) {
+    const m = /^([^:：]{1,20})[:：]\s*(.+)$/.exec(String(c || ''));
+    return `<li>${m ? `<b>${esc(m[1])}</b> · ${esc(m[2])}` : esc(c)}</li>`;
+  }
+
   function aiHTML(ai, ruleVerdict) {
     const r = ai.result || {};
     const v = LABEL[r.verdict] ? r.verdict : 'REVIEW';
@@ -1246,16 +1253,16 @@
     return `
 <details class="cmp-ai cmp-ai-fold" open>
   <summary class="cmp-result-head"><span class="cmp-fold-arrow" aria-hidden="true">▸</span><b class="cmp-ai-title">${icon('spark')} AI 2차 심의</b>${badge(v)}
-    <span class="cmp-tag">확신 ${conf}</span><span class="cmp-muted">${esc(ai.model || '')} · ${fmt(ai.at)} · 참고용</span></summary>
-  ${r.summary ? `<p class="cmp-ai-summary">${esc(r.summary)}</p>` : ''}
-  ${Array.isArray(r.checks) && r.checks.length ? `<p class="cmp-muted"><span class="cmp-label">AI가 확인한 것</span> ${r.checks.map(esc).join(' · ')}</p>` : ''}
-  ${r.uncertain ? `<p class="cmp-muted"><span class="cmp-label">확인하지 못한 것</span> ${esc(r.uncertain)}</p>` : ''}
+    <span class="cmp-tag">확신 ${conf}</span><span class="cmp-muted cmp-ai-meta">${esc(ai.model || '')} · ${fmt(ai.at)} · 참고용</span></summary>
+  ${r.summary ? `<p class="cmp-ai-summary">${sentences(r.summary)}</p>` : ''}
+  ${Array.isArray(r.checks) && r.checks.length ? `<div class="cmp-ai-sec"><h5>AI가 확인한 것</h5><ul class="cmp-ai-list">${r.checks.map(checkItem).join('')}</ul></div>` : ''}
+  ${r.uncertain ? `<div class="cmp-ai-sec"><h5>확인하지 못한 것</h5><p>${sentences(r.uncertain)}</p></div>` : ''}
   ${cmp}
   ${issues.map(x => `
   <article class="cmp-finding">
     <div class="cmp-finding-head"><code>${esc(x.phrase)}</code> ${badge(LABEL[x.verdict] ? x.verdict : 'REVIEW')} <span class="cmp-basis">${esc(x.code)}</span></div>
-    <p><span class="cmp-label">이유</span> ${esc(x.reason)}</p>
-    ${x.suggestion ? `<p><span class="cmp-label">제안</span> ${esc(x.suggestion)}</p>` : ''}
+    <p><span class="cmp-label">이유</span><span>${sentences(x.reason)}</span></p>
+    ${x.suggestion ? `<p><span class="cmp-label">제안</span><span>${sentences(x.suggestion)}</span></p>` : ''}
   </article>`).join('')}
   ${r.rewrite ? `
   <div class="cmp-ai-rewrite">
@@ -1263,11 +1270,12 @@
     <p class="cmp-quote">${esc(r.rewrite)}</p>
     <div class="cmp-actions"><button type="button" class="cmp-btn" data-act="ai-apply">이 문장 적용</button></div>
   </div>` : ''}
-  <p class="cmp-muted">AI 판정은 규칙 판정을 대신하지 않으며 법률 자문이 아니에요. 제안 문장도 다시 심의해야 해요.</p>
+  <p class="cmp-muted cmp-ai-foot">AI 판정은 규칙 판정을 대신하지 않으며 법률 자문이 아니에요.<br>제안 문장도 다시 심의해야 해요.</p>
 </details>`;
   }
 
-  /* ── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 1회용 링크로 회신 받음 (서버: review_requests.py) ── */
+  /* ── 문구 검토 요청 — 법무·인허가·품질팀에 엑셀 요청서를 메일로 보내고 1회용 링크로 회신 받음 (서버: review_requests.py) ──
+     2026-10-25 Slack 알림 → 2026-10-26 엑셀 첨부 Gmail */
   const RQ_TEAMS = [['legal', '법무팀'], ['regulatory', '인허가팀'], ['quality', '품질팀']];
   let REVIEW_REQS = [];
 
@@ -1281,35 +1289,146 @@
     if (p) paintReviews(p, loadJourney());
   }
 
-  /** 지금 문구로 보낸 검토 요청의 팀별 회신 (없으면 아무것도 안 보임) */
+  const RQ_ST = { '대기': 'wait', '승인': 'ok', '수정 필요': 'fix', '반려': 'no' };
+  const rqXlsxUrl = r => `/api/compliance/review-requests/${encodeURIComponent(r.id)}.xlsx`;
+  const md = iso => { const d = new Date(iso); return isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()}`; };
+
+  /** 검토 요청 현황 (점검 결과 아래 · 지금 문구로 보낸 요청만): 번호 · 보낸 날 · 기한 · 팀별 상태 · 요청서 받기 · 회신 엑셀 올리기 */
   function paintReviews(p, j) {
     const box = p.querySelector('[data-el="reviews"]');
     if (!box) return;
     const text = j.text.trim();
     const mine = text ? REVIEW_REQS.filter(r => r.text === text).slice(0, 3) : [];
-    box.innerHTML = mine.length ? `<div class="cmp-rq">${mine.map(r => `
-  <div class="cmp-rq-row"><span class="cmp-muted">검토 요청 ${esc(fmt(Date.parse(r.createdAt)))}${r.expired ? ' · 기한 지남' : ''}</span>
-    ${RQ_TEAMS.filter(([k]) => r.teams[k]).map(([k]) => r.teams[k]).map(t => `<span class="cmp-rq-team" title="${esc(t.comment || '')}">${esc(t.label)} <b>${esc(t.status)}</b>${t.by ? ` · ${esc(t.by)}` : ''}${t.comment ? ` · ${esc(t.comment)}` : ''}</span>`).join('')}</div>`).join('')}
-  <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-refresh">새 회신 확인</button></div>` : '';
+    box.innerHTML = mine.length ? `<section class="cmp-rqc" aria-label="검토 요청 현황">
+  <div class="cmp-rqc-top"><h4>검토 요청 현황</h4>
+    <button type="button" class="cmp-link-btn" data-act="rq-refresh">${icon('refresh')} 새 회신 확인</button></div>
+  ${mine.map(r => {
+    const teams = RQ_TEAMS.filter(([k]) => r.teams[k]).map(([k]) => r.teams[k]);
+    const left = teams.filter(t => t.status === '대기').length;
+    return `<article class="cmp-rqc-item">
+    <div class="cmp-rqc-head"><b>${esc(r.no || '검토 요청')}</b>
+      <span class="cmp-muted">${esc(md(r.createdAt))} ${r.mail ? '메일 보냄' : '요청서 만듦'} · 기한 ${esc(md(r.expiresAt))}${r.expired ? ' (지남)' : ''}${left ? ` · 회신 ${teams.length - left}/${teams.length}` : ' · 회신 완료'}</span>
+      <span class="cmp-rqc-acts"><a class="cmp-link-btn" href="${rqXlsxUrl(r)}" download>${icon('download')} 요청서</a>
+        <button type="button" class="cmp-link-btn" data-act="rq-import" data-id="${esc(r.id)}" title="팀이 [팀 회신] 시트를 채워 메일로 돌려준 엑셀을 올리면 상태가 바뀌어요">${icon('upload')} 회신 엑셀 올리기</button></span></div>
+    <ul class="cmp-rqc-teams">${teams.map(t => `<li><span class="cmp-st cmp-st-${RQ_ST[t.status] || 'wait'}">${esc(t.status)}</span>
+      <b>${esc(t.label)}</b>${t.by ? ` <span class="cmp-muted">${esc(t.by)}</span>` : ''}${t.comment ? `<span class="cmp-rqc-cm">${esc(t.comment)}</span>` : ''}</li>`).join('')}</ul>
+  </article>`;
+  }).join('')}
+  <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-el="rq-import-file" hidden>
+</section>` : '';
+  }
+
+  /** 회신 엑셀 올리기 → 팀별 상태 반영 */
+  async function importReplies(root, file) {
+    const fd = new FormData();
+    fd.append('file', file);
+    let out;
+    try {
+      const res = await fetch('/api/compliance/review-requests/import', { method: 'POST', body: fd, cache: 'no-store' });
+      out = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(out.error || `서버 오류 (${res.status})`);
+    } catch (e) {
+      return toast(`회신 엑셀을 반영하지 못했어요: ${e.message}`);
+    }
+    REVIEW_REQS = REVIEW_REQS.map(r => (r.id === out.request.id ? Object.assign({}, r, out.request) : r));
+    paintReviews(root.querySelector('[data-sub="single"]'), loadJourney());
+    const label = Object.fromEntries(RQ_TEAMS);
+    const done = out.updated.map(k => label[k]).join(' · ');
+    toast(done ? `${done} 회신을 반영했어요.${out.skipped.length ? ` (건너뜀: ${out.skipped.join(' / ')})` : ''}`
+      : out.skipped.length ? `반영하지 못했어요: ${out.skipped.join(' / ')}` : '[팀 회신] 시트에 채운 결정이 없어요.');
+  }
+
+  /* 검토 요청서 창 (2026-10-26) — 사내 메일 쓰기 모양: 받는 사람(팀) · 제목 · 본문 · 엑셀 첨부.
+     받는 사람은 고객 응대 탭 담당자 연락처에서 역할에 법무·인허가·품질이 들어간 사람을 팀마다 자동으로 넣음 · Gmail도 CS 연결을 같이 씀 */
+  function rqAiVerdict(j) { return j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : ''; }
+
+  function rqSubject(r) {
+    const codes = r.findings.map(f => f.code);
+    const what = codes.length ? `${codes[0]}${codes.length > 1 ? ` 외 ${codes.length - 1}건` : ''}` : '걸린 표현 없음';
+    const d = new Date(Date.now() + 14 * 864e5);
+    return `[문구 검토 요청] ${LIGHT[r.legal] ? `${LIGHT[r.legal].label} · ` : ''}${what} · 회신 기한 ${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  function rqBody(j, r) {
+    const ai = rqAiVerdict(j);
+    const lines = [
+      '안녕하세요.',
+      '아래 광고 문구 검토를 부탁드립니다. 걸린 표현과 근거는 첨부한 엑셀 요청서에 정리했습니다.',
+      '',
+      `· 문구: "${j.text.trim()}"`,
+      `· 사용처: ${channelShort(j.channel)} · ${productLabel(j.product)}`,
+      `· 규칙 판정: ${LABEL[r.verdict] || r.verdict}${LIGHT[r.legal] ? ` · 법적 신호 ${LIGHT[r.legal].label}` : ''}${ai ? ` · AI 2차 ${LABEL[ai] || ai}` : ''}`
+    ];
+    r.findings.forEach(f => lines.push(`  - ${f.code} ${f.name}: ${f.terms.join(', ')}`));
+    lines.push('', '아래 회신 링크로 답해 주시거나, 첨부 엑셀의 [팀 회신] 시트를 채워 회신 메일로 보내 주세요.', '감사합니다.');
+    return lines.join('\n');
+  }
+
+  /** 화면 규칙 설명(한 줄 결론·할 일·근거) → 엑셀 '걸린 표현' 시트용. 판정·걸린 규칙은 서버가 다시 점검함 */
+  function rqDetails(r) {
+    const out = {};
+    r.findings.forEach(f => {
+      const pl = plainOf('rules', f.code);
+      const rule = RULES.find(x => x.code === f.code) || {};
+      out[f.code] = { say: pl.say || '', todo: pl.todo || [], reason: f.reason || '', alt: f.alt || '',
+        law: (rule.law || []).map(l => `${l.agency} ${l.cite}`), legalNote: f.legalNote || '' };
+    });
+    return out;
   }
 
   function requestDialogHTML(j, r) {
-    const ai = j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : '';
+    const n = r.findings.length;
     return `
-<div class="cmp-dlg-head"><div><p class="cmp-dlg-eyebrow">문구 검토 요청</p>
+<div class="cmp-dlg-head"><div><p class="cmp-dlg-eyebrow">${icon('mail')} 새 메일 · 문구 검토 요청서</p>
   <h3 id="cmp-dlg-title" class="cmp-dlg-title">법무·인허가·품질팀에 검토 요청</h3></div>
   <button type="button" class="cmp-dlg-x" data-act="dlg-close" aria-label="닫기">×</button></div>
-<div class="cmp-dlg-body" data-el="rq-body">
-  <section><h4>보낼 문구</h4><p class="cmp-quote">${esc(j.text.trim())}</p>
-    <p class="cmp-muted">규칙 ${badge(r.verdict)}${light(r.legal)}${ai ?` · AI 2차 ${badge(LABEL[ai] ? ai : 'REVIEW')}` : ''} · ${esc(channelShort(j.channel))} · ${esc(productLabel(j.product))}</p></section>
-  <section><h4>받을 팀</h4><p class="cmp-rq-pick">${RQ_TEAMS.map(([k, v]) => `<label><input type="checkbox" name="rq-team" value="${k}" checked> ${v}</label>`).join(' ')}</p></section>
-  <section><h4>메모 (선택)</h4><textarea class="cmp-input" rows="3" maxlength="1000" data-el="rq-memo" placeholder="예: 이번 주 인스타 게시 예정 · 금요일까지 회신 부탁"></textarea></section>
-  <p class="cmp-muted">Slack 채널로 알림을 보내고, 팀마다 로그인 없이 회신할 수 있는 링크(14일)를 만들어요.</p>
+<div class="cmp-dlg-body cmp-mail" data-el="rq-body">
+  ${r.legal === 'red' ? `<p class="cmp-mail-warn">${icon('alert')} 법 위반 표현은 검토를 받아도 쓸 수 없어요. 고친 문구로 요청하는 게 좋아요.</p>` : ''}
+  <dl class="cmp-mail-fields">
+    <div><dt>받는 사람</dt><dd class="cmp-mail-chips" data-el="rq-to">${RQ_TEAMS.map(([k, v]) => `<label class="cmp-chk"><input type="checkbox" name="rq-team" value="${k}"><span>${v}</span></label>`).join('')}</dd></div>
+    <div><dt>제목</dt><dd><input class="cmp-mail-input" data-el="rq-subject" maxlength="200" value="${esc(rqSubject(r))}" aria-label="메일 제목"></dd></div>
+  </dl>
+  <textarea class="cmp-mail-body" data-el="rq-text" rows="11" maxlength="15000" aria-label="메일 본문">${esc(rqBody(j, r))}</textarea>
+  <div class="cmp-attach" data-el="rq-attach">
+    <span class="cmp-attach-ico">XLSX</span>
+    <span class="cmp-attach-txt"><b data-el="rq-fname">검토요청서.xlsx</b>
+      <small data-el="rq-fsub">요청서 · ${n ? `걸린 표현 ${n}건` : '걸린 표현 없음'} · 팀 회신란</small></span>
+    ${REBOOT.ui.fileActions(
+      '<button type="button" class="btn small file-btn" data-act="rq-unupload" hidden>원래 파일로</button>' +
+      REBOOT.ui.fileBtn('upload', { type: 'XLSX', act: 'rq-upload', title: '고친 요청서 올리기' }) +
+      REBOOT.ui.fileMenu('download', { cls: 'cmp-attach-menu', items: [
+        { label: '요청서 미리보기 (XLSX)', act: 'rq-preview', title: '보내기 전에 열어 보고, 고쳐서 다시 올릴 수 있어요' }] }))}
+    <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-el="rq-file" hidden>
+  </div>
 </div>
-<div class="cmp-dlg-foot" data-el="rq-foot">
-  <button type="button" class="cmp-btn" data-act="dlg-close">닫기</button>
-  <button type="button" class="cmp-btn cmp-primary" data-act="rq-send">보내기</button>
+<div class="cmp-dlg-foot cmp-mail-foot" data-el="rq-foot">
+  <span class="cmp-mail-from" data-el="rq-from"></span>
+  <button type="button" class="cmp-btn cmp-primary" data-act="rq-send" data-mode="mail" disabled>${icon('mail')} Gmail로 보내기</button>
+  <button type="button" class="cmp-btn" data-act="rq-send" data-mode="xlsx" disabled>${icon('download')} 엑셀만 받기</button>
+  <button type="button" class="cmp-btn" data-act="dlg-close">취소</button>
 </div>`;
+  }
+
+  function rqResultHTML(out, mail, mailError) {
+    const label = Object.fromEntries(RQ_TEAMS);
+    const links = RQ_TEAMS.filter(([k]) => out.links[k]).map(([k]) => `
+      <li><b>${esc(label[k])}</b> <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-copy" data-link="${esc(out.links[k])}">${icon('copy')} 링크 복사</button></li>`).join('');
+    return `
+  <section class="cmp-mail-done"><h4>${mail ? `${icon('check')} 메일을 보냈어요` : mailError ? `${icon('alert')} 요청서는 만들었지만 메일은 못 보냈어요` : `${icon('check')} 요청서를 만들고 엑셀을 받았어요`}</h4>
+    <p>${mail ? esc(mail.to.join(', ')) : mailError ? esc(mailError) : '엑셀과 아래 회신 링크를 담당자에게 전달하세요.'}</p>
+    <p class="cmp-muted">${esc(out.request.no)} · 회신 기한 ${esc(md(out.request.expiresAt))} · 회신은 점검 결과 아래 [검토 요청 현황]에 보여요</p></section>
+  ${mail ? `<details class="cmp-mail-links"><summary>회신 링크 직접 전달</summary><ul class="cmp-dlg-list">${links}</ul></details>`
+    : `<section><h4>팀별 회신 링크 (14일 · 로그인 없음)</h4><ul class="cmp-dlg-list">${links}</ul>
+    ${REBOOT.ui.fileActions(REBOOT.ui.fileBtn('download', { label: '요청서 다시 받기', type: 'XLSX', href: rqXlsxUrl(out.request) }))}</section>`}`;
+  }
+
+  function downloadBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
 
   function openRequestDialog(root) {
@@ -1318,32 +1437,130 @@
     if (!s.r) return;
     showDialog(root, requestDialogHTML(j, s.r));
     const dlg = root.querySelector('dialog.cmp-dialog');
+    const q = n => dlg.querySelector(`[data-el="${n}"]`);
+    const teamsNow = () => [...dlg.querySelectorAll('[name="rq-team"]:checked')].map(x => x.value);
+    let setup = { contacts: [], gmail: false };
+    let upload = null;   // { name, b64 } 사용자가 고친 요청서
+    const people = t => setup.contacts.filter(c => c.team === t);
+    const toNow = () => [...new Set(teamsNow().flatMap(t => people(t).map(c => c.email)))];
+
+    const paintTo = () => {   // 팀 칩 안에 담당자 이름 (연락처에서 자동)
+      dlg.querySelectorAll('[name="rq-team"]').forEach(x => {
+        const ps = people(x.value);
+        x.nextElementSibling.innerHTML = `${esc(Object.fromEntries(RQ_TEAMS)[x.value])}${ps.length
+          ? ` <small>${esc(ps.map(c => c.name || c.email).join(', '))}</small>` : ' <small>담당자 없음</small>'}`;
+        x.nextElementSibling.title = ps.map(c => `${c.name} <${c.email}>`).join('\n');
+      });
+    };
+    const paintSend = () => {   // Gmail로 보내기 · 엑셀만 받기 둘 다 늘 보임 — 못 쓸 때는 끄고 이유는 툴팁·왼쪽 안내로
+      const mailBtn = dlg.querySelector('[data-act="rq-send"][data-mode="mail"]');
+      const xlsxBtn = dlg.querySelector('[data-act="rq-send"][data-mode="xlsx"]');
+      if (!mailBtn || !xlsxBtn) return;
+      const teams = teamsNow().length > 0;
+      mailBtn.disabled = !(teams && setup.gmail && toNow().length);
+      mailBtn.title = !setup.gmail ? '설정 › 연결에서 Gmail을 연결하면 보낼 수 있어요'
+        : !toNow().length ? '고른 팀에 등록된 담당자가 없어요' : '';
+      xlsxBtn.disabled = !teams;
+      q('rq-from').innerHTML = !setup.gmail ? `${icon('info')} Gmail 연결 전 · 엑셀만 받아 직접 전달해요`
+        : !toNow().length ? `${icon('info')} 고른 팀에 등록된 담당자가 없어요 · 엑셀로 전달해요`
+          : `${icon('mail')} ${toNow().length}명에게 Gmail로 · 회신 링크는 본문 끝에 자동`;
+    };
+    const paintAttach = () => {
+      q('rq-fname').textContent = upload ? upload.name : '검토요청서.xlsx';
+      q('rq-fsub').textContent = upload ? '내가 고친 파일 · 요청번호는 보낼 때 들어가요'
+        : `요청서 · ${s.r.findings.length ? `걸린 표현 ${s.r.findings.length}건` : '걸린 표현 없음'} · 팀 회신란`;
+      dlg.querySelector('[data-act="rq-unupload"]').hidden = !upload;
+      q('rq-attach').classList.toggle('is-edited', !!upload);
+    };
+    fetch('/api/compliance/review-requests/mail-setup', { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error(res.status))))
+      .then(x => { setup = x; })
+      .catch(() => {})
+      .then(() => {
+        if (!q('rq-to')) return;
+        const withPeople = RQ_TEAMS.map(([k]) => k).filter(k => people(k).length);
+        const pick = withPeople.length ? withPeople : RQ_TEAMS.map(([k]) => k);   // 담당자가 있는 팀만 미리 켬
+        dlg.querySelectorAll('[name="rq-team"]').forEach(x => { x.checked = pick.includes(x.value); });
+        paintTo(); paintSend();
+      });
+    q('rq-body').addEventListener('change', async e => {
+      if (e.target.name === 'rq-team') return paintSend();
+      if (e.target.dataset.el !== 'rq-file' || !e.target.files[0]) return;
+      const f = e.target.files[0];
+      e.target.value = '';
+      if (!/\.xlsx$/i.test(f.name)) return toast('XLSX 파일만 올릴 수 있어요.');
+      if (f.size > 3 * 1024 * 1024) return toast('엑셀이 너무 커요 (3MB 이하).');
+      const b64 = await new Promise((ok, no) => {
+        const fr = new FileReader();
+        fr.onload = () => ok(String(fr.result).split(',')[1] || '');
+        fr.onerror = no;
+        fr.readAsDataURL(f);
+      }).catch(() => '');
+      if (!b64) return toast('파일을 읽지 못했어요.');
+      upload = { name: f.name, b64 };
+      paintAttach();
+      toast('고친 요청서를 첨부했어요.');
+    });
+
+    const payload = () => ({ text: j.text.trim(), ko: j.ko, channel: j.channel, product: j.product === ALL ? '' : j.product,
+      aiVerdict: rqAiVerdict(j), teams: teamsNow(), details: rqDetails(s.r) });
+    const done = (out, mail, mailError) => {
+      q('rq-body').innerHTML = rqResultHTML(out, mail, mailError);
+      q('rq-foot').innerHTML = '<button type="button" class="cmp-btn cmp-primary" data-act="dlg-close">확인</button>';
+      REVIEW_REQS = [Object.assign({}, out.request, { mail })].concat(REVIEW_REQS);
+      paintReviews(root.querySelector('[data-sub="single"]'), loadJourney());
+    };
     dlg._onAct = async (btn) => {
-      if (btn.dataset.act === 'rq-copy') {
+      const act = btn.dataset.act;
+      if (act === 'rq-copy') {
         const ok = await copyText(btn.dataset.link);
         return toast(ok ? '회신 링크를 복사했어요.' : '복사하지 못했어요. 링크를 직접 선택해 복사하세요.');
       }
-      if (btn.dataset.act !== 'rq-send') return;
-      const teams = [...dlg.querySelectorAll('[name="rq-team"]:checked')].map(x => x.value);
-      if (!teams.length) return toast('검토할 팀을 하나 이상 고르세요.');
-      btn.disabled = true;
-      const ai = j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : '';
+      if (act === 'rq-upload') return q('rq-file').click();
+      if (act === 'rq-unupload') { upload = null; return paintAttach(); }
+      if (!teamsNow().length) return toast('받을 팀을 하나 이상 고르세요.');
+      if (act === 'rq-preview') {
+        btn.classList.add('is-busy');
+        try {
+          const res = await fetch('/api/compliance/review-requests/preview', { method: 'POST', cache: 'no-store',
+            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload()) });
+          if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `서버 오류 (${res.status})`);
+          downloadBlob(await res.blob(), '검토요청서_미리보기.xlsx');
+        } catch (e) { toast(`미리 받지 못했어요: ${e.message}`); }
+        return btn.classList.remove('is-busy');
+      }
+      if (act !== 'rq-send') return;
+      const mailMode = btn.dataset.mode === 'mail';
+      const subject = q('rq-subject').value.trim();
+      const body = q('rq-text').value.trim();
+      if (mailMode && (!subject || !body)) return toast('제목과 본문을 확인해 주세요.');
+      dlg.querySelectorAll('.cmp-dlg-foot .cmp-btn').forEach(b => { b.disabled = true; });
+      btn.classList.add('is-busy');
+      let out;
       try {
-        const out = await api('/api/compliance/review-requests', { text: j.text.trim(), ko: j.ko, channel: j.channel,
-          product: j.product === ALL ? '' : j.product, aiVerdict: ai, teams, memo: dlg.querySelector('[data-el="rq-memo"]').value });
-        const label = Object.fromEntries(RQ_TEAMS);
-        dlg.querySelector('[data-el="rq-body"]').innerHTML = `
-  <section><h4>${out.slack.ok ? 'Slack으로 보냈어요' : 'Slack에는 보내지 못했어요'}</h4>
-    ${out.slack.ok ? '' : `<p class="cmp-muted">${esc(out.slack.error)}</p>`}</section>
-  <section><h4>팀별 회신 링크 (14일 · 로그인 없음)</h4><ul class="cmp-dlg-list">${RQ_TEAMS.filter(([k]) => out.links[k]).map(([k]) => [k, out.links[k]]).map(([k, url]) => `
-    <li><b>${esc(label[k] || k)}</b> <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-copy" data-link="${esc(url)}">링크 복사</button></li>`).join('')}</ul>
-    <p class="cmp-muted">회신이 오면 문구 점검의 문구 아래에 팀별 상태가 보여요.</p></section>`;
-        dlg.querySelector('[data-el="rq-foot"]').innerHTML = '<button type="button" class="cmp-btn cmp-primary" data-act="dlg-close">확인</button>';
-        REVIEW_REQS = [out.request].concat(REVIEW_REQS);
-        paintReviews(root.querySelector('[data-sub="single"]'), loadJourney());
+        out = await api('/api/compliance/review-requests', Object.assign(payload(), upload ? { attachment: upload.b64 } : {}));
       } catch (e) {
-        btn.disabled = false;
-        toast(`검토 요청을 보내지 못했어요: ${e.message}`);
+        dlg.querySelectorAll('.cmp-dlg-foot .cmp-btn').forEach(b => { b.disabled = false; });
+        btn.classList.remove('is-busy');
+        paintSend();
+        return toast(`검토 요청서를 만들지 못했어요: ${e.message}`);
+      }
+      if (!mailMode) {
+        const a = document.createElement('a');
+        a.href = rqXlsxUrl(out.request);
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return done(out, null, '');
+      }
+      try {
+        const res = await api(`/api/compliance/review-requests/${encodeURIComponent(out.request.id)}/mail`,
+          { to: toNow(), subject, body, links: out.links });
+        done(out, res.mail, '');
+        toast('검토 요청서를 메일로 보냈어요.');
+      } catch (e) {
+        done(out, null, e.message);
       }
     };
   }
@@ -1399,6 +1616,12 @@
     el('product').addEventListener('change', () => { sync(); autoRun(0); paintSingle(root); });
     autoRun(0);   // 저장돼 있던 문구가 아직 심의 전이면 열자마자 심의
     loadReviews(root);   // 이 문구로 보낸 검토 요청의 회신 상태
+    p.addEventListener('change', e => {   // 회신 엑셀 올리기
+      if (e.target.dataset.el !== 'rq-import-file' || !e.target.files[0]) return;
+      const f = e.target.files[0];
+      e.target.value = '';
+      importReplies(root, f);
+    });
 
     p.addEventListener('click', e => {
       const btn = e.target.closest('[data-act]');
@@ -1424,6 +1647,8 @@
         openRequestDialog(root);
       } else if (btn.dataset.act === 'rq-refresh') {
         loadReviews(root);
+      } else if (btn.dataset.act === 'rq-import') {
+        el('reviews').querySelector('[data-el="rq-import-file"]').click();
       } else if (btn.dataset.act === 'ai') {
         runAi(root, j);
       } else if (btn.dataset.act === 'ai-apply') {
@@ -1828,7 +2053,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
   <span class="cmp-hrow-hits">${hitN ? `${hitN}개 · ${r.codes.map(esc).join(' ')}` : '없음'}</span>
   <span class="cmp-hrow-time" title="${esc(fmt(ts))}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}">${histTime(ts)}</span>
   <span class="cmp-hrow-acts">
-    ${ko ? '' : `<button type="button" class="cmp-icon-btn" data-act="translate" data-toggle="1" aria-pressed="false" aria-label="한글로 보기" title="한글로 보기">${icon('translate')}</button>`}
+    ${ko ? '' : REBOOT.ui.trBtn()}
     <button type="button" class="cmp-icon-btn" data-act="hist-copy" aria-label="문구 복사" title="${block ? '사용 불가 문구는 복사할 수 없어요' : '문구 복사'}"${block ? ' disabled' : ''}>${icon('copy')}</button>
     <button type="button" class="cmp-icon-btn" data-act="hist-recheck" aria-label="문구 점검에서 다시 보기" title="문구 점검에서 다시 보기">${icon('redo')}</button>
   </span>
@@ -1947,7 +2172,7 @@ ${left ? `<button type="button" class="cmp-btn cmp-hist-more" data-act="hist-mor
 <div class="cmp-actions">
   <button type="button" class="cmp-btn" data-act="persona-reset">기본값으로 되돌리기</button>
   <button type="button" class="cmp-btn cmp-primary" data-act="persona-save">페르소나 저장</button>
-</div>`, true) +
+</div>`, false) +
       fold('rules-validate', '규칙 정확도 시험', 'FDA 문장을 놓치지 않는지 · 괜찮은 문장을 막지 않는지 · 처음 보는 문장 점수', validateHTML(), false) +
       fold('setup', 'FDA 데이터 키 신청', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', fdaKeyHTML(), false) +
       fold('ai-usage', '이번 달 AI 사용량·비용', '컴플라이언스·CS의 Claude 호출 · 팀 API 예산 관리', `
@@ -2465,7 +2690,7 @@ ${monFilterHTML()}
 <div data-el="mon-results">${monResultsHTML(sources)}</div>`;
 
     cbox.innerHTML = `
-<p class="cmp-summary">후보 ${cands.length}개 · 승인 대기 ${nCand}개 · 승인 ${approved.length}개</p>
+<p class="cmp-summary"><span class="cmp-muted">후보 ${cands.length}개${approved.length ? ` · 승인 ${approved.length}개` : ''}</span>${nCand ? `<span class="badge orange">승인 대기 ${nCand}</span>` : ''}</p>
 <p class="cmp-muted">수집한 경고장·NAD 결정 문구(NAD는 식품·음료·건강 결정만)는 자동으로 사례집이나 규칙에 들어가지 않아요.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">사람이 승인한 문구만 내려받아 컴플라이언스 담당자가 경고장 사례집에 옮기고 규칙 시험을 다시 실행해요. <b>'규칙 미탐지'로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요해요.</p></details>
 ${cands.length ? `
 <div class="cmp-row">
@@ -2613,7 +2838,7 @@ ${cands.length ? `
   <tbody>${results.map((x, i) => `<tr><td class="cmp-nowrap">${esc(x.date)}</td><td>${esc(x.agencies.join(', '))}</td><td>${esc(x.type)}</td>
     <td>${link(x.url, x.title)}<span data-ko-id="fr-${i}" data-ko-field="title"></span>
       ${x.abstract ? `<br><span class="cmp-muted">${esc(x.abstract.slice(0, 220))}${x.abstract.length > 220 ? '…' : ''}</span><span data-ko-id="fr-${i}" data-ko-field="summary"></span>` : ''}
-      ${trBlock(x.abstract ? `${x.title}\n${x.abstract}` : x.title, '제목·요약 번역')}</td></tr>`).join('')}</tbody>
+      ${trBlock(x.abstract ? `${x.title}\n${x.abstract}` : x.title, '제목·요약 한국어로 보기')}</td></tr>`).join('')}</tbody>
 </table></div>` : '');
         fillKo(out, results.map((x, i) => ({ id: `fr-${i}`, source: 'Federal Register', title: x.title, summary: x.abstract || '' })));
       } catch (e) { fail(out, e); }

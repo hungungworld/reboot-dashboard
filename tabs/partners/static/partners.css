@@ -135,7 +135,12 @@
 .part-partners .ptn-out-body { min-height: 300px; font-size: 13px; line-height: 1.7; }
 .part-partners .ptn-out-pre,
 .part-partners .ptn-rec-pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 12px; line-height: 1.7; margin: 0; color: var(--text); max-height: 320px; overflow: auto; }
-.part-partners .ptn-out-ko { background: var(--surface-2); }
+/* 한국어 번역 = 차트 말풍선과 같은 모양 (컴플라이언스 .cmp-tr · CS .cs-tr과 같은 값) */
+.part-partners .ptn-out-ko { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--surface); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.part-partners .ptn-out-ko .ptn-out-pre { color: inherit; line-height: 1.6; }
+.part-partners .ptn-ko-tag { font-size: 11px; font-weight: 700; }
+.part-partners .ptn-ko-note { margin: 0; font-size: 11px; opacity: .7; }
+.part-partners .ptn-ko-note .link { color: inherit; font-size: inherit; text-decoration: underline; }
 .part-partners .ptn-out-attdrop { min-height: 100px; cursor: pointer; }
 .part-partners .ptn-out-attdrop.is-busy { opacity: .6; pointer-events: none; }
 .part-partners .ptn-out-attlist { list-style: none; margin: 12px 0 0; padding: 0; }
@@ -353,25 +358,33 @@
 /* ───────── 제안 작성 V2 시안 (2026-10-26): 받는 파트너 → 01·02·03 단계 → 왼쪽 단계 카드 · 오른쪽 협업 가이드 ───────── */
 .part-partners .ptn-v2-paper { border-radius: 15px; padding: 26px; display: grid; gap: 16px; align-content: start; }
 .part-partners .ptn-v2-paper h2 { margin: 0; font-size: 15px; }
-/* 받는 파트너: 구분 탭(개수) → 검색 → 목록 · 고른 뒤 한 줄 */
-.part-partners .ptn-v2-pick { border-radius: 15px; padding: 18px 22px; margin-bottom: 22px; display: grid; gap: 12px; }
-.part-partners .ptn-v2-pick-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.part-partners .ptn-v2-pick-head h2 { margin: 0; font-size: 15px; }
-.part-partners .ptn-v2-count { font-size: 10px; opacity: .7; margin-left: 2px; }
-.part-partners .ptn-v2-picklist { list-style: none; margin: 0; padding: 4px; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius-sm); display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px; align-content: start; }
-.part-partners .ptn-v2-picklist > li[hidden] { display: none; }
-.part-partners .ptn-v2-picklist button { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font: inherit; text-align: left; cursor: pointer; color: var(--ink); min-width: 0; }
-.part-partners .ptn-v2-picklist button:hover, .part-partners .ptn-v2-picklist button:focus-visible { background: var(--soft); }
-.part-partners .ptn-v2-picklist button[aria-pressed="true"] { background: var(--lime-wash); }
-.part-partners .ptn-v2-picklist .ptn-out-name { flex: 1; min-width: 0; }
-.part-partners .ptn-v2-picklist .ptn-out-name strong, .part-partners .ptn-v2-picklist .ptn-out-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.part-partners .ptn-v2-picklist .ptn-out-name small { font-size: 11px; color: var(--muted); }
-.part-partners .ptn-v2-pick-manual small { color: var(--muted); font-size: 11px; }
-.part-partners .ptn-v2-pick-none { padding: 10px; grid-column: 1 / -1; }
-.part-partners .ptn-v2-picked { display: flex; align-items: center; gap: 12px; }
-.part-partners .ptn-v2-picked .ptn-out-name { flex: 1; min-width: 0; }
-.part-partners .ptn-v2-picked .ptn-out-name small { display: block; font-size: 11px; color: var(--muted); }
-.part-partners .ptn-v2-tag { margin-left: auto; font-size: 10px; padding: 6px 9px; background: var(--soft); border: 1px solid var(--line); border-radius: 5px; color: var(--muted); white-space: nowrap; }
+/* 메일 머리 (Gmail식): 보낸 사람 · 받는 사람(칩 + 자동 완성) · 제목 — 줄마다 이름표 칸 고정, 밑줄로 구분 */
+.part-partners .ptn-mail-head { border-radius: 15px; padding: 6px 22px 4px; margin-bottom: 22px; }
+.part-partners .ptn-mail-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 0; border-bottom: 1px solid var(--line-3); }
+.part-partners .ptn-mail-title h2 { margin: 0; font-size: 15px; }
+.part-partners .ptn-mail-note { font-size: 12px; color: var(--muted); }
+.part-partners .ptn-mail-title .link { margin-left: auto; }
+.part-partners .ptn-mail-row { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 6px 0; border-bottom: 1px solid var(--line-3); }
+.part-partners .ptn-mail-row:last-child { border-bottom: 0; }
+.part-partners .ptn-mail-label { flex: 0 0 72px; font-size: 12px; font-weight: 550; color: var(--muted); }
+.part-partners .ptn-mail-from { font-size: 13px; color: var(--ink); }
+.part-partners .ptn-mail-input { flex: 1; min-width: 0; border: 0; background: none; font: inherit; font-size: 14px; color: var(--ink); padding: 6px 0; outline: none; }
+.part-partners .ptn-rc { position: relative; flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; cursor: text; }
+.part-partners .ptn-rc-chips { display: contents; list-style: none; margin: 0; padding: 0; }
+.part-partners .ptn-rc-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; padding: 3px 4px 3px 4px; border: 1px solid var(--line); border-radius: 999px; background: var(--soft-2); font-size: 12px; color: var(--ink); cursor: default; }
+.part-partners .ptn-rc-chip > span:not(.ptn-logo):not(.initial) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
+.part-partners .ptn-rc-chip .ptn-logo, .part-partners .ptn-rc-chip .initial { width: 20px; height: 20px; font-size: 9px; flex: none; }
+.part-partners .ptn-rc-chip .ptn-logo img { width: 13px; height: 13px; }
+.part-partners .ptn-rc-chip button { width: 20px; height: 20px; flex: none; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; }
+.part-partners .ptn-rc-chip button:hover, .part-partners .ptn-rc-chip button:focus-visible { background: var(--line); color: var(--ink); }
+.part-partners .ptn-rc-q { flex: 1; min-width: 180px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--ink); padding: 6px 0; outline: none; }
+.part-partners .ptn-rc-menu { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: min(420px, 100%); list-style: none; margin: 0; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: 0 8px 24px rgba(0, 0, 0, .12); }
+.part-partners .ptn-rc-menu[hidden] { display: none; }
+.part-partners .ptn-rc-menu li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.part-partners .ptn-rc-menu li[aria-selected="true"], .part-partners .ptn-rc-menu li:hover { background: var(--lime-wash); }
+.part-partners .ptn-rc-menu .ptn-out-name { flex: 1; min-width: 0; }
+.part-partners .ptn-rc-menu .ptn-out-name strong, .part-partners .ptn-rc-menu .ptn-out-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-partners .ptn-rc-menu .ptn-out-name small { font-size: 11px; color: var(--muted); }
 .part-partners .ptn-v2-steps { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
 .part-partners .ptn-v2-steps button { border: 0; background: none; padding: 14px 18px 16px 6px; color: var(--muted); font: inherit; font-size: 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
 .part-partners .ptn-v2-steps button span { font-size: 10px; margin-right: 10px; }
@@ -395,8 +408,8 @@
 }
 @media (max-width: 640px) {
   .part-partners .ptn-v2-dates { grid-template-columns: 1fr; }
-  .part-partners .ptn-v2-tag { margin-left: 0; }
+  .part-partners .ptn-mail-label { flex-basis: 56px; }
   .part-partners .ptn-v2-steps button { padding-right: 10px; }
+}
 /* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
 .part-partners .linetabs { overflow-y: hidden; }
-}

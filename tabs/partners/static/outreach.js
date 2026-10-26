@@ -32,6 +32,8 @@
   (RD.mailStatus || []).forEach(x => { MAILS[x.v] = x; });
   const VERDICT = { BLOCK: ['사용 불가', 'red'], REVISE: ['수정 필요', 'orange'], COND: ['조건부', 'purple'], REVIEW: ['검토 필요', 'blue'], PASS: ['걸린 표현 없음', 'green'] };
   const COND_FIELDS = ['purpose', 'proposal', 'requests'];
+  const MAX_MANY = 20;              // 여러 곳에 제안: 업체마다 한 통씩, 한 번에 최대 20곳
+  const NAME_SLOT = '{업체명}';     // 본문·제목에 쓰면 보낼 때 업체 이름으로 바뀜
 
   /* ───────── 도우미 ───────── */
 
@@ -142,7 +144,7 @@
       ideal[ty] = d.ideal;
       cond[ty] = { purpose: d.purpose, proposal: d.proposal, requests: d.requests };
     });
-    return { v: 1, type: TYPES[1], sub: 'compose', partnerId: '', partnerName: '', to: '', subject: '', body: '', ai: false, ko: '',
+    return { v: 1, type: TYPES[1], sub: 'compose', rcpts: [], subject: '', body: '', ai: false, ko: '',
       ideal, cond, start: t, end: addDays(t, D.periodDays), owner: myName, reply: null, attachOff: [] };
   }
   function getDraft() {
@@ -156,8 +158,17 @@
     });
     if (!TYPES.includes(out.type)) out.type = TYPES[1];
     if (!Array.isArray(out.attachOff)) out.attachOff = [];
+    if (!Array.isArray(out.rcpts)) out.rcpts = oldRcpts(d);
+    delete out.partnerId; delete out.partnerName; delete out.to; delete out.many;
     return out;
   }
+  // 예전 초안(업체 하나 + 수신자 글자 · 여러 곳 목록) → 받는 사람 목록
+  function oldRcpts(d) {
+    if (Array.isArray(d.many) && d.many.length) return d.many;
+    return String(d.to || '').split(/[,;\n]+/).map(x => x.trim()).filter(Boolean).map((email, i) =>
+      (i ? { id: '', name: '', email, type: '' } : { id: d.partnerId || '', name: d.partnerName || '', email, type: d.type || '' }));
+  }
+  function rcptOf(c) { return { id: c.id || '', name: c.name || '', email: c.email || '', type: c.type || '' }; }
   function saveDraft(d) { store.set(K.draft, d); }
 
   function promptFor(type, cfg) {
@@ -189,26 +200,40 @@
   /** 업체로 협업 메일 쓰기: 다른 업체면 제목·본문·번역을 비우고, 같은 업체면 그대로 둠 (README 3-1) */
   function compose(c) {
     const d = getDraft();
-    if (d.partnerId !== c.id) Object.assign(d, { subject: '', body: '', ko: '', ai: false });
+    const same = d.rcpts.length === 1 && d.rcpts[0].id === c.id;
+    if (!same) Object.assign(d, { subject: '', body: '', ko: '', ai: false });
     d.reply = null;
     if (TYPES.includes(c.type)) d.type = c.type;
-    Object.assign(d, { partnerId: c.id, partnerName: c.name, to: c.email || '', sub: 'compose' });
+    Object.assign(d, { rcpts: c.email ? [rcptOf(c)] : [], sub: 'compose' });   // 이메일 없는 업체는 받는 사람 칸에 주소를 직접 넣음
     saveDraft(d);
+    if (!c.email) toast(`${c.name}은(는) 이메일이 없어요. 받는 사람 칸에 주소를 직접 넣으세요.`);
     go('mail');
   }
 
-  /** 협업 이력의 회신 → 메일 화면 답장 모드 (같은 Gmail 대화로 첨부와 함께 발송) */
+  /** 협업 이력의 회신 → 메일 화면 답장 모드 (같은 Gmail 대화로 첨부와 함께 발송 · 받는 사람은 한 명) */
   function openReply(h) {
     const d = getDraft();
     const r = h.reply || {};
     d.reply = { historyId: h.id, partnerName: h.partnerName || '', from: r.from || '', at: r.at || '', body: r.body || '', subject: r.subject || h.subject || '' };
-    Object.assign(d, { partnerId: h.partnerId || '', partnerName: h.partnerName || '', body: '', ko: '', ai: false, sub: 'compose' });
+    const email = replyAddress(r.from) || String(h.to || '').split(/[,;\n]+/)[0].trim();
+    Object.assign(d, { rcpts: email ? [{ id: h.partnerId || '', name: h.partnerName || '', email, type: h.partnerType || '' }] : [],
+      body: '', ko: '', ai: false, sub: 'compose' });
     if (TYPES.includes(h.partnerType)) d.type = h.partnerType;
-    d.to = replyAddress(r.from) || h.to || '';
     d.subject = 'Re: ' + String(r.subject || h.subject || '').replace(/^\s*((re|fw|fwd)\s*:\s*)+/i, '');
     saveDraft(d);
     go('mail');
   }
+
+  /** 여러 업체에 제안: 업체마다 따로 한 통씩 보냄 (받는 사람끼리 주소가 안 보이고, 협업 기록도 업체별로 남음) */
+  function composeMany(list) {
+    if (list.length === 1) return compose(list[0]);
+    const d = getDraft();
+    Object.assign(d, { rcpts: list.slice(0, MAX_MANY).map(rcptOf), reply: null, sub: 'compose' });
+    if (TYPES.includes(list[0].type)) d.type = list[0].type;
+    saveDraft(d);
+    go('mail');
+  }
+  const picked = new Set();   // 파트너 찾기에서 체크한 업체 (이번 접속 동안만)
 
   let wantImport = false;
   let importNote = null;
@@ -230,7 +255,9 @@
       return;
     }
     if (!el.isConnected) return;
-    const st = { el, data, ov, f: getFilters(), files: {} };
+    const st = { el, data, ov, f: getFilters(), files: {}, sel: picked };
+    const ok = new Set(data.items.filter(c => c.email).map(c => c.id));
+    picked.forEach(id => { if (!ok.has(id)) picked.delete(id); });
     el.innerHTML = `${hero(ov)}<div data-ref="note"></div><div data-ref="main"></div><div data-ref="import"></div>`;
     if (importNote) {
       el.querySelector('[data-ref="note"]').innerHTML = importNote;
@@ -377,11 +404,12 @@
     body.innerHTML = `<div class="workbench ptn-out-bench">
       <section class="card ptn-out-listcard ptn-cf-card">
         <div class="card-head wrap"><div class="ptn-head-title"><h2>파트너 목록</h2><span data-ref="total"></span></div>
+          <div class="flex wrap"><button type="button" class="btn small dark" data-act="compose-many" disabled>선택한 업체에 제안 작성</button>
           ${ui.fileActions(ui.fileBtn('upload', { type: 'CSV · XLSX', act: 'csv-open' }) + ui.fileMenu('download', { items: [
             { label: '케이터링 업체 (CSV)', href: '/api/partners/export/catering.csv' },
             { label: '인플루언서 업체 (CSV)', href: '/api/partners/export/influencer.csv' },
             { label: '케이터링 양식 (CSV)', href: '/api/partners/template/catering.csv' },
-            { label: '인플루언서 양식 (XLSX)', href: '/api/partners/template/influencer.xlsx' }] }))}</div>
+            { label: '인플루언서 양식 (XLSX)', href: '/api/partners/template/influencer.xlsx' }] }))}</div></div>
         <div data-ref="bar"></div>
         <div data-ref="rows"></div>
         <p class="panel-note mt-8" data-ref="foot"></p>
@@ -520,11 +548,13 @@
     const p = pageOf(list, st.page, size);
     st.page = p.cur;
     const ss = sortState(st.f, false);
-    const pad = p.pages > 1 ? '<tr class="ptn-pad" aria-hidden="true"><td colspan="4"></td></tr>'.repeat(size - p.shown.length) : '';   // 마지막 페이지도 표 높이 그대로
+    const pad = p.pages > 1 ? '<tr class="ptn-pad" aria-hidden="true"><td colspan="5"></td></tr>'.repeat(size - p.shown.length) : '';   // 마지막 페이지도 표 높이 그대로
+    const pageMail = p.shown.filter(c => c.email);
     st.el.querySelector('[data-ref="rows"]').innerHTML = list.length ? `<div class="table-wrap"><table class="data-table ptn-cf-table">
-      <thead><tr>${sortTh('업체', 'name', ss)}${sortTh('구분', 'type', ss)}${sortTh('세부 카테고리', 'tag', ss)}${sortTh('이메일', 'email', ss)}</tr></thead>
+      <thead><tr><th class="ptn-rec-chk"><input type="checkbox" data-sel-all aria-label="이 페이지에서 이메일 있는 업체 모두 선택"${pageMail.length && pageMail.every(c => st.sel.has(c.id)) ? ' checked' : ''}${pageMail.length ? '' : ' disabled'}></th>${sortTh('업체', 'name', ss)}${sortTh('구분', 'type', ss)}${sortTh('세부 카테고리', 'tag', ss)}${sortTh('이메일', 'email', ss)}</tr></thead>
       <tbody>${p.shown.map(c => `
       <tr class="clickable${c.id === st.f.selected ? ' selected' : ''}" data-id="${esc(c.id)}" tabindex="0" aria-label="${esc(c.name)} 상세 보기">
+        <td class="ptn-rec-chk">${c.email ? `<input type="checkbox" data-sel="${esc(c.id)}"${st.sel.has(c.id) ? ' checked' : ''} aria-label="${esc(c.name)} 선택">` : `<input type="checkbox" disabled title="이메일이 없어 고를 수 없어요" aria-label="${esc(c.name)} — 이메일 없음">`}</td>
         <td><div class="ptn-1l">${contactAvatar(c)}
           <b class="ptn-1l-name" title="${esc(c.name)} · ${esc(c.location || '지역 정보 없음')}">${esc(c.name)}</b>${c.example ? badge('예시', 'orange') : ''}</div></td>
         <td>${typeBadge(c.type)}</td>
@@ -533,10 +563,28 @@
       </tr>`).join('')}${pad}</tbody></table></div>${pager(p.cur, p.pages, list.length, p.from, p.from + p.shown.length - 1, '곳')}`
       : `<div class="mt-16">${ui.empty('조건에 맞는 업체가 없어요. 검색어나 필터를 바꿔 보세요.', 'search')}</div>`;
     logoFallback(st.el.querySelector('[data-ref="rows"]'));
-    st.el.querySelector('[data-ref="foot"]').textContent = '행을 누르면 오른쪽에 업체 카드가 열려요. 이메일을 누르면 제안 작성으로 이동하고 수신자가 자동으로 들어가요. 로고는 공식 사이트 아이콘이고, 예시 업체는 지어낸 로고예요.';
+    st.el.querySelector('[data-ref="foot"]').textContent = `행을 누르면 오른쪽에 업체 카드가 열려요. 이메일을 누르면 제안 작성으로 이동하고 수신자가 자동으로 들어가요. 왼쪽 칸을 체크하면 여러 곳(최대 ${MAX_MANY}곳)에 업체마다 따로 보낼 수 있어요. 로고는 공식 사이트 아이콘이고, 예시 업체는 지어낸 로고예요.`;
     paintCount(st, list);
+    selState(st);
     fitSt = st;
     fitRows(st);
+  }
+
+  // 여러 곳 선택: 체크한 업체 수를 버튼에 보여 줌 (이번 접속 동안만 기억)
+  function selState(st) {
+    const btn = st.el.querySelector('[data-act="compose-many"]');
+    if (!btn) return;
+    btn.disabled = !st.sel.size;
+    btn.textContent = st.sel.size ? `선택한 ${st.sel.size}곳에 제안 작성` : '선택한 업체에 제안 작성';
+  }
+  function toggleSel(st, ids, on) {
+    let over = false;
+    ids.forEach(id => {
+      if (!on) st.sel.delete(id);
+      else if (st.sel.size < MAX_MANY) st.sel.add(id);
+      else if (!st.sel.has(id)) over = true;
+    });
+    if (over) toast(`한 번에 ${MAX_MANY}곳까지 고를 수 있어요.`, 'error');
   }
 
   function paintCount(st, list) {
@@ -931,6 +979,9 @@
         if (a === 'compose') {
           const c = st.data.items.find(x => x.id === act.dataset.id);
           if (c) compose(c);
+        } else if (a === 'compose-many') {
+          const list = st.data.items.filter(x => st.sel.has(x.id) && x.email);
+          if (list.length) composeMany(list);
         } else if (a === 'import-open') paintImport(st, !st.data.total, true);
         else if (a === 'csv-open') csvModal(st);
         else if (a === 'example') loadExample(st, act);
@@ -957,7 +1008,7 @@
         return;
       }
       const tr = t.closest('tr[data-id]');
-      if (tr && !t.closest('a')) select(st, tr.dataset.id);
+      if (tr && !t.closest('a') && !t.closest('.ptn-rec-chk')) select(st, tr.dataset.id);
     });
     el.addEventListener('keydown', e => {
       if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('tr[data-id]')) {
@@ -982,6 +1033,13 @@
     el.addEventListener('change', e => {
       const t = e.target;
       if (t.matches('[data-cf]')) { cfChange(st, t.dataset.cf, t.value); return; }
+      if (t.matches('[data-sel]')) { toggleSel(st, [t.dataset.sel], t.checked); paintRows(st); return; }
+      if (t.matches('[data-sel-all]')) {
+        const ids = Array.from(st.el.querySelectorAll('[data-sel]')).map(x => x.dataset.sel);
+        toggleSel(st, ids, t.checked);
+        paintRows(st);
+        return;
+      }
       if (t.matches('[data-yt-sel]')) { if (t.checked) st.ytSel.add(t.dataset.ytSel); else st.ytSel.delete(t.dataset.ytSel); ytSelState(st); return; }
       if (t.matches('[data-yt-all]')) { ytSorted(st).forEach(c => { if (t.checked) st.ytSel.add(c.id); else st.ytSel.delete(c.id); }); paintYtRows(st); return; }
     });
@@ -1004,7 +1062,6 @@
     if (!el.isConnected) return;
     const d = getDraft();
     const st = { el, cfg, contacts: list.items || [], atts: null };
-    pickOpen = null;   // 파트너 찾기에서 고르고 들어오면 한 줄로 접힌 채 시작
     el.innerHTML = `
       <div class="ptn-out-statusline" aria-label="연결 상태">${statusLine(cfg.status)}</div>
       <div class="between ptn-out-subbar">
@@ -1051,7 +1108,6 @@
   // 제안 작성 단계 (V2 시안): 1 대상·조건 → 2 메일 작성 → 3 확인 · 발송. 메뉴를 옮겨도 이번 접속 동안은 그 단계 유지
   const STEPS = ['대상·조건', '메일 작성', '확인'];
   let composeStep = 1;
-  let pickOpen = null;   // 받는 파트너 목록 펼침 (null이면 아직 아무것도 안 골랐을 때만 펼침)
 
   function renderCompose(box, st) {
     const d = getDraft();
@@ -1062,13 +1118,19 @@
     box.innerHTML = `
     <div class="ptn-v2-compose">
       ${d.reply ? replyBanner(d.reply) : ''}
-      <section class="card ptn-v2-pick">
-        <div class="ptn-v2-pick-head">
-          <h2>받는 파트너</h2>
-          <div class="seg" role="group" aria-label="업체 구분">${TYPES.map(t => `<button type="button" data-mtype="${esc(t)}" aria-pressed="${d.type === t}">${D.typeIcon[t]} ${esc(t)} <span class="ptn-v2-count">${st.contacts.filter(c => c.type === t).length}</span></button>`).join('')}</div>
-          <span class="ptn-v2-tag">파트너별 초안 유지 · 내 계정에 저장</span>
-        </div>
-        <div data-ref="pick"></div>
+      <section class="card ptn-mail-head" aria-label="메일 머리">
+        <div class="ptn-mail-title"><h2>${d.reply ? '답장' : '새 제안 메일'}</h2><span class="ptn-mail-note" data-ref="rc-note"></span>
+          <button type="button" class="link small" data-act="goto-contacts">파트너 찾기에서 고르기</button></div>
+        <div class="ptn-mail-row"><span class="ptn-mail-label">보낸 사람</span>
+          <span class="ptn-mail-from">${s.smtp ? esc(s.sender) : `<span class="muted">Gmail 연결 안 됨 — ${settingsLink}</span>`}</span></div>
+        <div class="ptn-mail-row"><label class="ptn-mail-label" for="ptn-rc-q">받는 사람</label>
+          <div class="ptn-rc" data-ref="rc">
+            <ul class="ptn-rc-chips" data-ref="rc-chips"></ul>
+            <input class="ptn-rc-q" id="ptn-rc-q" type="text" data-ref="rc-q" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="ptn-rc-menu" aria-autocomplete="list">
+            <ul class="ptn-rc-menu" id="ptn-rc-menu" role="listbox" data-ref="rc-menu" hidden></ul>
+          </div></div>
+        <div class="ptn-mail-row"><label class="ptn-mail-label" for="ptn-mail-subject">제목</label>
+          <input class="ptn-mail-input" id="ptn-mail-subject" data-f="subject" value="${esc(d.subject)}" maxlength="300" placeholder="협업 제안 제목 · ${NAME_SLOT}은 받는 업체 이름으로 바뀌어요"></div>
       </section>
       <nav class="ptn-v2-steps" aria-label="제안 작성 단계">${STEPS.map((x, i) =>
         `<button type="button" data-step="${i + 1}" aria-current="${composeStep === i + 1 ? 'step' : 'false'}"><span>0${i + 1}</span>${x}</button>`).join('')}</nav>
@@ -1076,7 +1138,8 @@
         <div class="ptn-v2-step-body">
           <section class="card ptn-v2-paper" data-step-panel="1"${composeStep === 1 ? '' : ' hidden'}>
             <div class="between"><h2>어떤 협업을 제안할까요?</h2><button type="button" class="btn small ghost" data-act="reset-cond">↺ ${esc(d.type)} 기본 문구</button></div>
-            <label class="field"><span>업체 이름</span><input class="input" data-f="partnerName" value="${esc(d.partnerName)}" placeholder="직접 입력할 때 업체 이름"${d.partnerId ? ' readonly' : ''}></label>
+            <label class="field"><span>제안 구분</span><select class="input" data-f="type">${TYPES.map(t =>
+              `<option value="${esc(t)}"${d.type === t ? ' selected' : ''}>${D.typeIcon[t]} ${esc(t)}</option>`).join('')}</select><small>기본 문구와 AI 초안 기준이 이 구분을 따라요 · 받는 사람을 처음 넣으면 그 업체 구분으로 맞춰져요.</small></label>
             <label class="field"><span>협업 목적</span><input class="input" data-f="purpose" value="${esc(cond.purpose)}"></label>
             <div class="ptn-v2-dates">
               <label class="field"><span>시작일</span><input type="date" class="input" data-f="start" value="${esc(d.start)}"></label>
@@ -1095,14 +1158,12 @@
             <div class="between"><h2>제안 메일 <span data-ref="ai-badge">${d.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></h2>
               <button type="button" class="btn small soft" data-act="generate"${s.openai ? '' : ` disabled title="설정 › 연결에서 OpenAI 키를 넣으면 쓸 수 있어요"`}>AI 초안 넣기</button></div>
             ${s.openai ? '' : `<p class="panel-note">${settingsLink}에서 OpenAI 키를 넣으면 AI 초안을 쓸 수 있어요 · 지금은 직접 쓸 수 있어요.</p>`}
-            <label class="field"><span>수신자</span><input class="input" type="text" inputmode="email" data-f="to" value="${esc(d.to)}" placeholder="partner@example.com (여러 명은 쉼표로, 5명까지)" autocomplete="off"></label>
-            <label class="field"><span>제목</span><input class="input" data-f="subject" value="${esc(d.subject)}" maxlength="300" placeholder="협업 제안 제목"></label>
-            <label class="field"><span>본문</span><textarea class="input ptn-out-body" rows="12" data-f="body" placeholder="메일을 직접 작성하거나 AI 초안을 넣으세요.">${esc(d.body)}</textarea><small data-ref="wc"></small></label>
+            <label class="field"><span>본문</span><textarea class="input ptn-out-body" rows="12" data-f="body" placeholder="메일을 직접 작성하거나 AI 초안을 넣으세요.">${esc(d.body)}</textarea><small data-ref="wc"></small>
+              <small>제목·본문에 ${NAME_SLOT}을 쓰면 보낼 때 받는 업체 이름으로 바뀌어요.</small></label>
             <details class="ptn-v2-tools">
               <summary>첨부파일 · 번역 · 문구 심의 도구 <span data-ref="att-sum"></span></summary>
               <div class="flex wrap mt-8">
-                <button type="button" class="btn soft small" data-act="to-ko"${s.openai ? '' : ' disabled'}>한국어로 보기</button>
-                <button type="button" class="btn soft small" data-act="to-en"${s.openai ? '' : ' disabled'}>영어로 변환</button>
+                ${ui.trBtn({ act: 'mail-tr', title: s.openai ? MAIL_TR_TITLE : 'AI 키가 없어 번역할 수 없어요 · 설정 › 연결', on: !!d.ko, disabled: !s.openai })}
                 <button type="button" class="btn soft small" data-act="review">문구 심의</button>
               </div>
               <label class="dropzone ptn-out-attdrop mt-8" data-drop="attach">${icon('upload')}
@@ -1135,7 +1196,6 @@
               <button type="button" class="btn soft small" data-act="review">문구 심의</button></div>
             <div class="field-grid">
               <label class="field"><span>담당자</span><input class="input" data-f="owner" value="${esc(d.owner)}" placeholder="이름" maxlength="60"></label>
-              <div class="field"><span class="field-label">발송 계정</span><p class="small${s.smtp ? '' : ' muted'}">${s.smtp ? esc(s.sender) : 'Gmail 연결 안 됨'}</p></div>
             </div>
             <label class="check"><input type="checkbox" data-ref="confirm"${s.smtp ? '' : ' disabled'}> 수신자 · 제목 · 본문 · 첨부파일을 확인했고, 이 내용으로 보내요.</label>
             <div class="flex wrap">
@@ -1162,7 +1222,7 @@
         </aside>
       </div>
     </div>`;
-    paintPick(st, box);
+    paintRcpts(st, box);
     paintTarget(st, box);
     wordCount(box, d.body);
     wireCompose(st, box);
@@ -1186,16 +1246,24 @@
     if (n === 3) paintCheck(box);
   }
 
-  /** 3단계 확인: 지금 초안의 파트너 · 목적 · 일정 · 제목 · 본문 */
+  /** 3단계 확인: 받는 사람 · 보내는 방식 · 목적 · 일정 · 제목 · 본문 (여러 곳이면 첫 업체 기준 미리 보기) */
   function paintCheck(box) {
     const el = box.querySelector('[data-ref="check"]');
     if (!el) return;
     const d = getDraft();
     const cond = d.cond[d.type] || {};
-    el.innerHTML = `<dl class="ptn-v2-check"><dt>파트너</dt><dd>${esc(d.partnerName || '미정')}</dd><dt>수신자</dt><dd>${esc(d.to || '미작성')}</dd>
+    const first = d.rcpts[0];
+    const many = d.rcpts.length > 1;
+    el.innerHTML = `<dl class="ptn-v2-check"><dt>받는 사람</dt><dd>${d.rcpts.length ? esc(d.rcpts.map(rcptLabel).join(', ')) : '미정'}</dd>
+      <dt>보내는 방식</dt><dd>${many ? `업체마다 따로 ${fmt.num(d.rcpts.length)}통` : d.reply ? '같은 Gmail 대화로 답장' : '한 통'}</dd>
       <dt>협업 목적</dt><dd>${esc(cond.purpose || '미작성')}</dd><dt>일정</dt><dd>${esc(d.start || '미정')} ~ ${esc(d.end || '미정')}</dd></dl>
-      <h3>${esc(d.subject || '제목 미작성')}</h3><p class="ptn-v2-email-preview">${esc(d.body || '본문 미작성')}</p>`;
+      ${many ? `<p class="panel-note">미리 보기: ${esc(rcptLabel(first))} (${esc(first.email)})에게 가는 메일</p>` : ''}
+      <h3>${esc(fillName(d.subject, first && first.name) || '제목 미작성')}</h3><p class="ptn-v2-email-preview">${esc(fillName(d.body, first && first.name) || '본문 미작성')}</p>`;
   }
+  const rcptLabel = r => r.name || r.email;
+  // {업체명} → 받는 업체 이름
+  function fillName(text, name) { return String(text || '').split(NAME_SLOT).join(name || ''); }
+  function hasSlot(d) { return (d.subject + d.body).includes(NAME_SLOT); }
 
   function replyBanner(r) {
     return `<section class="card ptn-out-reply">
@@ -1206,67 +1274,201 @@
     </section>`;
   }
 
+  // 번역 버튼 (ui.trBtn 하나로 양쪽 방향): 툴팁 문구
+  const MAIL_TR_TITLE = '번역 · 영어면 한국어로 보기, 한글이 있으면 영어로 바꾸기 (본문이 바뀌어요)';
+  const GUIDE_TR_TITLE = '번역 · 한국어면 영어로, 영어면 한국어로 바꾸기 (↶ 번역 전으로 되돌릴 수 있어요)';
+  const HANGUL = /[가-힣]/;
+  // 글자 중 한글이 20% 이상이면 한국어 문서로 봄 (영어 가이드 안의 한글 메모 몇 줄은 무시)
+  function mostlyKo(text) {
+    const ko = (String(text).match(/[가-힣]/g) || []).length;
+    const en = (String(text).match(/[A-Za-z]/g) || []).length;
+    return ko > 0 && ko / (ko + en / 3) >= 0.2;
+  }
+  // 한국어 번역 칸 그리기 · 닫기 (번역 버튼의 눌림 상태도 같이)
+  function paintKo(box, text) {
+    box.querySelector('[data-ref="ko"]').innerHTML = text ? koBox(text) : '';
+    ui.trOn(box.querySelector('[data-act="mail-tr"]'), !!text);
+  }
+  function closeKo(box) {
+    const d = getDraft();
+    d.ko = '';
+    saveDraft(d);
+    paintKo(box, '');
+  }
+
   function koBox(text) {
-    return `<div class="result ptn-out-ko mt-16">
-      <div class="between"><strong class="small">한국어 번역</strong>${badge('AI 번역 · 참고용 (발송 본문은 영어 그대로)', 'purple')}</div>
-      <pre class="ptn-out-pre mt-8">${esc(text)}</pre>
-      <button type="button" class="link mt-8" data-act="ko-close">번역 닫기</button>
+    return `<div class="ptn-out-ko mt-16">
+      <span class="ptn-ko-tag">AI 번역 · 참고용</span>
+      <pre class="ptn-out-pre">${esc(text)}</pre>
+      <p class="ptn-ko-note">발송 본문은 영어 그대로예요. <button type="button" class="link" data-act="ko-close">번역 닫기</button></p>
     </div>`;
   }
 
-  // 받는 파트너: 고르기 전에는 검색 + 목록, 고른 뒤에는 한 줄(바꾸기)
-  function paintPick(st, box) {
+  /* ───────── 받는 사람 (Gmail식): 칩 + 입력칸 ─────────
+     이름·이메일을 치면 파트너 목록(이메일 있는 업체)에서 자동 완성, 목록에 없는 주소는 Enter · 쉼표로 추가,
+     ×나 빈 칸에서 Backspace로 빼기. 2곳 이상이면 업체마다 따로 보냄 */
+  const EMAIL_RE = /^[^\s@<>]+@[^\s@<>]+\.[A-Za-z]{2,}$/;
+  const cur = st => st.el.querySelector('[data-ref="sub"]');   // 지금 그려진 메일 작성 칸 (다시 그리면 바뀜)
+
+  function paintRcpts(st, box) {
     const d = getDraft();
-    const el = box.querySelector('[data-ref="pick"]');
-    const c = st.contacts.find(x => x.id === d.partnerId);
-    if (pickOpen === null) pickOpen = !c && !d.partnerName;
-    if (!pickOpen) {
-      el.innerHTML = `<div class="ptn-v2-picked">
-        ${c ? `${contactAvatar(c)}<div class="ptn-out-name"><strong>${esc(c.name)}</strong>${c.email ? `<small>${esc(c.email)}</small>` : badge('이메일 없음', 'orange')}</div>`
-          : `<div class="ptn-out-name"><strong>직접 입력${d.partnerName ? ` · ${esc(d.partnerName)}` : ''}</strong><small>업체 이름은 01 단계, 수신자는 02 단계에서 써요.</small></div>`}
-        <button type="button" class="btn small soft" data-act="pick-open">${c ? '바꾸기' : '목록에서 고르기'}</button></div>`;
-      logoFallback(el);
-      return;
-    }
-    const opts = st.contacts.filter(x => x.type === d.type);
-    const row = x => `<li data-search="${esc(`${x.name} ${x.email || ''}`.toLowerCase())}">
-      <button type="button" data-pick="${esc(x.id)}" aria-pressed="${x.id === d.partnerId}">${contactAvatar(x)}
-        <span class="ptn-out-name"><strong>${esc(x.name)}</strong>${x.email ? `<small>${esc(x.email)}</small>` : ''}</span>
-        ${x.email ? '' : badge('이메일 없음', 'orange')}${x.example ? badge('예시', 'orange') : ''}</button></li>`;
-    el.innerHTML = `<input class="input" type="search" data-ref="pick-q" placeholder="${esc(d.type)} ${opts.length}곳에서 이름·이메일 검색" aria-label="받는 파트너 검색" autocomplete="off">
-      <ul class="ptn-v2-picklist">
-        <li data-search=""><button type="button" data-pick="" class="ptn-v2-pick-manual">직접 입력 <small>목록에 없는 업체</small></button></li>
-        ${opts.map(row).join('')}
-        <li class="small muted ptn-v2-pick-none" hidden>찾는 업체가 없어요. 직접 입력을 고르세요.</li>
-      </ul>`;
-    logoFallback(el);
+    const list = box.querySelector('[data-ref="rc-chips"]');
+    list.innerHTML = d.rcpts.map((r, i) => {
+      const c = r.id && st.contacts.find(x => x.id === r.id);
+      return `<li class="ptn-rc-chip" title="${esc(r.email + (r.type ? ' · ' + r.type : ''))}">${c ? contactAvatar(c) : ''}<span>${esc(rcptLabel(r))}</span>
+        <button type="button" data-rc-del="${i}" aria-label="${esc(rcptLabel(r))} 빼기">×</button></li>`;
+    }).join('');
+    logoFallback(list);
+    const full = d.rcpts.length >= (d.reply ? 1 : MAX_MANY);
+    box.querySelector('[data-ref="rc-q"]').placeholder = full ? '' : d.rcpts.length ? '더 추가하기' : '업체 이름이나 이메일을 입력하세요';
+    box.querySelector('[data-ref="rc-note"]').textContent = d.reply ? '같은 Gmail 대화로 답장 · 받는 사람 1명'
+      : d.rcpts.length > 1 ? `${d.rcpts.length}곳 · 업체마다 따로 보내요 (받는 사람끼리 주소가 안 보여요)` : '';
   }
 
-  function filterPick(box, q) {
-    const s = q.trim().toLowerCase();
-    let shown = 0;
-    box.querySelectorAll('.ptn-v2-picklist li[data-search]').forEach(li => {
-      const ok = !s || !li.dataset.search || li.dataset.search.includes(s);
-      li.hidden = !ok;
-      if (ok && li.dataset.search) shown += 1;
-    });
-    const none = box.querySelector('.ptn-v2-pick-none');
-    if (none) none.hidden = !s || shown > 0;
+  // 받는 사람이 바뀌면: 칩 · 오른쪽 카드 · 확인 단계 · 발송 버튼
+  function afterRcpts(st, box) {
+    paintRcpts(st, box);
+    paintTarget(st, box);
+    paintCheck(box);
+    unconfirm(box);
+    updateSend(st, box);
+  }
+
+  // 입력값에 맞는 업체 (이미 넣은 주소 · 이메일 없는 업체 제외) + 올바른 주소면 '직접 추가'
+  function paintRcMenu(st, box) {
+    const d = getDraft();
+    const q = box.querySelector('[data-ref="rc-q"]');
+    const menu = box.querySelector('[data-ref="rc-menu"]');
+    const v = q.value.trim();
+    const s = v.toLowerCase();
+    const have = new Set(d.rcpts.map(r => r.email.toLowerCase()));
+    const hits = s ? st.contacts.filter(c => c.email && !have.has(c.email.toLowerCase()) &&
+      `${c.name} ${c.email}`.toLowerCase().includes(s)).slice(0, 8) : [];
+    const raw = EMAIL_RE.test(v) && !have.has(s) && !hits.some(c => c.email.toLowerCase() === s);
+    st.rcOpts = hits.map(rcptOf).concat(raw ? [{ id: '', name: '', email: v, type: '' }] : []);
+    st.rcAt = Math.min(st.rcAt || 0, Math.max(0, st.rcOpts.length - 1));
+    menu.hidden = !st.rcOpts.length;
+    menu.innerHTML = st.rcOpts.map((r, i) => {
+      const c = r.id && st.contacts.find(x => x.id === r.id);
+      return `<li role="option" id="ptn-rc-opt${i}" data-rc-opt="${i}" aria-selected="${i === st.rcAt}">${c ? contactAvatar(c) : '<span class="initial" aria-hidden="true">@</span>'}
+        <span class="ptn-out-name"><strong>${esc(r.name || r.email)}</strong><small>${esc(r.name ? `${r.email} · ${r.type}` : '목록에 없는 주소 · 직접 추가')}</small></span></li>`;
+    }).join('');
+    logoFallback(menu);
+    q.setAttribute('aria-expanded', String(!menu.hidden));
+    if (menu.hidden) q.removeAttribute('aria-activedescendant'); else q.setAttribute('aria-activedescendant', `ptn-rc-opt${st.rcAt}`);
+  }
+  function closeRcMenu(st, box) {
+    st.rcOpts = [];
+    st.rcAt = 0;
+    const menu = box.querySelector('[data-ref="rc-menu"]');
+    const q = box.querySelector('[data-ref="rc-q"]');
+    if (menu) menu.hidden = true;
+    if (q) { q.setAttribute('aria-expanded', 'false'); q.removeAttribute('aria-activedescendant'); }
+  }
+
+  // 주소만 친 경우: 파트너 목록에 같은 주소가 있으면 그 업체로
+  function rcptFromEmail(st, email) {
+    const c = st.contacts.find(x => x.email && x.email.toLowerCase() === email.toLowerCase());
+    return c ? rcptOf(c) : { id: '', name: '', email, type: '' };
+  }
+
+  /** 받는 사람 추가: 처음 넣는 업체면 제안 구분도 그 업체 구분으로 맞춤 */
+  function addRcpt(st, box, r) {
+    const d = getDraft();
+    if (d.rcpts.some(x => x.email.toLowerCase() === r.email.toLowerCase())) return true;
+    if (d.reply && d.rcpts.length) { toast('답장은 한 사람에게만 보낼 수 있어요. 답장을 취소하면 여러 곳에 보낼 수 있어요.', 'error'); return false; }
+    if (d.rcpts.length >= MAX_MANY) { toast(`한 번에 ${MAX_MANY}곳까지 보낼 수 있어요.`, 'error'); return false; }
+    const retype = !d.rcpts.length && TYPES.includes(r.type) && r.type !== d.type;
+    d.rcpts.push(r);
+    if (retype) d.type = r.type;
+    saveDraft(d);
+    if (retype) {   // 구분이 바뀌면 01 단계 문구도 바뀌므로 다시 그림
+      paintSub(st);
+      cur(st).querySelector('[data-ref="rc-q"]').focus();
+      return true;
+    }
+    afterRcpts(st, box);
+    return true;
+  }
+  function removeRcpt(st, box, i) {
+    const d = getDraft();
+    const [r] = d.rcpts.splice(i, 1);
+    if (!r) return;
+    if (r.id) picked.delete(r.id);
+    saveDraft(d);
+    afterRcpts(st, box);
+  }
+
+  // 입력칸의 글자를 칩으로: 메뉴에서 고른 것 · 아니면 올바른 주소
+  function commitRc(st, box, useMenu) {
+    const q = box.querySelector('[data-ref="rc-q"]');
+    const v = q.value.trim();
+    let r = useMenu && st.rcOpts && st.rcOpts[st.rcAt];
+    if (!r && EMAIL_RE.test(v)) r = rcptFromEmail(st, v);
+    if (!r) return false;
+    if (!addRcpt(st, box, r)) return true;
+    const b = cur(st);   // 구분이 바뀌어 다시 그렸으면 새 칸
+    const q2 = b.querySelector('[data-ref="rc-q"]');
+    q2.value = '';
+    q2.focus();
+    closeRcMenu(st, b);
+    return true;
+  }
+
+  function onRcKey(st, box, e) {
+    const q = e.target;
+    const open = st.rcOpts && st.rcOpts.length;
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && open) {
+      e.preventDefault();
+      st.rcAt = (st.rcAt + (e.key === 'ArrowDown' ? 1 : -1) + st.rcOpts.length) % st.rcOpts.length;
+      paintRcMenu(st, box);
+    } else if (e.key === 'Enter' || ((e.key === 'Tab') && open && q.value.trim())) {
+      if (q.value.trim()) { e.preventDefault(); if (!commitRc(st, box, true)) toast('목록에 없는 업체예요. 이메일 주소를 그대로 입력하세요.', 'error'); }
+    } else if (e.key === ',' || e.key === ';') {
+      e.preventDefault();
+      commitRc(st, box, true);
+    } else if (e.key === 'Backspace' && !q.value) {
+      const d = getDraft();
+      if (d.rcpts.length) removeRcpt(st, box, d.rcpts.length - 1);
+    } else if (e.key === 'Escape') closeRcMenu(st, box);
+  }
+
+  // 붙여넣기 등으로 쉼표·줄바꿈이 섞이면 올바른 주소마다 칩으로 (나머지는 칸에 남김)
+  function onRcInput(st, box, q) {
+    if (/[,;\n]/.test(q.value)) {
+      const parts = q.value.split(/[,;\n]+/).map(x => x.trim()).filter(Boolean);
+      const left = [];
+      parts.forEach(p => {
+        const m = p.match(/<([^<>]+)>\s*$/);
+        const email = (m ? m[1] : p).trim();
+        if (!EMAIL_RE.test(email) || !addRcpt(st, cur(st), rcptFromEmail(st, email))) left.push(p);
+      });
+      const q2 = cur(st).querySelector('[data-ref="rc-q"]');
+      q2.value = left.join(', ');
+      q2.focus();
+    }
+    st.rcAt = 0;
+    paintRcMenu(st, cur(st));
   }
 
   function paintTarget(st, box) {
     const d = getDraft();
     const el = box.querySelector('[data-ref="target"]');
-    const c = st.contacts.find(x => x.id === d.partnerId);
-    if (c) {
-      el.innerHTML = `<div class="card-head"><h2>받는 파트너</h2>${typeBadge(c.type)}</div>
+    const r = d.rcpts[0];
+    const c = d.rcpts.length === 1 && r.id && st.contacts.find(x => x.id === r.id);
+    if (d.rcpts.length > 1) {
+      el.innerHTML = `<div class="card-head"><h2>받는 사람</h2>${badge(`${fmt.num(d.rcpts.length)}곳`)}</div>
+        <p class="small">업체마다 한 통씩 따로 보내고, 협업 기록도 업체별로 남아요.</p>
+        <p class="panel-note mt-8">제목·본문의 ${NAME_SLOT}은 받는 업체 이름으로 바뀌어요. 확인 단계에서 첫 업체 기준으로 미리 볼 수 있어요.</p>`;
+    } else if (c) {
+      el.innerHTML = `<div class="card-head"><h2>받는 사람</h2>${typeBadge(c.type)}</div>
         <div class="flex"><span class="initial ptn-av${avIndex(c.id)}" aria-hidden="true">${esc(initials(c.name))}</span>
           <div class="ptn-out-name"><strong>${esc(c.name)}</strong>${c.example ? ' ' + badge('예시', 'orange') : ''}<small>${esc(c.location || '지역 정보 없음')}</small></div></div>
         ${c.category ? `<p class="small mt-8">${esc(c.category)}</p>` : ''}
         ${c.note ? `<p class="small muted mt-8">${esc(c.note)}</p>` : ''}`;
     } else {
-      el.innerHTML = `<div class="card-head"><h2>받는 파트너</h2></div>
-        <p class="panel-note">파트너 찾기에서 파트너를 고르거나 이메일을 누르면 수신자가 자동으로 들어가요. 직접 입력해도 돼요.</p>
+      el.innerHTML = `<div class="card-head"><h2>받는 사람</h2></div>
+        <p class="panel-note">${r ? `${esc(r.email)} — 파트너 목록에 없는 주소예요. ${NAME_SLOT}은 쓸 수 없어요.` : '위 받는 사람 칸에 업체 이름이나 이메일을 입력하거나, 파트너 찾기에서 여러 곳을 체크해 가져오세요.'}</p>
         <button type="button" class="btn small soft mt-8" data-act="goto-contacts">파트너 찾기로</button>`;
     }
   }
@@ -1298,8 +1500,9 @@
 
   function onField(st, box, t) {
     const f = t.dataset && t.dataset.f;
-    if (!f || f === 'partnerId') return;
+    if (!f) return;
     const d = getDraft();
+    if (f === 'type') return switchType(st, t.value);
     if (f === 'prompt') {
       setPrompt(d.type, t.value, st.cfg);
       const b = box.querySelector('[data-ref="prompt-badge"]');
@@ -1309,34 +1512,33 @@
     if (f === 'ideal') d.ideal[d.type] = t.value;
     else if (COND_FIELDS.includes(f)) d.cond[d.type][f] = t.value;
     else d[f] = t.value;
-    if (f === 'to' || f === 'subject' || f === 'body') {
+    if (f === 'subject' || f === 'body') {
       unconfirm(box);
-      if (f !== 'to') clearReview(box);
+      clearReview(box);
       if (f === 'body') wordCount(box, t.value);
     }
     saveDraft(d);
     updateSend(st, box);
   }
 
-  async function pickPartner(st, box, id) {
-    const d = getDraft();
-    if (id === d.partnerId) {   // 같은 업체(또는 이미 직접 입력)면 목록만 닫음
-      pickOpen = false;
-      paintPick(st, box);
-      return;
-    }
-    if ((d.subject.trim() || d.body.trim()) && !(await ui.confirm('다른 업체를 고르면 작성 중인 제목·본문·번역이 지워져요. 계속할까요?', { ok: '업체 바꾸기' }))) return;
-    const c = st.contacts.find(x => x.id === id);
-    Object.assign(d, { partnerId: c ? c.id : '', partnerName: c ? c.name : '', to: c ? (c.email || '') : '', subject: '', body: '', ko: '', ai: false, reply: null });
-    saveDraft(d);
-    pickOpen = false;
-    paintSub(st);
-  }
-
   function wireCompose(st, box) {
     box.addEventListener('input', e => {
-      if (e.target.matches('[data-ref="pick-q"]')) filterPick(box, e.target.value);
+      if (e.target.matches('[data-ref="rc-q"]')) onRcInput(st, box, e.target);
       else onField(st, box, e.target);
+    });
+    box.addEventListener('keydown', e => { if (e.target.matches('[data-ref="rc-q"]')) onRcKey(st, box, e); });
+    box.addEventListener('focusout', e => {
+      // 칸을 떠나면 올바른 주소는 칩으로, 메뉴는 닫음 (메뉴를 누르는 중이면 mousedown이 먼저 처리)
+      if (!e.target.matches('[data-ref="rc-q"]')) return;
+      if (EMAIL_RE.test(e.target.value.trim())) commitRc(st, box, false);
+      closeRcMenu(st, box);
+    });
+    box.addEventListener('mousedown', e => {
+      const opt = e.target.closest('[data-rc-opt]');
+      if (!opt) return;
+      e.preventDefault();   // 입력칸 포커스 유지
+      st.rcAt = Number(opt.dataset.rcOpt);
+      commitRc(st, box, true);
     });
     box.addEventListener('change', e => {
       const t = e.target;
@@ -1346,17 +1548,21 @@
       else if (t.matches('[data-f="start"], [data-f="end"]')) onField(st, box, t);
     });
     box.addEventListener('click', e => {
-      const typeBtn = e.target.closest('[data-mtype]');
-      if (typeBtn) return switchType(st, typeBtn.dataset.mtype);
-      const pick = e.target.closest('[data-pick]');
-      if (pick) return pickPartner(st, box, pick.dataset.pick);
+      const del = e.target.closest('[data-rc-del]');
+      if (del) { removeRcpt(st, box, Number(del.dataset.rcDel)); box.querySelector('[data-ref="rc-q"]').focus(); return; }
+      if (e.target.matches('[data-ref="rc"], [data-ref="rc-chips"]')) { box.querySelector('[data-ref="rc-q"]').focus(); return; }
       const b = e.target.closest('[data-act]');
       if (!b || b.disabled) return;
       const a = b.dataset.act;
       if (a === 'generate') generate(st, box, b);
-      else if (a === 'to-ko') toKo(box, b);
-      else if (a === 'to-en') toEn(st, box, b);
-      else if (a === 'ko-close') { const d = getDraft(); d.ko = ''; saveDraft(d); box.querySelector('[data-ref="ko"]').innerHTML = ''; }
+      else if (a === 'mail-tr') {   // 번역 버튼 하나: 펼친 번역은 닫고, 한글이 있으면 영어로 바꾸고, 영어면 한국어로 보기
+        const d = getDraft();
+        if (d.ko) closeKo(box);
+        else if (HANGUL.test(`${d.subject}
+${d.body}`)) toEn(st, box, b);
+        else toKo(box, b);
+      }
+      else if (a === 'ko-close') closeKo(box);
       else if (a === 'review') reviewMail(box);
       else if (a === 'send') doSend(st, box, b);
       else if (a === 'att-del') deleteAttachment(st, box, b.dataset.id);
@@ -1364,12 +1570,6 @@
       else if (a === 'reset-cond') resetCond(st);
       else if (a === 'reply-cancel') cancelReply(st);
       else if (a === 'goto-contacts') go('contacts');
-      else if (a === 'pick-open') {
-        pickOpen = true;
-        paintPick(st, box);
-        const q = box.querySelector('[data-ref="pick-q"]');
-        if (q) q.focus();
-      }
     });
     const zone = box.querySelector('[data-drop="attach"]');
     zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
@@ -1386,10 +1586,7 @@
     const d = getDraft();
     if (d.type === type) return;
     d.type = type;
-    const c = st.contacts.find(x => x.id === d.partnerId);
-    if (c && c.type !== type) d.partnerId = '';   // 다른 구분의 업체는 '직접 입력'으로 (이름·수신자는 남김)
     saveDraft(d);
-    pickOpen = true;   // 구분을 바꾸면 그 구분 목록을 바로 보여 줌
     paintSub(st);
   }
 
@@ -1428,7 +1625,7 @@
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/email/generate', {
-        type: d.type, partner: { id: d.partnerId, name: d.partnerName || '' }, ideal: d.ideal[d.type] || '',
+        type: d.type, partner: d.rcpts.length > 1 ? { id: '', name: NAME_SLOT } : { id: (d.rcpts[0] || {}).id || '', name: (d.rcpts[0] || {}).name || '' }, ideal: d.ideal[d.type] || '',
         prompt: promptFor(d.type, st.cfg), purpose: cond.purpose, period: { start: d.start, end: d.end },
         proposal: cond.proposal, requests: cond.requests, reply_to: d.reply ? d.reply.historyId : null
       });
@@ -1441,7 +1638,7 @@
         setField(box, 'body', dd.body);
         wordCount(box, dd.body);
         box.querySelector('[data-ref="ai-badge"]').innerHTML = badge('AI 초안 · 참고용', 'purple');
-        box.querySelector('[data-ref="ko"]').innerHTML = '';
+        paintKo(box, '');
         unconfirm(box);
         clearReview(box);
         updateSend(st, box);
@@ -1464,7 +1661,7 @@
       const dd = getDraft();
       dd.ko = out.text;
       saveDraft(dd);
-      if (box.isConnected) box.querySelector('[data-ref="ko"]').innerHTML = koBox(out.text);
+      if (box.isConnected) paintKo(box, out.text);
     } catch (e) {
       toast(`번역하지 못했어요: ${e.message}`, 'error');
     } finally {
@@ -1489,7 +1686,7 @@
         setField(box, 'body', dd.body);
         wordCount(box, dd.body);
         box.querySelector('[data-ref="ai-badge"]').innerHTML = badge('AI 번역 포함 · 참고용', 'purple');
-        box.querySelector('[data-ref="ko"]').innerHTML = '';
+        paintKo(box, '');
         unconfirm(box);
         clearReview(box);
         updateSend(st, box);
@@ -1634,8 +1831,10 @@
     const total = selectedAtts(st, d).reduce((n, a) => n + a.size, 0);
     let why = '';
     if (!s.smtp) why = `Gmail이 연결되지 않았어요 — ${settingsLink}에서 Gmail 주소와 앱 비밀번호를 넣으면 보낼 수 있어요.`;
-    else if (!emailsOk(d.to)) why = '수신자 이메일을 확인하세요.';
+    else if (!d.rcpts.length) why = '받는 사람을 넣으세요.';
+    else if (!d.rcpts.every(r => emailsOk(r.email))) why = '받는 사람 이메일을 확인하세요.';
     else if (!d.subject.trim() || !d.body.trim()) why = '제목과 본문을 입력하세요.';
+    else if (hasSlot(d) && d.rcpts.some(r => !r.name)) why = `파트너 목록에 없는 주소(${esc(d.rcpts.filter(r => !r.name).map(r => r.email).join(', '))})는 이름을 몰라 ${NAME_SLOT}을 바꿀 수 없어요. ${NAME_SLOT}을 지우거나 그 주소를 빼세요.`;
     else if (!String(d.owner || '').trim()) why = '담당자를 입력하세요.';
     else if (st.atts === null) why = '첨부파일 보관함을 불러오는 중이에요.';
     else if (total > D.attach.maxTotalMB * MB) why = `첨부파일 합계가 ${D.attach.maxTotalMB}MB를 넘어요.`;
@@ -1649,18 +1848,21 @@
     if (!confirmEl || !confirmEl.checked) return;   // 확인 체크 없이는 보내지 않음
     const d = getDraft();
     const atts = selectedAtts(st, d);
+    if (d.rcpts.length > 1) return sendMany(st, box, btn, d, atts);
+    const r = d.rcpts[0];
     ui.busy(btn, true);
     try {
       const out = await REBOOT.api('/api/partners/email/send', {
-        to: d.to, subject: d.subject, body: d.body, owner: d.owner, confirm: true,
-        partner_id: d.partnerId, partner_name: d.partnerName, partner_type: d.type,
+        to: r.email, subject: fillName(d.subject, r.name), body: fillName(d.body, r.name), owner: d.owner, confirm: true,
+        partner_id: r.id, partner_name: r.name, partner_type: r.type || d.type,
         attachment_ids: atts.map(a => a.id), reply_to: d.reply ? d.reply.historyId : null
       });
       refreshSummary();
       if (out.ok) {
-        toast(`보냈어요 — ${d.partnerName || d.to}. 협업 기록에 저장했어요.`);
+        toast(`보냈어요 — ${rcptLabel(r)}. 협업 기록에 저장했어요.`);
         const dd = getDraft();
-        Object.assign(dd, { subject: '', body: '', ko: '', ai: false, reply: null, attachOff: [] });   // 다음 메일은 보관함 파일 모두 기본 체크
+        Object.assign(dd, { rcpts: [], subject: '', body: '', ko: '', ai: false, reply: null, attachOff: [] });   // 다음은 새 메일 · 보관함 파일 모두 기본 체크
+        if (r.id) picked.delete(r.id);
         saveDraft(dd);
         ui.busy(btn, false);
         if (box.isConnected) paintSub(st);
@@ -1681,6 +1883,40 @@
     }
     ui.busy(btn, false);
     updateSend(st, box);
+  }
+
+  /** 여러 곳: 업체마다 한 통씩 차례로 보냄. 못 보낸 업체만 목록에 남겨 다시 보낼 수 있게 함 */
+  async function sendMany(st, box, btn, d, atts) {
+    const hint = box.querySelector('[data-ref="send-hint"]');
+    const failed = [];
+    let sent = 0, unsaved = 0;
+    ui.busy(btn, true);
+    for (const [i, m] of d.rcpts.entries()) {
+      if (hint) hint.textContent = `${i + 1}/${d.rcpts.length} 보내는 중 — ${rcptLabel(m)}`;
+      try {
+        const out = await REBOOT.api('/api/partners/email/send', {
+          to: m.email, subject: fillName(d.subject, m.name), body: fillName(d.body, m.name), owner: d.owner, confirm: true,
+          partner_id: m.id, partner_name: m.name, partner_type: m.type || d.type, attachment_ids: atts.map(a => a.id), reply_to: null
+        });
+        if (out.ok) sent += 1; else failed.push(Object.assign({ error: out.error }, m));
+      } catch (e) {
+        if (e.data && e.data.sent) { sent += 1; unsaved += 1; }   // 메일은 갔고 기록만 못 남김
+        else failed.push(Object.assign({ error: e.message }, m));
+      }
+    }
+    refreshSummary();
+    const dd = getDraft();
+    if (!failed.length) {
+      Object.assign(dd, { rcpts: [], subject: '', body: '', ko: '', ai: false, attachOff: [] });
+      d.rcpts.forEach(m => picked.delete(m.id));
+      toast(`${fmt.num(sent)}곳에 보냈어요. 협업 기록에 업체별로 저장했어요.${unsaved ? ` (${unsaved}곳은 기록 저장 실패 — 협업 관리에서 확인하세요)` : ''}`);
+    } else {
+      dd.rcpts = failed.map(({ id, name, email, type }) => ({ id, name, email, type }));
+      toast(`${fmt.num(sent)}곳은 보냈고 ${fmt.num(failed.length)}곳은 못 보냈어요: ${failed.map(f => `${rcptLabel(f)} (${f.error})`).join(', ')}. 못 보낸 업체만 남겨 두었어요.`, 'error');
+    }
+    saveDraft(dd);
+    ui.busy(btn, false);
+    if (box.isConnected) paintSub(st);
   }
 
   /* ───────── 협업 가이드 ───────── */
@@ -1728,10 +1964,11 @@
     <div class="workbench ptn-out-guide">
       <div class="stack tight">
         <section class="card">
-          <div class="card-head"><h2>협업 가이드 조건</h2>
-            <div class="seg" role="group" aria-label="협업 유형">${TYPES.slice().reverse().map(t => `<button type="button" data-gtype="${esc(t)}" aria-pressed="${g.type === t}">${D.typeIcon[t]} ${esc(t)}</button>`).join('')}</div></div>
+          <div class="card-head"><h2>협업 가이드 조건</h2></div>
           <div class="field"><span class="field-label">협업 개요 · 제품 <small class="muted">(여러 개 선택 · 안 고르면 전체)</small></span>
             <div class="chips" role="group" aria-label="제품">${(cfg.products || []).map(p => `<button type="button" class="chip" data-gproduct="${esc(p.id)}" aria-pressed="${(g.products || []).includes(p.id)}" title="${esc(p.form)}">${esc(p.name)}</button>`).join('') || '<span class="small muted">설정 › 팩트시트에 제품이 없어요.</span>'}</div></div>
+          <div class="field"><span class="field-label">협업 유형 <small class="muted">(바꾸면 아래 협업 목적 · 기본 문구가 바뀜)</small></span>
+            <div class="linetabs" role="group" aria-label="협업 유형">${TYPES.slice().reverse().map(t => `<button type="button" data-gtype="${esc(t)}" aria-pressed="${g.type === t}">${esc(t)}</button>`).join('')}</div></div>
           <div class="field"><span class="field-label">협업 목적</span>
             <div class="chips" role="group" aria-label="협업 목적">${purposes.map(p => `<button type="button" class="chip" data-purpose="${esc(p)}" aria-pressed="${current === p}">${esc(p)}</button>`).join('')}
               <button type="button" class="chip" data-purpose="__custom" aria-pressed="${current === '__custom'}">직접 입력</button></div>
@@ -1753,8 +1990,7 @@
           </div>
           <div class="mt-16" data-ref="g-view"></div>
           <div class="flex wrap mt-16">
-            <button type="button" class="btn soft small" data-act="g-en"${s.openai ? '' : ' disabled'}>영어로 번역</button>
-            <button type="button" class="btn soft small" data-act="g-ko"${s.openai ? '' : ' disabled'}>한국어로 번역</button>
+            ${ui.trBtn({ act: 'g-tr', title: s.openai ? GUIDE_TR_TITLE : 'AI 키가 없어 번역할 수 없어요 · 설정 › 연결', disabled: !s.openai })}
             <button type="button" class="btn ghost small" data-act="g-undo"${g.prev ? '' : ' hidden'}>↶ 번역 전으로</button>
           </div>
           <details class="ptn-out-gcheck mt-16">
@@ -1925,7 +2161,7 @@
       if (!b || b.disabled) return;
       const a = b.dataset.act;
       if (a === 'g-generate') guideGenerate(st, box, b);
-      else if (a === 'g-en' || a === 'g-ko') guideTranslate(box, b, a === 'g-en' ? 'en' : 'ko');
+      else if (a === 'g-tr') guideTranslate(box, b, mostlyKo(getGuide().md) ? 'en' : 'ko');   // 한국어 가이드면 영어로, 영어면 한국어로
       else if (a === 'g-undo') {
         const g = getGuide();
         if (!g.prev) return;

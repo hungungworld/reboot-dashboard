@@ -1,5 +1,5 @@
 /* 홈 · 데일리 브리핑 스타일 (담당: 강현서) — .part-home 안에서만, home- 접두사.
-   home-layout · brief-hero · calendar-large · task · market-item · activity는 base.css 그대로 씁니다. */
+   brief-hero · calendar-large · task · market-item · activity는 base.css 그대로 씁니다. */
 /* 줄바꿈: 어절 단위(base.css keep-all) + 마지막 줄에 한두 단어만 남지 않게(pretty) · 제목 · 짧은 글은 줄 길이를 고르게(balance)
    text-wrap-style만 바꿔서 nowrap 칸(배지 · 표 · 알약)은 그대로 한 줄 */
 .part-home { text-wrap-style: pretty; }
@@ -51,15 +51,21 @@
 .part-home .home-task-main .meta .link { font-size: 12px; display: inline; }
 /* To-Do 제목이 한 줄에 들어가도록: 출처 배지(AI · 규칙 · 직접)는 근거 줄 맨 앞으로 */
 .part-home .home-task-main .meta .badge { margin-right: 5px; padding: 1px 5px; vertical-align: 1px; }
-/* 오른쪽 칸(시즌 · 한눈에 보기 · 활동)을 1201~1599px에서도 330px로 (base.css는 1600px 이상만 330px) */
-@media (min-width: 1201px) { .part-home .home-layout { grid-template-columns: minmax(0, 1fr) 330px; } }
+/* 브리핑 배치: 위 4칸(작은 달력 · 다가오는 시즌 · 한눈에 보기 · 최근 활동, 같은 높이) → 아래 2단(시장 브리핑 넓게 · 할 일 좁게) */
+.part-home .home-top4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
+.part-home .home-top4 > .card { display: flex; flex-direction: column; height: 400px; min-width: 0; }
+.part-home .home-top4 .home-box-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 0; }
+.part-home .home-top4 .home-mini-cal { overflow-y: auto; }
+.part-home .home-main2 { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 22px; align-items: start; }
+@media (max-width: 1300px) { .part-home .home-top4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .part-home .home-main2 { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .part-home .home-top4 { grid-template-columns: 1fr; } .part-home .home-top4 > .card { height: auto; max-height: 420px; } }
 .part-home .home-todo-del { flex-shrink: 0; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--faint); opacity: .6; }
 .part-home .home-todo-del:hover, .part-home .home-todo-del:focus-visible { opacity: 1; background: var(--soft); color: var(--red); }
 .part-home .home-todo-del .icon { width: 14px; height: 14px; }
 .part-home .home-todo-form { display: grid; gap: 8px; margin: 10px 0 6px; padding: 12px; border-radius: var(--radius-sm); background: var(--soft-2); border: 1px solid var(--line); }
 
-/* 이번 주 할 일 2단: 왼쪽 작은 달력 · 오른쪽 할 일 */
-.part-home .home-todo-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+/* 작은 달력 (위 4칸 첫 칸) */
 .part-home .home-mini-cal .card-head h2 { font-size: 15px; }
 .part-home .home-mini-cal .icon-btn { width: 28px; height: 28px; font-size: 15px; }
 .part-home .home-mini-week, .part-home .home-mini-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; text-align: center; }
@@ -81,7 +87,6 @@
 .part-home .home-mini-list b { font-variant-numeric: tabular-nums; }
 .part-home .home-mini-list small { color: var(--muted); }
 .part-home .home-mini-more { margin-top: 10px; }
-@media (max-width: 900px) { .part-home .home-todo-split { grid-template-columns: 1fr; } }
 
 /* 뉴스 */
 .part-home .home-news-badges { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }

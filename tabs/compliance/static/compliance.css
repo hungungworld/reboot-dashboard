@@ -173,19 +173,30 @@
 .part-compliance details.cmp-finding-fold[open] .cmp-fold-arrow { transform: rotate(90deg); }
 /* AI 2차 판정 카드 접기 (2026-10-25 · 처음에는 펼친 상태) */
 .part-compliance details.cmp-ai-fold { display: block; }
-.part-compliance details.cmp-ai-fold > * + * { margin-top: 10px; }   /* grid gap 대신 (details는 블록으로) */
+.part-compliance details.cmp-ai-fold > * + * { margin-top: 16px; }   /* grid gap 대신 (details는 블록으로) */
 .part-compliance details.cmp-ai-fold > summary { list-style: none; cursor: pointer; }
 .part-compliance details.cmp-ai-fold > summary::-webkit-details-marker { display: none; }
 .part-compliance details.cmp-ai-fold[open] > summary .cmp-fold-arrow { transform: rotate(90deg); }
 .part-compliance .cmp-finding-terms { display: inline-flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
 /* 문구 검토 요청 회신 상태 (2026-10-25) */
-.part-compliance .cmp-rq { display: grid; gap: 6px; padding: 10px 14px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); font-size: 12px; }
-.part-compliance .cmp-rq-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-.part-compliance .cmp-rq-team { white-space: nowrap; }
-.part-compliance .cmp-rq .cmp-btn { justify-self: start; }
-.part-compliance .cmp-rq-pick label { margin-right: 14px; white-space: nowrap; }
+/* 검토 요청 현황 (2026-10-26 · 점검 결과 아래): 요청마다 번호 · 날짜 · 팀별 상태 칩 */
+.part-compliance .cmp-rqc { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); }
+.part-compliance .cmp-rqc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.part-compliance .cmp-rqc-top h4 { margin: 0; font-size: 12px; font-weight: 650; color: var(--cmp-muted); }
+.part-compliance .cmp-rqc-item { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--cmp-rule); }
+.part-compliance .cmp-rqc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 13px; }
+.part-compliance .cmp-rqc-head .cmp-muted { font-size: 12px; }
+.part-compliance .cmp-rqc-acts { margin-left: auto; display: inline-flex; gap: 12px; }
+.part-compliance .cmp-rqc-teams { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; }
+.part-compliance .cmp-rqc-teams li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.part-compliance .cmp-rqc-cm { flex-basis: 100%; padding-left: 4px; color: var(--cmp-muted); line-height: 1.55; overflow-wrap: anywhere; }
+.part-compliance .cmp-st { display: inline-block; min-width: 54px; padding: 2px 6px; border-radius: var(--radius-xs); font-size: 11px; font-weight: 650; text-align: center; }
+.part-compliance .cmp-st-wait { background: var(--cmp-code); color: var(--cmp-muted); }
+.part-compliance .cmp-st-ok { background: var(--cmp-PASS-bg); color: var(--cmp-PASS-ink); }
+.part-compliance .cmp-st-fix { background: var(--cmp-REVISE-bg); color: var(--cmp-REVISE-ink); }
+.part-compliance .cmp-st-no { background: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); }
 /* PASS '왜 통과했나요?' */
-.part-compliance .cmp-pass { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--cmp-soft); border-radius: var(--radius-sm); }
+.part-compliance .cmp-pass { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--cmp-soft); border-radius: var(--radius-sm); }
 .part-compliance .cmp-pass-text { flex: 1 1 320px; }
 .part-compliance .cmp-pass p { margin: 0; font-size: 12px; line-height: 1.7; }
 .part-compliance .cmp-pass-q { font-weight: 700; margin-bottom: 2px !important; }
@@ -350,10 +361,23 @@
 .part-compliance .cmp-firm { display: block; margin-top: 6px; font-size: 12px; }
 
 /* AI 2차 판정 (참고용) */
-.part-compliance .cmp-ai { border: 1px solid var(--cmp-accent-line); background: var(--cmp-accent-soft); border-radius: var(--radius-sm); padding: 18px 20px; display: grid; gap: 10px; }
-.part-compliance .cmp-ai-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 680; }
-.part-compliance .cmp-ai-summary { margin: 0; font-size: 13px; line-height: 1.75; }
-.part-compliance .cmp-ai .cmp-finding { border-top-color: var(--cmp-accent-line); }
+.part-compliance .cmp-ai { border: 1px solid var(--cmp-accent-line); background: var(--cmp-accent-soft); border-radius: var(--radius-sm); padding: 16px 18px; display: grid; gap: 10px; }
+/* AI 2차 심의 가독성 (2026-10-26): 머리는 한 줄(제목 · 판정 · 확신), 모델 · 시각은 그 아래 · 내용은 문장마다 줄바꿈 · 소제목은 위에 따로 */
+.part-compliance .cmp-ai-fold > summary.cmp-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.part-compliance .cmp-ai-meta { flex-basis: 100%; font-size: 12px; }
+.part-compliance .cmp-ai-title { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 680; }
+.part-compliance .cmp-ai-summary { margin: 0; font-size: 14px; line-height: 1.75; color: var(--cmp-ink); }
+.part-compliance .cmp-sent { display: block; }
+.part-compliance .cmp-sent + .cmp-sent { margin-top: 2px; }
+.part-compliance .cmp-ai-sec { display: grid; gap: 6px; }
+.part-compliance .cmp-ai-sec > h5 { margin: 0; font-size: 12px; font-weight: 650; color: var(--cmp-muted); }
+.part-compliance .cmp-ai-sec > p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--cmp-muted); }
+.part-compliance .cmp-ai-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; line-height: 1.65; color: var(--cmp-muted); }
+.part-compliance .cmp-ai-list b { color: var(--cmp-ink); font-weight: 650; }
+.part-compliance .cmp-ai .cmp-finding { border-top-color: var(--cmp-accent-line); padding-top: 14px; gap: 8px; }
+.part-compliance .cmp-ai .cmp-finding p { display: grid; grid-template-columns: 40px 1fr; gap: 8px; font-size: 13px; }
+.part-compliance .cmp-ai .cmp-finding .cmp-label { min-width: 0; color: var(--cmp-muted); }
+.part-compliance .cmp-ai-foot { font-size: 12px; }
 .part-compliance .cmp-ai .cmp-quote { background: var(--cmp-card); }
 .part-compliance .cmp-ai-rewrite { display: grid; gap: 8px; }
 .part-compliance .cmp-ai-wait p { display: flex; align-items: center; gap: 8px; margin: 0; }
@@ -361,12 +385,11 @@
 
 /* 한글 번역 (참고용) */
 .part-compliance .cmp-trblock { display: grid; gap: 6px; justify-items: start; }
-/* 뜻 한글로 보기: 다른 탭과 같은 작은 버튼(cmp-btn-sm) + 번역 아이콘 */
-.part-compliance .cmp-btn.cmp-btn-tr { margin-left: 0; }
-.part-compliance .cmp-btn-tr .cmp-icon { width: 15px; height: 15px; }
-.part-compliance .cmp-tr { border-left: 2px solid var(--cmp-accent); padding: 4px 12px; display: grid; gap: 4px; }
-.part-compliance .cmp-tr-tag { font-size: 12px; font-weight: 650; color: var(--cmp-link); letter-spacing: .3px; }
-.part-compliance .cmp-tr-text { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.7; }
+/* 번역 결과 = 차트 말풍선과 같은 모양 (진한 바탕 · 흰 글씨 · 둥근 모서리, 인사이트 .ins-sw-tip과 같은 값) */
+.part-compliance .cmp-tr { display: grid; gap: 4px; max-width: 640px; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--surface); box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.part-compliance .cmp-tr-tag { font-size: 11px; font-weight: 700; color: inherit; }
+.part-compliance .cmp-tr-text { margin: 0; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: inherit; }
+.part-compliance .cmp-tr .cmp-muted { margin: 0; font-size: 11px; color: inherit; opacity: .7; }
 .part-compliance .cmp-tr a, .part-compliance .cmp-note a { color: inherit; font-weight: 700; }
 
 @media (max-width: 1200px) {
@@ -506,8 +529,6 @@
 .part-compliance .cmp-sum-sub { margin: 0 0 10px; font-size: 13px; color: var(--cmp-muted); }
 .part-compliance .cmp-btn.cmp-wide { width: 100%; justify-content: center; min-height: 46px; font-size: 15px; border-radius: var(--radius-sm); }
 .part-compliance .cmp-btn.cmp-btn-quiet { border-color: transparent; background: transparent; color: var(--cmp-muted); min-height: 36px; }
-.part-compliance .cmp-side-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.part-compliance .cmp-side-acts .cmp-btn { justify-content: center; min-height: 42px; }
 .part-compliance .cmp-side-note .cmp-icon { width: 14px; height: 14px; vertical-align: -2px; }
 @media (max-width: 720px) {
   .part-compliance .cmp-ed-hl, .part-compliance .cmp-ed-input { font-size: 20px; }
@@ -608,7 +629,10 @@
 .part-compliance .cmp-work .cmp-ed-input { min-height: 230px; }
 .part-compliance .cmp-ed-bottom { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 0; font-size: 11px; color: var(--cmp-muted); }
 .part-compliance .cmp-ed-links { display: flex; gap: 14px; }
-.part-compliance .cmp-link-btn { border: 0; background: none; padding: 0; color: var(--cmp-muted); font: inherit; font-size: 12px; cursor: pointer; justify-self: start; }
+.part-compliance .cmp-link-btn { border: 0; background: none; padding: 0; color: var(--cmp-muted); font: inherit; font-size: 12px; cursor: pointer; justify-self: start;
+  display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.part-compliance .cmp-link-btn .cmp-icon { width: 14px; height: 14px; }
+.part-compliance .cmp-link-btn[hidden] { display: none; }
 .part-compliance .cmp-link-btn:hover { color: var(--cmp-ink); text-decoration: underline; }
 /* 추가 검토 (2026-10-26): ERP 메뉴처럼 한 줄씩 — 아이콘 · 이름 + 설명 · › */
 .part-compliance .cmp-more-acts { margin-top: 24px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); overflow: hidden; }
@@ -629,15 +653,73 @@
 .part-compliance .cmp-act-tag[hidden] { display: none; }
 .part-compliance .cmp-more-acts .cmp-side-note { padding: 9px 14px; font-size: 12px; gap: 6px; }
 .part-compliance .cmp-more-acts .cmp-side-note b { font-weight: 600; color: var(--cmp-ink); }
-.part-compliance .cmp-help { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--cmp-rule); display: grid; gap: 12px; }
-.part-compliance .cmp-help > summary { cursor: pointer; font-size: 12px; color: var(--cmp-muted); }
+
+/* 검토 요청서 창 = 사내 메일 쓰기 (CS 답장 쓰기 .cs-cfields와 같은 줄 구성) */
+.part-compliance .cmp-dialog:has(.cmp-mail) { width: min(760px, calc(100vw - 32px)); }
+.part-compliance .cmp-dlg-body.cmp-mail { padding: 0; gap: 0; }
+.part-compliance .cmp-dlg-eyebrow .cmp-icon { width: 14px; height: 14px; vertical-align: -2px; }
+.part-compliance .cmp-mail-fields { margin: 0; }
+.part-compliance .cmp-mail-fields > div { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 26px; border-bottom: 1px solid var(--cmp-rule); font-size: 13px; }
+.part-compliance .cmp-mail-fields dt { width: 72px; flex-shrink: 0; color: var(--cmp-muted); font-size: 12px; }
+.part-compliance .cmp-mail-fields dd { margin: 0; flex: 1; min-width: 0; }
+.part-compliance .cmp-mail-input { width: 100%; box-sizing: border-box; border: 0; padding: 6px 0; background: transparent; color: var(--cmp-ink); font: inherit; font-size: 13px; }
+.part-compliance .cmp-mail-input:focus { outline: none; box-shadow: inset 0 -2px 0 var(--cmp-accent); }
+.part-compliance .cmp-mail-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.part-compliance .cmp-chk { position: relative; display: inline-flex; cursor: pointer; }
+.part-compliance .cmp-chk input { position: absolute; opacity: 0; pointer-events: none; }
+.part-compliance .cmp-chk span { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--cmp-rule-strong); border-radius: 999px; font-size: 12px; color: var(--cmp-muted); background: var(--cmp-card); }
+.part-compliance .cmp-chk span small { font-size: 11px; color: var(--cmp-faint); }
+.part-compliance .cmp-chk input:checked + span { background: var(--cmp-dark); border-color: var(--cmp-dark); color: var(--cmp-dark-ink); }
+.part-compliance .cmp-chk input:checked + span small { color: inherit; opacity: .7; }
+.part-compliance .cmp-chk input:checked + span::before { content: '✓'; font-size: 11px; }
+.part-compliance .cmp-chk input:focus-visible + span { outline: 3px solid var(--cmp-focus); outline-offset: 2px; }
+.part-compliance .cmp-mail-body { display: block; width: 100%; box-sizing: border-box; min-height: 220px; padding: 16px 26px; border: 0; resize: vertical;
+  background: var(--cmp-card); color: var(--cmp-ink); font: inherit; font-size: 13px; line-height: 1.75; }
+.part-compliance .cmp-mail-body:focus { outline: none; background: var(--cmp-soft); }
+.part-compliance .cmp-dlg-body.cmp-mail p.cmp-mail-warn { margin: 0; padding: 10px 26px; font-size: 12px; background: var(--cmp-BLOCK-bg); color: var(--cmp-BLOCK-ink); display: flex; align-items: center; gap: 6px; }
+.part-compliance .cmp-mail-warn .cmp-icon { width: 14px; height: 14px; flex-shrink: 0; }
+/* 첨부 줄 버튼: 공통 파일 버튼 (업로드 · 다운로드 ▾) — 창 아래쪽이라 메뉴는 위로 열림 */
+.part-compliance .cmp-attach .file-actions [hidden] { display: none; }
+.part-compliance .cmp-attach-menu .file-menu-list { top: auto; bottom: calc(100% + 4px); white-space: nowrap; }
+.part-compliance .cmp-mail-done .file-actions { justify-content: flex-start; margin-left: 0; }
+/* ERP(Fiori) 폼: 라벨 + 테두리 입력칸 · 받는 사람은 토큰 · 닫기 포커스는 얇은 링 */
+.part-compliance .cmp-mail-fields dt::after { content: ':'; }
+.part-compliance .cmp-mail .cmp-mail-input { border: 1px solid var(--cmp-rule-strong); border-radius: 6px; padding: 6px 10px; background: var(--cmp-card); }
+.part-compliance .cmp-mail .cmp-mail-input:focus { box-shadow: none; border-color: var(--blue); outline: 1px solid var(--blue); }
+.part-compliance .cmp-mail .cmp-chk span { border-radius: 6px; }
+.part-compliance .cmp-mail .cmp-chk input:checked + span { background: var(--blue-bg); border-color: var(--blue); color: var(--ink); }
+.part-compliance .cmp-mail .cmp-chk input:checked + span small { color: var(--cmp-muted); opacity: 1; }
+.part-compliance .cmp-mail .cmp-chk input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 1px; }
+.part-compliance .cmp-dialog:has(.cmp-mail) .cmp-dlg-x:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.part-compliance .cmp-attach.is-edited { border-color: var(--cmp-accent-line); background: var(--cmp-accent-soft); }
+.part-compliance .cmp-mail-links { font-size: 12px; color: var(--cmp-muted); }
+.part-compliance .cmp-mail-links > summary { cursor: pointer; }
+.part-compliance .cmp-mail-links .cmp-dlg-list { margin-top: 8px; }
+.part-compliance .cmp-attach { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 4px 26px 18px; padding: 10px 12px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); background: var(--cmp-soft); }
+.part-compliance .cmp-attach-ico { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: var(--radius-xs); background: #1F7244; color: #fff; font-size: 10px; font-weight: 800; letter-spacing: .3px; }
+.part-compliance .cmp-attach-txt { display: grid; gap: 2px; min-width: 0; }
+.part-compliance .cmp-attach-txt b { font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.part-compliance .cmp-attach-txt small { font-size: 12px; color: var(--cmp-muted); }
+.part-compliance .cmp-mail-foot { align-items: center; }
+.part-compliance .cmp-mail-from { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--cmp-muted); }
+.part-compliance .cmp-mail-from .cmp-icon, .part-compliance .cmp-mail-foot .cmp-btn .cmp-icon { width: 15px; height: 15px; }
+.part-compliance .cmp-dlg-body.cmp-mail > section { padding: 16px 26px; }
+.part-compliance .cmp-mail-done h4 { font-size: 14px; color: var(--cmp-ink); }
+.part-compliance .cmp-mail-done h4 .cmp-icon { width: 16px; height: 16px; }
+@media (max-width: 560px) {
+  .part-compliance .cmp-mail-fields > div { flex-direction: column; align-items: stretch; gap: 4px; padding: 8px 16px; }
+  .part-compliance .cmp-mail-body, .part-compliance .cmp-dlg-body.cmp-mail > section { padding-left: 16px; padding-right: 16px; }
+  .part-compliance .cmp-attach { margin: 0 16px 16px; }
+  .part-compliance .cmp-mail-from { width: 100%; }
+}
 .part-compliance .cmp-result-card { min-height: 424px; display: grid; gap: 14px; align-content: start; }
+.part-compliance .cmp-work .cmp-result-card { gap: 16px; }   /* 위 .cmp-work .cmp-card의 gap: 0을 결과 카드에서만 되돌림 — 박스 · 버튼 줄 · AI 박스 사이 16px (2026-10-26) */
 .part-compliance .cmp-result-card > :empty { display: none; }
 .part-compliance .cmp-empty { padding: 48px 8px; }
 .part-compliance .cmp-empty h2 { margin: 0 0 16px; font-size: 24px; line-height: 1.55; letter-spacing: -0.03em; }
 .part-compliance .cmp-empty p { margin: 0; font-size: 12px; color: var(--cmp-muted); }
 .part-compliance .cmp-empty-ico { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 30px; border-radius: 50%; background: var(--cmp-accent); color: var(--cmp-accent-ink); font-size: 20px; }
-.part-compliance .cmp-result-head { display: grid; gap: 10px; justify-items: start; padding-bottom: 6px; }
+.part-compliance .cmp-result-head { display: grid; gap: 10px; justify-items: start; }
 .part-compliance .cmp-result-head h2 { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
 .part-compliance .cmp-result-head p { margin: 0; font-size: 12px; color: var(--cmp-muted); line-height: 1.6; }
 .part-compliance .cmp-result-card .cmp-result { background: none; border: 0; padding: 0; gap: 0; }
@@ -645,7 +727,7 @@
 .part-compliance .cmp-finding-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .part-compliance .cmp-finding-card p { margin: 0; line-height: 1.6; }
 .part-compliance .cmp-finding-terms { font-weight: 650; color: var(--cmp-BLOCK-ink); }
-.part-compliance .cmp-result-acts { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 18px; border-top: 1px solid var(--cmp-rule); }
+.part-compliance .cmp-result-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* 점검 기록: 개수가 붙은 필터 — core .linetabs (밑줄 탭) */
 .part-compliance .cmp-filters { margin-bottom: 4px; }
