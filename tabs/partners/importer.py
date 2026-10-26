@@ -32,47 +32,47 @@ HEADER_ROW_XLSX = 6   # 인플루언서 XLSX는 6행이 머리글
 
 SUBCATEGORIES = {
     CATERING: [
-        {"key": "festival", "emoji": "🎵", "label": "페스티벌·콘서트",
+        {"key": "festival", "emoji": "", "label": "페스티벌·콘서트",
          "keywords": ["festival", "concert", "music", "edm", "live event", "amphitheater", "페스티벌", "콘서트", "공연", "음악"]},
-        {"key": "nightlife", "emoji": "🌙", "label": "나이트라이프·클럽",
+        {"key": "nightlife", "emoji": "", "label": "나이트라이프·클럽",
          "keywords": ["nightlife", "night life", "nightclub", "night club", "club", "lounge", "after party", "afterparty", "dj",
                       "나이트", "클럽", "라운지"]},
-        {"key": "campus", "emoji": "🎓", "label": "대학·테일게이트",
+        {"key": "campus", "emoji": "", "label": "대학·테일게이트",
          "keywords": ["college", "university", "campus", "tailgate", "tailgating", "game day", "gameday", "fraternity",
                       "sorority", "greek life", "student", "alumni", "대학", "캠퍼스", "테일게이트"]},
-        {"key": "vip", "emoji": "💎", "label": "VIP·럭셔리·갈라",
+        {"key": "vip", "emoji": "", "label": "VIP·럭셔리·갈라",
          "keywords": ["vip", "luxury", "gala", "upscale", "high end", "premium", "black tie", "exclusive", "celebrity",
                       "럭셔리", "갈라", "고급"]},
-        {"key": "mobile_bar", "emoji": "🍸", "label": "모바일 바·믹솔로지",
+        {"key": "mobile_bar", "emoji": "", "label": "모바일 바·믹솔로지",
          "keywords": ["mobile bar", "bartend", "mixolog", "cocktail", "bar service", "beverage service", "drink service",
                       "bar cart", "칵테일", "바텐", "믹솔로지", "모바일 바"]},
-        {"key": "brand_popup", "emoji": "🚀", "label": "브랜드 팝업·런칭",
+        {"key": "brand_popup", "emoji": "", "label": "브랜드 팝업·런칭",
          "keywords": ["brand activation", "activation", "pop up", "popup", "launch", "experiential", "sampling",
                       "product launch", "brand event", "팝업", "런칭", "론칭", "샘플링"]},
-        {"key": "pool_beach", "emoji": "🏖️", "label": "풀·비치·루프탑",
+        {"key": "pool_beach", "emoji": "", "label": "풀·비치·루프탑",
          "keywords": ["pool", "beach", "rooftop", "roof top", "yacht", "boat", "resort", "cabana",
                       "풀파티", "수영장", "비치", "해변", "루프탑"]},
     ],
     INFLUENCER: [
-        {"key": "agency", "emoji": "🏢", "label": "대행사·매니지먼트",
+        {"key": "agency", "emoji": "", "label": "대행사·매니지먼트",
          "keywords": ["agency", "agencies", "management", "talent", "representation", "roster", "mcn",
                       "대행", "에이전시", "매니지먼트", "소속사"]},
-        {"key": "platform", "emoji": "🧩", "label": "플랫폼",
+        {"key": "platform", "emoji": "", "label": "플랫폼",
          "keywords": ["platform", "marketplace", "software", "saas", "app", "database", "network",
                       "플랫폼", "마켓플레이스", "솔루션"]},
-        {"key": "ugc", "emoji": "🎬", "label": "UGC·광고 소재",
+        {"key": "ugc", "emoji": "", "label": "UGC·광고 소재",
          "keywords": ["ugc", "user generated", "creative", "ad creative", "content production", "content creation",
                       "video ad", "광고 소재", "소재", "콘텐츠 제작", "영상 제작"]},
-        {"key": "pr_social", "emoji": "📣", "label": "PR·소셜",
+        {"key": "pr_social", "emoji": "", "label": "PR·소셜",
          "keywords": ["pr", "public relations", "social media", "social", "communications", "publicity",
                       "홍보", "소셜", "언론"]},
-        {"key": "micro_seeding", "emoji": "🌱", "label": "마이크로·제품 시딩",
+        {"key": "micro_seeding", "emoji": "", "label": "마이크로·제품 시딩",
          "keywords": ["micro", "nano", "seeding", "gifting", "product seeding", "sampling",
                       "마이크로", "나노", "시딩", "협찬", "제품 제공"]},
-        {"key": "food_bev", "emoji": "🍔", "label": "식음료·외식",
+        {"key": "food_bev", "emoji": "", "label": "식음료·외식",
          "keywords": ["food", "beverage", "f&b", "drink", "restaurant", "foodie", "culinary", "cpg", "snack",
                       "식음료", "외식", "음료", "푸드", "맛집"]},
-        {"key": "tiktok_dtc", "emoji": "🛒", "label": "TikTok Shop·DTC",
+        {"key": "tiktok_dtc", "emoji": "", "label": "TikTok Shop·DTC",
          "keywords": ["tiktok shop", "dtc", "d2c", "direct to consumer", "e commerce", "ecommerce", "shopify",
                       "affiliate", "live shopping", "틱톡샵", "틱톡 샵", "커머스", "라이브 커머스"]},
     ],
@@ -416,6 +416,26 @@ def example_records(ptype):
     if not ex.get("header") or not ex.get("rows"):
         raise ImportFailed("예시 데이터 파일(tabs/partners/data/examples.json)을 읽지 못했습니다.")
     return parse_rows(ptype, [[ex["header"]] + ex["rows"]])[0]
+
+
+def export_csv(ptype, contacts):
+    """지금 업체 목록을 가져오기와 같은 머리글의 CSV로 (내려받아 고친 뒤 다시 가져오면 그대로 읽힘)."""
+    key = "catering" if ptype == CATERING else "influencer"
+    header = (examples().get(key) or {}).get("header")
+    out = io.StringIO()
+    w = csv.writer(out)
+    if ptype == CATERING:
+        w.writerow(header or ["No", "Company Name", "Contact Email", "Phone Number", "Official Website URL",
+                              "Office Location", "Category Focus", "Why Relevant"])
+        for i, c in enumerate(contacts, start=1):
+            w.writerow([i, c.name, c.email, c.phone, c.url, c.location, c.category, c.note])
+    else:
+        w.writerow(header or ["번호", "업체명", "공개 이메일", "공개 전화/문자", "공식 사이트 URL", "미국 시장 범위",
+                              "서비스 형태", "서비스/검토 이유", "주의/연락처 용도"])
+        for i, c in enumerate(contacts, start=1):
+            # 서비스 형태 · 검토 이유는 가져올 때 ' · '로 합쳐 두었으므로 한 칸에 그대로 (다시 가져와도 같은 값)
+            w.writerow([i, c.name, c.email, c.phone, c.url, c.location, c.category, "", c.note])
+    return "﻿" + out.getvalue()
 
 
 def template_csv():

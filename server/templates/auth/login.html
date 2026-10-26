@@ -22,12 +22,12 @@
     {{ form.hidden_tag() }}
     <label class="field">
       <span>{{ form.email.label.text }}</span>
-      {{ form.email(class_="input", type="email", autocomplete="username", required=true, maxlength=255, placeholder="name@company.com", autofocus=true) }}
+      {{ form.email(class_="input", type="email", autocomplete="username", required=true, maxlength=255, placeholder="admin@reboot.com", autofocus=true) }}
     </label>
     <label class="field">
       <span>{{ form.password.label.text }}</span>
       <span class="pw-wrap">
-        {{ form.password(class_="input", autocomplete="current-password", required=true, maxlength=128, placeholder="비밀번호를 입력하세요") }}
+        {{ form.password(class_="input", autocomplete="current-password", required=true, maxlength=128, placeholder="reboot2026!") }}
         <button type="button" class="pw-toggle" id="pw-toggle" aria-label="비밀번호 보기" aria-pressed="false">보기</button>
       </span>
     </label>
@@ -47,6 +47,13 @@
   var pw = document.getElementById('password');
   var toggle = document.getElementById('pw-toggle');
   var submit = document.getElementById('login-submit');
+  {% if config.DEMO_LOGIN %}
+  /* 시연용: 관리자 계정을 미리 채움 (.env의 DEMO_LOGIN=1) */
+  var demoEmail = document.getElementById('email');
+  if (!demoEmail.value) demoEmail.value = 'admin@reboot.com';
+  if (!pw.value) pw.value = 'reboot2026!';
+  submit.focus();
+  {% endif %}
   toggle.addEventListener('click', function () {
     var show = pw.type === 'password';
     pw.type = show ? 'text' : 'password';

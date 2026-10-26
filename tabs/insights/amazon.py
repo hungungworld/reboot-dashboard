@@ -2,10 +2,13 @@
 
 - 검색: engine=amazon · 검색어마다 광고(sponsored)를 뺀 상위 8개
 - 상세: engine=amazon_product · 리뷰 많은 상품 N개 + 추적 ASIN → 재고 · 브랜드 · 판매 문구 · 대표 리뷰
+  + 아마존 전체 리뷰로 낸 별점 분포 · 'Customers say' 주제(언급 · 칭찬 · 불만 수) → kv 'amazon_review_stats'
+  (제품 선택 · 상품 정보의 Item Form이 있으면 판매 문구 맨 앞에 'Item Form: …'으로 붙임 → 제형 판단용)
 - 응답 모양이 조금씩 달라서 여러 이름을 차례로 확인합니다 (못 찾으면 빈 값)
 """
 import re
 
+from server.models import iso, utcnow
 from . import http, store
 from .http import CollectError
 from .models import kv_get, kv_set
@@ -96,6 +99,32 @@ def _first_list(*vals):
     return []
 
 
+FORM_KEY_RE = re.compile(r"^(item[\s_]*form|product[\s_]*form|form)$", re.I)
+
+
+def _item_form(data, pr):
+    """'제품 선택' · 상품 정보 표의 Item Form (예: Tablet). 응답 모양이 달라 여러 곳을 봄, 못 찾으면 ''."""
+    for v in (pr.get("variants"), data.get("variants")):   # [{"title": "Item Form", "items": [{"name", "selected"}]}]
+        for g in v if isinstance(v, list) else []:
+            if isinstance(g, dict) and FORM_KEY_RE.match(str(g.get("title") or "").strip().rstrip(":")):
+                items = [i for i in g.get("items") or [] if isinstance(i, dict)]
+                sel = next((i for i in items if i.get("selected")), items[0] if len(items) == 1 else None)
+                if sel and sel.get("name"):
+                    return clean(sel["name"], 60)
+    for v in (data.get("product_details"), pr.get("product_details"), data.get("item_specifications"),
+              data.get("specifications"), data.get("product_information"), pr.get("item_specifications")):
+        if isinstance(v, dict):
+            pairs = v.items()
+        elif isinstance(v, list):   # [{"name": "Item Form", "value": "Tablet"}]
+            pairs = [(r.get("name") or r.get("title"), r.get("value")) for r in v if isinstance(r, dict)]
+        else:
+            continue
+        for k, val in pairs:
+            if FORM_KEY_RE.match(str(k or "").strip().rstrip(":")) and isinstance(val, str) and val.strip():
+                return clean(val, 60)
+    return ""
+
+
 def _reviews(data):
     info = data.get("reviews_information") if isinstance(data.get("reviews_information"), dict) else {}
     rows = _first_list(info.get("authors_reviews"), info.get("reviews"), data.get("authors_reviews"), data.get("top_reviews"),
@@ -110,14 +139,67 @@ def _reviews(data):
         out.append({"title": clean(r.get("title"), 300), "text": clean(text, 5000),
                     "rating": to_float(r.get("rating") if r.get("rating") is not None else r.get("stars")),
                     "date_text": clean(r.get("date") or r.get("review_date") or "", 80)})
-        if len(out) >= 8:
-            break
     summary = info.get("summary")
     if isinstance(summary, dict):
         summary = summary.get("text") or summary.get("snippet") or ""
     if not summary:
         summary = (data.get("ai_summary") or {}).get("text") if isinstance(data.get("ai_summary"), dict) else ""
     return out, clean(summary, 1500)
+
+
+STAR_RE = re.compile(r"([1-5])")
+
+
+def _stars(v):
+    """별점 분포 (아마존 전체 평가 기준) → [{stars, percent, count}] 5점부터. 모양이 달라 dict · list 둘 다 봄."""
+    if isinstance(v, dict):
+        pairs = list(v.items())
+    elif isinstance(v, list):
+        pairs = [(r.get("stars") or r.get("rating") or r.get("name") or r.get("title"), r) for r in v if isinstance(r, dict)]
+    else:
+        return []
+    out = {}
+    for k, val in pairs:
+        m = STAR_RE.search(str(k or ""))
+        if not m:
+            continue
+        d = val if isinstance(val, dict) else {"percentage": val}
+        pct = to_float(d.get("percentage") if d.get("percentage") is not None else d.get("percent"))
+        cnt = to_int(d.get("count") if d.get("count") is not None else d.get("reviews"))
+        if pct is None and cnt is None:
+            continue
+        out[int(m.group(1))] = {"stars": int(m.group(1)), "percent": pct, "count": cnt}
+    return [out[s] for s in sorted(out, reverse=True)]
+
+
+def _aspects(v):
+    """아마존 'Customers say' 주제 (전체 리뷰 기준) → [{name, sentiment, total, pos, neg, summary}]."""
+    out = []
+    for r in v if isinstance(v, list) else []:
+        if not isinstance(r, dict) or not clean(r.get("title") or r.get("name"), 80):
+            continue
+        m = r.get("mentions") if isinstance(r.get("mentions"), dict) else {}
+        out.append({"name": clean(r.get("title") or r.get("name"), 80), "sentiment": clean(r.get("sentiment"), 20),
+                    "total": to_int(m.get("total")), "pos": to_int(m.get("positive")), "neg": to_int(m.get("negative")),
+                    "summary": clean(r.get("summary"), 600)})
+    return out
+
+
+def review_stats(data):
+    """상품 응답 → {stars, aspects}. 대표 리뷰가 아니라 아마존 전체 리뷰로 낸 숫자."""
+    info = data.get("reviews_information") if isinstance(data.get("reviews_information"), dict) else {}
+    s = info.get("summary") if isinstance(info.get("summary"), dict) else {}
+    return {"stars": _stars(s.get("customer_reviews") or info.get("customer_reviews") or data.get("rating_breakdown")),
+            "aspects": _aspects(s.get("insights") or info.get("insights"))}
+
+
+def save_stats(rows):
+    """kv 'amazon_review_stats'[asin] = {title, brand, own, rating, reviews, stars, aspects, at}. 받은 상품만 덮어씀."""
+    cur = kv_get("amazon_review_stats", {})
+    for r in rows:
+        if r["stars"] or r["aspects"]:
+            cur[r["asin"]] = dict(r, at=iso(utcnow()))
+    kv_set("amazon_review_stats", cur)
 
 
 def product(key, asin):
@@ -134,13 +216,15 @@ def product(key, asin):
         stock_text = stock_text.get("text") or ""
     bullets = _first_list(data.get("about_item"), pr.get("about_item"), pr.get("feature_bullets"), data.get("feature_bullets"))
     reviews, summary = _reviews(data)
+    form = _item_form(data, pr)   # 판매 문구 앞에 붙여 저장 → competitors.rule_form_of가 상품명 다음으로 봄
+    bullets = [f"Item Form: {form}"] + bullets[:3] if form else bullets
     return {
         "asin": asin, "title": clean(pr.get("title"), 500), "brand": _brand(pr.get("brand")), "price": price,
         "price_text": clean(pr.get("price") if isinstance(pr.get("price"), str) else "", 60),
         "rating": to_float(pr.get("rating")), "reviews": to_int(pr.get("reviews") if pr.get("reviews") is not None else pr.get("ratings_total")),
         "availability": clean(stock_text, 200), "in_stock": stock_state(stock_text),
-        "message": clean(" / ".join(str(b) for b in bullets[:3] if b), 1200),
-        "review_rows": reviews, "summary": summary,
+        "message": clean(" / ".join(str(b) for b in bullets[:4 if form else 3] if b), 1200),
+        "review_rows": reviews, "summary": summary, **review_stats(data),
     }
 
 
@@ -163,7 +247,7 @@ def collect(cfg, key, week):
             items[it["asin"]] = it
     ranked = sorted(items.values(), key=lambda x: -(x.get("reviews") or 0))[: int(cfg.get("amazon_product_lookups") or 0)]
     lookups = [x["asin"] for x in ranked] + [a for a in tracked if a not in {x["asin"] for x in ranked}]
-    review_rows, summaries = [], kv_get("amazon_summaries", {})
+    review_rows, summaries, stats = [], kv_get("amazon_summaries", {}), []
     for asin in lookups:
         try:
             det = product(key, asin)
@@ -188,6 +272,8 @@ def collect(cfg, key, week):
         it["detailed"] = True
         if det["summary"]:
             summaries[asin] = {"title": it.get("title", ""), "text": det["summary"]}
+        stats.append({"asin": asin, "key": it["key"], "title": it.get("title", ""), "brand": it.get("brand", ""), "own": False,
+                      "rating": det["rating"], "reviews": det["reviews"], "stars": det["stars"], "aspects": det["aspects"]})
         for r in det["review_rows"]:
             review_rows.append(dict(r, source="amazon", product_key=it["key"], product_title=it.get("title", ""),
                                     brand=it.get("brand", ""), own=False))
@@ -198,7 +284,10 @@ def collect(cfg, key, week):
     own_keys = {it["key"] for it in items.values() if it["own"]}
     for r in review_rows:
         r["own"] = r["product_key"] in own_keys
+    for s in stats:
+        s["own"] = s.pop("key") in own_keys
     store.save_shelf(week, "amazon", list(items.values()))
+    save_stats(stats)
     new_reviews = store.save_reviews(review_rows, week)
     kv_set("amazon_summaries", summaries)
     return {"count": len(items), "calls": calls, "reviews": new_reviews, "warnings": warnings}

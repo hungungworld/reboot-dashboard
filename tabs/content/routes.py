@@ -1,40 +1,54 @@
 """콘텐츠 제작 API (담당: 나원). 모두 로그인 필요 · 쓰기는 CSRF (core.js가 자동).
 
   GET    /api/content/meta                          모델·연결 상태 · 선택지
-  GET    /api/content/meta/check                    연결 테스트 (OpenAI 모델 조회만 · 비용 없음 / Higgsfield는 키 유무)
+  GET    /api/content/meta/check                    연결 테스트 (OpenAI 모델 조회 · Higgsfield 없는 요청 조회 — 둘 다 비용 없음)
   GET    /api/content/campaigns?q=&status=          내 캠페인 목록 (+ 상태별 개수)
   POST   /api/content/campaigns                     시트로 캠페인 시작 {content_type, channels, brand_focus, product_ids, goal, extra_request}
   GET    /api/content/campaigns/<id>                복원: 시트 · 결정 · 대화 · 버전 · 작업 · 제품 근거
   PATCH  /api/content/campaigns/<id>                {expected_revision, sheet?, title?, status?, settings?, reference_text?} (다르면 409)
   DELETE /api/content/campaigns/<id>                만든 사람·관리자만
+  POST   /api/content/campaigns/<id>/copy           {channel} 다른 채널로 만들기 — 시트·정한 내용 복사, 대화·버전·파일은 복사 안 함
   POST   /api/content/campaigns/<id>/decisions      {expected_revision, changes:[{field, value, status}], source} 후보 선택·직접 입력·되돌리기
   POST   /api/content/campaigns/<id>/chat           {message, expected_revision, base_version_id?, client_request_id?, force_action?, kickoff?}
   POST   /api/content/campaigns/<id>/interview      {action: start|answer|skip|finish, expected_revision, option?|value?, client_request_id?}
   POST   /api/content/campaigns/<id>/versions       직접 작성 {kind, body, label?, title?, parent_id?}
   POST   /api/content/campaigns/<id>/images         브라우저 편집기 PNG (multipart: file, parent_id, text_layers, edits, baked)
+  POST   /api/content/campaigns/<id>/references     레퍼런스 이미지 (multipart: file, note?) — 최대 3장 · AI 요약 · 대화에서만 씀
+  DELETE /api/content/campaigns/<id>/references/<rid>
   POST   /api/content/campaigns/<id>/select         {version_id|null} 기준 결과물
   GET    /api/content/campaigns/<id>/export         ZIP (?version=<id> 한 버전만)
   POST   /api/content/suggest                       {field: goal|extra, sheet} → 후보 3개 (키 없으면 예시 추천)
   POST   /api/content/versions/<id>/final           {final: true|false}
   POST   /api/content/versions/<id>/review          컴플라이언스(화면에서 판정한 결과) 기록
   POST   /api/content/versions/<id>/ai-review       AI 보조 검토 (review_v2)
-  GET    /api/content/jobs/<id>                     이미지 작업 상태
-  GET    /api/content/files/<이름>.png              생성 이미지 (로그인 필요)
+  GET    /api/content/jobs/<id>                     이미지·영상 작업 상태
+  POST   /api/content/jobs/<id>/cancel              Higgsfield 요청 취소 (시작 전만 가능)
+  GET    /api/content/files/<이름>.png|jpg|webp|mp4 생성 이미지·영상 (로그인 필요)
+  GET    /api/content/assets                        브랜드 자산 목록 (로고 · 제품 · 캐릭터 Rebu 사진)
+  GET    /api/content/assets/<ID>.jpg               자산 사진 (로그인 필요)
+  POST   /api/content/cardnews/extract              카드뉴스 자료 파일 → 글자 (multipart: file · .md .txt .csv .docx)
+  GET    /api/content/campaigns/<id>/cardnews       카드뉴스 덱 {decks: {버전 ID: 덱}}
+  POST   /api/content/campaigns/<id>/cardnews/generate  {source, language, tone, count, ratio, template} → AI 덱 → 새 버전
+  POST   /api/content/campaigns/<id>/cardnews       편집한 덱 저장 {deck, parent_id?} → 새 버전 (AI 아님)
+  POST   /api/content/campaigns/<id>/cardnews/photo 카드 사진 (multipart: file · JPG — 화면이 줄여서 보냄)
+  POST   /api/content/campaigns/<id>/cardnews/backgrounds/plan  {deck, count} → AI 배경 넣을 카드 추천 (count 0 = AI가 장 수 판단)
+  POST   /api/content/campaigns/<id>/cardnews/backgrounds       {deck, cards:[{id, visual}]} → 카드마다 이미지 작업 (유료)
+  GET    /api/content/campaigns/<id>/cardnews/backgrounds       AI 배경 작업 상태 · 만든 배경
 """
 import json
 
-from flask import Blueprint, Response, jsonify, request, send_from_directory
+from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory
 from flask_login import current_user
 
-from server import envkeys, worklog
+from server import worklog
 from server.core.ai import AIError
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
-from . import conversation, media, prompts, providers, repository, review, schemas
+from . import assets, brandkit, cardnews, conversation, higgsfield, media, prompts, providers, repository, review, schemas
 from . import options as O
 from .export import build_zip
-from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentVersion
+from .models import ContentCampaign, ContentDecisionEvent, ContentJob, ContentMessage, ContentReference, ContentVersion
 
 bp = Blueprint("content", __name__, url_prefix="/api/content")
 
@@ -45,15 +59,15 @@ def _who():
 
 def _campaign(cid):
     c = db.session.get(ContentCampaign, cid)
-    if c is None:
-        raise ApiError("없는 캠페인입니다.", 404)
+    if c is None or c.content_type in O.RETIRED_TYPES:  # 없앤 콘텐츠 종류(상품 설명·기획서)는 숨김 — DB에는 남음
+        raise ApiError("없는 캠페인이에요.", 404)
     return c
 
 
 def _version(vid):
     v = db.session.get(ContentVersion, vid)
     if v is None:
-        raise ApiError("없는 버전입니다.", 404)
+        raise ApiError("없는 버전이에요.", 404)
     return v
 
 
@@ -67,7 +81,7 @@ def _conflict(e):
     db.session.rollback()
     c = db.session.get(ContentCampaign, e.campaign_id)
     if c is None:
-        return jsonify(error="캠페인이 삭제되었습니다."), 404
+        return jsonify(error="캠페인이 삭제됐어요."), 404
     return jsonify(error="다른 곳에서 먼저 바뀌었어요. 최신 상태를 불러왔으니 확인 후 다시 시도하세요.",
                    conflict=True, revision=c.revision, campaign=repository.campaign_state(c)), 409
 
@@ -89,27 +103,29 @@ def meta():
     return jsonify(
         textModel=providers.text_model(), textReady=providers.ready(),
         imageModel=providers.image_model(), imageReady=providers.ready(), imageEdit=providers.image_supports_edit(),
-        video={"mode": "plan_only", "label": "구성안만 (실제 영상 생성은 Higgsfield 연동 예정)",
-               "higgsfieldKey": envkeys.has("HIGGSFIELD_API_KEY")},
-        # 연결 상태 칸 — Higgsfield는 앱 연동 전이라 키가 있는지만 (실제 호출 확인 없음)
+        video={"modes": O.VIDEO_MODES, "model": "Seedance 2.0", "resolution": higgsfield.VIDEO_RESOLUTION,
+               "higgsfieldKey": higgsfield.ready()},
+        imageProviders=O.IMAGE_PROVIDERS, higgsfieldImageModel=higgsfield.IMAGE_MODEL,
         connections={"openai": {"key": providers.ready(), "textModel": providers.text_model(),
                                 "imageModel": providers.image_model(), "imageEdit": providers.image_supports_edit()},
-                     "higgsfield": {"key": envkeys.has("HIGGSFIELD_API_KEY"), "wired": False}},
+                     "higgsfield": {"key": higgsfield.ready(), "wired": True, "imageModel": higgsfield.IMAGE_MODEL,
+                                    "videoModel": f"Seedance 2.0 · {higgsfield.VIDEO_RESOLUTION}"}},
         defaults=O.DEFAULT_SETTINGS, answerLengths=O.ANSWER_LENGTHS, promptVersion=prompts.PROMPT_BUNDLE_VERSION,
         contentTypes=[{"id": k, "label": v["label"], "kind": v["kind"]} for k, v in O.CONTENT_TYPES.items()],
         channels=[{"id": k, "label": v["label"]} for k, v in O.CHANNELS.items()], statuses=list(O.STATUSES),
-        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS)
+        kinds=O.KIND_LABELS, decisionLabels=O.DECISION_LABELS, flows=O.CONTENT_FLOWS,
+        references={"max": media.REF_PER_CAMPAIGN, "maxBytes": media.REF_MAX_BYTES},
+        character={"choices": list(assets.CHARACTER_CHOICES), "contentTypes": list(assets.CHARACTER_TYPES), "name": "Rebu"},
+        productKit={pid: {"form": p.get("form"), "flavors": (p.get("flavors") or {}).get("value"), "ko": p.get("ko")}
+                    for pid, p in brandkit.load()["products"].items()})
 
 
 @bp.get("/meta/check")
 def meta_check():
-    """연결 테스트 — OpenAI는 모델 조회만 (생성 비용 없음). Higgsfield는 어댑터가 없어 키 유무만."""
-    out = providers.check_connection()
-    hf = envkeys.has("HIGGSFIELD_API_KEY")
-    return jsonify(openai=out, higgsfield={
-        "key": hf, "checked": False,
-        "message": ("키는 있어요. 앱에 Higgsfield 연동 코드가 아직 없어 실제 호출 확인은 연동 후에 할 수 있어요." if hf
-                    else "HIGGSFIELD_API_KEY가 없어요 (설정 › 연결).")})
+    """연결 테스트 — OpenAI는 모델 조회만, Higgsfield는 없는 요청 상태 조회만 (둘 다 생성 비용 없음)."""
+    hf = higgsfield.check_connection()
+    hf["key"] = higgsfield.ready()
+    return jsonify(openai=providers.check_connection(), higgsfield=hf)
 
 
 # ───────── 캠페인 ─────────
@@ -118,7 +134,8 @@ def meta_check():
 def campaigns_list():
     q = (request.args.get("q") or "").strip().lower()[:100]
     status = (request.args.get("status") or "").strip()
-    rows = ContentCampaign.query.order_by(ContentCampaign.updated_at.desc()).limit(500).all()
+    rows = (ContentCampaign.query.filter(ContentCampaign.content_type.notin_(O.RETIRED_TYPES))
+            .order_by(ContentCampaign.updated_at.desc()).limit(500).all())
     products = repository.products_index()
     counts = {s: 0 for s in O.STATUSES}
     for c in rows:
@@ -141,8 +158,15 @@ def campaigns_list():
             if finals.get(cid) == vid or cid not in covers:  # 최종본 이미지 우선, 없으면 가장 최근 이미지
                 covers[cid] = name
     items = [repository.campaign_summary(c, vcount.get(c.id, 0), covers.get(c.id), products) for c in rows]
+    deck_covers = cardnews.deck_covers([c for c in rows if c.content_type == "cardnews"])
+    for it in items:  # 카드뉴스 편집기 덱 → 앞 3장을 화면이 썸네일로 그림 (이미지 파일 없음)
+        if it["id"] in deck_covers:
+            it["deckCover"] = deck_covers[it["id"]]
     total_all = sum(counts.values())
     return jsonify(items=items, total=total_all, counts=counts, active=counts.get("제작 중", 0) + counts.get("검토 중", 0))
+
+
+SHEET_LANGUAGES = {"한국어": "한국어", "영어": "미국 영어 (US English)"}  # 시트 칩 → 결정 값 (대화 질문 보기와 같은 값)
 
 
 @bp.post("/campaigns")
@@ -151,6 +175,12 @@ def campaigns_create():
     products = repository.products_index()
     try:
         sheet = repository.build_sheet(data, products)
+        character = (assets.norm_character(data["use_character"])
+                     if data.get("use_character") and sheet["content_type"] in assets.CHARACTER_TYPES else None)
+        flavors = (assets.norm_product_flavors(data["product_flavors"], sheet["product_ids"], products)
+                   if data.get("product_flavors") is not None and sheet["product_ids"] else None)
+        ref_skip = (assets.norm_ref_skip(data["ref_skip"])
+                    if data.get("ref_skip") and repository.ref_product_ids(sheet) else None)
     except ValueError as e:
         raise ApiError(str(e))
     try:  # 브라우저에 저장된 새 캠페인 기본값 — 이상하면 기본값으로
@@ -165,9 +195,27 @@ def campaigns_create():
                         status="제작 중", revision=1, created_by=user, created_by_id=current_user.id, updated_by=user)
     c.channels, c.product_ids = sheet["channels"], sheet["product_ids"]
     c.settings = settings
-    # 소비자용 결과물 언어는 영어를 '초기 제안'으로 (README 5.4) — 사용자 확정이 아님
-    c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
-                                "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    # 시트에서 고른 콘텐츠 언어(한국어 · 영어) → 확정. 안 보냈으면 영어를 '초기 제안'으로 (README 5.4)
+    lang = SHEET_LANGUAGES.get(data.get("language"))
+    if lang:
+        c.decisions = {"language": {"value": lang, "status": "confirmed", "source": "sheet", "by": user,
+                                    "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    else:
+        c.decisions = {"language": {"value": "미국 영어 (US English)", "status": "proposed", "source": "default", "by": "기본값",
+                                    "at": iso(utcnow()), "revision": 1, "messageId": None}}
+    ratio = O.default_ratio(sheet)
+    if ratio:  # 채널 기본 비율도 '초기 제안' — 대화에서 바꿀 수 있음
+        c.decisions = dict(c.decisions, ratio={"value": ratio, "status": "proposed", "source": "default", "by": "채널 기본값",
+                                               "at": iso(utcnow()), "revision": 1, "messageId": None})
+    if character is not None:  # 시트에서 고른 캐릭터 Rebu 사용 여부 → 확정 결정
+        c.decisions = dict(c.decisions, use_character={"value": character, "status": "confirmed", "source": "sheet",
+                                                       "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
+    if flavors:  # 시트에서 제품마다 고른 맛 → 확정 결정 (참고 사진도 그 맛으로)
+        c.decisions = dict(c.decisions, product_flavors={"value": flavors, "status": "confirmed", "source": "sheet",
+                                                         "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
+    if ref_skip:  # 시트에서 눌러 뺀 참고 사진 → 확정 결정 (이미지·영상 만들 때 안 보냄)
+        c.decisions = dict(c.decisions, ref_skip={"value": ref_skip, "status": "confirmed", "source": "sheet",
+                                                  "by": user, "at": iso(utcnow()), "revision": 1, "messageId": None})
     db.session.add(c)
     db.session.flush()
     lab = repository.labels_of(sheet, products)
@@ -204,6 +252,28 @@ def campaigns_patch(cid):
                    if k in repository.SHEET_FIELDS]
         if "channel" in sheet_in and "channels" not in sheet_in:
             changes.append({"field": "sheet.channels", "value": [sheet_in["channel"]], "status": "confirmed"})
+        if sheet_in.get("use_character"):  # 캐릭터 Rebu 사용 여부는 결정 사항으로 저장
+            try:
+                changes.append({"field": "decisions.use_character", "value": assets.norm_character(sheet_in["use_character"]),
+                                "status": "confirmed"})
+            except ValueError as e:
+                raise ApiError(str(e))
+        if "product_flavors" in sheet_in:  # 제품별 맛도 결정 사항으로 (제품을 다 빼면 지움)
+            products = repository.products_index()
+            try:
+                pids = (repository.norm_sheet_value("product_ids", sheet_in["product_ids"], products)
+                        if "product_ids" in sheet_in else c.product_ids)
+                value = assets.norm_product_flavors(sheet_in["product_flavors"], pids, products)
+            except ValueError as e:
+                raise ApiError(str(e))
+            changes.append({"field": "decisions.product_flavors", "value": value,
+                            "status": "confirmed" if value else "undecided"})
+        if "ref_skip" in sheet_in:  # 뺀 참고 사진 (다 다시 켜면 지움)
+            try:
+                value = assets.norm_ref_skip(sheet_in["ref_skip"])
+            except ValueError as e:
+                raise ApiError(str(e))
+            changes.append({"field": "decisions.ref_skip", "value": value, "status": "confirmed" if value else "undecided"})
         plan = repository.plan_changes(repository.sheet_of(c), c.decisions, changes, user=user, source="sheet",
                                        revision=c.revision)
         if plan["rejected"]:
@@ -214,12 +284,12 @@ def campaigns_patch(cid):
     if "title" in data:
         title = clip(data.get("title"), 80).strip()
         if not title:
-            raise ApiError("캠페인명을 입력하세요.")
+            raise ApiError("캠페인명을 입력해 주세요.")
         if title != c.title:
             c.title, changed = title, True
     if "status" in data:
         if data["status"] not in O.STATUSES:
-            raise ApiError("상태는 제작 중 · 검토 중 · 완료 중 하나입니다.")
+            raise ApiError("상태는 제작 중 · 검토 중 · 완료 중 하나예요.")
         if data["status"] != c.status:
             c.status, changed = data["status"], True
     if isinstance(data.get("settings"), dict):
@@ -251,14 +321,68 @@ def campaigns_delete(cid):
         raise ApiError("캠페인을 만든 사람이나 관리자만 삭제할 수 있어요.", 403)
     files = [n for (n,) in db.session.query(ContentVersion.image_file).filter(
         ContentVersion.campaign_id == cid, ContentVersion.image_file.isnot(None))]
+    files += [r.file for r in repository.references_of(cid)]
+    files += [p.name for p in media.upload_dir().glob(f"c{cid}-cn*") if cardnews.PHOTO_RE.match(p.name)]  # 카드 사진 · AI 배경
     title = c.title
-    for model in (ContentVersion, ContentMessage, ContentDecisionEvent, ContentJob):
+    for model in (ContentVersion, ContentMessage, ContentDecisionEvent, ContentJob, ContentReference):
         model.query.filter_by(campaign_id=cid).delete()
     db.session.delete(c)
     db.session.commit()
     media.delete_files(files)
     worklog.add("content", "기타", f"캠페인 삭제: {title}", detail={"campaign": cid, "files": len(files)})
     return jsonify(ok=True)
+
+
+# 다른 채널로 만들기 — 채널마다 달라지는 값(비율 · 캡션 · 멘트)은 복사하지 않음 (비율은 새 채널 기본값 제안)
+COPY_SKIP_DECISIONS = ("ratio", "caption", "hook")
+
+
+@bp.post("/campaigns/<int:cid>/copy")
+def campaigns_copy(cid):
+    src = _campaign(cid)
+    data = json_body()
+    channel = str(data.get("channel") or "").strip()
+    if channel not in O.CHANNELS:
+        raise ApiError("게시 채널을 골라 주세요.")
+    if src.content_type == O.CRM_TYPE or channel == O.CRM_CHANNEL:
+        raise ApiError("CRM 메시지는 CRM 채널하고만 만들 수 있어 다른 채널로 바꿀 수 없어요.")
+    if channel in src.channels:
+        raise ApiError("지금과 같은 채널이에요. 다른 채널을 골라 주세요.")
+    products = repository.products_index()
+    try:
+        sheet = repository.build_sheet(dict(repository.sheet_of(src), channels=[channel]), products)
+    except ValueError as e:
+        raise ApiError(str(e))
+    user, now = _who(), iso(utcnow())
+    # 원래 캠페인의 최종본(텍스트가 아니면 가장 최근 텍스트 버전) 문구를 참고 문구로 넘겨 새 채널에 맞게 고쳐 쓰게 함
+    texts = ContentVersion.query.filter(ContentVersion.campaign_id == cid, ContentVersion.kind.in_(O.TEXT_KINDS))
+    base = (texts.filter(ContentVersion.id == src.final_version_id).first() if src.final_version_id else None) \
+        or texts.order_by(ContentVersion.id.desc()).first()
+    ref = (f"[원래 캠페인 '{src.title}'의 {base.label} v{base.seq} 문구 — {O.CHANNELS[channel]['label']}에 맞게 고쳐 쓰기]\n{base.body}"
+           if base else src.reference_text or "")
+    c = ContentCampaign(title=repository.auto_title(sheet), content_type=sheet["content_type"], brand_focus=sheet["brand_focus"],
+                        goal=sheet["goal"], extra_request=sheet["extra_request"],
+                        reference_text=repository.clip_text(ref, repository.REFERENCE_MAX),
+                        status="제작 중", revision=1, created_by=user, created_by_id=current_user.id, updated_by=user)
+    c.channels, c.product_ids = sheet["channels"], sheet["product_ids"]
+    c.settings = repository.settings_of(src)
+    decisions = {k: dict(d, revision=1, messageId=None) for k, d in (src.decisions or {}).items()
+                 if k not in COPY_SKIP_DECISIONS and (d or {}).get("value")}
+    ratio = O.default_ratio(sheet)
+    if ratio:
+        decisions["ratio"] = {"value": ratio, "status": "proposed", "source": "default", "by": "채널 기본값",
+                              "at": now, "revision": 1, "messageId": None}
+    c.decisions = decisions
+    db.session.add(c)
+    db.session.flush()
+    old = ", ".join(O.CHANNELS[ch]["label"] for ch in src.channels if ch in O.CHANNELS)
+    repository.add_event(c, f"'{src.title}'에서 채널만 바꿔 복사했어요 — {old} → {O.CHANNELS[channel]['label']} "
+                            f"(정한 내용 {len(decisions)}개 · 대화와 버전은 복사하지 않음)",
+                         {"kind": "created", "copiedFrom": src.id}, user=user)
+    db.session.commit()
+    worklog.add("content", "기타", f"캠페인 복사: {src.title} → {c.title}", detail={
+        "campaign": c.id, "from": src.id, "channel": channel})
+    return _state(c.id, 201)
 
 
 @bp.post("/campaigns/<int:cid>/decisions")
@@ -270,7 +394,7 @@ def campaigns_decisions(cid):
         raise repository.Conflict(cid)
     changes = data.get("changes")
     if not isinstance(changes, list) or not changes:
-        raise ApiError("바꿀 항목이 없습니다.")
+        raise ApiError("바꿀 항목이 없어요.")
     source = data.get("source") if data.get("source") in ("candidate", "manual", "undo") else "manual"
     user = _who()
     try:
@@ -314,10 +438,10 @@ def images_upload(cid):
     c = _campaign(cid)
     f = request.files.get("file")
     if f is None:
-        raise ApiError("이미지 파일이 없습니다.")
+        raise ApiError("이미지 파일이 없어요.")
     data = f.read(media.UPLOAD_MAX + 1)
     if len(data) > media.UPLOAD_MAX:
-        raise ApiError("이미지가 너무 큽니다 (12MB 이하).", 413)
+        raise ApiError("이미지가 너무 커요 (12MB 이하).", 413)
     size = media.png_size(data)
     if size is None or not (16 <= size[0] <= 4096 and 16 <= size[1] <= 4096):
         raise ApiError("PNG 이미지만 저장할 수 있어요 (가로·세로 16~4096px).")
@@ -326,25 +450,26 @@ def images_upload(cid):
     except (TypeError, ValueError):
         parent = None
     if parent is None or parent.campaign_id != cid or parent.kind != "image":
-        raise ApiError("편집한 원본 이미지 버전을 찾지 못했습니다.")
+        raise ApiError("편집한 원본 이미지 버전을 찾지 못했어요.")
     try:
         layers = media.clean_layers(json.loads(request.form.get("text_layers") or "[]"))
         edits = json.loads(request.form.get("edits") or "{}")
     except ValueError:
-        raise ApiError("편집 정보를 읽지 못했습니다.")
+        raise ApiError("편집 정보를 읽지 못했어요.")
     edits = {k: clip(v, 40) for k, v in (edits.items() if isinstance(edits, dict) else []) if k in media.EDIT_KEYS}
     baked = request.form.get("baked") == "1"
     name = media.save_upload(data, cid)
     if not name:
-        raise ApiError("이미지를 저장하지 못했습니다 (서버 저장 공간 확인).", 500)
+        raise ApiError("이미지를 저장하지 못했어요 (서버 저장 공간 확인).", 500)
     user = _who()
     sheet = repository.sheet_of(c)
-    from server.catalog import service as catalog
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
                                            model=None, mode="manual")
+    drawn = ((parent.snapshot or {}).get("image") or {}).get("image_text") or []  # AI가 이미지에 그린 문구는 그대로 이어받음
     snap["image"] = {"model": None, "size": f"{size[0]}x{size[1]}", "mode": "manual_edit", "text_layers": layers,
-                     "baked": baked, "edits": edits, "base": {"label": parent.label, "seq": parent.seq}}
+                     "baked": baked or bool(drawn), "image_text": drawn, "edits": edits,
+                     "base": {"label": parent.label, "seq": parent.seq}}
     note = [f"{parent.label} · v{parent.seq}을 브라우저 편집기로 수정 (AI 아님)"]
     if baked:
         note.append("글자를 이미지에 합성")
@@ -354,8 +479,8 @@ def images_upload(cid):
                        approach=", ".join(f"{k} {val}" for k, val in edits.items())[:300], note=" · ".join(note)[:500],
                        facts_version=facts.get("facts_version") or "", snapshot_hash=shash, created_by=user)
     v.snapshot = snap
-    v.review = {"keyword": review.keyword_check("\n".join(t["text"] for t in layers), "copy", sheet, facts),
-                "imageScope": "이미지 속 픽셀·글자는 검사하지 않음 (텍스트 레이어만 확인)"}
+    v.review = {"keyword": review.keyword_check("\n".join(t["text"] for t in layers + drawn), "copy", sheet, facts),
+                "imageScope": media.IMAGE_SCOPE if drawn else "이미지 속 픽셀·글자는 검사하지 않음 (텍스트 레이어만 확인)"}
     db.session.add(v)
     db.session.flush()
     c.selected_version_id = v.id
@@ -375,10 +500,10 @@ def versions_create(cid):
     data = json_body(max_bytes=256 * 1024)
     kind = data.get("kind")
     if kind not in O.TEXT_KINDS:
-        raise ApiError("결과물 종류를 고르세요 (카피 · 카드뉴스 · 숏폼 구성안 · 상품 설명 · CRM 메시지 · 기획서).")
+        raise ApiError("결과물 종류를 골라 주세요 (카피 · 카드뉴스 · 숏폼 구성안 · 상품 설명 · CRM 메시지 · 기획서).")
     body = repository.clip_text(data.get("body"), 20000)
     if not body:
-        raise ApiError("본문을 입력하세요.")
+        raise ApiError("본문을 입력해 주세요.")
     parent = None
     if data.get("parent_id") not in (None, ""):
         try:
@@ -386,12 +511,11 @@ def versions_create(cid):
         except (TypeError, ValueError):
             parent = None
         if parent is None or parent.campaign_id != cid:
-            raise ApiError("기준 버전을 찾지 못했습니다.")
+            raise ApiError("기준 버전을 찾지 못했어요.")
     user = _who()
     label = clip(data.get("label"), 30).strip() or (parent.label if parent else "직접 작성")
     sheet = repository.sheet_of(c)
-    from server.catalog import service as catalog
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
                                            model=None, mode="manual")
     v = ContentVersion(campaign_id=cid, seq=repository.next_seq(cid), kind=kind, label=label,
@@ -409,6 +533,66 @@ def versions_create(cid):
     return _state(cid, 201, versionId=v.id)
 
 
+@bp.post("/campaigns/<int:cid>/references")
+def references_upload(cid):
+    """레퍼런스 이미지 (multipart: file, note?) → 저장 → 대화 AI가 한 번 보고 요약. 이미지 생성 참고 사진으로는 쓰지 않음."""
+    c = _campaign(cid)
+    if len(repository.references_of(cid)) >= media.REF_PER_CAMPAIGN:
+        raise ApiError(f"레퍼런스는 캠페인마다 {media.REF_PER_CAMPAIGN}장까지예요. 하나를 삭제하고 올려 주세요.")
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("이미지 파일이 없어요.")
+    data = f.read(media.REF_MAX_BYTES + 1)
+    if len(data) > media.REF_MAX_BYTES:
+        raise ApiError("이미지가 너무 커요 (5MB 이하).", 413)
+    try:
+        name, dims = media.save_reference(data, cid)
+    except ValueError as e:
+        raise ApiError(str(e))
+    if not name:
+        raise ApiError("이미지를 저장하지 못했어요 (서버 저장 공간 확인).", 500)
+    user = _who()
+    note = clip(request.form.get("note"), 300).strip()
+    ref = ContentReference(campaign_id=cid, file=name, width=dims[0], height=dims[1], note=note, created_by=user)
+    db.session.add(ref)
+    repository.add_event(c, "레퍼런스 이미지를 올렸어요" + (f" — {note}" if note else ""), {"kind": "reference"}, user=user)
+    db.session.commit()
+    rid = ref.id
+    # AI 요약 (DB에 쓰지 않는 동안 호출 · 실패해도 이미지는 남고 다음 대화에서 직접 봄)
+    summary, warn = "", None
+    if providers.ready():
+        try:
+            out = providers.call_json_images(prompts.REFERENCE_V1, prompts.dumps({"note": note or None}),
+                                             [(data, media.REF_MIMES[media.file_ext(data)])], schema=schemas.REFERENCE,
+                                             name="content_reference", action="레퍼런스 이미지 요약", max_tokens=700,
+                                             timeout=60)
+            summary = clip(out.get("summary"), 1500).strip()
+        except AIError as e:
+            warn = f"이미지는 올렸지만 AI가 보지 못했어요: {e}"
+    else:
+        warn = "OpenAI 키가 없어 AI 요약 없이 저장했어요."
+    if summary:
+        ref = db.session.get(ContentReference, rid)
+        if ref is not None:
+            ref.summary, ref.summary_model = summary, providers.text_model()
+            db.session.commit()
+    worklog.add("content", "기타", f"레퍼런스 이미지 업로드: {c.title}", detail={"campaign": cid, "summary": bool(summary)})
+    return _state(cid, 201, warning=warn)
+
+
+@bp.delete("/campaigns/<int:cid>/references/<int:rid>")
+def references_delete(cid, rid):
+    _campaign(cid)
+    ref = db.session.get(ContentReference, rid)
+    if ref is None or ref.campaign_id != cid:
+        raise ApiError("없는 레퍼런스예요.", 404)
+    name = ref.file
+    db.session.delete(ref)
+    db.session.commit()
+    media.delete_files([name])
+    return _state(cid)
+
+
 @bp.post("/campaigns/<int:cid>/select")
 def campaigns_select(cid):
     c = _campaign(cid)
@@ -417,7 +601,7 @@ def campaigns_select(cid):
     if vid is not None:
         v = db.session.get(ContentVersion, int(vid)) if str(vid).isdigit() else None
         if v is None or v.campaign_id != cid:
-            raise ApiError("이 캠페인의 버전이 아닙니다.")
+            raise ApiError("이 캠페인의 버전이 아니에요.")
         vid = v.id
     c.selected_version_id = vid
     db.session.commit()
@@ -431,10 +615,10 @@ def campaigns_export(cid):
     only_id = None
     if only:
         if not only.isdigit():
-            raise ApiError("버전 번호가 올바르지 않습니다.")
+            raise ApiError("버전 번호가 올바르지 않아요.")
         v = db.session.get(ContentVersion, int(only))
         if v is None or v.campaign_id != cid:
-            raise ApiError("이 캠페인의 버전이 아닙니다.", 404)
+            raise ApiError("이 캠페인의 버전이 아니에요.", 404)
         only_id = v.id
     data, filename = build_zip(c, only_id)
     worklog.add("content", "기타", f"내보내기: {c.title}", detail={"campaign": cid, "version": only_id, "bytes": len(data)})
@@ -449,7 +633,7 @@ def suggest():
     data = json_body()
     field = data.get("field")
     if field not in ("goal", "extra"):
-        raise ApiError("추천할 항목은 목적(goal) 또는 추가 요청(extra)입니다.")
+        raise ApiError("추천할 항목은 목적 또는 추가 요청이에요.")
     raw = data.get("sheet") if isinstance(data.get("sheet"), dict) else {}
     products = repository.products_index()
     sheet = dict(repository.EMPTY_SHEET)
@@ -466,12 +650,12 @@ def suggest():
         return jsonify(field=field, items=O.example_suggestions(field, sheet), source="example", basis=basis,
                        note="OpenAI 키가 없어 예시 추천을 보여 드려요. 설정 › 연결에서 키를 넣으면 AI 추천을 받을 수 있어요.")
     from server.catalog import service as catalog
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     lab = repository.labels_of(sheet, products)
     user = {"field": field, "sheet": {"content_type": lab["contentType"], "channels": lab["channels"], "target": lab["target"],
                                       "brand_focus": sheet["brand_focus"], "goal": sheet["goal"] or None,
                                       "extra_request": sheet["extra_request"] or None},
-            "brand_facts": {k: (facts.get("brand") or {}).get(k) for k in ("name", "slogan", "colors", "character", "cm_song")},
+            "brand_facts": brandkit.brand_view(facts),
             "product_facts": facts.get("products"),
             "upcoming_seasons": [{"name": s["name"], "start": s["start"], "dday": s["dday"]} for s in catalog.list_seasons()[:3]]}
     try:
@@ -525,7 +709,7 @@ def versions_review(vid):
     data = json_body()
     verdict = str(data.get("verdict") or "")
     if verdict not in ("BLOCK", "REVISE", "COND", "REVIEW", "PASS", "UNAVAILABLE", "ERROR"):
-        raise ApiError("판정 값이 올바르지 않습니다.")
+        raise ApiError("판정 값이 올바르지 않아요.")
     findings = []
     for f in (data.get("findings") or [])[:30]:
         if isinstance(f, dict):
@@ -545,12 +729,11 @@ def versions_ai_review(vid):
     v = _version(vid)
     c = _campaign(v.campaign_id)
     if v.kind == "image":
-        raise ApiError("이미지는 AI 보조 검토 대상이 아닙니다 (텍스트 레이어만 키워드 확인).")
+        raise ApiError("이미지는 AI 보조 검토 대상이 아니에요 (텍스트 레이어만 키워드 확인).")
     if not providers.ready():
         raise ApiError(conversation.NO_KEY, 503)
-    from server.catalog import service as catalog
     sheet = repository.sheet_of(c)
-    facts = catalog.product_facts(sheet["product_ids"])
+    facts = brandkit.product_facts(sheet["product_ids"])
     user = {"version": {"label": v.label, "kind": O.KIND_LABELS.get(v.kind), "body": v.body[:12000]},
             "sheet": repository.labels_of(sheet), "brand_facts": facts.get("brand"), "product_facts": facts.get("products"),
             "keyword_check": (v.review or {}).get("keyword")}
@@ -573,24 +756,254 @@ def versions_ai_review(vid):
 @bp.get("/jobs/<job_id>")
 def jobs_get(job_id):
     if not job_id.isalnum() or len(job_id) > 32:
-        raise ApiError("없는 작업입니다.", 404)
+        raise ApiError("없는 작업이에요.", 404)
     repository.settle_stale_jobs()
     j = db.session.get(ContentJob, job_id)
     if j is None:
-        raise ApiError("없는 작업입니다.", 404)
+        raise ApiError("없는 작업이에요.", 404)
     return jsonify(job=repository.job_dict(j))
+
+
+@bp.post("/jobs/<job_id>/cancel")
+def jobs_cancel(job_id):
+    if not job_id.isalnum() or len(job_id) > 32:
+        raise ApiError("없는 작업이에요.", 404)
+    j = db.session.get(ContentJob, job_id)
+    if j is None:
+        raise ApiError("없는 작업이에요.", 404)
+    try:
+        ok, message = media.cancel_job(j)
+    except providers.ProviderError as e:
+        raise ApiError(str(e), e.status)
+    if ok:
+        worklog.add("content", "AI 프롬프트", "Higgsfield 취소 요청", detail={"job": j.id, "campaign": j.campaign_id},
+                    user_name=_who())
+    return jsonify(ok=ok, message=message, job=repository.job_dict(j))
+
+
+@bp.get("/assets")
+def assets_list():
+    return jsonify(items=[assets.public(a) for a in assets.all_assets()], version=assets.manifest()["version"])
+
+
+@bp.get("/assets/<name>")
+def assets_file(name):
+    a = assets.get(name[:-4]) if (name or "").endswith(".jpg") else None
+    if a is None or not assets.path_of(a).is_file():
+        raise ApiError("없는 자산이에요.", 404)
+    resp = send_from_directory(str(assets.path_of(a).parent), assets.path_of(a).name, mimetype="image/jpeg", max_age=0)
+    resp.headers["Cache-Control"] = "private, max-age=86400"
+    return resp
 
 
 @bp.get("/files/<name>")
 def files(name):
     if not media.FILE_RE.match(name or ""):
-        raise ApiError("없는 파일입니다.", 404)
-    if ContentVersion.query.filter_by(image_file=name).first() is None:
-        raise ApiError("없는 파일입니다.", 404)
+        raise ApiError("없는 파일이에요.", 404)
+    photo = cardnews.PHOTO_RE.match(name)
+    if photo:  # 카드뉴스 카드 사진 — 덱 JSON에만 이름이 있어 캠페인이 있는지만 확인
+        if db.session.get(ContentCampaign, int(photo.group(1))) is None:
+            raise ApiError("없는 파일이에요.", 404)
+    elif (ContentVersion.query.filter_by(image_file=name).first() is None
+            and ContentReference.query.filter_by(file=name).first() is None):
+        raise ApiError("없는 파일이에요.", 404)
     folder = media.upload_dir()
     if not (folder / name).is_file():
-        raise ApiError("파일을 찾지 못했습니다 (서버 저장소 확인).", 404)
-    resp = send_from_directory(str(folder), name, mimetype="image/png", max_age=0)
+        raise ApiError("파일을 찾지 못했어요 (서버 저장소 확인).", 404)
+    resp = send_from_directory(str(folder), name, mimetype=media.MIMES["." + name.rsplit(".", 1)[1]], max_age=0)
     resp.headers["Cache-Control"] = "private, max-age=86400"
     resp.headers["Content-Disposition"] = f'inline; filename="reboot-content-{name}"'
     return resp
+
+
+# ───────── 카드뉴스 편집기 (cardnews.py · README 7.1a) ─────────
+
+def _cardnews_opts(data):
+    try:
+        count = int(data.get("count") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return {"language": data.get("language") if data.get("language") in cardnews.LANGUAGES else "en",
+            "tone": data.get("tone") if data.get("tone") in cardnews.TONES else "info",
+            "ratio": data.get("ratio") if data.get("ratio") in cardnews.RATIOS else "4:5",
+            "template": data.get("template") if data.get("template") in cardnews.TEMPLATES else cardnews.TEMPLATES[0],
+            "count": count if count in cardnews.COUNTS else 0}
+
+
+def _cardnews_campaign(cid):
+    c = _campaign(cid)
+    if c.content_type != "cardnews":
+        raise ApiError("카드뉴스 캠페인에서만 쓸 수 있어요.")
+    return c
+
+
+def _save_deck(c, deck, *, source, label, parent, note, model=None):
+    user = _who()
+    sheet = repository.sheet_of(c)
+    facts = brandkit.product_facts(sheet["product_ids"])
+    snap, shash = repository.make_snapshot(sheet, c.decisions, repository.settings_of(c), facts.get("facts_version"),
+                                           model=model, mode="cardnews", deck=deck)
+    v = ContentVersion(campaign_id=c.id, seq=repository.next_seq(c.id), kind="cardnews", label=label[:40],
+                       title=deck["deckTitle"].replace("**", "")[:200], body=cardnews.deck_body(deck),
+                       parent_id=parent.id if parent else None, source=source, note=note[:500],
+                       facts_version=facts.get("facts_version") or "", snapshot_hash=shash, created_by=user)
+    v.snapshot = snap
+    v.review = {"keyword": cardnews.check(deck, sheet, facts)}
+    v.needs_check = deck["needsCheck"]
+    db.session.add(v)
+    db.session.flush()
+    c.selected_version_id = v.id
+    c.updated_by, c.updated_at = user, utcnow()
+    repository.add_event(c, f"카드뉴스를 저장했어요 — {v.label} (v{v.seq} · {len(deck['cards'])}장)",
+                         {"kind": "cardnews_version", "versionId": v.id}, user=user)
+    db.session.commit()
+    return v
+
+
+@bp.post("/cardnews/extract")
+def cardnews_extract():
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("파일을 골라 주세요.")
+    data = f.read(cardnews.EXTRACT_MAX_BYTES + 1)
+    if len(data) > cardnews.EXTRACT_MAX_BYTES:
+        raise ApiError("파일이 너무 커요 (5MB 이하).", 413)
+    try:
+        text = cardnews.extract_text(f.filename, data)
+    except ValueError as e:
+        raise ApiError(str(e))
+    return jsonify(text=text[:30000], name=clip(f.filename, 120), chars=len(text),
+                   truncated=len(text) > cardnews.SOURCE_MAX, max=cardnews.SOURCE_MAX)
+
+
+@bp.get("/campaigns/<int:cid>/cardnews")
+def cardnews_decks(cid):
+    _campaign(cid)
+    rows = (ContentVersion.query.filter_by(campaign_id=cid, kind="cardnews")
+            .order_by(ContentVersion.id.desc()).limit(100).all())
+    return jsonify(decks={str(v.id): v.snapshot["deck"] for v in rows if v.snapshot.get("deck")})
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/generate")
+def cardnews_generate(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=128 * 1024)
+    source = repository.clip_text(data.get("source"), 30000)
+    if len(source) < 10:
+        raise ApiError("카드뉴스에 넣을 내용을 10자 이상 입력해 주세요.")
+    if not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 쓸 수 있어요. 키 없이도 '예시로 구경하기'는 돼요.", 503)
+    opts = _cardnews_opts(data)
+    sheet = repository.sheet_of(c)
+    facts = brandkit.product_facts(sheet["product_ids"])
+    deck, note = cardnews.generate(source, opts, campaign_id=cid, sheet=sheet, decisions=c.decisions, facts=facts,
+                                   labels=repository.labels_of(sheet))
+    label = (repository.next_letter_labels(cid, 1) or ["AI 덱"])[0]
+    v = _save_deck(c, deck, source="ai", label=label, parent=None, model=providers.text_model(),
+                   note="카드뉴스 편집기 · AI 구성" + (f" · {note}" if note else ""))
+    return _state(cid, 201, versionId=v.id, deck=deck)
+
+
+@bp.post("/campaigns/<int:cid>/cardnews")
+def cardnews_save(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    try:
+        deck = cardnews.norm_deck(data.get("deck"), cid)
+    except ValueError as e:
+        raise ApiError(str(e))
+    parent = None
+    if data.get("parent_id") not in (None, ""):
+        try:
+            parent = db.session.get(ContentVersion, int(data["parent_id"]))
+        except (TypeError, ValueError):
+            parent = None
+        if parent is None or parent.campaign_id != cid:
+            raise ApiError("기준 버전을 찾지 못했어요.")
+    label = clip(data.get("label"), 30).strip() or (parent.label if parent else "예시" if deck["demo"] else "직접 작성")
+    note = ("카드뉴스 편집기 · 직접 수정" + (f" · {parent.label} v{parent.seq}에서 수정" if parent else "")
+            + (" · 예시 데이터로 시작" if deck["demo"] else ""))
+    v = _save_deck(c, deck, source="manual", label=label, parent=parent, note=note)
+    return _state(cid, 201, versionId=v.id, deck=deck)
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/photo")
+def cardnews_photo(cid):
+    _cardnews_campaign(cid)
+    f = request.files.get("file")
+    if f is None:
+        raise ApiError("사진 파일이 없어요.")
+    data = f.read(cardnews.PHOTO_MAX_BYTES + 1)
+    if len(data) > cardnews.PHOTO_MAX_BYTES:
+        raise ApiError("사진이 너무 커요 (6MB 이하).", 413)
+    dims = media.image_dims(data) if media.file_ext(data) == ".jpg" else None
+    if dims is None or not (16 <= dims[0] <= 4096 and 16 <= dims[1] <= 4096):
+        raise ApiError("JPG 사진만 올릴 수 있어요 (가로·세로 16~4096px).")
+    name = cardnews.photo_name(cid)
+    try:
+        (media.upload_dir() / name).write_bytes(data)
+    except OSError:
+        raise ApiError("사진을 저장하지 못했어요 (서버 저장 공간 확인).", 500)
+    return jsonify(name=name, url=repository.file_url(name)), 201
+
+
+def _deck_from(c, data):
+    try:
+        return cardnews.norm_deck(data.get("deck"), c.id)
+    except ValueError as e:
+        raise ApiError(str(e))
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/backgrounds/plan")
+def cardnews_bg_plan(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    deck = _deck_from(c, data)
+    try:
+        count = max(0, min(len(deck["cards"]), int(data.get("count") or 0)))
+    except (TypeError, ValueError):
+        count = 0
+    if not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 AI 추천을 받을 수 있어요. 카드는 직접 고를 수 있어요.", 503)
+    sheet = repository.sheet_of(c)
+    plan = cardnews.plan_backgrounds(deck, count, sheet=sheet, decisions=c.decisions,
+                                     facts=brandkit.product_facts(sheet["product_ids"]))
+    return jsonify(cards=plan, count=sum(1 for p in plan if p["use"]))
+
+
+@bp.get("/campaigns/<int:cid>/cardnews/backgrounds")
+def cardnews_bg_list(cid):
+    _campaign(cid)
+    return jsonify(jobs=[cardnews.bg_dict(j) for j in cardnews.bg_jobs(cid)])
+
+
+@bp.post("/campaigns/<int:cid>/cardnews/backgrounds")
+def cardnews_bg_start(cid):
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=256 * 1024)
+    deck = _deck_from(c, data)
+    items = [x for x in data.get("cards") or [] if isinstance(x, dict) and x.get("id")]
+    if not items:
+        raise ApiError("배경을 만들 카드를 하나 이상 골라 주세요.")
+    if len(items) > cardnews.BG_MAX:
+        raise ApiError(f"한 번에 {cardnews.BG_MAX}장까지 만들 수 있어요.")
+    provider = data.get("provider") or repository.settings_of(c).get("image_provider") or "openai"
+    if provider not in O.IMAGE_PROVIDERS:
+        raise ApiError("이미지 AI는 OpenAI · Higgsfield 중에서 골라 주세요.")
+    if provider == "higgsfield" and not higgsfield.ready():   # OpenAI로 자동 전환하지 않음
+        raise ApiError("Higgsfield 키가 없어요. 설정 › 연결에서 키를 넣거나 이미지 AI를 OpenAI로 바꿔 주세요.", 503)
+    if provider == "openai" and not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 AI 배경을 만들 수 있어요.", 503)
+    busy = {j.snapshot.get("card_id") for j in cardnews.bg_jobs(cid) if j.status in repository.ACTIVE_JOB}
+    items = [x for x in items if x["id"] not in busy]   # 이미 만드는 중인 카드는 다시 제출하지 않음 (중복 과금 방지)
+    if not items:
+        raise ApiError("고른 카드는 이미 배경을 만드는 중이에요.", 409)
+    made = cardnews.start_backgrounds(c, items, deck, user=_who(), provider=provider)
+    if not made:
+        raise ApiError("고른 카드를 덱에서 찾지 못했어요.")
+    app = current_app._get_current_object()
+    for j in made:
+        cardnews.launch(app, j.id)
+    worklog.add("content", "기타", f"카드뉴스 AI 배경 요청 {len(made)}장: {c.title}",
+                detail={"campaign": cid, "jobs": len(made), "provider": provider})
+    return jsonify(jobs=[cardnews.bg_dict(j) for j in made]), 202

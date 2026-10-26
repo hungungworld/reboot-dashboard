@@ -144,18 +144,23 @@ def test_requires_login(client):
 
 
 def test_status_and_config(auth_client, monkeypatch):
-    for name in ("REGULATION_DB_URL", "PRODUCT_DESC"):
-        monkeypatch.delenv(name, raising=False)
+    monkeypatch.delenv("PRODUCT_DESC", raising=False)
     st = auth_client.get("/api/partners/status").get_json()
-    assert set(st) == {"regulationDb", "openai", "model", "smtp", "sender"}
-    assert (st["regulationDb"], st["openai"], st["smtp"], st["sender"]) == (False, False, False, "")
-    monkeypatch.setenv("REGULATION_DB_URL", "postgresql://example.invalid/regulation")
-    assert auth_client.get("/api/partners/status").get_json()["regulationDb"] is True
+    assert set(st) == {"regulationDb", "regulation", "openai", "model", "smtp", "sender"}
+    assert (st["openai"], st["smtp"], st["sender"]) == (False, False, "")
+    # 규제 DB = 컴플라이언스 파트의 규칙 DB를 실제로 읽은 결과
+    reg = st["regulation"]
+    assert st["regulationDb"] is True and reg["source"] == "compliance" and reg["ruleCount"] > 0 and reg["rulesVersion"]
+    from tabs.compliance import server_review
+    monkeypatch.setattr(server_review, "RULES_FILE", ROOT / "tabs" / "partners" / "no-such-rules.json")
+    off = auth_client.get("/api/partners/status").get_json()
+    assert off["regulationDb"] is False and off["regulation"]["error"]
     cfg = auth_client.get("/api/partners/config").get_json()
     assert [len(cfg["subcategories"][t]) for t in ("케이터링", "인플루언서")] == [7, 7]
     assert [len(cfg["guidePurposes"][t]) for t in ("케이터링", "인플루언서")] == [6, 6]
     assert all("{partner}" in p and "{ideal}" in p and "{product}" in p for p in cfg["prompts"].values())
-    assert len(cfg["guideSections"]) == 8 and "hangover" not in cfg["productDesc"].lower()
+    desc = cfg["productDesc"].lower().replace("-", " ")
+    assert len(cfg["guideSections"]) == 8 and "hangover" not in desc and "morning after" not in desc   # 컴플라이언스 R2 금지어
 
 
 def test_partner_page_loads_scripts_in_order(auth_client):
@@ -677,6 +682,60 @@ def test_sales_uses_imported_influencers_without_examples(auth_client):
     assert {c["code"] for c in data["creators"]} == {"ALPHATALEN10", "BETAUGCPLA10"}
 
 
+SHOP_ORDERS = (
+    "order_id,ordered_at,status,product_slug,product_name,option_sku,option_label,quantity,unit_price_usd,discount_usd,"
+    "line_total_usd,link_code,influencer_name,ship_state,is_dummy,points_used\n"
+    "1,2026-10-01T10:00:00,paid,jelly,Jelly,j,P,2,10.00,0,20.00,ALPHA,Alpha (Fictional),WA,True,0\n"
+    "1,2026-10-01T10:00:00,paid,drink,Drink,d,B,1,5.00,0,5.00,ALPHA,Alpha (Fictional),WA,True,0\n"
+    "2,2026-10-02T10:00:00,refunded,jelly,Jelly,j,P,1,10.00,0,10.00,ALPHA,Alpha (Fictional),WA,True,0\n"
+    "3,2026-10-02T11:00:00,paid,jelly,Jelly,j,P,1,10.00,1,9.00,BETA,Beta (Fictional),TX,True,0\n"
+    "4,2026-10-02T12:00:00,paid,jelly,Jelly,j,P,3,10.00,0,30.00,DIRECT,,TX,True,0\n"
+)
+SHOP_CREATORS = (
+    "creator,discount_code,platform,link_url,clicks,order_count,units_sold,net_sales_usd,conversion_rate_pct,commission_usd\n"
+    "Alpha (Fictional),ALPHA,TikTok,https://x.test/r/ALPHA,100,1,3,25.00,1.00,3.75\n"
+    "Beta (Fictional),BETA,Instagram,https://x.test/r/BETA,50,1,1,9.00,2.00,1.35\n"
+    "Gamma (Fictional),GAMMA,Instagram,https://x.test/r/GAMMA,10,0,0,0,0,0\n"
+)
+
+
+def shop_upload(client, *files):
+    data = {"file": [(io.BytesIO(body.encode("utf-8")), name) for name, body in files]}
+    return client.post("/api/partners/sales/upload", data=data, content_type="multipart/form-data")
+
+
+def test_sales_shop_csv_upload_and_reset(auth_client):
+    assert shop_upload(auth_client, ("creators.csv", SHOP_CREATORS)).status_code == 400   # 주문 CSV 없이는 안 됨
+    assert shop_upload(auth_client, ("x.csv", "a,b\n1,2\n")).status_code == 400
+    out = shop_upload(auth_client, ("orders.csv", SHOP_ORDERS), ("creators.csv", SHOP_CREATORS)).get_json()
+    assert out["saved"] == ["creators", "orders"]
+    d = auth_client.get("/api/partners/sales").get_json()
+    assert d["source"] == "shop" and d["dummy"] is True and d["range"] == {"min": "2026-10-01", "max": "2026-10-02"}
+    by = {c["code"]: c for c in d["creators"]}
+    assert set(by) == {"ALPHA", "BETA", "GAMMA"}                    # DIRECT 제외 · 주문 없는 크리에이터도 표시
+    a = by["ALPHA"]
+    assert (a["orders"], a["units"], a["revenue"], a["refunds"], a["visits"]) == (1, 3, 25.0, 1, 100)
+    assert a["conversion"] == 1.0 and a["name"] == "Alpha (Fictional)" and a["platform"] == "TikTok"
+    assert d["totals"]["revenue"] == 34.0 and d["totals"]["visits"] == 160
+    assert [x["revenue"] for x in d["daily"]] == [25.0, 9.0] and d["daily"][0]["visits"] is None
+    one = auth_client.get("/api/partners/sales?start=2026-10-02&end=2026-10-02").get_json()
+    assert one["totals"]["revenue"] == 9.0 and one["totals"]["prevRevenue"] == 25.0
+    assert auth_client.delete("/api/partners/sales/upload").status_code == 200
+    assert auth_client.get("/api/partners/sales").get_json()["source"] == "placeholder"
+
+
+def test_sales_shop_merges_platform_order_lines(auth_client):
+    head = ("order_id,ordered_at,status,platform,influencer_name,discount_code,link_path,discount_rate,product_slug,"
+            "product_name,option_sku,option_label,quantity,unit_price_usd,gross_usd,discount_usd,line_total_usd,"
+            "commission_rate,commission_usd,ship_state,is_dummy\n")
+    tt = head + "1,2026-10-01T10:00:00,paid,TikTok,Alpha,ALPHA,/r/ALPHA,0.1,j,J,j,P,1,10,10,1,9.00,0.15,1.35,WA,False\n"
+    ig = head + "2,2026-10-01T11:00:00,paid,Instagram,Beta,BETA,/r/BETA,0.1,j,J,j,P,2,10,20,2,18.00,0.15,2.70,WA,False\n"
+    assert shop_upload(auth_client, ("tiktok.csv", tt), ("instagram.csv", ig)).status_code == 200
+    d = auth_client.get("/api/partners/sales").get_json()
+    assert d["dummy"] is False and d["hasVisits"] is False
+    assert {c["code"]: c["revenue"] for c in d["creators"]} == {"ALPHA": 9.0, "BETA": 18.0}
+
+
 def test_sales_values_fixed_per_day():
     r1 = sales.report(["Creator X"], date(2026, 10, 23), date(2026, 10, 1), date(2026, 10, 10))
     r2 = sales.report(["Creator X"], date(2026, 10, 30), date(2026, 10, 1), date(2026, 10, 10))
@@ -717,3 +776,18 @@ def test_guide_prompt_fixed_summary_and_no_age_key_message():
     assert f"> {prompts.GUIDE_SUMMARY}" in system and "{summary}" not in system
     assert "never copy the format notes" in system and "must not include an adults-21+" in system
     assert "hangover" not in prompts.GUIDE_SUMMARY.lower() and "숙취" not in prompts.GUIDE_SUMMARY
+
+
+def test_export_csv_roundtrip(auth_client):
+    """업체 목록 CSV 내보내기 → 그대로 다시 가져오면 같은 목록 (가짜 데이터)."""
+    import_both(auth_client)
+    before = {c["name"]: c for c in auth_client.get("/api/partners/contacts").get_json()["items"]}
+    for name in ("catering.csv", "influencer.csv"):
+        res = auth_client.get(f"/api/partners/export/{name}")
+        assert res.status_code == 200 and "attachment" in res.headers["Content-Disposition"]
+        assert upload(auth_client, file=(name, res.get_data())).status_code == 200
+    after = {c["name"]: c for c in auth_client.get("/api/partners/contacts").get_json()["items"]}
+    assert set(after) == set(before)
+    for n, c in before.items():
+        assert (after[n]["email"], after[n]["type"], after[n]["category"]) == (c["email"], c["type"], c["category"])
+    assert auth_client.get("/api/partners/export/other.csv").status_code == 404

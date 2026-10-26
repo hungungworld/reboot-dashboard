@@ -53,10 +53,10 @@
   <nav class="subnav" id="subnav" aria-label="{{ part.short or part.label }} 하위 메뉴">
     {% if part.links %}
     {% for label, ic, view in part.links %}{% set on = request.args.get('view', '') == view %}{% if on %}{% set ns.crumb = label %}{% endif %}
-    <a class="{{ 'active' if on }}"{% if on %} aria-current="page"{% endif %} href="{{ base_url }}{{ '?view=' ~ view if view }}">{{ icon(ic) }}<span class="label">{{ label }}</span></a>
+    <a class="{{ 'active' if on }}"{% if on %} aria-current="page"{% endif %} href="{{ base_url }}{{ '?view=' ~ view if view }}"><span class="label">{{ label }}</span><span class="sub-no" aria-hidden="true">{{ '%02d' % loop.index }}</span></a>
     {% endfor %}
     {% else %}
-    <a class="active" aria-current="page" href="{{ base_url }}">{{ icon(part.icon) }}<span class="label">{{ part.label }}</span></a>
+    <a class="active" aria-current="page" href="{{ base_url }}"><span class="label">{{ part.label }}</span><span class="sub-no" aria-hidden="true">01</span></a>
     {% endif %}
   </nav>
   <div class="sidebar-bottom">
@@ -65,11 +65,11 @@
       <p>판정·초안·AI 결과는 1차 참고용입니다.<br>최종 판단과 발송은 담당자가 합니다.</p>
     </div>
     {% for p in all_parts if not p.nav %}
-    <a class="utility-link{% if p.id == part.id %} active{% endif %}" href="{{ url_for('core.part_page', part_id=p.id) }}"{% if p.id == part.id %} aria-current="page"{% endif %}>{{ icon(p.icon) }}<span>{{ p.label }}</span><span class="count" data-count="{{ p.id }}" hidden></span></a>
+    <a class="utility-link{% if p.id == part.id %} active{% endif %}" href="{{ url_for('core.part_page', part_id=p.id) }}"{% if p.id == part.id %} aria-current="page"{% endif %}><span>{{ p.label }}</span><span class="count" data-count="{{ p.id }}" hidden></span></a>
     {% endfor %}
     <form method="post" action="{{ url_for('auth.logout') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="utility-link">{{ icon('logout') }}<span>로그아웃</span></button>
+      <button type="submit" class="utility-link"><span>로그아웃</span></button>
     </form>
     <div class="side-footer">MARKETING WORKSPACE <span>{{ boot.env.label }}</span></div>
   </div>
@@ -85,7 +85,7 @@
     </div>
     <div class="page-heading">
       <div>
-        <h1 id="page-title">{{ title }}{% if part.id == 'home' %} <span aria-hidden="true">☀</span>{% endif %}</h1>
+        <h1 id="page-title">{{ title }}</h1>
         <p id="page-sub">{{ part.subtitle }}</p>
       </div>
       <div class="page-actions" id="page-actions"></div>

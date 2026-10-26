@@ -1,48 +1,99 @@
 /* 홈 · 데일리 브리핑 스타일 (담당: 강현서) — .part-home 안에서만, home- 접두사.
-   kpis · home-layout · brief-hero · season-card · calendar-large · intro-* · launch-* · task · market-item · activity는 base.css 그대로 씁니다.
-   차트 색: 매출(라임 실선) · 광고비(어두운 올리브 점선) — 다크 모드는 따로 */
-.part-home { --home-rev: #a3bb12; --home-rev-fill: rgba(228, 250, 24, .28); --home-spend: #6d6e78; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .part-home { --home-rev: #d4ea2a; --home-rev-fill: rgba(228, 250, 24, .14); --home-spend: #a0a1ab; }
-}
-:root[data-theme="dark"] .part-home { --home-rev: #d4ea2a; --home-rev-fill: rgba(228, 250, 24, .14); --home-spend: #a0a1ab; }
+   brief-hero · calendar-large · task · market-item · activity는 base.css 그대로 씁니다. */
+/* 줄바꿈: 어절 단위(base.css keep-all) + 마지막 줄에 한두 단어만 남지 않게(pretty) · 제목 · 짧은 글은 줄 길이를 고르게(balance)
+   text-wrap-style만 바꿔서 nowrap 칸(배지 · 표 · 알약)은 그대로 한 줄 */
+.part-home { text-wrap-style: pretty; }
+.part-home :is(h1, h2, h3, h4, summary, th, label, .badge, .kpi-label, .panel-note) { text-wrap-style: balance; }
+/* 문장 · 반점 한 조각(home.js phrase) — 한 줄에 들어가면 통째로 다음 줄로, 길면 조각 안에서 줄 길이를 고르게 */
+.part-home .home-ph { display: inline-block; max-width: 100%; text-wrap-style: balance; }
+/* 히어로 카드 — 누르면 콘텐츠 캘린더로 (안의 버튼은 원래 링크) */
+.part-home .brief-hero[data-go-view] { cursor: pointer; }
+/* 히어로 버튼 두 개 — 높이 · 길이 같게 */
+.part-home .brief-hero .btn { min-width: 150px; }
 
-/* 이번 주 성과 */
-.part-home .home-chart-top { margin-bottom: 14px; align-items: flex-end; flex-wrap: wrap; }
-.part-home .home-chart-summary { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.part-home .home-chart-summary strong { font-size: 25px; letter-spacing: -.8px; font-weight: 720; }
-.part-home .home-chart-summary small { font-size: 10px; color: var(--muted-2); flex-basis: 100%; }
-.part-home .home-legend { display: flex; gap: 14px; font-size: 10px; color: var(--muted); }
-.part-home .home-legend span::before { content: ""; display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--home-rev); vertical-align: middle; margin-right: 6px; }
-.part-home .home-legend .spend::before { border-top: 2px dashed var(--home-spend); }
-.part-home .home-chart { position: relative; height: 205px; }
-.part-home .home-chart canvas { display: block; }
-.part-home [data-range]:disabled { opacity: .45; cursor: not-allowed; }
+/* 다가오는 시즌 (오른쪽 · 한 줄씩) — 누르면 콘텐츠 캘린더 */
+.part-home .home-season-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; border: 0; border-top: 1px solid var(--line-3);
+  background: none; color: inherit; text-align: left; font: inherit; font-size: 13px; cursor: pointer; }
+.part-home .home-season-row:first-child { border-top: 0; padding-top: 2px; }
+.part-home .home-season-row b { flex: 0 0 60px; box-sizing: border-box; padding: 2px 0; border-radius: var(--radius-xs); text-align: center; font-size: 15px; letter-spacing: -.3px; }
+.part-home .home-season-row.on b { color: var(--lime-ink); background: var(--lime); }
+.part-home .home-season-row small { display: block; font-size: 12px; color: var(--muted); }
+.part-home .home-season-row:hover .grow { text-decoration: underline; }
+
+/* 한눈에 보기 (오른쪽) — 줄마다 해당 탭으로 */
+.part-home .home-glance-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line-3); color: inherit; text-decoration: none; font-size: 13px; }
+.part-home .home-glance-row:first-child { border-top: 0; padding-top: 2px; }
+.part-home .home-glance-row > span { flex: 1; color: var(--muted); }
+.part-home .home-glance-row b { font-weight: 650; }
+.part-home .home-glance-row .icon { width: 14px; height: 14px; color: var(--faint); }
+.part-home .home-glance-row:hover b { text-decoration: underline; }
+
+/* 이번 주 할 일 맨 위: 인사이트 긴급 · 기회 (읽기 전용) */
+.part-home .home-signal { align-items: flex-start; border-left: 3px solid var(--line-2); padding-left: 10px; border-radius: 0; }
+.part-home .home-signal.urgent { border-left-color: var(--red); }
+.part-home .home-signal.chance { border-left-color: var(--green); }
+.home-dock-signal { color: inherit; text-decoration: none; }
+.part-home .home-signal .task-title, .part-home .home-signal .meta { display: block; }
+.part-home .home-signal-go { flex: none; font-size: 12px; white-space: nowrap; }
+.part-home .home-signals { margin-bottom: 4px; }
+.home-grade { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: var(--radius-xs); font-size: 11px; font-weight: 650; vertical-align: 1px; }
+.home-signal.urgent .home-grade, .home-dock-signal.urgent .home-grade { background: var(--red-bg); color: var(--red); }
+.home-signal.chance .home-grade, .home-dock-signal.chance .home-grade { background: var(--green-bg); color: var(--green); }
+
+/* 규제 기사 → 컴플라이언스 */
+.part-home .home-comp-link { display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.part-home .home-comp-link .icon { width: 12px; height: 12px; }
 
 /* To-Do */
 .part-home .home-todo-meta { margin: -8px 0 4px; }
 .part-home .home-task-main { display: flex; gap: 10px; align-items: flex-start; flex: 1; min-width: 0; cursor: pointer; }
 .part-home .home-task-main .task-title, .part-home .home-task-main .meta { display: block; }
-.part-home .home-task-main .meta .link { font-size: 10px; display: inline; }
-.part-home .home-todo-del { flex-shrink: 0; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; color: var(--faint); opacity: .6; }
+.part-home .home-task-main .meta .link { font-size: 12px; display: inline; }
+/* To-Do 제목이 한 줄에 들어가도록: 출처 배지(AI · 규칙 · 직접)는 근거 줄 맨 앞으로 */
+.part-home .home-task-main .meta .badge { margin-right: 5px; padding: 1px 5px; vertical-align: 1px; }
+/* 브리핑 배치: 위 4칸(작은 달력 · 다가오는 시즌 · 한눈에 보기 · 최근 활동, 같은 높이) → 아래 2단(시장 브리핑 넓게 · 할 일 좁게) */
+.part-home .home-top4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
+.part-home .home-top4 > .card { display: flex; flex-direction: column; height: 400px; min-width: 0; }
+.part-home .home-top4 .home-box-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 0; }
+.part-home .home-top4 .home-mini-cal { overflow-y: auto; }
+.part-home .home-main2 { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 22px; align-items: start; }
+@media (max-width: 1300px) { .part-home .home-top4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .part-home .home-main2 { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .part-home .home-top4 { grid-template-columns: 1fr; } .part-home .home-top4 > .card { height: auto; max-height: 420px; } }
+.part-home .home-todo-del { flex-shrink: 0; width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--faint); opacity: .6; }
 .part-home .home-todo-del:hover, .part-home .home-todo-del:focus-visible { opacity: 1; background: var(--soft); color: var(--red); }
 .part-home .home-todo-del .icon { width: 14px; height: 14px; }
-.part-home .home-todo-form { display: grid; gap: 8px; margin: 10px 0 6px; padding: 12px; border-radius: 10px; background: var(--soft-2); border: 1px solid var(--line); }
+.part-home .home-todo-form { display: grid; gap: 8px; margin: 10px 0 6px; padding: 12px; border-radius: var(--radius-sm); background: var(--soft-2); border: 1px solid var(--line); }
+
+/* 작은 달력 (위 4칸 첫 칸) */
+.part-home .home-mini-cal .card-head h2 { font-size: 15px; }
+.part-home .home-mini-cal .icon-btn { width: 28px; height: 28px; font-size: 15px; }
+.part-home .home-mini-week, .part-home .home-mini-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; text-align: center; }
+.part-home .home-mini-week { margin-bottom: 4px; font-size: 11px; color: var(--faint); }
+.part-home .home-mini-day { position: relative; height: 38px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; padding: 4px 0 12px; }
+.part-home .home-mini-day:hover, .part-home .home-mini-day:focus-visible { background: var(--soft); }
+.part-home .home-mini-day.week { background: var(--soft-2); }
+.part-home .home-mini-day.dim { color: var(--faint); }
+.part-home .home-mini-day.today { background: var(--lime); color: var(--lime-ink); font-weight: 700; }
+.part-home .home-mini-dots { position: absolute; left: 0; right: 0; bottom: 5px; display: flex; justify-content: center; gap: 3px; }
+.part-home .home-mini-cal i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; }
+.part-home .home-mini-cal i.dot-season { background: var(--green); }
+.part-home .home-mini-cal i.dot-lead { background: var(--faint); }
+.part-home .home-mini-cal i.dot-week { width: 10px; border-radius: 2px; background: var(--soft-2); border: 1px solid var(--line); }
+.part-home .home-mini-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+.part-home .home-mini-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.part-home .home-mini-list { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--line-3); }
+.part-home .home-mini-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
+.part-home .home-mini-list b { font-variant-numeric: tabular-nums; }
+.part-home .home-mini-list small { color: var(--muted); }
+.part-home .home-mini-more { margin-top: 10px; }
 
 /* 뉴스 */
 .part-home .home-news-badges { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
-.part-home .home-headline { display: flex; gap: 8px; align-items: flex-start; background: var(--lime-wash); border-radius: 9px; padding: 12px 13px; font-size: 11.5px; line-height: 1.75; color: var(--ink-2); }
-.part-home .home-headline .icon { width: 15px; height: 15px; margin-top: 3px; color: var(--lime-deep); }
-.part-home .home-signals { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 2px; }
-.part-home .home-signal { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; padding: 4px 8px; border-radius: 6px; background: var(--orange-bg); color: var(--orange); }
-.part-home .home-signal .icon { width: 12px; height: 12px; }
-.part-home .home-signal-none { margin-top: 10px; }
 .part-home .market-item p a { color: inherit; text-decoration: none; }
 .part-home .market-item p a:hover { text-decoration: underline; }
 .part-home .home-links a { color: var(--muted-2); text-decoration: underline; text-underline-offset: 2px; }
 .part-home .home-links a:hover { color: var(--ink); }
-.part-home .home-news-more { margin-top: 10px; }
-.part-home .home-news-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-3); flex-wrap: wrap; }
 .part-home .home-errors { margin-top: 10px; font-size: 11px; color: var(--red); }
 .part-home .home-errors summary { cursor: pointer; }
 .part-home .home-errors ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
@@ -50,12 +101,35 @@
 /* 콘텐츠 캘린더 (큰 달력 · base.css .calendar-large) */
 .part-home .home-cal-head { flex-wrap: wrap; }
 .part-home .home-cal-title { font-size: 20px; margin-right: 4px; }
-.part-home .home-cal-weekdays { font-size: 11px; margin: 0 0 17px; }
+.part-home .home-cal-weekdays { font-size: 11px; margin: 0 0 8px; }
+.part-home .calendar-large .day { min-height: 72px; padding: 5px 7px; }
+.part-home .calendar-large .event-pill { margin-top: 3px; padding: 3px 5px; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 시즌 띠 — 옅은 바탕 + 색 테두리 + 왼쪽 진한 띠, 여러 날이면 칸 사이를 이어 붙임 (색은 home.js seasonColor) */
+.part-home .calendar-large .ev-green { --ev: #3fae5a; } .part-home .calendar-large .ev-pink { --ev: #e0508f; }
+.part-home .calendar-large .ev-orange { --ev: #e98a2b; } .part-home .calendar-large .ev-purple { --ev: #8b5cf6; }
+.part-home .calendar-large .ev-cyan { --ev: #14a7b8; } .part-home .calendar-large .ev-blue { --ev: #3b82f6; }
+.part-home .calendar-large .day .event-pill.ev { position: relative; box-sizing: border-box; width: auto; height: 22px; line-height: 16px; padding: 2px 6px 2px 7px;
+  background: color-mix(in srgb, var(--ev) 12%, var(--surface)); color: color-mix(in srgb, var(--ev) 62%, var(--text));
+  border: 1px solid color-mix(in srgb, var(--ev) 55%, transparent); border-left: 3px solid var(--ev); border-radius: 5px; font-weight: 600; }
+.part-home .calendar-large .day .event-pill.ev:hover { background: color-mix(in srgb, var(--ev) 20%, var(--surface)); }
+.part-home .calendar-large .day .event-pill.ev.from { margin-left: -7px; border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.part-home .calendar-large .day .event-pill.ev.to { margin-right: -8px; border-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.part-home .calendar-large .day .event-pill.ev.lead { background: var(--surface); border-style: dashed; border-left-style: solid; font-weight: 500; }
+.part-home .calendar-large .home-ev-gap { display: block; height: 22px; margin-top: 3px; }
 .part-home .home-sched-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 22px; }
 .part-home .home-sched-grid .schedule-item { margin: 0; padding: 12px 0; border-bottom: 1px solid var(--line-3); }
 .part-home .home-sched.is-lead .date-box { background: var(--lime); color: var(--lime-ink); }
 .part-home .home-sched p { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.part-home .home-sched .date-box small { font-size: 7.5px; white-space: nowrap; }
+.part-home .home-sched .date-box small { white-space: nowrap; }
+.part-home .home-surge > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.part-home .home-surge > summary::-webkit-details-marker { display: none; }
+.part-home .home-surge > summary::before { content: "▸"; font-size: 12px; color: var(--muted); transition: transform .15s; }
+.part-home .home-surge[open] > summary::before { transform: rotate(90deg); }
+.part-home .home-surge > summary h2 { margin: 0; font-size: 15px; }
+.part-home .home-surge-body { margin-top: 14px; }
+.part-home .home-surge-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.part-home .home-surge-list li { padding: 10px 0; border-bottom: 1px solid var(--line-3); }
+.part-home .home-surge-list small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 
 /* 데일리 브리핑 오른쪽 */
 .part-home .home-todo-head { flex-wrap: wrap; }
@@ -65,7 +139,7 @@
 @media (max-width: 600px) { .part-home .home-sched-grid { grid-template-columns: 1fr; } }
 
 /* 뉴스 카드: 카드 어디를 눌러도 기사 새 탭 */
-.part-home .home-news-card { cursor: pointer; border-radius: 9px; transition: background .15s; }
+.part-home .home-news-card { cursor: pointer; border-radius: var(--radius-sm); transition: background .15s; }
 .part-home .home-news-card:hover { background: var(--soft-2); }
 
 /* 이번 주 To-Do 버튼 · 사이드 패널 (모든 화면 · part-home 밖이라 home-dock 접두사) */
@@ -73,8 +147,8 @@
   background: var(--lime); color: var(--lime-ink); box-shadow: var(--shadow); display: grid; place-items: center; cursor: pointer; }
 .home-fab:hover { background: var(--lime-line); }
 .home-fab .icon { width: 22px; height: 22px; }
-.home-fab-count { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
-  background: var(--dark); color: var(--dark-ink); font-size: 10.5px; font-weight: 650; display: grid; place-items: center; }
+.home-fab-count { position: absolute; top: -4px; right: -4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+  background: var(--dark); color: var(--dark-ink); font-size: 11px; font-weight: 650; display: grid; place-items: center; }
 .home-fab-count[hidden] { display: none; }
 .home-dock-scrim { position: fixed; inset: 0; z-index: 54; background: rgba(23, 23, 32, .25); }
 .home-dock-panel { position: fixed; top: 0; right: 0; bottom: 0; z-index: 55; width: min(380px, 100vw); background: var(--surface);
@@ -82,21 +156,124 @@
 .home-dock-panel[hidden], .home-dock-scrim[hidden] { display: none; }
 .home-dock-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .home-dock-head h2 { font-size: 15px; }
-.home-dock-close { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: 7px; }
+.home-dock-close { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 6px; border-radius: var(--radius-xs); }
 .home-dock-close:hover { background: var(--soft); }
-.home-dock-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-.home-dock-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 9px; cursor: pointer; }
+.home-dock-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin: 0 -4px; padding: 0 4px; }
+.home-dock-sec { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0 12px; }
+.home-dock-sec > summary { display: flex; align-items: center; gap: 4px; padding: 12px 0; font-size: 13px; font-weight: 700; color: var(--ink); cursor: pointer; list-style: none; }
+.home-dock-sec > summary::-webkit-details-marker { display: none; }
+.home-dock-sec > summary::after { content: ''; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+.home-dock-sec[open] > summary::after { transform: rotate(-135deg); }
+.home-dock-sec[open] { padding-bottom: 12px; }
+.home-dock-list { display: flex; flex-direction: column; gap: 4px; }
+.home-dock-form { display: grid; gap: 6px; margin-top: 8px; padding: 10px; border-radius: var(--radius-sm); background: var(--soft-2); }
+.home-dock-form .btn { justify-self: start; }
+.home-dock-news { cursor: default; align-items: center; }
+.home-dock-news a.home-dock-title { text-decoration: none; }
+.home-dock-news a.home-dock-title:hover { text-decoration: underline; }
+.home-dock-sec[data-sec="news"] .home-dock-list { margin-top: 8px; }
+/* 인사이트 자료: 끌어다 놓기 · 담은 자료 */
+.home-dock-drop { padding: 12px; border: 1.5px dashed var(--line); border-radius: var(--radius-sm); font-size: 11px; color: var(--muted); line-height: 1.6; text-align: center; }
+.home-dock-panel.drop-on .home-dock-drop { border-color: var(--lime-line); background: var(--soft-2); color: var(--ink); }
+.home-dock-panel.drop-on { box-shadow: inset 0 0 0 2px var(--lime-line), var(--shadow); }
+.home-dock-sec[data-sec="insight"] .home-dock-list { margin-top: 8px; }
+.home-dock-note { cursor: default; }
+.home-dock-kind { display: inline-block; margin-bottom: 3px; padding: 1px 6px; border-radius: 999px; background: var(--soft); font-size: 10px; color: var(--muted); }
+.home-dock-note-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; color: var(--ink); margin-top: 3px; line-height: 1.5; }
+.home-dock-note .home-dock-reason a { color: inherit; }
+.home-dock-tools { margin-top: 8px; }
+body.home-dock-dragging .home-fab { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(208, 230, 60, .45), var(--shadow); }
+.home-dock-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: var(--radius-sm); cursor: pointer; }
 .home-dock-item:hover { background: var(--soft-2); }
 .home-dock-item input { margin-top: 3px; }
-.home-dock-title { display: block; font-size: 12.5px; color: var(--ink); }
+.home-dock-title { display: block; font-size: 12px; color: var(--ink); }
 .home-dock-reason { display: block; font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
 .home-dock-item.done .home-dock-title { text-decoration: line-through; color: var(--faint); }
 .home-dock-go { align-self: flex-start; }
 @media (max-width: 640px) { .home-fab { right: 16px; bottom: 16px; } }
 
-/* 뉴스 카드 '왜 중요' 한 줄 · 검색어 점검 */
-.part-home .home-why { display: block; margin-top: 4px; color: var(--ink-2); }
-.part-home .home-why b { font-weight: 650; color: var(--lime-deep); margin-right: 4px; }
-.part-home .home-qstats { margin-top: 10px; font-size: 11.5px; }
+.part-home .market-item > div:nth-child(2) { flex: 1; min-width: 0; }
+
+/* 검색어 점검 */
+.part-home .home-qstats { margin-top: 10px; font-size: 12px; }
 .part-home .home-qstats summary { cursor: pointer; color: var(--muted); }
-.part-home .home-qstats code { font-size: 10.5px; white-space: normal; }
+.part-home .home-qstats code { font-size: 11px; white-space: normal; }
+
+
+/* 미국 시장 브리핑 — 헤더 한 줄 · 오늘의 핵심 1개 · 짧은 목록 · 하단 한 줄. 글자 15/13/12/11px, 색은 잉크 · 회색 · 라임만 */
+/* 헤더: 왼쪽 제목 · 배송 정보, 오른쪽 새로고침은 항상 같은 줄. 업계/트렌드 버튼은 그 아래 줄 */
+.part-home .home-brief-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.part-home .home-brief-title { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; min-width: 0; }
+.part-home .home-brief-title h2 { white-space: nowrap; }
+.part-home .home-brief-refresh { flex-shrink: 0; width: 30px; height: 30px; }
+.part-home .home-brief-refresh .icon { width: 15px; height: 15px; }
+.part-home .home-brief-title > .head-cap { margin-left: 0; }   /* 줄바꿈되는 flex라 제목 밖에 둠 — gap 8px이 간격 */
+.part-home .home-brief-tabs:empty { display: none; }
+.part-home .home-brief-tabs { margin-top: 10px; }
+.part-home .home-news-more { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; height: 26px; margin-top: 2px;
+  border-top: 1px solid var(--line-3); font-size: 11px; color: var(--muted); }
+.part-home .home-news-more:hover { color: var(--ink); background: var(--soft-2); }
+.part-home .home-news-more-ic { font-size: 12px; line-height: 1; }
+.part-home .home-kind button:disabled { opacity: .45; cursor: default; }
+.part-home .home-lead { margin-top: 14px; padding: 15px 16px; border-radius: var(--radius-sm); background: var(--soft-2); }
+.part-home .home-lead-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.part-home .home-lead-meta { font-size: 11px; color: var(--muted); }
+.part-home .home-lead-meta b, .part-home .home-row-side b { font-weight: 650; color: var(--lime-deep); }
+.part-home .home-lead-title { margin-top: 4px; font-size: 15px; font-weight: 650; line-height: 1.45; color: var(--ink); }
+.part-home .home-lead-sum { margin-top: 4px; font-size: 12px; line-height: 1.6; color: var(--text); }
+.part-home .home-lead-view { margin-top: 10px; padding-left: 10px; border-left: 3px solid var(--lime-deep); font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+.part-home .home-rows { margin-top: 4px; }
+.part-home .home-row { display: flex; align-items: flex-start; gap: 12px; padding: 11px 4px; border-bottom: 1px solid var(--line-3); }
+.part-home .home-rows > .home-row:last-of-type, .part-home .home-rows > div > .home-row:last-child { border-bottom: 0; }
+.part-home .home-row-no { width: 14px; flex-shrink: 0; padding-top: 2px; font-size: 11px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
+.part-home .home-row-main { flex: 1; min-width: 0; }
+.part-home .home-row-title { font-size: 13px; font-weight: 650; line-height: 1.45; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-home .home-row-view { margin-top: 2px; font-size: 12px; line-height: 1.55; color: var(--text); }
+.part-home .home-row-side { flex-shrink: 0; padding-top: 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.part-home .home-lead-title a, .part-home .home-row-title a { color: inherit; text-decoration: none; }
+.part-home .home-lead-title a:hover, .part-home .home-row-title a:hover { text-decoration: underline; }
+.part-home .home-news-card { cursor: pointer; }
+.part-home .home-row.home-news-card:hover { background: var(--soft-2); border-radius: var(--radius-sm); }
+.part-home .read .home-lead-title, .part-home .read .home-row-title { color: var(--muted); }
+.part-home .read .home-row-view, .part-home .read .home-lead-sum { color: var(--muted-2); }
+.part-home .home-save { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: var(--radius-xs); color: var(--muted-2); }
+.part-home .home-save:hover { background: var(--surface); color: var(--ink); }
+.part-home .home-save .icon { width: 15px; height: 15px; }
+.part-home .home-save.on { color: var(--lime-deep); }
+.part-home .home-save.on .icon { fill: currentColor; }
+.part-home .home-brief-empty { margin-top: 14px; }
+.part-home .home-brief-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line-3); font-size: 11px; }
+.part-home .home-brief-saved .home-saved-open { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; color: var(--ink-2); font-weight: 600; cursor: pointer; }
+.part-home .home-brief-saved .home-saved-open:hover { color: var(--lime-deep); }
+.part-home .home-brief-saved .icon { width: 13px; height: 13px; }
+.part-home .home-brief-info { margin-left: auto; color: var(--muted); }
+.part-home .home-brief-info summary { cursor: pointer; text-align: right; }
+.part-home .home-brief-info[open] { flex-basis: 100%; margin-left: 0; }
+.part-home .home-brief-info[open] summary { text-align: left; }
+.part-home .home-brief-info .panel-note { margin-top: 6px; }
+@media (max-width: 640px) { .part-home .home-row-side { display: none; } .part-home .home-row-title { white-space: normal; } }
+/* 보관함 창 (openSaved) */
+.part-home.home-saved .home-saved-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
+.part-home.home-saved .home-saved-tools .input { flex: 1; min-width: 220px; }
+.part-home.home-saved .home-saved-count { margin: 8px 0 0; }
+.part-home.home-saved .home-saved-list { list-style: none; margin: 0; padding: 0; }
+.part-home.home-saved .home-saved-item { display: flex; gap: 12px; align-items: flex-start; padding: 11px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
+.part-home.home-saved .home-saved-item:last-child { border-bottom: 0; }
+.part-home.home-saved .home-saved-main { flex: 1; min-width: 0; }
+.part-home.home-saved .home-saved-main small { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; line-height: 1.55; }
+.part-home.home-saved .home-saved-main b a { color: inherit; text-decoration: none; }
+.part-home.home-saved .home-saved-main b a:hover { text-decoration: underline; }
+.part-home.home-saved .home-saved-why { color: var(--ink-2); }
+.part-home.home-saved .home-saved-why b { color: var(--lime-deep); margin-right: 4px; }
+.part-home.home-saved .home-saved-unsave { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; color: var(--lime-deep); border-color: var(--lime-deep); }
+.part-home.home-saved .home-saved-unsave .icon { width: 13px; height: 13px; fill: currentColor; }
+.part-home.home-saved mark { background: color-mix(in srgb, var(--lime) 55%, transparent); color: inherit; border-radius: var(--radius-xs); padding: 0 1px; }
+
+/* 이번 주 할 일 — 4개 넘으면 '나머지 N개'로 접기 */
+.part-home .home-todo-more > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; padding: 10px 2px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.part-home .home-todo-more > summary::-webkit-details-marker { display: none; }
+.part-home .home-todo-more > summary::before { content: "▸"; font-size: 11px; transition: transform .15s; }
+.part-home .home-todo-more[open] > summary::before { transform: rotate(90deg); }
+.part-home .home-todo-more > summary:hover { color: var(--ink, inherit); }
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-home .linetabs { overflow-y: hidden; }

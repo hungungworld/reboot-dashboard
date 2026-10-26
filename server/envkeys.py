@@ -43,21 +43,24 @@ SERVICES = [
     Service("OPENFDA_API_KEY", "openFDA", "규제 모니터링 (키 없이 먼저 호출)", "키 없이도 동작"),
     Service("REGULATIONS_GOV_API_KEY", "Regulations.gov", "규제 모니터링 (규칙·규칙안)", "무료 키"),
     Service("COURTLISTENER_TOKEN", "CourtListener", "규제 모니터링 (허위광고 판결)", "무료 토큰"),
+    Service("FDA_DASHBOARD_USER", "FDA Data Dashboard 계정 (이메일)", "규제 모니터링 (수입 거부 · 경고장)", secret=False),
+    Service("FDA_DASHBOARD_KEY", "FDA Data Dashboard 키", "규제 모니터링 (수입 거부 · 경고장)", "무료 키"),
     Service("SHOPIFY_TOKEN", "Shopify", "할인코드별 주문·매출 (연동 예정)"),
-    Service("HIGGSFIELD_API_KEY", "Higgsfield", "콘텐츠 이미지·영상 (연동 예정)"),
+    Service("HIGGSFIELD_API_KEY", "Higgsfield", "콘텐츠 이미지·영상"),
     Service("GMAIL_ADDRESS", "Gmail 주소 (SMTP)", "협업 메일 발송", secret=False,
             aliases=("GMAIL_ADDRESS", "gmail_address")),
     Service("GMAIL_APP_PASSWORD", "Gmail 앱 비밀번호", "협업 메일 발송 · 답장 확인 (IMAP)", "16자리 앱 비밀번호",
             aliases=("GMAIL_APP_PASSWORD", "gmail_api")),
     Service("GOOGLE_CLIENT_ID", "Google OAuth 클라이언트 ID", "Google로 로그인 (CS Gmail 문의함·답장 초안)", secret=False),
     Service("GOOGLE_CLIENT_SECRET", "Google OAuth 클라이언트 보안 비밀", "Google로 로그인 (CS Gmail 문의함·답장 초안)"),
+    Service("SLACK_WEBHOOK_URL", "Slack 웹훅 주소", "인사이트 리뷰 카드 '슬랙으로 보내기' (보내기 전 확인)", "무료"),
     # 키가 아닌 설정값
     Service("OPENAI_MODEL", "OpenAI 모델", "OpenAI를 쓰는 모든 기능", secret=False, group="setting"),
     Service("GMAIL_QUERY", "CS 문의 메일 조건", "CS 문의함 (Gmail 검색어)", secret=False, group="setting"),
     Service("PRODUCT_DESC", "제품 설명 (AI 프롬프트)", "파트너 메일·가이드", secret=False, group="setting"),
     Service("REGULATION_DB_URL", "규제(검열) DB 주소", "파트너 협업 메일 '규제 DB 연결' 표시 (통합 DB 미정)", group="setting"),
     Service("CONTENT_TEXT_MODEL", "콘텐츠 대화·제작 모델", "콘텐츠 제작 (비우면 OPENAI_MODEL)", secret=False, group="setting"),
-    Service("CONTENT_IMAGE_MODEL", "콘텐츠 이미지 모델", "콘텐츠 이미지 생성 (비우면 gpt-image-1)", secret=False, group="setting"),
+    Service("CONTENT_IMAGE_MODEL", "콘텐츠 이미지 모델", "콘텐츠 이미지 생성 (비우면 gpt-image-2.5-sunburst)", secret=False, group="setting"),
 ]
 _BY_NAME = {s.name: s for s in SERVICES}
 DEFAULTS = {"OPENAI_MODEL": "gpt-4o-mini"}

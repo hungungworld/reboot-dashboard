@@ -103,7 +103,7 @@ def test_upload_replace_accepts_korean_formats(app, auth_client):
     saved = Path(app.config["DATA_DIR"]) / "uploads" / "performance" / "performance.csv"
     assert saved.read_text(encoding="utf-8-sig").splitlines()[0] == HEADER
     logs = auth_client.get("/api/worklog?part=performance").get_json()["items"]
-    assert logs and "업로드" in logs[0]["action"]
+    assert logs and "파일 올리기" in logs[0]["action"]
 
 
 def test_header_mismatch_message(auth_client):
@@ -118,7 +118,7 @@ def test_header_mismatch_message(auth_client):
 @pytest.mark.parametrize("line,word", [
     ("2026-13-40,IG,1,1,1,1,1", "날짜"),
     ("2026-10-19,IG,-5,1,1,1,1", "0 이상"),
-    ("2026-10-19,IG,abc,1,1,1,1", "숫자가 아닙니다"),
+    ("2026-10-19,IG,abc,1,1,1,1", "숫자가 아니에요"),
     ("2026-10-19,,1,1,1,1,1", "채널"),
     ("2026-10-19,IG,1,1", "칸이"),
     ("2026-10-19,IG,300,000,1,1,1,1", "7개보다"),
@@ -273,7 +273,7 @@ def test_fx_network_error_and_non_json(auth_client, monkeypatch, today):
 
 def test_advice_without_key_is_503(auth_client):
     res = auth_client.post("/api/performance/advice", json={"start": "2026-10-15", "end": "2026-10-21"})
-    assert res.status_code == 503 and "OPENAI_API_KEY" in res.get_json()["error"]
+    assert res.status_code == 503 and "OpenAI 키" in res.get_json()["error"]
 
 
 def test_advice_clamps_budget_and_fills_channels(auth_client, monkeypatch, today):
@@ -283,7 +283,7 @@ def test_advice_clamps_budget_and_fills_channels(auth_client, monkeypatch, today
     def fake_openai_json(system, user, **kw):
         seen["system"], seen["user"], seen["kw"] = system, user, kw
         return {
-            "overview": "샘플 데이터 기준 총평입니다.",
+            "overview": "예시 데이터 기준 총평입니다.",
             "analysis": {"good": "Instagram이 가장 좋습니다.", "improve": "TikTok의 전환율이 낮습니다."},
             "budget": [
                 {"channel": "instagram", "amount": 9_000_000, "reason": "ROAS 최고"},

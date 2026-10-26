@@ -81,6 +81,18 @@ def test_collect_save_and_accessor(app, auth_client):
     assert any(i["action"] == "수집 설정 변경" for i in log)
 
 
+def test_collect_source_toggle(auth_client):
+    cfg = auth_client.get("/api/settings/collect").get_json()["config"]
+    assert all(cfg["enabled"].values())   # 기본은 모두 켬
+    cfg["enabled"] = {"yami": False, "trends": 0}   # 빠진 항목은 켬
+    out = auth_client.put("/api/settings/collect", json={"config": cfg}).get_json()
+    assert out["config"]["enabled"]["yami"] is False and out["config"]["enabled"]["trends"] is False
+    assert out["config"]["enabled"]["amazon"] is True and "enabled" in out["changed"]
+    plan = {i["id"]: i for i in auth_client.get("/api/insights/update/plan").get_json()["items"]}
+    assert plan["yami"]["ready"] is False and "꺼 두었어요" in plan["yami"]["note"]
+    assert "꺼 두었어요" not in plan["amazon"]["note"]
+
+
 @pytest.mark.parametrize("patch, word", [
     ({"tracked_asins": [{"asin": "B0SHORT"}]}, "ASIN"),
     ({"weee_urls": ["http://example.com/x"]}, "Weee"),
@@ -178,6 +190,7 @@ def test_connection_test_serpapi_bad_key(auth_client, monkeypatch, calls):
 
 def test_connection_test_openai_and_anthropic(auth_client, monkeypatch, calls):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test-aaaa")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")   # 내 .env의 모델 설정과 상관없이 아래 가짜 목록 기준
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-bbbb")
     calls["routes"]["api.openai.com/v1/models"] = FakeRes(200, {"data": [{"id": "gpt-4o-mini"}, {"id": "gpt-4o"}]})
     calls["routes"]["api.anthropic.com/v1/models"] = FakeRes(200, {"data": [{"id": "claude-x"}]})

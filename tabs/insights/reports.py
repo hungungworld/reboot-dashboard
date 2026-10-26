@@ -8,9 +8,8 @@ from docx.shared import Cm, Pt, RGBColor
 
 from server.models import WorkLog
 from tabs.settings import xlsx
-from . import competitors
 from .models import Comment, Review, ShelfItem, Video
-from .service import SOURCE_LABEL, TIER_LABEL, competitors_view, latest_trends, monthly_view, shelf_dict, shelf_maps, weekly_view
+from .service import EXPORT_HEAD, SOURCE_LABEL, competitor_export, competitors_view, latest_trends, monthly_view, shelf_dict, shelf_maps, weekly_view
 from .util import BUCKET_LABEL, week_label
 
 GRADE_COLOR = {"긴급": RGBColor(0xB7, 0x5B, 0x48), "기회": RGBColor(0x63, 0x7C, 0x13), "참고": RGBColor(0x62, 0x7A, 0xA5)}
@@ -102,12 +101,13 @@ def weekly_docx(t=None):
         r.bold, r.font.color.rgb = True, GRADE_COLOR[a["grade"]]
         p.add_run(a["fact"]).bold = True
         p.paragraph_format.space_after = Pt(1)
-        _p(d, f"왜 중요한가: {a['why']}")
+        _p(d, f"영향: {a['why']}")
         _p(d, f"할 일: {a['todo']}" + ("  (AI 문장 · 참고용)" if a.get("ai") else ""))
     s = v["shelf"]
     d.add_heading("진열대 요약", level=2)
     if s["total"]:
-        cmp_txt = (f"지난 수집 대비 가격 변동 {s['priceChanges']}개 · 신규 진입 {s['newEntries']}개" if s["compare"]
+        cc = s.get("compChanges")
+        cmp_txt = (f"지난 수집 대비 경쟁사 변화 {cc['total']}건 (가격 변동 {cc['price']} · 새 상품 {cc['new']})" if s["compare"] and cc
                    else "첫 수집이라 변화 비교는 다음 수집부터예요")
         _p(d, f"상품 {s['total']}개 · 경쟁 상품 품절 {s['oos']}개 · 자사 품절 {s['ownOos']}개 · {cmp_txt}.")
         if s.get("ownWeee"):
@@ -140,7 +140,7 @@ def weekly_docx(t=None):
     d.add_heading("출처", level=2)
     srcs = [f"{SOURCE_LABEL.get(src, src)} {w['now']}" for src, w in s["weeks"].items()]
     _p(d, "진열대: " + (" · ".join(srcs) if srcs else "없음") + " · Amazon은 SerpApi(검색 상위 · 광고 제외), Weee!는 Firecrawl")
-    _p(d, "리뷰: Amazon 대표 리뷰(SerpApi) · Weee! CSV · 검색 수요: Google Trends(SerpApi, 미국 12개월)")
+    _p(d, "리뷰: Amazon 대표 리뷰(SerpApi) · Weee!(공개 리뷰 페이지) · 검색 수요: Google Trends(SerpApi, 미국 12개월)")
     return _save(d), f"reboot-insights-weekly-{v['week']}.docx"
 
 
@@ -240,13 +240,10 @@ def data_xlsx(t=None):
                      x["signals"]["similarPrice"], x["watched"], x["recommended"], x["reason"],
                      " / ".join(p["title"][:60] for p in x["products"])] for col in comp["columns"].values() for x in col],
                    widths={10: 50, 11: 60})
-    xlsx.add_sheet(wb, "경쟁사 분석", ["브랜드", "구분", "상태"] + [label for _, label in competitors.FIELDS]
-                   + ["홈페이지", "발견 검색어", "출처", "조사일(UTC)", "AI 분석"],
-                   [[r["brand"], TIER_LABEL.get(r["tier"], r["tier"]), "보관" if r["status"] == "archived" else "관리 중"]
-                    + [r[f] for f, _ in competitors.FIELDS] + [r["website"], r["keywords"], r["sources"], r["researched_at"], r["ai"]]
-                    for r in competitors.export_rows()], widths={4: 30, 6: 30, 7: 50, 8: 50, 9: 50, 11: 40, 12: 60})
+    xlsx.add_sheet(wb, "경쟁사 분석", [label for _, label in EXPORT_HEAD],
+                   [[r[k] for k, _ in EXPORT_HEAD] for r in competitor_export()], widths={4: 40, 11: 40, 12: 30, 13: 40, 14: 40})
     wk = weekly_view(t)
-    xlsx.add_sheet(wb, "이번 주 액션", ["주차", "등급", "규칙", "사실", "왜 중요한가", "할 일", "AI 문장", "규칙에 걸린 신호"],
+    xlsx.add_sheet(wb, "이번 주 액션", ["주차", "등급", "규칙", "사실", "영향", "할 일", "AI 문장", "규칙에 걸린 신호"],
                    [[wk["week"], a["grade"], a["ruleLabel"], a["fact"], a["why"], a["todo"], a["ai"],
                      json.dumps(a["facts"], ensure_ascii=False)[:2000]] for a in wk["actions"]], widths={4: 50, 5: 50, 6: 50, 8: 60})
     logs = WorkLog.query.filter_by(part="insights").order_by(WorkLog.id.desc()).limit(500).all()

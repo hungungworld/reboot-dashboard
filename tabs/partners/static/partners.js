@@ -1,21 +1,24 @@
 /* 인플루언서 · 파트너 (대표 파일) — 메뉴 등록 · 탭 틀만 둡니다. 기능 코드는 넣지 않습니다 (팀 README 4장).
-   🔎 업체 컨택 · ✉️ 협업 메일  → outreach.js  REBOOT.use('partners.outreach').render(el, 'contacts' | 'mail')
-   🗂️ 협업 이력 · 📈 판매 실적  → records.js   REBOOT.use('partners.records').render(el, 'history' | 'sales')
+   파트너 찾기 · 제안 작성 → outreach.js  REBOOT.use('partners.outreach').render(el, 'contacts' | 'mail')
+   협업 관리 · 성과     → records.js   REBOOT.use('partners.records').render(el, 'history' | 'sales')
    다른 파일은 탭을 바꿀 때 .part-partners 요소에 CustomEvent('ptn:go', {detail:{tab}})를 보냅니다.
-   저장 키: partners.tab.u<사용자 id> (마지막으로 본 탭) */
+   첫 화면은 항상 파트너 찾기 (주소에 #mail · #history · #sales가 있으면 그 탭) */
 (function (global) {
   'use strict';
 
   const REBOOT = global.REBOOT;
   const doc = global.document;
   const { esc, icon } = REBOOT.ui;
-  const store = REBOOT.store('partners');
-  const KEY_TAB = `partners.tab.u${(REBOOT.user() || {}).id || 0}`;
   const TABS = [
-    { id: 'contacts', label: '🔎 업체 컨택', file: 'partners.outreach', view: 'contacts' },
-    { id: 'mail', label: '✉️ 협업 메일', file: 'partners.outreach', view: 'mail' },
-    { id: 'history', label: '🗂️ 협업 이력', file: 'partners.records', view: 'history' },
-    { id: 'sales', label: '📈 판매 실적', file: 'partners.records', view: 'sales' }
+    // V2 시안 이름·순서 (2026-10-26): 파트너 찾기 → 협업 관리 → 제안 작성 → 성과. id는 예전 주소(#contacts …) 그대로
+    { id: 'contacts', label: '파트너 찾기', file: 'partners.outreach', view: 'contacts',
+      head: ['다음 파트너를 만나보세요.', '후보를 고르고, 함께할 일을 제안하세요.'] },
+    { id: 'history', label: '협업 관리', file: 'partners.records', view: 'history',
+      head: ['협업의 다음 단계를 이어가세요.', '진행 상태와 지난 대화를 한곳에서 확인하세요.'] },
+    { id: 'mail', label: '제안 작성', file: 'partners.outreach', view: 'mail',
+      head: ['좋은 제안은, 명확한 조건에서.', '대상과 조건을 정리하고, 메일과 가이드로 이어가세요.'] },
+    { id: 'sales', label: '성과', file: 'partners.records', view: 'sales',
+      head: ['누가 성과를 만들고 있나요?', '예시 누적 실적 · 실제 매출 및 정산 자료가 아닙니다.'] }
   ];
   const tabOf = id => TABS.find(t => t.id === id);
 
@@ -42,15 +45,16 @@
       const panel = old.cloneNode(false);
       panel.setAttribute('aria-labelledby', `ptn-tab-${t.id}`);
       old.replaceWith(panel);
-      if (store.get(KEY_TAB, '') !== t.id) store.set(KEY_TAB, t.id);
       if (global.history && global.history.replaceState && global.location.hash !== '#' + t.id) {
         global.history.replaceState(null, '', '#' + t.id);
       }
+      REBOOT.page.title(t.head[0]);
+      REBOOT.page.subtitle(t.head[1]);
       if (opts && opts.scroll) global.scrollTo({ top: 0, behavior: 'smooth' });   // 메뉴를 바꾸면 맨 위로 (README 3장)
       try {
         REBOOT.use(t.file).render(panel, t.view);
       } catch (e) {
-        panel.innerHTML = `<p class="part-error">${esc(t.label)} 화면을 그리지 못했습니다.\n${esc(e && e.message)}</p>`;
+        panel.innerHTML = `<p class="part-error">${esc(t.label)} 화면을 불러오지 못했어요. ${esc(e && e.message)}</p>`;
       }
     }
 
@@ -73,25 +77,17 @@
       if (tabOf(id) && id !== current) show(id);
     });
 
-    // 제목 오른쪽 버튼: 업체 파일 가져오기 (업체 컨택 탭의 가져오기 카드를 엶)
-    const actions = REBOOT.page.actions();
-    if (actions) {
-      actions.innerHTML = `<button type="button" class="btn lime" data-act="ptn-import">${icon('upload')} 업체 파일 가져오기</button>`;
-      actions.addEventListener('click', e => {
-        if (!e.target.closest('[data-act="ptn-import"]')) return;
-        try { REBOOT.use('partners.outreach').openImport(); } catch (err) { /* outreach.js 없음 */ }
-        show('contacts');
-      });
-    }
+    // 제목 오른쪽 버튼은 두지 않음 — 업체 파일 가져오기는 업체 컨택 › 업체 목록 카드 머리와 맨 아래 가져오기 카드에서
 
     const hash = (global.location.hash || '').slice(1);
-    show(tabOf(hash) ? hash : (tabOf(store.get(KEY_TAB, '')) ? store.get(KEY_TAB, '') : 'contacts'));
+    // 메뉴로 들어오면 항상 업체 컨택부터 (주소에 #탭이 있을 때만 그 탭)
+    show(tabOf(hash) ? hash : 'contacts');
   }
 
   REBOOT.register({
-    id: 'partners', label: '인플루언서 · 파트너', icon: '🤝', priority: 'P1', order: 60,
-    title: '함께 만드는 브랜드의 다음 장.',
-    subtitle: '크리에이터와 파트너를 발견하고, 협업의 모든 단계를 연결하세요.',
+    id: 'partners', label: '인플루언서', icon: '', priority: 'P1', order: 60,
+    title: '다음 파트너를 만나보세요.',
+    subtitle: '후보를 고르고, 함께할 일을 제안하세요.',
     render,
     // 메뉴 배지 · 종 알림: 회신을 기다리는 발송 기록 수 (records.js가 저장소에 캐시한 값 — 동기)
     summary: () => {

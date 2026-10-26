@@ -1,7 +1,7 @@
 /* 성과분석 파트 (담당: 혁주) — 설명서 tabs/performance/docs/README.md · 메모 tabs/performance/docs/NOTES.md
    화면 순서: 기간 선택 → 기본 정보 → 핵심 지표 6 → 채널별 성과 표(원화/달러 · 행 클릭) → 차트 → 잘한 점/개선할 점 → AI 제안·다음 주 예산
    보고서: /dashboard/performance?view=report&start=…&end=… (A4 · 브라우저 인쇄로 PDF)
-   - 샘플 데이터는 어디서나 '샘플 데이터'로 표시. AI 결과는 'AI' 배지 + 참고용
+   - 샘플 데이터는 어디서나 '예시' 배지로 표시. AI 결과는 'AI' 배지 + 참고용
    - 계산은 metrics.js (REBOOT.use('performance.metrics')), 서버는 CSV 저장·환율·AI만
    다른 파트에 공개: REBOOT.use('performance').weekSummary() · summary({start, end}) */
 (function (global) {
@@ -18,6 +18,7 @@
   const S = {
     root: null, view: 'main', data: null, rows: [], rng: null, chans: [], period: null, sum: null,
     currency: 'KRW', fx: null, selected: new Set(), charts: {}, ai: { state: 'idle' }, aiTimer: null, aiCtrl: null,
+    insight: { state: 'idle' }, insightTimer: null, insightCtrl: null,
     watching: false
   };
   const KPI_ICONS = { spend: 'dollar', revenue: 'chart', roas: 'up', conversions: 'check', cpa: 'filter', profit: 'spark' };
@@ -68,6 +69,31 @@
     if (n == null || !isFinite(n)) return '—';
     return (n > 0 ? '+' : n < 0 ? '-' : '') + fmt.krw(Math.abs(n));
   }
+  // 달러 표시는 성과분석 화면에서만 — 보고서(A4)는 늘 원화
+  const usdOn = () => S.view !== 'report' && S.currency === 'USD';
+  function cash(n) { return usdOn() ? money(n) : fmt.krw(n); }
+  function signedCash(n) {
+    if (n == null || !isFinite(n)) return '—';
+    return (n > 0 ? '+' : n < 0 ? '-' : '') + cash(Math.abs(n));
+  }
+  /** 차트 축용 짧은 금액: 원화 2,663만 · 달러 $12.3K */
+  function shortCash(n) {
+    if (!usdOn()) return man(n);
+    const v = n / rate(), a = Math.abs(v);
+    return '$' + (a >= 1e6 ? fmt.num(v / 1e6, 1) + 'M' : a >= 1e3 ? fmt.num(v / 1e3, 1) + 'K' : fmt.num(v, 0));
+  }
+  // AI 문장 속 "₩ 46,706,094"를 화면에서만 달러로 (원문·캐시는 원화 그대로)
+  function fxText(t) {
+    if (!usdOn() || t == null) return t;
+    return String(t).replace(/₩\s?(\d[\d,]*)/g, (m, d) => fmt.usd(Number(d.replace(/,/g, '')) / rate()));
+  }
+  function renderCurrency() {
+    renderTable();
+    renderKpis();
+    renderInsight();
+    renderAi();
+    drawCharts();
+  }
   function arrow(d) { return d > 0 ? '▲' : d < 0 ? '▼' : '–'; }
   function deltaHtml(metric, d) {
     const t = M.tone(metric, d);
@@ -97,9 +123,9 @@
   }
   function sourceBadge() {
     if (!S.data) return '';
-    if (S.data.isSample) return badge('샘플 데이터', 'orange');
+    if (S.data.isSample) return badge('예시', 'orange');
     const m = S.data.meta || {};
-    return badge(`업로드 데이터${m.updatedAt ? ' · ' + fmt.datetime(m.updatedAt) : ''}`, 'green');
+    return badge(`올린 데이터${m.updatedAt ? ' · ' + fmt.datetime(m.updatedAt) : ''}`, 'green');
   }
 
   /* ───────── 차트 ───────── */
@@ -120,12 +146,12 @@
         legend: { position: 'bottom', labels: { color: muted, font: font(11), boxWidth: 18, boxHeight: 8, padding: 14, usePointStyle: true, pointStyle: legendStyle, pointStyleWidth: legendStyle === 'line' ? 22 : undefined } },
         tooltip: {
           titleFont: font(11), bodyFont: font(12), padding: 10, boxPadding: 4,
-          callbacks: { label: c => ` ${c.dataset.label}: ${fmt.krw(c.parsed.y)}` }
+          callbacks: { label: c => ` ${c.dataset.label}: ${cash(c.parsed.y)}` }
         }
       },
       scales: {
-        x: { grid: { display: false }, border: { color: line }, ticks: { color: muted, font: font(10), maxRotation: 0, autoSkipPadding: 14 } },
-        y: { beginAtZero: true, grid: { color: line }, border: { display: false }, ticks: { color: muted, font: font(10), callback: v => man(v) } }
+        x: { grid: { display: false }, border: { color: line }, ticks: { color: muted, font: font(11), maxRotation: 0, autoSkipPadding: 14 } },
+        y: { beginAtZero: true, grid: { color: line }, border: { display: false }, ticks: { color: muted, font: font(11), callback: v => shortCash(v) } }
       }
     };
   }
@@ -174,6 +200,8 @@
   function drawCharts() {
     destroyCharts();
     if (!S.sum || !S.sum.rows) return;
+    const barUnit = ref('bar-unit');
+    if (barUnit) barUnit.textContent = usdOn() ? '단위: 달러 ($K = 천 달러)' : '단위: 원 (만 원 표시)';
     drawBar(ref('bar'));
     drawLine(ref('line'));
     const note = ref('line-note');
@@ -196,11 +224,11 @@
   /* ───────── 환율 ───────── */
   function fxLabel() {
     const f = S.fx;
-    if (!f) return '환율 확인 중…';
+    if (!f) return '환율 받는 중…';
     if (f.status === 'ok') {
       return `1$ = ${fmt.num(f.rate, 1)}원 · 수출입은행 ${f.date} 기준${f.warning ? ` (새로 받지 못함: ${f.warning})` : ''}`;
     }
-    return `1$ = ${fmt.num(f.rate, 0)}원 · 기본값 (${f.reason || '조회 실패'})`;
+    return `1$ = ${fmt.num(f.rate, 0)}원 · 기본값 (${f.reason || '받기 실패'})`;
   }
   function paintFx() {
     const el = ref('fx-label');
@@ -212,13 +240,13 @@
     if (btn) busy(btn, true);
     try {
       S.fx = await REBOOT.api('/api/performance/fx' + (refresh ? '?refresh=1' : ''));
-      if (refresh) toast(S.fx.status === 'ok' ? `환율을 다시 받았습니다: ${fxLabel()}` : `환율을 받지 못해 기본값을 씁니다 (${S.fx.reason || S.fx.warning || '조회 실패'})`, S.fx.status === 'ok' ? undefined : 'error');
+      if (refresh) toast(S.fx.status === 'ok' ? `최신 환율을 받았어요: ${fxLabel()}` : `환율을 받지 못해 기본값을 써요 (${S.fx.reason || S.fx.warning || '받기 실패'})`, S.fx.status === 'ok' ? undefined : 'error');
     } catch (e) {
       S.fx = { status: 'error', rate: 1400, reason: e.message };
     }
     if (btn) busy(btn, false);
     paintFx();
-    if (S.currency === 'USD') renderTable();
+    if (S.currency === 'USD' && S.sum && S.sum.rows) renderCurrency();
   }
 
   /* ───────── AI 해석 · 예산 제안 ───────── */
@@ -227,6 +255,7 @@
     return `reboot-performance-advice:${S.period.start}:${S.period.end}:${REBOOT.today()}:${m.updatedAt || (S.data && S.data.source) || ''}`;
   }
   function scheduleAdvice(force) {
+    if (S.view !== 'report') scheduleInsight();
     clearTimeout(S.aiTimer);
     if (S.aiCtrl) { S.aiCtrl.abort(); S.aiCtrl = null; }
     if (!S.sum || !S.sum.rows) { S.ai = { state: 'idle' }; return; }
@@ -267,14 +296,99 @@
     paintAi();
   }
 
+  /* ───────── AI 인사이트 (채널별 성과 표 위, 두괄식) — 예산 제안과 따로 부름 ───────── */
+  function insightKey() {
+    return adviceKey().replace('reboot-performance-advice:', 'reboot-performance-insight:');
+  }
+  function scheduleInsight(force) {
+    clearTimeout(S.insightTimer);
+    if (S.insightCtrl) { S.insightCtrl.abort(); S.insightCtrl = null; }
+    if (!S.sum || !S.sum.rows) { S.insight = { state: 'idle' }; return; }
+    const cached = !force && readCache(insightKey());
+    if (cached && cached.headline) {   // 예전 3줄 형식(lines) 결과는 다시 받음
+      S.insight = { state: 'ok', data: cached, cached: true };
+      renderInsight();
+      return;
+    }
+    S.insight = { state: 'loading' };
+    renderInsight();
+    S.insightTimer = setTimeout(() => loadInsight(), force ? 0 : 900);
+  }
+  async function loadInsight() {
+    const h = await REBOOT.health();
+    if (h && h.openai === false) {
+      S.insight = { state: 'nokey' };
+      renderInsight();
+      return;
+    }
+    const ctrl = global.AbortController ? new global.AbortController() : null;
+    S.insightCtrl = ctrl;
+    const period = Object.assign({}, S.period);
+    const key = insightKey();
+    try {
+      const data = await REBOOT.api('/api/performance/insight', period, ctrl ? { signal: ctrl.signal } : {});
+      if (S.insightCtrl !== ctrl || data.start !== S.period.start || data.end !== S.period.end) return;
+      writeCache(key, data);
+      S.insight = { state: 'ok', data };
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      if (S.insightCtrl !== ctrl) return;
+      S.insight = e.status === 503 ? { state: 'nokey' } : { state: 'error', message: e.message };
+    }
+    S.insightCtrl = null;
+    renderInsight();
+  }
+  // AI가 **굵게** 감싼 부분만 <strong>으로 (먼저 esc 하므로 다른 태그는 그대로 막힘)
+  function boldHtml(t) {
+    return esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  }
+  function renderInsight() {
+    const box = ref('insight');
+    if (!box) return;
+    const st = S.insight.state;
+    const tag = badge('AI 인사이트', 'purple');
+    let body;
+    if (st === 'ok') {
+      const d = S.insight.data;
+      const pts = (d.points || []).map(p => `<li>${p.label ? `<span class="perf-insight-label">${esc(p.label)}</span>` : ''}${boldHtml(fxText(p.text))}</li>`).join('');
+      body = `<div><p class="perf-insight-head">${boldHtml(fxText(d.headline))}</p>${pts ? `<ul class="perf-insight-lines">${pts}</ul>` : ''}</div>
+        <button type="button" class="btn small ghost" data-act="insight-again" aria-label="AI 인사이트 다시 만들기">${icon('refresh')}</button>`;
+    } else if (st === 'nokey') {
+      body = `<p class="panel-note">AI 연결 안 됨 — 설정 › 연결에서 OpenAI 키를 넣으면 전체 성과 요약을 볼 수 있어요.</p>`;
+    } else if (st === 'error') {
+      body = `<p class="panel-note">AI 인사이트를 만들지 못했어요: ${esc(S.insight.message)}</p>
+        <button type="button" class="btn small ghost" data-act="insight-again">${icon('refresh')} 다시 만들기</button>`;
+    } else if (st === 'loading') {
+      body = `<div class="perf-loading"><span class="spinner" aria-hidden="true"></span>AI가 이 기간 성과를 요약하고 있어요…</div>`;
+    } else {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = tag + `<div class="perf-insight-body">${body}</div>`;
+  }
+
   function paintAi() {
     if (S.view === 'report') reportAi();
     else { renderReview(); renderAi(); }
   }
 
+  // 잘한 점 · 개선할 점: AI가 "- " 줄로 주면 핵심 요약 목록(굵게 포함), 아니면(숫자 기준 · 예전 결과) 문단 그대로
+  function reviewLines(text) {
+    return String(text || '').split('\n').map(l => l.trim()).filter(l => /^[-•]\s+/.test(l)).map(l => l.replace(/^[-•]\s+/, ''));
+  }
   function reviewCard(title, text, ai) {
     const tag = ai ? `<span class="flex">${badge('AI', 'purple')}<span class="small muted">참고용</span></span>` : badge('숫자 기준');
-    return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2>${tag}</div><p class="perf-review-text">${esc(text || '—')}</p></section>`;
+    const lines = reviewLines(text);
+    const body = lines.length
+      ? `<ul class="perf-insight-lines perf-review-lines">${lines.map(l => `<li>${boldHtml(l)}</li>`).join('')}</ul>`
+      : `<p class="perf-review-text">${esc(text || '—')}</p>`;
+    return `<section class="card"><div class="card-head"><h2>${esc(title)}</h2>${tag}</div>${body}</section>`;
+  }
+  // 보고서(A4)용: 굵게 표시 기호는 빼고 줄은 그대로
+  function reviewPlain(text) {
+    const lines = reviewLines(text);
+    return lines.length ? `<ul>${lines.map(l => `<li>${esc(l.replace(/\*\*/g, ''))}</li>`).join('')}</ul>` : `<p>${esc(text)}</p>`;
   }
   function renderReview() {
     const box = ref('review');
@@ -292,8 +406,8 @@
     const items = (b.items || []).map(i => `
       <div class="perf-budget-row">
         <span class="perf-ch"><span class="perf-swatch" style="background:${esc(chColor(i.channel))}"></span>${esc(i.channel)}</span>
-        <span class="num"><b>${esc(fmt.krw(i.amount))}</b></span>
-        <span class="num perf-delta neutral">${esc(signedKrw(i.delta))}${i.deltaPct != null ? ` (${esc(fmt.signed(i.deltaPct, 1, '%'))})` : ''}</span>
+        <span class="num"><b>${esc(cash(i.amount))}</b></span>
+        <span class="num perf-delta neutral">${esc(signedCash(i.delta))}${i.deltaPct != null ? ` (${esc(fmt.signed(i.deltaPct, 1, '%'))})` : ''}</span>
         <span class="perf-share"><span class="progress-track"><i style="width:${Math.max(0, Math.min(100, Number(i.share) || 0))}%"></i></span>${esc(fmt.pct(i.share, 0))}</span>
         ${i.reason ? `<p>${esc(i.reason)}</p>` : ''}
       </div>`).join('');
@@ -302,14 +416,14 @@
     return `
       ${a.overview ? `<p class="perf-overview">${esc(a.overview)}</p>` : ''}
       <div class="perf-ai-sum">
-        <div class="perf-ai-stat"><span>다음 주 총 예산</span><strong>${esc(fmt.krw(b.total))}</strong><small>기준의 80~120%: ${esc(fmt.krw(b.min))} ~ ${esc(fmt.krw(b.max))}</small></div>
-        <div class="perf-ai-stat"><span>${b.scaled ? `이번 기간 광고비 (${esc(b.days)}일 → 7일 환산)` : '이번 주 광고비'}</span><strong>${esc(fmt.krw(b.current))}</strong></div>
-        <div class="perf-ai-stat"><span>증감</span><strong>${esc(signedKrw(b.delta))}</strong><small>${esc(fmt.signed(b.deltaPct, 1, '%'))}</small></div>
+        <div class="perf-ai-stat"><span>다음 주 총 예산</span><strong>${esc(cash(b.total))}</strong><small>기준의 80~120%: ${esc(cash(b.min))} ~ ${esc(cash(b.max))}</small></div>
+        <div class="perf-ai-stat"><span>${b.scaled ? `이번 기간 광고비 (${esc(b.days)}일 → 7일 환산)` : '이번 주 광고비'}</span><strong>${esc(cash(b.current))}</strong></div>
+        <div class="perf-ai-stat"><span>증감</span><strong>${esc(signedCash(b.delta))}</strong><small>${esc(fmt.signed(b.deltaPct, 1, '%'))}</small></div>
       </div>
-      <div class="perf-budget">${items || '<p class="panel-note">채널별 예산 제안이 없습니다.</p>'}</div>
+      <div class="perf-budget">${items || '<p class="panel-note">아직 채널별 예산 제안이 없어요.</p>'}</div>
       ${(b.notes || []).length ? `<p class="panel-note mt-8">${b.notes.map(esc).join(' · ')}</p>` : ''}
       ${actions ? `<div class="perf-actions">${actions}</div>` : ''}
-      ${compact ? '' : `<div class="perf-ai-foot"><span class="panel-note">AI · 참고용 · ${esc(a.model || '')}${when ? ` · ${esc(when)} 생성` : ''}${S.ai.cached ? ' (이 탭에 저장된 결과)' : ''}. 예산 총액은 서버가 기준 광고비의 ±20% 안으로 맞춥니다.</span></div>`}`;
+      ${compact ? '' : `<div class="perf-ai-foot"><span class="panel-note">AI · 참고용 · ${esc(a.model || '')}${when ? ` · ${esc(when)} 생성` : ''}${S.ai.cached ? ' (이 탭에 저장된 결과)' : ''}. 예산 총액은 서버가 기준 광고비의 ±20% 안으로 맞춰요.</span></div>`}`;
   }
   function renderAi() {
     const box = ref('ai');
@@ -320,13 +434,13 @@
     const head = `<div class="card-head"><div class="perf-ai-title"><div class="bot-symbol" aria-hidden="true">✳</div><h2>AI 제안 · 다음 주 예산 배분</h2>${badge('AI', 'purple')}</div>${again}</div>`;
     let body;
     if (st === 'nokey') {
-      body = `<p class="note">AI 미연결 — 설정 › 연결에서 OPENAI_API_KEY를 넣으면 AI 해석과 다음 주 예산 제안을 받을 수 있습니다. 지금은 위의 숫자 기준 문구만 보여 줍니다.</p>`;
+      body = `<p class="note">AI 연결 안 됨 — 설정 › 연결에서 OpenAI 키를 넣으면 AI 해석과 다음 주 예산 제안을 받을 수 있어요. 지금은 위의 숫자 기준 문구만 보여 줘요.</p>`;
     } else if (st === 'error') {
-      body = `<p class="note error">AI 제안을 받지 못했습니다: ${esc(S.ai.message)}</p><p class="panel-note mt-8">잘한 점 · 개선할 점은 숫자 기준 문구 그대로입니다.</p>`;
+      body = `<p class="note error">AI 제안을 만들지 못했어요: ${esc(S.ai.message)}</p><p class="panel-note mt-8">잘한 점 · 개선할 점은 숫자 기준 문구 그대로예요.</p>`;
     } else if (st === 'ok') {
       body = adviceHtml(S.ai.data);
     } else {
-      body = `<div class="perf-loading"><span class="spinner" aria-hidden="true"></span>AI 컨설턴트가 이 기간의 숫자를 보고 있어요… (보통 10~30초)</div>`;
+      body = `<div class="perf-loading"><span class="spinner" aria-hidden="true"></span>AI가 이 기간의 숫자를 보고 있어요… (보통 10~30초)</div>`;
     }
     box.innerHTML = head + body;
   }
@@ -344,11 +458,10 @@
         ? `<strong>${esc(M.fmtPeriod(cmp.start, cmp.end))}</strong><small>${esc(cmp.label)}</small>`
         : `<strong>데이터 없음</strong><small>비교 기간이 CSV 시작일(${esc(S.rng.start)})보다 앞이라 비교하지 않음</small>`}</div>
       <div class="perf-info-item"><span>작성일</span><strong>${esc(today.replace(/-/g, '.'))}</strong><small>${esc(u.name || '')}</small></div>
-      <div class="perf-info-item"><span>데이터</span><strong>${d.isSample ? '샘플 데이터 (가상값)' : '업로드한 CSV'}</strong>
+      <div class="perf-info-item"><span>데이터</span><strong>${d.isSample ? badge('예시', 'orange') : '올린 데이터'}</strong>
         <small>${esc(M.fmtPeriod(S.rng.start, S.rng.end))} · ${esc(fmt.num(S.rows.length))}행${!d.isSample && m.updatedBy ? ` · ${esc(m.updatedBy)}` : ''}${!d.isSample && m.filename ? ` · ${esc(m.filename)}` : ''}</small>
         <div class="perf-info-actions">
-          <a class="btn small ghost" href="/api/performance/export.csv" download>${icon('download')} 지금 데이터 받기</a>
-          ${d.isSample ? '' : `<button type="button" class="btn small ghost" data-act="reset">${icon('trash')} 샘플로 되돌리기</button>`}
+          ${d.isSample ? '' : `<button type="button" class="btn small ghost" data-act="reset">${icon('trash')} 예시로 되돌리기</button>`}
         </div></div>`;
   }
 
@@ -366,13 +479,16 @@
         foot: cmp ? cmp.label : '비교 데이터 없음'
       });
     };
+    const usd = usdOn();
+    const big = n => (usd ? fmt.num(Math.round(n / rate())) : man(n));
+    const unit = usd ? '달러' : '원';
     box.innerHTML = [
-      card('spend', '총 광고비', man(t.spend), '원', true),
-      card('revenue', '총 매출', man(t.revenue), '원'),
-      card('roas', 'ROAS', fmt.num(t.roas, 0), '%'),
+      card('spend', '총 광고비', big(t.spend), unit, true),
+      card('revenue', '총 매출', big(t.revenue), unit),
+      card('roas', 'ROAS (광고비 대비 매출)', fmt.num(t.roas, 0), '%'),
       card('conversions', '전환수', fmt.num(t.conversions), '건'),
-      card('cpa', 'CPA (전환당 비용)', fmt.num(t.cpa), '원'),
-      card('profit', '순수익 (매출 − 광고비)', man(t.profit), '원')
+      card('cpa', 'CPA (전환당 비용)', usd ? fmt.num(t.cpa / rate(), 2) : fmt.num(t.cpa), unit),
+      card('profit', '순수익 (매출 − 광고비)', big(t.profit), unit)
     ].join('');
   }
 
@@ -382,7 +498,14 @@
     const cash = n => (usd ? money(n) : fmt.krw(n));
     const best = s.best && s.best.channel, worst = s.worst && s.worst.channel;
     const head = ['채널', '광고비', '노출수', '클릭수', 'CTR', '전환수', 'CVR', 'CPA', '매출', 'ROAS', '순수익'];
-    const rows = s.channels.map(c => {
+    // 머리글 정렬 (화면만 · 보고서는 원래 순서): 누를 때마다 내림차순 ↔ 오름차순
+    const sort = !forReport && S.sort;
+    const list = sort ? s.channels.slice().sort((a, b) => {
+      const x = a[sort.k], y = b[sort.k];
+      if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1;   // 값 없는 채널은 늘 아래
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * sort.dir;
+    }) : s.channels;
+    const rows = list.map(c => {
       const sel = !forReport && S.selected.has(c.channel);
       const tags = (c.channel === best ? badge('ROAS 최고', 'green') : '') + (c.channel === worst ? badge('ROAS 최저', 'orange') : '');
       return `<tr${forReport ? '' : ` class="clickable${sel ? ' selected' : ''}" data-ch="${esc(c.channel)}" tabindex="0" aria-selected="${sel}"`}>
@@ -403,9 +526,34 @@
       <td class="num">${esc(fmt.pct(t.cvr, 2))}</td><td class="num">${esc(cash(t.cpa))}</td><td class="num">${esc(cash(t.revenue))}</td>
       <td class="num">${esc(fmt.pct(t.roas, 0))}</td><td class="num${t.profit < 0 ? ' perf-loss' : ''}">${esc(cash(t.profit))}</td></tr>`;
     return `<table class="data-table"><caption class="sr-only">채널별 성과 (${esc(M.fmtPeriod(s.start, s.end))})</caption>
-      <thead><tr>${head.map((h, i) => `<th${i ? ' class="num"' : ''} scope="col">${h}</th>`).join('')}</tr></thead>
+      <thead><tr>${head.map((h, i) => {
+        const tip = !forReport && HEAD_TIPS[h];
+        const sub = HEAD_SUB[h] ? `<span class="perf-th-sub">${HEAD_SUB[h]}</span>` : '';
+        if (forReport) return `<th${i ? ' class="num"' : ''} scope="col">${h}${sub}</th>`;
+        const k = SORT_KEYS[h], on = sort && sort.k === k;
+        const label = `<span class="perf-th-label">${tip ? `<span class="perf-tip" data-tip="${esc(tip)}">${h}</span>` : h}${sub}</span>`;
+        return `<th class="${i ? 'num' : ''}${on ? ' sorted' : ''}" scope="col"${on ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>
+          <button type="button" class="perf-th-sort" data-act="sort-col" data-k="${k}" title="누를 때마다 내림차순 ↔ 오름차순">${label}<i aria-hidden="true">${on ? (sort.dir > 0 ? '▲' : '▼') : '↕'}</i></button></th>`;
+      }).join('')}</tr></thead>
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>`;
   }
+  const SORT_KEYS = { 채널: 'channel', 광고비: 'spend', 노출수: 'impressions', 클릭수: 'clicks', CTR: 'ctr', 전환수: 'conversions',
+    CVR: 'cvr', CPA: 'cpa', 매출: 'revenue', ROAS: 'roas', 순수익: 'profit' };
+  // 영어 약자 머리글 아래에 늘 보이는 짧은 설명 (화면 · 보고서 공통)
+  const HEAD_SUB = { CTR: '클릭률', CVR: '전환율', CPA: '전환당 비용', ROAS: '광고비 대비 매출' };
+  // 채널별 성과 표 머리글에 마우스를 올리면 보이는 설명
+  const HEAD_TIPS = {
+    광고비: '이 기간에 광고에 쓴 돈',
+    노출수: '광고가 화면에 보인 횟수',
+    클릭수: '광고를 누른 횟수',
+    CTR: '클릭률 = 클릭수 ÷ 노출수. 광고를 본 사람 중 누른 비율',
+    전환수: '광고를 통해 구매(전환)한 건수',
+    CVR: '전환율 = 전환수 ÷ 클릭수. 광고를 누른 사람 중 구매한 비율',
+    CPA: '전환당 비용 = 광고비 ÷ 전환수. 구매 1건을 얻는 데 든 광고비 (낮을수록 좋음)',
+    매출: '광고를 통해 발생한 매출',
+    ROAS: '광고비 대비 매출 = 매출 ÷ 광고비. 100%보다 높으면 쓴 광고비보다 매출이 큼',
+    순수익: '매출 − 광고비. 제품 원가·배송비 등은 빼지 않은 값'
+  };
   function renderTable() {
     const box = ref('table');
     if (box && S.sum) box.innerHTML = tableHtml(false);
@@ -425,22 +573,23 @@
       <section class="card perf-info" data-ref="info" aria-label="기본 정보"></section>
       <div class="kpis six" data-ref="kpis"></div>
       <section class="card">
-        <div class="card-head"><h2>채널별 성과 <span class="muted small" data-ref="unit"></span></h2>
+        <div class="card-head"><h2><button type="button" class="perf-fold" data-act="fold-table" aria-expanded="${S.tableOpen !== false}" aria-controls="perf-table-body">채널별 성과</button><span class="head-cap" data-ref="unit"></span></h2>
           <div class="perf-table-tools">
             <div class="seg" role="group" aria-label="통화">
               <button type="button" data-cur="KRW" class="${S.currency === 'KRW' ? 'selected' : ''}" aria-pressed="${S.currency === 'KRW'}">원화</button>
               <button type="button" data-cur="USD" class="${S.currency === 'USD' ? 'selected' : ''}" aria-pressed="${S.currency === 'USD'}">달러</button>
             </div>
-            <button type="button" class="btn small" data-act="fx">${icon('refresh')} 환율 확인</button>
+            <button type="button" class="btn small" data-act="fx">${icon('refresh')} 최신 환율 받기</button>
             <span class="perf-fx" data-ref="fx-label"></span>
           </div></div>
-        <div class="table-wrap" data-ref="table"></div>
-        <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나옵니다. 여러 채널을 고를 수 있고, 다시 누르면 해제됩니다. 달러 표시는 이 표에만 적용됩니다.</p>
+        <div class="perf-insight" data-ref="insight" aria-live="polite" hidden></div>
+        <div id="perf-table-body"${S.tableOpen === false ? ' hidden' : ''}><div class="table-wrap" data-ref="table"></div>
+        <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나와요. 여러 채널을 고를 수 있고, 다시 누르면 해제돼요. 달러를 고르면 핵심 지표·차트·AI 문장도 달러로 보여요 (보고서·인쇄는 원화).</p></div>
       </section>
       <div class="grid-2">
-        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출</h2><span class="small muted">원</span></div>
+        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출<span class="head-cap" data-ref="bar-unit">단위: 원 (만 원 표시)</span></h2></div>
           <div class="perf-chart"><canvas data-ref="bar" role="img" aria-label="채널별 광고비와 매출 막대 차트 (숫자는 위 표에 있음)"></canvas></div></section>
-        <section class="card"><div class="card-head"><h2>일별 매출 추이</h2><span class="small muted" data-ref="line-note"></span></div>
+        <section class="card"><div class="card-head"><h2>일별 매출 추이<span class="head-cap" data-ref="line-note"></span></h2></div>
           <div class="perf-chart"><canvas data-ref="line" role="img" aria-label="일별 매출 추이 선 차트 (범례를 누르면 선을 숨기거나 보임)"></canvas></div></section>
       </div>
       <div class="grid-2" data-ref="review"></div>
@@ -448,6 +597,7 @@
     renderInfo();
     renderKpis();
     renderTable();
+    renderInsight();
     paintFx();
     renderReview();
     renderAi();
@@ -458,7 +608,7 @@
     const p = S.period, d = S.data;
     S.root.innerHTML = `
       <div class="perf-wrap">
-        ${d.isSample ? `<p class="note warn" role="note"><b>샘플 데이터</b> — 실제 성과가 아닌 화면 확인용 가상값입니다 (${esc(M.fmtPeriod(S.rng.start, S.rng.end))}). 매출 CSV를 올리면 실제 데이터로 바뀝니다.</p>` : ''}
+        ${d.isSample ? `<p class="note warn" role="note">${badge('예시', 'orange')} 매출 데이터를 업로드하면 실제 데이터로 바뀌어요.</p>` : ''}
         <div class="filters">
           <div class="perf-dates">
             <label><span class="sr-only">시작일</span><input class="input" type="date" data-ref="start" min="${esc(S.rng.start)}" max="${esc(S.rng.end)}" value="${esc(p.start)}"></label>
@@ -467,11 +617,12 @@
             <button type="button" class="btn small" data-act="last7">최근 7일</button>
             ${sourceBadge()}
           </div>
-          <div class="flex wrap">
-            <button type="button" class="btn small" data-act="upload">${icon('upload')} 매출 CSV 업로드</button>
-            <button type="button" class="btn small" data-act="template">${icon('download')} 양식 받기</button>
-            <button type="button" class="btn small lime" data-act="report">${icon('doc')} 보고서 만들기 · PDF</button>
-          </div>
+          ${ui.fileActions(
+            ui.fileBtn('upload', { label: '매출 데이터 업로드', type: 'CSV', act: 'upload' }) +
+            ui.fileMenu('download', { items: [
+              { label: '성과 데이터 (CSV)', href: '/api/performance/export.csv' },
+              { label: '업로드 양식 (CSV)', act: 'template' }] }) +
+            ui.fileBtn('report', { type: 'PDF', act: 'report' }))}
         </div>
         <div class="perf-wrap" data-ref="body"></div>
       </div>`;
@@ -504,24 +655,24 @@
   async function openUpload() {
     let file = null, mode = 'merge', check = null;
     const body = `<div class="part-performance"><div class="perf-upload">
-      <p class="small muted">첫 줄(제목)은 <b>${esc(M.HEADER.join(','))}</b> 순서여야 합니다. 엑셀에서 저장한 CSV(EUC-KR)도 그대로 올릴 수 있습니다.</p>
+      <p class="small muted">첫 줄(제목)은 <b>${esc(M.HEADER.join(','))}</b> 순서여야 해요. 엑셀에서 저장한 CSV(EUC-KR)도 그대로 올릴 수 있어요.</p>
       <label class="field"><span class="field-label">CSV 파일</span><input type="file" accept=".csv,text/csv" data-ref="file"></label>
       <div class="perf-preview" data-ref="preview" aria-live="polite"></div>
       <div class="field"><span class="field-label">방식</span>
         <div class="choice-grid perf-modes">
           <button type="button" class="choice selected" data-mode="merge" aria-pressed="true"><b>합치기</b><small>기존 데이터에 추가 · 같은 날짜+채널은 새 값으로</small></button>
-          <button type="button" class="choice" data-mode="replace" aria-pressed="false"><b>전체 바꾸기</b><small>기존 데이터를 지우고 새 파일로</small></button>
+          <button type="button" class="choice" data-mode="replace" aria-pressed="false"><b>전체 바꾸기</b><small>기존 데이터를 삭제하고 새 파일로</small></button>
         </div></div>
-      <p class="panel-note mt-16">덮어쓰기 전 이전 파일은 서버에 자동 보관됩니다 (backups/performance-날짜-시간.csv). ${S.data.isSample ? '지금은 샘플 데이터라, 처음 올리는 파일은 샘플과 섞지 않고 새로 시작합니다.' : ''}</p>
+      <p class="panel-note mt-16">덮어쓰기 전 이전 파일은 서버에 날짜·시간별로 자동 보관돼요. ${S.data.isSample ? '지금은 예시 데이터라, 처음 올리는 파일은 예시 데이터와 섞지 않고 새로 시작해요.' : ''}</p>
     </div></div>`;
     const showPreview = (el, html) => { el.querySelector('[data-ref="preview"]').innerHTML = html; };
     const res = await ui.modal({
-      title: '매출 CSV 업로드',
+      title: '매출 데이터 업로드 (CSV)',
       body,
       actions: [
         { label: '취소', value: null },
         {
-          label: '올리기', value: 'ok', tone: 'lime',
+          label: '업로드', value: 'ok', tone: 'lime',
           onClick: el => {
             if (!file) { showPreview(el, '<p class="note error">CSV 파일을 골라 주세요.</p>'); return false; }
             if (check && !check.ok) return false;
@@ -535,9 +686,9 @@
           file = input.files && input.files[0] ? input.files[0] : null;
           check = null;
           if (!file) { showPreview(el, ''); return; }
-          if (file.size > 5 * 1024 * 1024) { check = { ok: false }; showPreview(el, '<p class="note error">파일이 너무 큽니다 (5MB 이하).</p>'); return; }
+          if (file.size > 5 * 1024 * 1024) { check = { ok: false }; showPreview(el, '<p class="note error">파일이 너무 커요 (5MB 이하).</p>'); return; }
           let r;
-          try { r = M.parseCsv(decodeText(await readBytes(file))); } catch (e) { r = { ok: false, error: '파일을 읽지 못했습니다.', errors: [] }; }
+          try { r = M.parseCsv(decodeText(await readBytes(file))); } catch (e) { r = { ok: false, error: '파일을 읽지 못했어요.', errors: [] }; }
           check = r;
           if (!r.ok) {
             const more = r.errors.length > 1 ? ` 외 ${r.errors.length - 1}곳` : '';
@@ -562,7 +713,7 @@
       fd.append('mode', mode);
       const r = await REBOOT.upload('/api/performance/upload', fd);
       const x = r.result || {};
-      toast(`업로드 완료: 전체 ${fmt.num(x.rows)}행 (새 행 ${fmt.num(x.added)} · 바꾼 행 ${fmt.num(x.updated)})`);
+      toast(`파일을 올렸어요: 전체 ${fmt.num(x.rows)}행 (새 행 ${fmt.num(x.added)} · 바꾼 행 ${fmt.num(x.updated)})`);
       weekP = null;
       applyData(r);
       const inside = S.period && S.period.start >= S.rng.start && S.period.end <= S.rng.end;
@@ -571,28 +722,28 @@
       renderMain();
       scheduleAdvice();
     } catch (e) {
-      toast(e.message, 'error');
+      toast(`파일을 올리지 못했어요: ${e.message}`, 'error');
       busy(btn, false);
     }
   }
   async function resetToSample() {
-    const ok = await ui.confirm('업로드한 성과 데이터를 지우고 샘플 데이터로 되돌릴까요? 지금 파일은 서버 백업 폴더에 보관됩니다.', { ok: '샘플로 되돌리기', danger: true });
+    const ok = await ui.confirm('올린 성과 데이터를 삭제하고 예시 데이터로 되돌릴까요? 지금 파일은 서버에 따로 보관돼요.', { ok: '예시로 되돌리기', danger: true });
     if (!ok) return;
     try {
       await REBOOT.api('/api/performance', undefined, { method: 'DELETE' });
-      toast('샘플 데이터로 되돌렸습니다. 이전 파일은 백업에 보관했습니다.');
+      toast('예시 데이터로 되돌렸어요. 이전 파일은 서버에 따로 보관했어요.');
       weekP = null;
       await load();
-    } catch (e) { toast(e.message, 'error'); }
+    } catch (e) { toast(`예시로 되돌리지 못했어요: ${e.message}`, 'error'); }
   }
 
   /* ───────── 보고서 (A4) ───────── */
   function reportSummaryText() {
     const s = S.sum, t = s.totals;
     const top = s.channels.slice().sort((a, b) => b.revenue - a.revenue)[0];
-    const parts = [`총 매출 ${fmt.krw(t.revenue)}, 광고비 ${fmt.krw(t.spend)}으로 ROAS ${fmt.pct(t.roas, 0)}를 기록했습니다.`,
-      `전환수는 ${fmt.num(t.conversions)}건, 순수익(매출 − 광고비)은 ${fmt.krw(t.profit)}입니다.`];
-    if (top && t.revenue) parts.push(`${top.channel}이(가) 매출의 ${fmt.pct(top.revenue / t.revenue * 100, 1)}를 차지합니다.`);
+    const parts = [`총 매출 ${fmt.krw(t.revenue)}, 광고비 ${fmt.krw(t.spend)}으로 ROAS ${fmt.pct(t.roas, 0)}를 기록했어요.`,
+      `전환수는 ${fmt.num(t.conversions)}건, 순수익(매출 − 광고비)은 ${fmt.krw(t.profit)}이에요.`];
+    if (top && t.revenue) parts.push(`${top.channel}이(가) 매출의 ${fmt.pct(top.revenue / t.revenue * 100, 1)}를 차지해요.`);
     if (s.compare && s.change.revenue != null) parts.push(`${s.compare.label} 매출 ${fmt.signed(s.change.revenue, 1, '%')}, ROAS ${fmt.signed(s.change.roas, 1, '%')}.`);
     return parts.join(' ');
   }
@@ -603,8 +754,8 @@
       return `<div class="perf-report-kpi"><span>${esc(label)}</span><strong>${esc(value)}</strong>${deltaHtml(key, d) || `<span class="perf-delta none">${s.compare ? '—' : '비교 없음'}</span>`}</div>`;
     };
     return `<div class="perf-report-kpis">
-      ${item('spend', '총 광고비', fmt.krw(t.spend))}${item('revenue', '총 매출', fmt.krw(t.revenue))}${item('roas', 'ROAS', fmt.pct(t.roas, 0))}
-      ${item('conversions', '전환수', fmt.num(t.conversions) + '건')}${item('cpa', 'CPA', fmt.krw(t.cpa))}${item('profit', '순수익', fmt.krw(t.profit))}</div>`;
+      ${item('spend', '총 광고비', fmt.krw(t.spend))}${item('revenue', '총 매출', fmt.krw(t.revenue))}${item('roas', 'ROAS (광고비 대비 매출)', fmt.pct(t.roas, 0))}
+      ${item('conversions', '전환수', fmt.num(t.conversions) + '건')}${item('cpa', 'CPA (전환당 비용)', fmt.krw(t.cpa))}${item('profit', '순수익', fmt.krw(t.profit))}</div>`;
   }
   function reportAi() {
     const box = ref('report-ai');
@@ -614,8 +765,8 @@
     const num = M.insights(S.sum);
     const tag = ai ? `${badge('AI', 'purple')}<span class="tiny muted">참고용</span>` : badge('숫자 기준');
     const an = (ai && ai.analysis) || {};
-    rev.innerHTML = `<div class="perf-report-box"><h3>잘한 점 ${an.good ? tag : badge('숫자 기준')}</h3><p>${esc(an.good || num.good)}</p></div>
-      <div class="perf-report-box"><h3>개선할 점 ${an.improve ? tag : badge('숫자 기준')}</h3><p>${esc(an.improve || num.improve)}</p></div>`;
+    rev.innerHTML = `<div class="perf-report-box"><h3>잘한 점 ${an.good ? tag : badge('숫자 기준')}</h3>${reviewPlain(an.good || num.good)}</div>
+      <div class="perf-report-box"><h3>개선할 점 ${an.improve ? tag : badge('숫자 기준')}</h3>${reviewPlain(an.improve || num.improve)}</div>`;
     if (ai) {
       const b = ai.budget || { items: [] };
       box.innerHTML = `${ai.overview ? `<p>${esc(ai.overview)}</p>` : ''}
@@ -624,11 +775,11 @@
           <td class="num">${esc(signedKrw(i.delta))}</td><td class="num">${esc(fmt.pct(i.share, 0))}</td><td>${esc(i.reason)}</td></tr>`).join('')}</tbody>
         <tfoot><tr><td>합계</td><td class="num">${esc(fmt.krw(b.total))}</td><td class="num">${esc(fmt.krw(b.current))}</td><td class="num">${esc(signedKrw(b.delta))}</td><td class="num">100%</td><td></td></tr></tfoot></table>
         ${(ai.actions || []).length ? `<ol>${ai.actions.map(x => `<li><b>${esc(x.title)}</b> — ${esc(x.detail)}${x.season ? ` (${esc(x.season)})` : ''}</li>`).join('')}</ol>` : ''}
-        <p class="panel-note mt-8">AI 제안 · 참고용 (${esc(ai.model || '')}). 예산 총액은 기준 광고비의 ±20% 안으로 맞췄습니다. 최종 결정은 담당자가 합니다.</p>`;
+        <p class="panel-note mt-8">AI 제안 · 참고용 (${esc(ai.model || '')}). 예산 총액은 기준 광고비의 ±20% 안으로 맞췄어요. 최종 결정은 담당자가 해요.</p>`;
     } else if (S.ai.state === 'loading' || S.ai.state === 'idle') {
-      box.innerHTML = `<div class="perf-loading no-print"><span class="spinner" aria-hidden="true"></span>AI 제안을 받는 중…</div>`;
+      box.innerHTML = `<div class="perf-loading no-print"><span class="spinner" aria-hidden="true"></span>AI 제안을 만드는 중…</div>`;
     } else {
-      box.innerHTML = `<p class="note">${S.ai.state === 'nokey' ? 'AI 미연결 — 설정 › 연결에서 OPENAI_API_KEY를 넣으면 다음 주 예산·실행 과제 제안이 들어갑니다.' : `AI 제안을 받지 못했습니다: ${esc(S.ai.message || '')}`}</p>`;
+      box.innerHTML = `<p class="note">${S.ai.state === 'nokey' ? 'AI 연결 안 됨 — 설정 › 연결에서 OpenAI 키를 넣으면 다음 주 예산·실행 과제 제안이 들어가요.' : `AI 제안을 만들지 못했어요: ${esc(S.ai.message || '')}`}</p>`;
     }
   }
   function reportOptions(custom) {
@@ -649,12 +800,11 @@
       return;
     }
     sheet.innerHTML = `
-      <div class="between"><strong class="perf-wordmark">REB∞T</strong>${d.isSample ? badge('샘플 데이터 · 가상값', 'orange') : badge('WEEKLY REPORT', 'dark')}</div>
+      <div class="between"><strong class="perf-wordmark">REB∞T</strong>${d.isSample ? badge('예시', 'orange') : badge('WEEKLY REPORT', 'dark')}</div>
       <p class="eyebrow">WEEKLY MARKETING REPORT</p>
       <h1>미국 채널 주간 성과 보고서</h1>
       <p class="muted small">${esc(M.fmtPeriod(s.start, s.end))} (${esc(s.days)}일) · 비교 ${s.compare ? `${esc(M.fmtPeriod(s.compare.start, s.compare.end))} (${esc(s.compare.label)})` : '없음 (CSV 시작일 이전)'} · 작성 ${esc(u.name || '')} · ${esc(REBOOT.today().replace(/-/g, '.'))}</p>
       <div class="perf-report-rule"></div>
-      ${d.isSample ? '<p class="note warn mt-16">이 보고서는 샘플(가상) 데이터로 만들었습니다. 실제 성과가 아닙니다.</p>' : ''}
       <h2>01. 핵심 지표 요약</h2>
       ${reportKpis()}
       <p>${esc(reportSummaryText())}</p>
@@ -669,7 +819,7 @@
       <div class="perf-report-two" data-ref="report-review"></div>
       <h2>05. 다음 주 예산 · 실행 계획</h2>
       <div data-ref="report-ai"></div>
-      <p class="panel-note perf-report-foot">이 보고서는 ${d.isSample ? '샘플(가상) 데이터' : `업로드한 성과 CSV${m.filename ? ` (${esc(m.filename)})` : ''}`}를 바탕으로 자동으로 만들었습니다. 지표 계산: ROAS = 매출 ÷ 광고비 × 100, CPA = 광고비 ÷ 전환수, 합계는 채널 합계로 다시 계산. AI 해석은 참고용이며 최종 판단은 담당자가 합니다.</p>`;
+      <p class="panel-note perf-report-foot">이 보고서는 ${d.isSample ? '예시 데이터' : `올린 성과 데이터${m.filename ? ` (${esc(m.filename)})` : ''}`}를 바탕으로 자동으로 만들었어요. 지표 계산: ROAS(광고비 대비 매출) = 매출 ÷ 광고비 × 100, CPA(전환당 비용) = 광고비 ÷ 전환수, 합계는 채널 합계로 다시 계산. AI 해석은 참고용이고 최종 판단은 담당자가 해요.</p>`;
     S.selected.clear();
     drawBar(ref('bar'));
     drawLine(ref('line'));
@@ -687,7 +837,7 @@
       <div class="perf-report-bar no-print">
         <a class="btn" href="/dashboard/performance?start=${encodeURIComponent(S.period.start)}&end=${encodeURIComponent(S.period.end)}" data-ref="back">← 성과분석으로</a>
         <label>보고 기간 <select class="input" data-ref="week">${opts.map((o, i) => `<option value="${i}"${o.start === S.period.start && o.end === S.period.end ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select></label>
-        <button type="button" class="btn lime" data-act="print">${icon('download')} 인쇄 · PDF 저장</button>
+        ${ui.fileBtn('download', { label: 'PDF 다운로드', type: '인쇄', act: 'print', title: '브라우저 인쇄 창에서 PDF로 저장' })}
       </div>
       <article class="perf-report" data-ref="sheet" aria-label="주간 성과 보고서"></article>`;
     ref('week').addEventListener('change', e => {
@@ -709,17 +859,17 @@
 
   /* ───────── 시작 ───────── */
   async function load() {
-    S.root.innerHTML = '<div class="skeleton" style="height:120px"></div>';
+    S.root.innerHTML = '<div class="skeleton perf-skeleton"></div>';
     try {
       applyData(await REBOOT.api('/api/performance/data'));
     } catch (e) {
-      S.root.innerHTML = `<section class="card"><p class="note error">성과 데이터를 불러오지 못했습니다: ${esc(e.message)}</p></section>`;
+      S.root.innerHTML = `<section class="card"><p class="note error">성과 데이터를 불러오지 못했어요. ${esc(e.message)}</p></section>`;
       return;
     }
     if (!S.rows.length) {
-      S.root.innerHTML = `<section class="card">${ui.empty('성과 데이터가 아직 없어요. 매출 CSV를 올려 주세요.', 'upload')}
-        <div class="flex mt-16" style="justify-content:center"><button type="button" class="btn lime" data-act="upload">${icon('upload')} 매출 CSV 업로드</button>
-        <button type="button" class="btn" data-act="template">${icon('download')} 양식 받기</button></div></section>`;
+      S.root.innerHTML = `<section class="card">${ui.empty('아직 성과 데이터가 없어요. 매출 데이터 업로드를 눌러 시작하세요.', 'upload')}
+        <div class="flex mt-16 perf-center">${ui.fileBtn('upload', { label: '매출 데이터 업로드', type: 'CSV', act: 'upload' })}
+        ${ui.fileBtn('download', { label: '양식 다운로드', type: 'CSV', act: 'template' })}</div></section>`;
       return;
     }
     if (S.view === 'report') {
@@ -743,7 +893,19 @@
       else if (a === 'template') ui.download('reboot-performance-template.csv', ui.csv([M.HEADER]), 'text/csv;charset=utf-8');
       else if (a === 'report') global.location.href = `/dashboard/performance?view=report&start=${encodeURIComponent(S.period.start)}&end=${encodeURIComponent(S.period.end)}`;
       else if (a === 'fx') loadFx(true, act);
+      else if (a === 'fold-table') {   // 채널별 성과 표 접기·펴기
+        S.tableOpen = act.getAttribute('aria-expanded') !== 'true';
+        act.setAttribute('aria-expanded', String(S.tableOpen));
+        S.root.querySelector('#perf-table-body').hidden = !S.tableOpen;
+      }
       else if (a === 'ai-again') scheduleAdvice(true);
+      else if (a === 'insight-again') scheduleInsight(true);
+      else if (a === 'sort-col') {
+        // 같은 칸을 다시 누르면 방향만 바뀜 · 다른 칸은 채널 이름은 가나다순, 숫자는 큰 값부터
+        const k = act.dataset.k;
+        S.sort = S.sort && S.sort.k === k ? { k, dir: -S.sort.dir } : { k, dir: k === 'channel' ? 1 : -1 };
+        renderTable();
+      }
       else if (a === 'reset') resetToSample();
       else if (a === 'print') global.print();
       return;
@@ -752,7 +914,7 @@
     if (cur) {
       S.currency = cur.dataset.cur === 'USD' ? 'USD' : 'KRW';
       S.root.querySelectorAll('[data-cur]').forEach(b => { b.classList.toggle('selected', b === cur); b.setAttribute('aria-pressed', String(b === cur)); });
-      renderTable();
+      renderCurrency();
       return;
     }
     const tr = e.target.closest('tr[data-ch]');
@@ -773,7 +935,7 @@
     S.root = root;
     root.classList.add('part-performance');
     if (!M) {
-      root.innerHTML = '<p class="part-error">성과분석 계산 파일(tabs/performance/static/metrics.js)을 불러오지 못했습니다.</p>';
+      root.innerHTML = '<p class="part-error">성과분석 계산 기능을 불러오지 못했어요. 페이지를 새로고침해 주세요.</p>';
       return;
     }
     S.view = params().get('view') === 'report' ? 'report' : 'main';
@@ -794,7 +956,7 @@
   }
 
   REBOOT.register({
-    id: 'performance', label: '성과분석', order: 70,
+    id: 'performance', label: '성과 분석', order: 70,
     title: '숫자에서 찾는, 다음 성장의 힌트.',
     subtitle: '채널별 성과를 비교하고, 다음 캠페인을 위한 인사이트를 발견하세요.',
     render

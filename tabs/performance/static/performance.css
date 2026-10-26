@@ -36,9 +36,9 @@
 .part-performance .perf-info-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 
 /* 표 */
-.part-performance .perf-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 8px; vertical-align: middle; flex-shrink: 0; }
+.part-performance .perf-swatch { display: inline-block; width: 9px; height: 9px; border-radius: var(--radius-xs); margin-right: 8px; vertical-align: middle; flex-shrink: 0; }
 .part-performance .perf-ch { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; white-space: nowrap; }
-.part-performance .perf-delta { display: block; font-size: 10px; margin-top: 3px; font-weight: 550; }
+.part-performance .perf-delta { display: block; font-size: 11px; margin-top: 3px; font-weight: 550; }
 .part-performance .perf-delta.good { color: var(--green); }
 .part-performance .perf-delta.bad { color: var(--red); }
 .part-performance .perf-delta.neutral, .part-performance .perf-delta.none { color: var(--muted); }
@@ -48,7 +48,7 @@
 .part-performance .perf-fx.is-default { color: var(--orange); }
 
 /* 차트 */
-.part-performance .perf-chart { position: relative; height: 270px; }
+.part-performance .perf-chart { position: relative; height: 280px; }
 .part-performance .perf-chart.small { height: 210px; }
 .part-performance .perf-chart canvas { display: block; }
 
@@ -61,16 +61,16 @@
 .part-performance .perf-ai-title { display: flex; align-items: center; gap: 10px; }
 .part-performance .perf-overview { font-size: 13px; line-height: 1.8; color: var(--ink-2); }
 .part-performance .perf-ai-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
-.part-performance .perf-ai-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 14px 16px; }
+.part-performance .perf-ai-stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; }
 .part-performance .perf-ai-stat span { display: block; font-size: 11px; color: var(--muted); }
-.part-performance .perf-ai-stat strong { display: block; font-size: 19px; margin-top: 6px; letter-spacing: -.5px; color: var(--ink); }
-.part-performance .perf-ai-stat small { display: block; font-size: 10px; color: var(--muted-2); margin-top: 4px; }
-.part-performance .perf-budget { background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 6px 16px; }
+.part-performance .perf-ai-stat strong { display: block; font-size: 20px; margin-top: 6px; letter-spacing: -.5px; color: var(--ink); }
+.part-performance .perf-ai-stat small { display: block; font-size: 11px; color: var(--muted-2); margin-top: 4px; }
+.part-performance .perf-budget { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 6px 16px; }
 .part-performance .perf-budget-row { display: grid; grid-template-columns: minmax(90px, 1.1fr) minmax(90px, .9fr) minmax(80px, .8fr) minmax(120px, 1.6fr); gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
 .part-performance .perf-budget-row:last-child { border-bottom: 0; }
 .part-performance .perf-budget-row .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .part-performance .perf-budget-row p { grid-column: 1 / -1; font-size: 11px; color: var(--muted); margin-top: -4px; }
-.part-performance .perf-share { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--muted); }
+.part-performance .perf-share { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
 .part-performance .perf-share .progress-track { flex: 1; height: 7px; }
 .part-performance .perf-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
 .part-performance .perf-actions .result h3 { font-size: 13px; margin-bottom: 8px; }
@@ -78,10 +78,12 @@
 .part-performance .perf-actions .result .badge { margin-top: 10px; }
 .part-performance .perf-ai-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .part-performance .perf-loading { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); padding: 8px 0; }
+.part-performance .perf-skeleton { height: 120px; }
+.part-performance .perf-center { justify-content: center; }
 
 /* 업로드 창 (모달 안 내용을 .part-performance로 감싸서 범위 유지) */
 .part-performance .perf-upload .choice { flex-direction: column; align-items: flex-start; gap: 4px; }
-.part-performance .perf-upload .choice small { font-size: 10px; color: var(--muted); }
+.part-performance .perf-upload .choice small { font-size: 11px; color: var(--muted); }
 .part-performance .perf-upload .perf-modes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .part-performance .perf-upload .perf-preview { margin-top: 12px; }
 
@@ -89,24 +91,26 @@
 .part-performance .perf-report-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .part-performance .perf-report-bar label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .part-performance .perf-report-bar select { width: auto; min-width: 230px; }
-.part-performance .perf-report { max-width: 210mm; margin: 0 auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: 6px; padding: 16mm 15mm 14mm; color: var(--ink); box-shadow: var(--shadow); }
+/* PDF 다운로드 — 옆 '← 성과분석으로'와 같은 크기 */
+.part-performance .perf-report-bar .btn.small { padding: 10px 15px; font-size: 12px; }
+.part-performance .perf-report { max-width: 210mm; margin: 0 auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-xs); padding: 16mm 15mm 14mm; color: var(--ink); box-shadow: var(--shadow); }
 .part-performance .perf-wordmark { font-size: 26px; font-weight: 850; letter-spacing: -1px; }
 .part-performance .perf-report .eyebrow { margin-top: 34px; }
 .part-performance .perf-report h1 { font-size: 26px; margin: 10px 0 8px; letter-spacing: -1px; }
 .part-performance .perf-report-rule { height: 3px; background: var(--lime); margin: 22px 0 6px; }
 .part-performance .perf-report h2 { font-size: 15px; margin: 28px 0 12px; break-after: avoid; }
-.part-performance .perf-report p { font-size: 12.5px; }
+.part-performance .perf-report p { font-size: 12px; }
 .part-performance .perf-report-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-.part-performance .perf-report-kpi { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; }
-.part-performance .perf-report-kpi span { display: block; font-size: 10px; color: var(--muted); }
-.part-performance .perf-report-kpi strong { display: block; font-size: 16px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.part-performance .perf-report-kpi { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 13px; }
+.part-performance .perf-report-kpi span { display: block; font-size: 11px; color: var(--muted); }
+.part-performance .perf-report-kpi strong { display: block; font-size: 15px; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .part-performance .perf-report .data-table { font-size: 11px; }
 .part-performance .perf-report .data-table th, .part-performance .perf-report .data-table td { padding: 8px 9px; }
 .part-performance .perf-report-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.part-performance .perf-report-box { border: 1px solid var(--line); border-radius: 9px; padding: 13px 15px; break-inside: avoid; }
+.part-performance .perf-report-box { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 13px 15px; break-inside: avoid; }
 .part-performance .perf-report-box h3 { font-size: 12px; margin-bottom: 8px; display: flex; gap: 6px; align-items: center; }
 .part-performance .perf-report-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.part-performance .perf-report ol { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.8; }
+.part-performance .perf-report ol { margin: 8px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.8; }
 .part-performance .perf-report-foot { margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--line-2); }
 
 @media (max-width: 1200px) {
@@ -135,3 +139,39 @@
   .part-performance .perf-report h2 { margin-top: 20px; }
   .part-performance .perf-report table, .part-performance .perf-report-kpis { break-inside: avoid; }
 }
+
+/* 채널별 성과 표 머리글 설명 말풍선 */
+.perf-tip { position: relative; cursor: help; border-bottom: 1px dotted currentColor; outline-offset: 2px; }
+.perf-tip::after {
+  content: attr(data-tip); position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
+  width: max-content; max-width: 240px; padding: 8px 10px; border-radius: var(--radius-sm);
+  background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 500; line-height: 1.45;
+  text-align: left; white-space: normal; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transition: opacity .12s; pointer-events: none;
+}
+.perf-tip:hover::after, .perf-tip:focus-visible::after { opacity: 1; visibility: visible; }
+
+/* 채널별 성과 표 접기·펴기 (제목 버튼) */
+.perf-fold { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-xs); }
+.perf-fold::before { content: '▾'; font-size: 12px; transition: transform .15s; }
+.perf-fold[aria-expanded="false"]::before { transform: rotate(-90deg); }
+.perf-fold:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+/* AI 인사이트 (채널별 성과 표 위, 두괄식) */
+.part-performance .perf-insight { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2, rgba(0, 0, 0, .03)); }
+.part-performance .perf-insight-body { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.part-performance .perf-insight-head { margin: 0 0 6px; font-size: 13px; line-height: 1.6; color: var(--ink); }
+.part-performance .perf-insight-lines { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.7; color: var(--ink-2); }
+.part-performance .perf-insight-label { display: inline-block; min-width: 34px; margin-right: 8px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.part-performance .perf-insight strong { font-weight: 700; color: var(--ink); }
+
+/* 채널별 성과 표 머리글 정렬: 누를 때마다 내림차순 ↔ 오름차순 (지금 기준은 라임 세모) */
+.part-performance .perf-th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.part-performance .perf-th-sort i { font-style: normal; font-size: 11px; color: var(--muted-2); min-width: 12px; text-align: center; }
+.part-performance .perf-th-sort:hover i { color: var(--ink); }
+.part-performance th.sorted { color: var(--ink); }
+/* 영어 약자 머리글(CTR·CVR·CPA·ROAS) 아래 짧은 설명 — 화면 · 보고서 공통 */
+.part-performance .perf-th-label { display: inline-flex; flex-direction: column; align-items: flex-start; }
+.part-performance th.num .perf-th-label { align-items: flex-end; }
+.part-performance .perf-th-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.part-performance th.sorted .perf-th-sort i { color: var(--accent); font-size: 12px; -webkit-text-stroke: .6px var(--lime-line); }

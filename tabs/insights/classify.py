@@ -62,6 +62,7 @@ def review_sentiment(text, rating=None):
 
 _Q_START = re.compile(r"^\s*(how|what|where|when|why|which|who|does|do|is|are|can|could|should|would|will|did|has|have|any|anyone)\b", re.I)
 QUESTION_TOPICS = [
+    ("compare", "다른 제품과 비교", [" vs", "versus", "better than", "instead of", "compared to", "compare", "difference between"]),
     ("buy", "어디서 사나요 (구매처)", ["where", "buy", "purchase", "available", "amazon", "store", "walmart", "target", "costco",
                                     "link", "order", "ship", "sell", "find"]),
     ("works", "정말 효과가 있나요", ["work", "works", "effective", "legit", "actually", "really help", "does it help", "result"]),
@@ -74,16 +75,25 @@ QUESTION_TOPICS = [
                                          "vegan"]),
 ]
 QUESTION_LABEL = {k: label for k, label, _ in QUESTION_TOPICS}
-QUESTION_LABEL["other"] = "기타 질문"
+# 숙취 공감 · 한탄 · 농담 — 제품 이야기가 아님
+NOISE = ["anyone else", "who else", "never drinking again", "so hungover", "lol", "lmao"]
+# 해결책 · 제품 단어 — '숙취' · '술'만 나오는 잡담은 통과시키지 않음
+SOLUTION_WORDS = ["cure", "remedy", "supplement", "jelly", "shot", "pill", "tablet", "capsule", "stick", "packet", "electrolyte",
+                  "dhm", "product", "brand", "this drink", "drink it", "tried", "try it", "taste", "flavor", "price", "buy", "korean",
+                  "숙취해소", "효과"]
+# 영상 제목 — 해결책 · 제품 · 리뷰 영상만 댓글을 모음 (설정의 자사 이름도 함께 봄)
+VIDEO_WORDS = ["cure", "remedy", "supplement", "jelly", "shot", "pill", "electrolyte", "dhm", "drink", "drinks", "review",
+               "tested", "tried", "vs", "best", "korean", "recovery", "숙취해소"]
+MIN_WORDS = 5
 
-RELEVANT = ["hangover", "hungover", "drunk", "drink", "drinking", "alcohol", "booze", "beer", "soju", "wine", "liquor", "party",
-            "jelly", "korean", "remedy", "cure", "headache", "nausea", "liver", "electrolyte", "hydrat", "morning after",
-            "taste", "work", "buy", "price", "tried", "try", "숙취", "술"]
+_NOISE_RE = _pattern(NOISE)
+_SOLUTION_RE = _pattern(SOLUTION_WORDS)
 
 
 def is_question(text):
+    """질문 모양(? · 의문사)이면서 구매 전 궁금증 주제에 걸려야 질문."""
     t = str(text or "").strip()
-    return "?" in t or bool(_Q_START.match(t))
+    return ("?" in t or bool(_Q_START.match(t))) and bool(question_topic(t))
 
 
 def question_topic(text):
@@ -91,15 +101,20 @@ def question_topic(text):
     for key, _label, words in QUESTION_TOPICS:
         if any(w in t for w in words):
             return key
-    return "other"
+    return ""
 
 
 def is_relevant(text):
-    """유튜버 칭찬 · 잡담처럼 제품 · 숙취와 무관한 댓글은 뺌 (규칙 · 대략)."""
-    t = str(text or "").lower()
-    if len(t.split()) < 3:
+    """공감 · 잡담 · 유튜버 칭찬은 빼고, 해결책 · 제품 이야기이거나 제품 질문인 댓글만 (규칙 · 대략)."""
+    t = str(text or "")
+    if len(t.split()) < MIN_WORDS or _NOISE_RE.search(t):
         return False
-    return any(w in t for w in RELEVANT)
+    return bool(_SOLUTION_RE.search(t)) or is_question(t)
+
+
+def video_on_topic(title, extra=()):
+    """영상 제목에 해결책 · 제품 · 리뷰 단어(또는 자사 이름)가 있는지."""
+    return bool(_pattern(list(VIDEO_WORDS) + [w for w in extra if w]).search(str(title or "")))
 
 
 def classify_comment(text):

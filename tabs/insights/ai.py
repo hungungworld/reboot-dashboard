@@ -6,8 +6,9 @@
 """
 import hashlib
 import json
+from pathlib import Path
 
-from server.core.ai import openai_json, openai_model, openai_ready
+from server.core.ai import AIError, openai_json, openai_model, openai_ready
 from server.extensions import db
 from .classify import QUESTION_TOPICS, TOPICS
 from .models import AICache, load_json
@@ -102,94 +103,162 @@ def classify_reviews(rows):
     return {str(i["id"]): i for i in out.get("items") or []}
 
 
-COMMENT_TOPICS = [k for k, _l, _w in QUESTION_TOPICS] + ["other", "none"]
+TRANSLATE_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["text_ko"],
+    "properties": {"text_ko": {"type": "string"}},
+}
+
+
+def is_korean(text):
+    """한글이 글자의 30% 이상이면 한국어 (번역하지 않음)."""
+    letters = [c for c in str(text or "") if c.isalpha()]
+    return bool(letters) and sum(1 for c in letters if "가" <= c <= "힣") / len(letters) >= 0.3
+
+
+def translate_review(text):
+    """리뷰 원문 → 한국어 번역. 같은 원문은 저장된 번역을 씀 (비용 없음). 한국어면 그대로."""
+    text = str(text or "")[:4000]
+    if is_korean(text):
+        return text
+    payload = {"text": text}
+    hit, _ = cache_get("review_ko", payload)
+    if hit and hit.get("text_ko"):
+        return hit["text_ko"]
+    system = ("구매자 리뷰를 자연스러운 한국어로 번역해. 뜻을 더하거나 빼지 말고 말투(구어 · 이모지)는 살려. 번역문만 text_ko에 넣어. " + SAFE)
+    out = openai_json(system, payload, schema=TRANSLATE_SCHEMA, schema_name="review_ko", part=PART, action="리뷰 번역",
+                      max_tokens=2000)
+    text_ko = str(out.get("text_ko") or "")[:6000]
+    if text_ko:
+        cache_put("review_ko", payload, {"text_ko": text_ko})
+    return text_ko
+
+
+COMMENT_TOPICS = [k for k, _l, _w in QUESTION_TOPICS] + ["none"]
+# reason을 먼저 쓰게 함 (판단 근거 → 답 순서, CoT)
 COMMENT_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],
     "properties": {"items": {"type": "array", "items": {
-        "type": "object", "additionalProperties": False, "required": ["id", "relevant", "question", "topic"],
-        "properties": {"id": {"type": "string"}, "relevant": {"type": "boolean"}, "question": {"type": "boolean"},
-                       "topic": {"type": "string", "enum": COMMENT_TOPICS}}}}},
+        "type": "object", "additionalProperties": False, "required": ["id", "reason", "relevant", "question", "topic"],
+        "properties": {"id": {"type": "string"}, "reason": {"type": "string"}, "relevant": {"type": "boolean"},
+                       "question": {"type": "boolean"}, "topic": {"type": "string", "enum": COMMENT_TOPICS}}}}},
 }
+COMMENT_EXAMPLES = Path(__file__).parent / "data" / "comment_examples.json"
 
 
-def classify_comments(rows):
-    """rows: [{id, text}] → {id: {relevant, question, topic}}."""
+def comment_examples():
+    """사람이 정답을 붙인 댓글 100건 (use=example 24건은 퓨샷 예시, use=test는 정확도 검증용)."""
+    return json.loads(COMMENT_EXAMPLES.read_text(encoding="utf-8"))["items"]
+
+
+def _few_shot_text():
+    lines = []
+    for x in comment_examples():
+        if x["use"] != "example":
+            continue
+        ans = {"reason": x["reason"], "relevant": x["relevant"], "question": x["question"], "topic": x["topic"]}
+        lines.append(f"- {json.dumps(x['text'], ensure_ascii=False)} → {json.dumps(ans, ensure_ascii=False)}")
+    return "\n".join(lines)
+
+
+def classify_comments(rows, few_shot=True):
+    """rows: [{id, text}] → {id: {reason, relevant, question, topic}}. few_shot=False는 정확도 검증의 비교용."""
     topics = ", ".join(f"{k}={label}" for k, label, _w in QUESTION_TOPICS)
-    system = ("유튜브 댓글이 숙취 · 숙취해소 제품과 관련 있는지(relevant), 구매 전 궁금증을 묻는 질문인지(question) 판단하고 "
-              f"질문이면 주제(topic)를 골라: {topics}, 그 밖의 질문=other, 질문이 아니면 none. "
-              "유튜버 칭찬 · 잡담 · 광고는 relevant=false.")
+    system = ("유튜브 댓글이 숙취해소 제품 · 해결책과 관련 있는지(relevant), 제품을 사기 전 궁금증을 묻는 질문인지(question) 판단하고 "
+              f"질문이면 주제(topic)를 골라: {topics}. 어느 주제에도 맞지 않으면 question=false, topic=none. "
+              "숙취 공감 · 한탄 · 농담('anyone else hungover?' 등), 유튜버 칭찬 · 잡담 · 광고는 relevant=false. "
+              "relevant=false면 question=false, topic=none. "
+              "각 댓글마다 먼저 reason에 판단 근거를 한국어 한 문장(20자 안팎)으로 쓰고, 그 근거에 맞게 나머지 칸을 채워.")
+    if few_shot:
+        system += "\n\n사람이 정답을 붙인 예시 (댓글 → 답):\n" + _few_shot_text()
     out = openai_json(system, {"comments": rows}, schema=COMMENT_SCHEMA, schema_name="voc", part=PART,
-                      action="VOC(유튜브 댓글) 분류", max_tokens=4000)
+                      action="VOC(유튜브 댓글) 분류" + ("" if few_shot else " · 예시 없이 (정확도 검증)"), max_tokens=8000)
     return {str(i["id"]): i for i in out.get("items") or []}
 
 
-# ───────── 경쟁사: 상품 위치 분류 · 브랜드 분석 ─────────
+# ───────── 경쟁사: 제형 분류 · 브랜드 분석 · 웹 검색 보충 ─────────
 
-POSITION_SCHEMA = {
+FORM_SCHEMA = {
     "type": "object", "additionalProperties": False, "required": ["items"],
     "properties": {"items": {"type": "array", "items": {
-        "type": "object", "additionalProperties": False, "required": ["id", "form", "timing", "wellness"],
+        "type": "object", "additionalProperties": False, "required": ["id", "form"],
         "properties": {"id": {"type": "string"},
-                       "form": {"type": "string", "enum": ["liquid", "solid", "unknown"]},
-                       "timing": {"type": "string", "enum": ["pre", "post", "both", "unknown"]},
-                       "wellness": {"type": "boolean"}}}}},
+                       "form": {"type": "string", "enum": ["liquid", "powder", "stick", "gummy", "pellet", "tablet", "other"]}}}}},
 }
 
 
-def classify_positions(rows):
-    """rows: [{id, title, text}] → ({id: {form, timing, wellness}}, 저장된 결과였는지)."""
-    data, _ = cache_get("product_positions", rows)
+def classify_forms(rows):
+    """rows: [{id, title, text}] → ({id: form}, 저장된 결과였는지). 상품명 규칙으로 못 정한 상품만."""
+    data, _ = cache_get("product_forms", rows)
     if data:
         return data.get("items") or {}, True
-    system = ("숙취 관련 상품의 상품명 · 판매 문구를 보고 분류해. form: 마시는 액상(샷 · 음료 · 병)=liquid, "
-              "분말 · 구미 · 젤리 · 정제 · 캡슐 · 스틱 분말=solid. timing: 판매 문구가 음주 전 섭취를 말하면 pre, "
-              "음주 후 · 다음 날 회복을 말하면 post, 둘 다면 both. wellness: 허브 · 아유르베다 · 프로바이오틱스 · 간 건강 같은 "
-              "기능성 웰니스를 내세우면 true. 문구로 알 수 없으면 unknown (추측하지 마).")
-    out = openai_json(system, {"products": rows}, schema=POSITION_SCHEMA, schema_name="product_positions", part=PART,
-                      action="경쟁 상품 위치 분류", max_tokens=4000)
+    system = ("숙취 관련 상품의 상품명 · 판매 문구를 보고 제형을 하나 골라. liquid = 마시는 액상(샷 · 음료 · 병), "
+              "powder = 분말 · 드링크 믹스 · 과립, stick = 스틱 포장(내용물이 젤리 · 분말 · 액상이어도 스틱), "
+              "gummy = 구미 · 젤리 · 츄어블, pellet = 한국식 환(작은 알갱이를 물과 삼킴), "
+              "tablet = 정제 · 캡슐 · 알약, other = 패치처럼 위 여섯이 아닌 것. 상품명 · 문구에 나온 말로 판단해.")
+    out = openai_json(system, {"products": rows}, schema=FORM_SCHEMA, schema_name="product_forms", part=PART,
+                      action="경쟁 상품 제형 분류", max_tokens=3000)
     ids = {r["id"] for r in rows}
-    items = {i["id"]: {"form": i["form"], "timing": i["timing"], "wellness": bool(i["wellness"])}
-             for i in out.get("items") or [] if i.get("id") in ids}
-    cache_put("product_positions", rows, {"items": items})
+    items = {i["id"]: i["form"] for i in out.get("items") or [] if i.get("id") in ids}
+    cache_put("product_forms", rows, {"items": items})
     return items, False
 
 
 _SRC = {"type": "array", "items": {"type": "string"}}
-
-
-def _vals(enum):
-    return {"type": "object", "additionalProperties": False, "required": ["values", "sources"],
-            "properties": {"values": {"type": "array", "items": {"type": "string", "enum": enum}}, "sources": _SRC}}
-
-
 _TEXT = {"type": "object", "additionalProperties": False, "required": ["text", "sources"],
          "properties": {"text": {"type": "string"}, "sources": _SRC}}
+_LIST = {"type": "object", "additionalProperties": False, "required": ["values", "sources"],
+         "properties": {"values": _SRC, "sources": _SRC}}
 COMPETITOR_SCHEMA = {
     "type": "object", "additionalProperties": False,
-    "required": ["positioning", "formats", "channels", "usp", "marketing", "implication"],
-    "properties": {
-        "positioning": _vals(["Pre-Drinking", "Post-Drinking", "Functional Wellness"]),
-        "formats": _vals(["Liquid Shot", "Drink", "Powder", "Gummy", "Jelly", "Tablet/Capsule", "기타"]),
-        "channels": _vals(["D2C 중심", "Amazon", "대형 오프라인 리테일", "편의점 · 주류점", "아시안 마켓", "기타 온라인몰"]),
-        "usp": _TEXT, "marketing": _TEXT, "implication": _TEXT,
-    },
+    "required": ["message", "ingredients", "retail", "news", "use", "avoid"],
+    "properties": {"message": _TEXT, "ingredients": _LIST, "retail": _TEXT, "news": _TEXT, "use": _TEXT, "avoid": _TEXT},
 }
 
 
 def analyze_competitor(payload):
-    """payload: {brand, tier, evidence:[{id, type, title, text}]} → (7개 항목, 저장된 결과였는지)."""
-    data, _ = cache_get("competitor_analysis", payload)
+    """payload: {brand, evidence:[{id, type, title, text}]} → (6개 항목, 저장된 결과였는지)."""
+    data, _ = cache_get("competitor_analysis_v2", payload)
     if data:
         return data, True
-    system = ("너는 글로벌 웰니스 · 숙취해소제 시장을 분석하는 수석 브랜드 마케터야. 당사는 미국에 진출한 한국 숙취해소 젤리 · 음료 "
-              "브랜드(REBOOT, 실제 데이터는 알디콤)야. 주어진 경쟁사의 evidence(근거 자료)만 보고 아래 항목을 채워. "
-              "positioning(1~2개) · formats · channels는 목록에서 고르고, usp(핵심 소구 성분 · 차별점) · "
-              "marketing(주요 마케팅 채널 · 버즈 포인트)은 한국어 1~2문장, implication은 알디콤이 벤치마킹하거나 방어할 점 1~2문장. "
-              "항목마다 sources에 근거 id(P1 · S1 · R1 · W1 …)를 넣어. 근거에 없는 내용은 쓰지 말고 "
-              "text는 '{확인 필요}', values는 빈 목록, sources는 빈 목록으로 둬. 판매 채널은 근거의 판매처 · 홈페이지 문구로만 판단해. " + SAFE)
+    system = ("너는 미국 숙취해소제 시장을 보는 브랜드 마케터야. 당사는 미국에 진출한 한국 숙취해소 젤리 · 음료 브랜드"
+              "(REBOOT, 실제 데이터는 알디콤 · Amazon · Weee! · Yami에서 판매)야. 주어진 경쟁사의 evidence(근거 자료)만 보고 채워. "
+              "message = 이 브랜드가 소비자에게 내세우는 핵심 메시지 한 줄(한국어, 판매 문구 · 홈페이지 표현 기준), "
+              "ingredients = 주력 성분 이름(영문 그대로, 최대 5개), retail = Amazon · Weee! · Yami 말고 근거에 나온 판매처"
+              "(자사몰 · 오프라인 매장 · 다른 온라인몰), news = 근거의 뉴스 · 기사에 나온 최근 소식 1문장. "
+              "이 네 항목은 sources에 근거 id(P1 · S1 · R1 · W1 · N1 …)를 꼭 넣고, 근거에 없으면 text는 빈 문자열, values는 빈 목록으로 둬. "
+              "use = 알디콤이 이 경쟁사와 비교해 마케팅 문구에 쓸 만한 말 1문장, avoid = 이 경쟁사와 겹치거나 "
+              "효능 단정(cure · prevent · treat)이라 피할 말 1문장 — 이 둘은 너의 판단이고 sources는 참고한 근거 id. " + SAFE)
     out = openai_json(system, payload, schema=COMPETITOR_SCHEMA, schema_name="competitor_analysis", part=PART,
                       action=f"경쟁사 분석: {payload.get('brand', '')}", max_tokens=2000, timeout=90)
-    cache_put("competitor_analysis", payload, out)
+    cache_put("competitor_analysis_v2", payload, out)
+    return out, False
+
+
+WEB_MODEL = "gpt-4o-mini-search-preview"  # OpenAI 검색 모델 (웹을 찾아보고 답함)
+WEB_FIELD_HINT = {"message": "the brand's main marketing message or slogan to consumers",
+                  "ingredients": "key active ingredients (up to 5)",
+                  "retail": "where it is sold besides Amazon, Weee! and Yami (own online store, US retail chains, other e-commerce)",
+                  "news": "one recent news item about the brand (launch, campaign, funding, retail expansion)"}
+_WEB = {"type": "object", "additionalProperties": False, "required": ["text", "values", "urls"],
+        "properties": {"text": {"type": "string"}, "values": _SRC, "urls": _SRC}}
+
+
+def web_fill(brand, fields, month):
+    """근거로 못 채운 사실 칸만 OpenAI 웹 검색으로 → ({field: {text, values, urls}}, 저장된 결과였는지). 같은 달 · 같은 칸이면 다시 안 부름."""
+    payload = {"brand": brand, "fields": sorted(fields), "month": month}
+    data, _ = cache_get("competitor_web", payload)
+    if data:
+        return data, True
+    schema = {"type": "object", "additionalProperties": False, "required": sorted(fields),
+              "properties": {f: _WEB for f in sorted(fields)}}
+    system = ("Search the web about the hangover-relief brand given by the user (US market). For each requested field, "
+              "answer only from pages you actually found and put those page URLs in urls. Write text in Korean "
+              "(ingredients go in values as English names). If you cannot find a reliable source, leave text empty, "
+              "values empty and urls empty. Do not guess. Do not use listicle or affiliate 'best hangover cures' pages.")
+    user = {"brand": brand, "fields": {f: WEB_FIELD_HINT[f] for f in sorted(fields)}}
+    out = openai_json(system, user, schema=schema, schema_name="competitor_web", model=WEB_MODEL, part=PART,
+                      action=f"경쟁사 웹 검색: {brand}", max_tokens=1500, timeout=120)
+    cache_put("competitor_web", payload, out)
     return out, False
 
 
@@ -233,3 +302,62 @@ def monthly_analysis(payload):
     out["personas"] = (out.get("personas") or [])[:3]
     out["swot"] = {k: ((out.get("swot") or {}).get(k) or [])[:3] for k in ("S", "W", "O", "T")}
     return out
+
+
+# ───────── 콘텐츠 브리프 (brief.py) ─────────
+
+BRIEF_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["items"],
+    "properties": {"items": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["id", "angle", "say", "avoid"],
+        "properties": {"id": _STR, "angle": _STR, "say": _STR, "avoid": _STRS}}}},
+}
+
+
+def content_brief(themes):
+    """규칙이 고른 주제마다 콘텐츠 각도 · 말할 방향 · 피할 말 → {id: {angle, say, avoid}}. 숫자 · 근거는 서버가 붙임."""
+    data, _ = cache_get("content_brief", themes)
+    if data:
+        return data.get("items") or {}
+    system = ("너는 미국에 진출한 한국 젤리 · 음료 브랜드(REBOOT, 실제 데이터는 알디콤)의 콘텐츠 기획 보조야. "
+              "주제마다 이미지 · 카드뉴스 · 숏폼을 만드는 팀이 바로 쓸 수 있게 angle(콘텐츠 각도 1문장), "
+              "say(말할 방향 1문장), avoid(이 주제에서 피할 말 최대 3개)를 써. id는 그대로 돌려줘. "
+              "숫자 · 건수를 쓰지 말고, 리뷰 원문을 인용하지 말고, 과음을 부추기거나 경쟁사를 언급하지 마. "
+              "'숙취'라는 단어도 angle · say에 쓰지 마. " + SAFE)
+    out = openai_json(system, {"themes": themes}, schema=BRIEF_SCHEMA, schema_name="content_brief", part=PART,
+                      action="콘텐츠 브리프 작성", max_tokens=2000)
+    ids = {t["id"] for t in themes}
+    items = {i["id"]: {"angle": i["angle"].strip(), "say": i["say"].strip(), "avoid": i.get("avoid") or []}
+             for i in out.get("items") or [] if i.get("id") in ids and i.get("angle")}
+    cache_put("content_brief", themes, {"items": items})
+    return items
+
+
+# ───────── 시즌별 프로모션 제안 (promo.py) ─────────
+
+PROMO_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["items"],
+    "properties": {"items": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["season", "idea", "price", "channel"],
+        "properties": {"season": _STR, "idea": _STR, "price": _STR, "channel": _STR}}}},
+}
+
+
+def season_promos(payload):
+    """다가오는 시즌마다 프로모션 제안 → [{season, idea, price, channel}]. 숫자는 받은 단가 요약만 씀."""
+    data, _ = cache_get("season_promos", payload)
+    if data:
+        return data.get("items") or []
+    system = ("너는 미국에 진출한 한국 젤리 · 음료 브랜드(REBOOT, 실제 데이터는 알디콤)의 마케팅 보조야. "
+              "prices는 미국 진열대(Weee! · Amazon · Yami)의 1회분 단가 요약(달러)이고, seasons는 다가오는 시즌이야. "
+              "시즌마다 season(받은 이름 그대로), idea(프로모션 아이디어 1문장), "
+              "price(가격 전략 1문장 · 알디콤 단가를 보통 가격 · 최저가와 견줘 할인 · 묶음 · 증정 중 무엇이 맞는지), "
+              "channel(먼저 할 판매처 · 채널 1개와 이유 짧게)을 써. "
+              "단가 숫자는 prices에 있는 값만 쓰고, 할인율 같은 새 숫자를 지어내지 마. 과음을 부추기지 마. " + SAFE)
+    out = openai_json(system, payload, schema=PROMO_SCHEMA, schema_name="season_promos", part=PART,
+                      action="시즌 프로모션 제안", max_tokens=1500)
+    names = {s["name"] for s in payload["seasons"]}
+    items = [{k: i[k].strip() for k in ("season", "idea", "price", "channel")}
+             for i in out.get("items") or [] if i.get("season") in names and i.get("idea")]
+    cache_put("season_promos", payload, {"items": items})
+    return items

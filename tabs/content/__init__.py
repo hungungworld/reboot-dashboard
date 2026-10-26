@@ -16,5 +16,6 @@ LangGraph 없이 conversation.run_turn()의 고정 단계(읽기 → 맥락 → 
   media.py       이미지 생성·편집 작업 (뒤에서 실행)
   conversation.py 대화 한 턴
   export.py      ZIP 내보내기
+  cardnews.py    카드뉴스 편집기 — 덱 검증 · 본문 변환 · AI 덱 구성 · 첨부 파일 글자 뽑기
   routes.py      /api/content/*
 """

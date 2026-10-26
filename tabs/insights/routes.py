@@ -7,6 +7,8 @@
 수정 · 올리기
   PATCH /api/insights/shelf/<id>               진열대 한 줄 고치기 {price, in_stock, own}
   PUT   /api/insights/servings                 회분 수 고치기 {key, servings|null} (모든 주차에 적용)
+  PUT   /api/insights/lines                    제품 라인 묶음 고치기 {key, brand, form} (둘 다 null이면 자동으로)
+  POST  /api/insights/lines/confirm            지금 묶음을 모두 '확인함'으로 기억
   PUT   /api/insights/watch                    주시 브랜드 {brand, watch}
 경쟁사 분석
   POST  /api/insights/competitors/discover     새 경쟁사 찾기 (지금 진열대 기준 · 무료)
@@ -14,17 +16,29 @@
   POST  /api/insights/competitors/research-all    상위 15개 모두 다시 조사 (뒤에서 실행)
   PATCH /api/insights/competitors/<id>         {status: active|archived, website}
   GET   /api/insights/competitors.csv · /competitors.json
-  POST  /api/insights/reviews/upload           Weee! 리뷰 CSV {csv}
+  POST  /api/insights/reviews/<id>/translate   리뷰 한국어 번역 (OpenAI · 같은 원문은 저장된 번역)
+  POST  /api/insights/amazon-summaries/<asin>/translate   아마존 리뷰 요약 한국어 번역 (같은 방식)
+  POST  /api/insights/reviews/<id>/cs          자사 리뷰 CS 대응 {status: new · todo · done · skip, memo}
+  POST  /api/insights/reviews/<id>/slack       슬랙 채널로 보내기 {note, preview} (preview면 글만 돌려줌 · 웹훅 SLACK_WEBHOOK_URL)
   POST  /api/insights/trends/upload            Google Trends CSV {csv} (SerpApi 키가 없을 때)
 데이터 업데이트
   GET   /api/insights/update/plan              항목 · 필요한 키 · 예상 비용 · 이번 달 쓴 양
   POST  /api/insights/update                   {items:[…]} → 뒤에서 실행
   GET   /api/insights/update/status            진행 상황
 내려받기
-  GET   /api/insights/report/weekly.docx · /report/monthly.docx · /export.xlsx · /templates/weee-reviews.csv
+  GET   /api/insights/report/weekly.docx · /report/monthly.docx · /export.xlsx
 다른 파트 공개 (REBOOT.use('insights'))
   GET   /api/insights/trends                   {keywords:[{keyword, points:[{date, value}]}], updatedAt}
   GET   /api/insights/personas                 [{name, oneLine, needs, message}]
+  GET   /api/insights/priorities               자사 불만 주제 순위 {items:[{topic, count, weight, score, channels, check}], total, basis}
+  GET   /api/insights/brief                    콘텐츠 브리프 승인본 (없으면 null) — brief.public()
+콘텐츠 브리프 (월간 리뷰 화면 · brief.py)
+  GET   /api/insights/brief/draft?month=       이 달 초안 + 공개 중인 승인본 요약
+  POST  /api/insights/brief/draft              초안 만들기 {month} (새 주제만 OpenAI 1회 · 키 없으면 빈 칸)
+  PUT   /api/insights/brief/draft              고치기 · 승인 {month, themes:[{id, angle, say, avoid, use}], approve}
+시즌 프로모션 (가격 위치 화면 · promo.py)
+  GET   /api/insights/promo                    {summary: {items:[{season, start, dday, idea, price, channel}], prices, createdAt} | null, aiReady}
+  POST  /api/insights/promo                    다시 만들기 (OpenAI 1회 · 같은 입력이면 저장된 결과)
 """
 import csv
 import io
@@ -35,28 +49,18 @@ from flask import Blueprint, Response, jsonify, request, send_file
 from flask_login import current_user
 
 from server import worklog
-from server.config import ROOT
 from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
-from . import competitors, reports, service, store, trends, update
-from .models import Competitor, ServingOverride, ShelfItem, kv_get, kv_set
+from . import ai as insights_ai
+from . import accuracy, brief, competitors, lines, promo, reports, service, slack, store, trends, update
+from .http import CollectError
+from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
 
 bp = Blueprint("insights", __name__, url_prefix="/api/insights")
 
 MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-TEMPLATE = ROOT / "tabs" / "insights" / "data" / "weee_reviews_template.csv"
-CSV_HEAD = {
-    "product": ("product", "product_title", "제품", "상품", "상품명", "제품명"),
-    "brand": ("brand", "브랜드"),
-    "rating": ("rating", "stars", "별점", "평점"),
-    "date": ("date", "날짜", "작성일"),
-    "title": ("title", "제목"),
-    "text": ("text", "review", "body", "내용", "리뷰", "본문"),
-    "own": ("own", "자사"),
-}
-YES = {"y", "yes", "true", "1", "예", "o", "자사"}
 DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -96,7 +100,9 @@ def data_tab(tab):
         return jsonify(service.audience_view(_month_arg()))
     if tab == "trends":
         return jsonify(service.trends_view())
-    raise ApiError("없는 데이터 탭입니다.", 404)
+    if tab == "accuracy":
+        return jsonify(accuracy.view())
+    raise ApiError("없는 데이터 탭이에요.", 404)
 
 
 # ───────── 수정 · 올리기 ─────────
@@ -105,7 +111,7 @@ def data_tab(tab):
 def shelf_edit(row_id):
     row = db.session.get(ShelfItem, row_id)
     if row is None:
-        raise ApiError("없는 진열대 항목입니다.", 404)
+        raise ApiError("없는 진열대 항목이에요.", 404)
     data = json_body()
     changed = []
     if "price" in data:
@@ -125,7 +131,7 @@ def shelf_edit(row_id):
     if "in_stock" in data:
         v = data["in_stock"]
         if v not in (True, False, None):
-            raise ApiError("재고는 있음 · 품절 · 모름 중 하나입니다.")
+            raise ApiError("재고는 있음 · 품절 · 모름 중 하나로 고르세요.")
         row.in_stock = v
         changed.append("in_stock")
     if "own" in data:
@@ -134,7 +140,7 @@ def shelf_edit(row_id):
         kv_set("own_overrides", ovr, _who())
         changed.append("own")
     if not changed:
-        raise ApiError("고칠 값이 없습니다.")
+        raise ApiError("고칠 값이 없어요.")
     row.edited_by = _who()
     db.session.commit()
     worklog.add("insights", "기타", f"진열대 값 수정: {row.title[:60]}", detail={"fields": changed, "week": row.week})
@@ -146,7 +152,7 @@ def servings_edit():
     data = json_body()
     key = clip(data.get("key"), 200)
     if not key or db.session.query(ShelfItem.id).filter_by(key=key).first() is None:
-        raise ApiError("없는 상품입니다.", 404)
+        raise ApiError("없는 제품이에요.", 404)
     v = data.get("servings")
     row = db.session.get(ServingOverride, key)
     if v in (None, ""):
@@ -169,12 +175,34 @@ def servings_edit():
     return jsonify(key=key, servings=n)
 
 
+@bp.put("/lines")
+def line_edit():
+    data = json_body()
+    key = clip(data.get("key"), 200)
+    if not key or db.session.query(ShelfItem.id).filter_by(key=key).first() is None:
+        raise ApiError("없는 제품이에요.", 404)
+    brand, form = clean(data.get("brand"), 60) or None, data.get("form") or None
+    if form is not None and form not in competitors.FORM_LABEL:
+        raise ApiError("제형은 목록에서 고르세요.")
+    lines.set_override(key, brand, form, _who())
+    worklog.add("insights", "기타", f"제품 묶음 수정: {key} → {brand or '자동'} · {form or '자동'}")
+    return jsonify(ok=True)
+
+
+@bp.post("/lines/confirm")
+def line_confirm():
+    now, _, _ = service.snapshots()
+    n = lines.confirm(now, _who())
+    worklog.add("insights", "승인 · 선정", f"제품 묶음 확인 {n}개", approval=_who())
+    return jsonify(ok=True, confirmed=n)
+
+
 @bp.put("/watch")
 def watch_edit():
     data = json_body()
     brand = clean(data.get("brand"), 60)
     if not brand:
-        raise ApiError("브랜드 이름이 없습니다.")
+        raise ApiError("브랜드 이름이 없어요.")
     watch = [b for b in kv_get("watch", []) if b.lower() != brand.lower()]
     on = bool(data.get("watch", True))
     if on:
@@ -192,9 +220,9 @@ def watch_edit():
 def competitors_discover():
     now, _, _ = service.snapshots()
     if not now:
-        raise ApiError("진열대 데이터가 없어요. 먼저 데이터 업데이트에서 Amazon · Weee! 진열대를 모으세요.")
+        raise ApiError("아직 진열대 데이터가 없어요. 먼저 최신 데이터 받기에서 Amazon · Weee! 진열대를 고르세요.")
     added = competitors.sync(now, service._tier)
-    worklog.add("insights", "수집", "새 경쟁사 찾기 (진열대 기준)", detail={"added": added[:30]})
+    worklog.add("insights", "수집", "새 경쟁 브랜드 찾기 (진열대 기준)", detail={"added": added[:30]})
     return jsonify(ok=True, added=added)
 
 
@@ -213,25 +241,25 @@ def _start_competitors(options, label):
 def competitor_research(cid):
     c = db.session.get(Competitor, cid)
     if c is None:
-        raise ApiError("없는 경쟁사입니다.", 404)
-    return _start_competitors({"only": c.id}, f"경쟁사 다시 조사: {c.brand}")
+        raise ApiError("없는 경쟁 브랜드예요.", 404)
+    return _start_competitors({"only": c.id}, f"경쟁 브랜드 다시 분석: {c.brand}")
 
 
 @bp.post("/competitors/research-all")
 def competitors_research_all():
-    return _start_competitors({"force": True}, "경쟁사 전체 다시 조사")
+    return _start_competitors({"force": True}, "경쟁 브랜드 전체 다시 분석")
 
 
 @bp.patch("/competitors/<int:cid>")
 def competitor_edit(cid):
     c = db.session.get(Competitor, cid)
     if c is None:
-        raise ApiError("없는 경쟁사입니다.", 404)
+        raise ApiError("없는 경쟁 브랜드예요.", 404)
     data = json_body()
     changed = []
     if "status" in data:
         if data["status"] not in ("active", "archived"):
-            raise ApiError("상태는 active(관리 중) · archived(보관) 중 하나입니다.")
+            raise ApiError("상태는 관리 중 · 보관 중 하나로 고르세요.")
         c.status = data["status"]
         changed.append("status")
     if "website" in data:
@@ -241,77 +269,92 @@ def competitor_edit(cid):
         c.website = url
         changed.append("website")
     if not changed:
-        raise ApiError("고칠 값이 없습니다.")
+        raise ApiError("고칠 값이 없어요.")
     db.session.commit()
-    worklog.add("insights", "기타", f"경쟁사 수정: {c.brand}", detail={"fields": changed, "status": c.status})
+    worklog.add("insights", "기타", f"경쟁 브랜드 수정: {c.brand}", detail={"fields": changed, "status": c.status})
     return jsonify(competitors.comp_dict(c))
 
 
 @bp.get("/competitors.json")
 def competitors_json():
-    body = json.dumps(competitors.export_rows(), ensure_ascii=False, indent=2)
+    body = json.dumps(service.competitor_export(), ensure_ascii=False, indent=2)
     return Response(body, content_type="application/json; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.json"})
 
 
 @bp.get("/competitors.csv")
 def competitors_csv():
-    rows = competitors.export_rows()
     buf = io.StringIO()
-    head = ["brand", "tier", "status"] + [f for f, _ in competitors.FIELDS] + ["website", "keywords", "sources", "researched_at", "ai"]
     w = csv.writer(buf)
-    w.writerow(["브랜드", "구분", "상태"] + [label for _, label in competitors.FIELDS] + ["홈페이지", "발견 검색어", "출처", "조사일", "AI 분석"])
-    for r in rows:
-        w.writerow([r[k] for k in head])
+    w.writerow([label for _, label in service.EXPORT_HEAD])
+    for r in service.competitor_export():
+        w.writerow(["" if r[k] is None else r[k] for k, _ in service.EXPORT_HEAD])
     return Response("﻿" + buf.getvalue(), content_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=reboot-insights-competitors.csv"})
 
 
-def _csv_rows(text):
-    reader = csv.reader(io.StringIO(text.replace("﻿", "")))
+def _review(rid):
+    r = db.session.get(Review, rid)
+    if r is None:
+        raise ApiError("리뷰를 찾지 못했어요.", 404)
+    return r
+
+
+@bp.post("/reviews/<int:rid>/translate")
+def review_translate(rid):
+    r = _review(rid)
+    if insights_ai.is_korean(r.text):
+        return jsonify(textKo=r.text)
+    if not insights_ai.ready():
+        raise ApiError("OpenAI 키가 없어 번역할 수 없어요. 설정 › 연결에서 키를 넣으세요.")
+    return jsonify(textKo=insights_ai.translate_review(r.text))
+
+
+@bp.post("/amazon-summaries/<asin>/translate")
+def amazon_summary_translate(asin):
+    s = kv_get("amazon_summaries", {}).get(asin)
+    if not s or not s.get("text"):
+        raise ApiError("리뷰 요약을 찾지 못했어요.", 404)
+    if insights_ai.is_korean(s["text"]):
+        return jsonify(textKo=s["text"])
+    if not insights_ai.ready():
+        raise ApiError("OpenAI 키가 없어 번역할 수 없어요. 설정 › 연결에서 키를 넣으세요.")
+    return jsonify(textKo=insights_ai.translate_review(s["text"]))
+
+
+@bp.post("/reviews/<int:rid>/cs")
+def review_cs(rid):
+    r = _review(rid)
+    if not r.own:
+        raise ApiError("CS 대응은 알디콤 리뷰에만 표시할 수 있어요.")
+    data = json_body()
+    status = str(data.get("status", "")).strip()
+    if status not in service.CS_STATUS:
+        raise ApiError("대응 상태가 올바르지 않아요.")
+    row = db.session.get(ReviewCS, rid) or ReviewCS(review_id=rid)
+    row.status = status
+    if "memo" in data:
+        row.memo = clip(str(data.get("memo") or ""), 1000)
+    row.updated_by, row.updated_at = _who()[:100], utcnow()
+    db.session.add(row)
+    db.session.commit()
+    return jsonify(ok=True, **service.cs_dict(r, row))
+
+
+@bp.post("/reviews/<int:rid>/slack")
+def review_slack(rid):
+    r = _review(rid)
+    data = json_body()
+    note = clip(str(data.get("note") or "").strip(), 500)
+    cs = db.session.get(ReviewCS, rid) if r.own else None
+    if data.get("preview"):
+        return jsonify(ok=True, ready=slack.ready(), text=slack.message(r, cs, note, _who()))
     try:
-        header = [h.strip().lower() for h in next(reader)]
-    except StopIteration:
-        raise ApiError("CSV가 비어 있어요.")
-    idx = {}
-    for field, names in CSV_HEAD.items():
-        for i, h in enumerate(header):
-            if h in names:
-                idx[field] = i
-                break
-    if "text" not in idx:
-        raise ApiError("CSV 첫 줄에 리뷰 내용 열(text 또는 내용)이 있어야 해요. 양식을 내려받아 쓰세요.")
-    rows = []
-    for n, r in enumerate(reader, start=2):
-        if not any(c.strip() for c in r):
-            continue
-        get = lambda f: r[idx[f]].strip() if f in idx and idx[f] < len(r) else ""  # noqa: E731
-        rating = None
-        if get("rating"):
-            try:
-                rating = float(get("rating"))
-            except ValueError:
-                raise ApiError(f"{n}번째 줄: 별점은 1~5 숫자로 입력하세요.")
-            if not 1 <= rating <= 5:
-                raise ApiError(f"{n}번째 줄: 별점은 1~5 사이예요.")
-        product = get("product")
-        rows.append({"source": "weee", "product_key": "weee-csv:" + product.lower()[:150], "product_title": product,
-                     "brand": get("brand"), "rating": rating, "date_text": get("date"), "title": get("title"),
-                     "text": get("text"), "own": get("own").lower() in YES})
-        if len(rows) > 2000:
-            raise ApiError("한 번에 2,000줄까지 올릴 수 있어요.")
-    if not rows:
-        raise ApiError("올릴 리뷰가 없어요.")
-    return rows
-
-
-@bp.post("/reviews/upload")
-def reviews_upload():
-    data = json_body(max_bytes=2 * 1024 * 1024)
-    rows = _csv_rows(str(data.get("csv", "")))
-    added = store.save_reviews(rows, week_key(service.today()))
-    worklog.add("insights", "수집", "Weee! 리뷰 CSV 올리기", detail={"rows": len(rows), "added": added})
-    return jsonify(ok=True, rows=len(rows), added=added)
+        shared = slack.send(r, cs, note, _who()[:100])
+    except CollectError as e:
+        raise ApiError(str(e))
+    worklog.add("insights", "기타", "리뷰 슬랙 보내기", detail={"review": rid, "own": r.own, "note": bool(note)})
+    return jsonify(ok=True, **shared)
 
 
 @bp.post("/trends/upload")
@@ -340,10 +383,10 @@ def update_start():
     data = json_body()
     items = data.get("items")
     if not isinstance(items, list) or not all(isinstance(i, str) for i in items):
-        raise ApiError("항목 목록이 올바르지 않습니다.")
+        raise ApiError("항목 목록이 올바르지 않아요.")
     unknown = [i for i in items if i not in update.BY_ID]
     if unknown:
-        raise ApiError("없는 항목이 있습니다: " + ", ".join(clip(u, 20) for u in unknown[:3]))
+        raise ApiError("없는 항목이 있어요: " + ", ".join(clip(u, 20) for u in unknown[:3]))
     try:
         run = update.start(items, _who())
     except ValueError as e:
@@ -378,13 +421,6 @@ def export_xlsx():
     return send_file(buf, as_attachment=True, download_name=name, mimetype=XLSX)
 
 
-@bp.get("/templates/weee-reviews.csv")
-def weee_template():
-    text = TEMPLATE.read_text(encoding="utf-8") if TEMPLATE.exists() else "product,brand,rating,date,title,text,own\n"
-    return Response("﻿" + text, content_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": "attachment; filename=reboot-insights-weee-reviews-template.csv"})
-
-
 # ───────── 다른 파트 공개 ─────────
 
 @bp.get("/trends")
@@ -395,6 +431,67 @@ def trends_expose():
 @bp.get("/personas")
 def personas_expose():
     return jsonify(service.personas_expose())
+
+
+@bp.get("/priorities")
+def priorities_expose():
+    return jsonify(service.review_priorities())
+
+
+@bp.get("/brief")
+def brief_expose():
+    return jsonify(brief.public())
+
+
+# ───────── 콘텐츠 브리프 ─────────
+
+def _brief_month(value):
+    m = str(value or "").strip()
+    if m and not MONTH_RE.match(m):
+        raise ApiError("월은 YYYY-MM 형식으로 주세요.")
+    return m or review_month(service.today())
+
+
+@bp.get("/brief/draft")
+def brief_draft():
+    return jsonify(brief.view(_brief_month(request.args.get("month"))))
+
+
+@bp.post("/brief/draft")
+def brief_make():
+    month = _brief_month(json_body().get("month"))
+    draft = brief.make_draft(month, service.top_questions(month, limit=20), _who()[:100])
+    worklog.add("insights", "기타", "콘텐츠 브리프 초안", detail={"month": month, "themes": len(draft["themes"]), "ai": draft["ai"]})
+    return jsonify(brief.view(month))
+
+
+@bp.put("/brief/draft")
+def brief_save():
+    data = json_body()
+    month = _brief_month(data.get("month"))
+    items = data.get("themes") if isinstance(data.get("themes"), list) else []
+    _draft, err = brief.save_draft(month, items, bool(data.get("approve")), _who()[:100])
+    if err:
+        raise ApiError(err)
+    if data.get("approve"):
+        worklog.add("insights", "기타", "콘텐츠 브리프 승인", detail={"month": month})
+    return jsonify(brief.view(month))
+
+
+# ───────── 시즌 프로모션 (가격 위치 화면 · promo.py) ─────────
+
+@bp.get("/promo")
+def promo_view():
+    return jsonify(promo.view())
+
+
+@bp.post("/promo")
+def promo_make():
+    data, err = promo.make(_who()[:100])
+    if err:
+        raise ApiError(err)
+    worklog.add("insights", "기타", "시즌 프로모션 제안", detail={"seasons": len(data["summary"]["items"])})
+    return jsonify(data)
 
 
 @bp.get("/meta")

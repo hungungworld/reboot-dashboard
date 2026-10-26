@@ -201,7 +201,9 @@
     upload: 'M12 16V4 m-5 5 5-5 5 5 M4 16v5h16v-5',
     link: 'M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
     user: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10 M3 22a9 9 0 0 1 18 0',
-    x: 'M6 6l12 12 M18 6 6 18'
+    x: 'M6 6l12 12 M18 6 6 18',
+    chevron: 'm6 9 6 6 6-6',
+    translate: 'M4 6h9 M8.5 4v2c0 4-2 7-4.5 8.5 M6 9.5c1.3 2.2 3.3 3.8 5.5 4.5 M13 20l4-9 4 9 M14.5 17h5'
   };
 
   function esc(s) {
@@ -258,6 +260,52 @@
         `<div class="trend">${o.change ? `<b class="${tone}">${esc(o.change)}</b>` : ''}${esc(o.foot || '')}</div></div>`;
     },
     empty: (text, iconName) => `<div class="empty-art">${icon(iconName || 'doc')}<span>${esc(text)}</span></div>`,
+    /** 파일 버튼 (모든 탭 같은 이름·모양 · SAP Fiori 툴바 버튼처럼): kind = 'upload' | 'download' | 'report'
+        o = { label: '매출 데이터 업로드', type: 'CSV', act, href(있으면 <a download>), download(저장 파일 이름), attrs, cls, title, disabled }
+        버튼 하나에 동작 하나 — '… 업로드 · 다운로드'처럼 묶지 않음 (둘 다 필요하면 버튼 둘, 같은 동작의 형식만 다르면 fileMenu)
+        형식(type)은 버튼 글자 대신 툴팁으로. lime은 보고서 만들기만 */
+    fileBtn(kind, o) {
+      o = o || {};
+      const K = { upload: ['upload', '업로드'], download: ['download', '다운로드'], report: ['doc', '보고서 만들기'] }[kind] || ['download', '다운로드'];
+      const cls = `btn small file-btn${kind === 'report' ? ' lime' : ''}${o.cls ? ' ' + o.cls : ''}`;
+      const inner = `${icon(K[0])}${esc(o.label || K[1])}`;
+      const title = [o.title, o.type ? `${o.type} 파일` : ''].filter(Boolean).join(' · ');
+      const attrs = `${o.act ? ` data-act="${esc(o.act)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${o.attrs ? ' ' + o.attrs : ''}`;
+      return o.href
+        ? `<a class="${cls}" href="${esc(o.href)}" download${o.download ? `="${esc(o.download)}"` : ''}${attrs}>${inner}</a>`
+        : `<button type="button" class="${cls}"${attrs}${o.disabled ? ' disabled' : ''}>${inner}</button>`;
+    },
+    /** 파일 메뉴 버튼 (SAP Menu Button): 같은 동작을 형식·대상별로 고를 때 — '다운로드 ▾' 하나에 항목 여럿
+        o = { label, cls, items: [{ label: 'CSV', act | href, attrs, title }] } · 항목을 누르면 메뉴는 닫힘 */
+    fileMenu(kind, o) {
+      o = o || {};
+      const K = kind === 'upload' ? ['upload', '업로드'] : ['download', '다운로드'];
+      const items = (o.items || []).map(it => {
+        const attrs = `${it.act ? ` data-act="${esc(it.act)}"` : ''}${it.title ? ` title="${esc(it.title)}"` : ''}${it.attrs ? ' ' + it.attrs : ''}`;
+        return it.href
+          ? `<a role="menuitem" href="${esc(it.href)}" download${attrs}>${esc(it.label)}</a>`
+          : `<button type="button" role="menuitem"${attrs}>${esc(it.label)}</button>`;
+      }).join('');
+      return `<details class="file-menu${o.cls ? ' ' + o.cls : ''}"><summary class="btn small file-btn">${icon(K[0])}${esc(o.label || K[1])}${icon('chevron', 'icon file-menu-caret')}</summary>` +
+        `<div class="file-menu-list" role="menu">${items}</div></details>`;
+    },
+    /** AI 번역 버튼 (모든 탭 같은 모양: 네모 아이콘 버튼 하나, 글자는 툴팁으로)
+        o = { act(기본 'translate' · false면 없음), title(기본 '한국어로 보기'), on(번역이 펼쳐진 채 그림), attrs, cls, disabled } · 번역을 펼치면 ui.trOn(btn, true) → 툴팁 '번역 닫기' */
+    trBtn(o) {
+      o = o || {};
+      const t = o.title || '한국어로 보기', now = o.on ? '번역 닫기' : t;
+      return `<button type="button" class="tr-btn${o.cls ? ' ' + o.cls : ''}"${o.act === false ? '' : ` data-act="${esc(o.act || 'translate')}"`} data-tr-title="${esc(t)}" aria-pressed="${!!o.on}" aria-label="${esc(now)}" title="${esc(now)}"` +
+        `${o.attrs ? ' ' + o.attrs : ''}${o.disabled ? ' disabled' : ''}>${icon('translate')}</button>`;
+    },
+    trOn(btn, on) {
+      if (!btn) return;
+      const t = on ? '번역 닫기' : btn.dataset.trTitle || '한국어로 보기';
+      btn.setAttribute('aria-pressed', String(!!on));
+      btn.setAttribute('aria-label', t);
+      btn.title = t;
+    },
+    /** 파일 버튼 줄: 카드 머리 오른쪽 · 순서는 업로드 → 다운로드 → 보고서 만들기 */
+    fileActions: (html) => `<div class="file-actions">${html}</div>`,
     toast(msg, tone) {
       if (!doc) return;
       let box = doc.getElementById('reboot-toast');
@@ -309,7 +357,7 @@
         wrap.className = 'modal-backdrop';
         const actions = (o.actions && o.actions.length ? o.actions : [{ label: '확인', value: true, tone: 'lime' }]);
         wrap.innerHTML = `<section class="modal${o.wide ? ' wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(o.title || '')}">
-          <div class="between"><h2>${esc(o.title || '')}</h2><button type="button" class="icon-btn" data-modal-close aria-label="닫기">${icon('x')}</button></div>
+          <div class="between modal-head"><h2>${esc(o.title || '')}</h2><button type="button" class="modal-close" data-modal-close aria-label="닫기">${icon('x')}</button></div>
           <div class="modal-body"></div>
           <div class="modal-actions">${actions.map((a, i) => `<button type="button" class="btn ${esc(a.tone || '')}" data-modal-act="${i}">${esc(a.label)}</button>`).join('')}</div>
         </section>`;
@@ -351,7 +399,8 @@
         doc.body.appendChild(wrap);
         if (o.onOpen) o.onOpen(bodyEl);
         const first = wrap.querySelector('input,select,textarea') || wrap.querySelector('[data-modal-act]');
-        if (first) first.focus();
+        if (first) first.focus({ preventScroll: true });  // 버튼에 포커스가 가도 창은 맨 위부터 보이게
+        wrap.querySelector('.modal').scrollTop = 0;
       });
     },
     /** 코드에서 맨 위 모달 닫기 (ui.modal의 Promise는 value로 끝남) */
@@ -361,11 +410,55 @@
     },
     confirm(message, o) {
       o = o || {};
+      // "삭제할까요? 되돌릴 수 없어요."처럼 질문 뒤에 설명이 붙으면 질문 줄과 설명 줄을 나눔
+      const qa = String(message).match(/^([^?]*\?)\s+(\S[\s\S]*)$/);
       return ui.modal({
         title: o.title || '확인',
-        body: `<p>${esc(message)}</p>`,
+        body: qa ? `<p><b>${esc(qa[1])}</b></p><p class="muted mt-8">${esc(qa[2])}</p>` : `<p>${esc(message)}</p>`,
         actions: [{ label: o.cancel || '취소', value: false }, { label: o.ok || '확인', value: true, tone: o.danger ? 'danger' : 'lime' }]
       }).then(v => v === true);
+    },
+    /** 업로드 팝업 (모든 탭 같은 모양): 끌어다 놓거나 눌러서 파일을 고르고 [올리기]
+        o = { title, accept, type('CSV' 등 작은 글씨), multiple, help(html, 칸 위), extra(html, 칸 아래), okLabel, wide, onOpen(body) }
+        → Promise({ files, body }) · 닫으면 null. body는 닫힌 뒤에도 extra 입력값을 읽을 수 있음 */
+    uploadModal(o) {
+      o = o || {};
+      let files = [];
+      let bodyEl = null;
+      const hint = '파일을 끌어다 놓거나 눌러서 고르세요';
+      const size = n => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))}KB` : `${(n / 1048576).toFixed(1)}MB`);
+      return ui.modal({
+        title: o.title || '파일 업로드',
+        wide: o.wide,
+        body: `${o.help || ''}
+          <label class="dropzone upload-drop" data-upload-drop>${icon('upload')}
+            <strong data-upload-picked>${hint}</strong>${o.type ? `<span class="tiny muted">${esc(o.type)}</span>` : ''}
+            <input type="file" class="sr-only" accept="${esc(o.accept || '')}"${o.multiple ? ' multiple' : ''} data-upload-input aria-label="${esc(o.title || '파일')} 고르기"></label>
+          ${o.extra || ''}`,
+        actions: [{ label: '취소', value: null }, { label: o.okLabel || '올리기', value: 'ok', tone: 'lime', onClick: () => files.length > 0 }],
+        onOpen(b) {
+          bodyEl = b;
+          const zone = b.querySelector('[data-upload-drop]');
+          const okBtn = b.closest('.modal').querySelector('[data-modal-act="1"]');
+          const pick = list => {
+            files = Array.from(list || []).slice(0, o.multiple ? undefined : 1);
+            zone.querySelector('[data-upload-picked]').textContent = files.length
+              ? files.map(f => `${f.name} (${size(f.size)})`).join(' · ') : hint;
+            zone.classList.toggle('picked', files.length > 0);
+            okBtn.disabled = !files.length;
+          };
+          okBtn.disabled = true;
+          zone.querySelector('[data-upload-input]').addEventListener('change', e => pick(e.target.files));
+          zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+          zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+          zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag');
+            if (e.dataTransfer) pick(e.dataTransfer.files);
+          });
+          if (o.onOpen) o.onOpen(b);
+        }
+      }).then(v => (v === 'ok' && files.length ? { files, body: bodyEl } : null));
     }
   };
 
@@ -433,15 +526,10 @@
      - 왼쪽 항목을 누르면 원래 탭 버튼을 누른 것과 같음 (tab.click())
      - 옮긴 탭 줄은 화면에서 숨김 (.is-subnav-mirrored). 탭이 바뀌면(aria-selected · class) 왼쪽도 따라 바뀜
      - 탭 패널 안의 두 번째 탭 줄(예: 인사이트 › 데이터의 세부 탭)은 고른 항목 아래에 들여 써서 보여 줌
-     - 옮기지 않을 탭 줄: data-subnav="off" · 아이콘 지정: 탭 버튼에 data-icon="mail" (없으면 이름으로 고름)
+     - 옮기지 않을 탭 줄: data-subnav="off" · 아이콘 없이 순서대로 01, 02 … 번호를 붙임
+     - 탭에 data-group="이름"이 있으면 묶음이 바뀌는 자리에 회색 작은 이름표를 넣음 (누르는 항목 아님)
+     - data-quiet가 있는 탭은 흐린 글씨 (자주 안 가는 관리 화면)
      - 탭이 없는 파트는 서버가 그린 기본 항목(파트 이름) 하나가 그대로 보임 */
-  const NAV_ICONS = [
-    [/시작/, 'home'], [/브리핑|대시보드/, 'chart'], [/캘린더|일정/, 'calendar'], [/주간/, 'calendar'], [/월간/, 'chart'], [/데이터/, 'grid'],
-    [/AI|제작/, 'spark'], [/캠페인/, 'image'], [/단건|점검/, 'shield'], [/일괄/, 'doc'], [/이력|로그/, 'clock'], [/규칙|가이드|사례/, 'edit'],
-    [/모니터링/, 'globe'], [/기관|출처/, 'link'], [/문의/, 'mail'], [/부작용|긴급/, 'bell'], [/템플릿/, 'doc'], [/컨택|업체/, 'users'],
-    [/메일/, 'mail'], [/판매|실적|성과/, 'chart'], [/보고서/, 'doc'], [/브랜드|제품/, 'grid'], [/수집/, 'filter'], [/연결/, 'link'],
-    [/계정|프로필/, 'user'], [/알림/, 'bell']
-  ];
   const isOn = el => el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' ||
     el.classList.contains('active') || el.classList.contains('selected') || el.classList.contains('is-active');
   let navState = { items: [], subs: [], sig: "" };
@@ -459,8 +547,7 @@
     });
     let label = c.textContent.replace(/\s+/g, ' ').trim() || el.textContent.replace(/\s+/g, ' ').trim();
     label = label.replace(/^[^\p{L}\p{N}]+/u, '').trim();  // 앞의 이모지·기호 (🔎 업체 컨택 → 업체 컨택)
-    const hit = NAV_ICONS.find(([re]) => re.test(label));
-    return { el, label, count, on: isOn(el), disabled: !!el.disabled, icon: el.dataset.icon || (hit ? hit[1] : 'grid') };
+    return { el, label, count, on: isOn(el), disabled: !!el.disabled, group: el.dataset.group || '', quiet: 'quiet' in el.dataset };
   }
   function hiddenUpTo(el, root) {
     for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (p.hidden) return true;
@@ -477,15 +564,17 @@
     [primary, nested].forEach(l => { if (l && !l.classList.contains('is-subnav-mirrored')) l.classList.add('is-subnav-mirrored'); });
     const items = Array.from(primary.querySelectorAll('[role="tab"]')).map(tabInfo);
     const subs = nested ? Array.from(nested.querySelectorAll('[role="tab"]')).map(tabInfo) : [];
-    const sig = JSON.stringify([items.map(i => [i.label, i.count, i.on, i.disabled, i.icon]), subs.map(i => [i.label, i.on, i.disabled])]);
+    const sig = JSON.stringify([items.map(i => [i.label, i.count, i.on, i.disabled, i.group]), subs.map(i => [i.label, i.on, i.disabled])]);
     navState.items = items;
     navState.subs = subs;
     if (sig === navState.sig) return;
     navState.sig = sig;
-    const btn = (it, key) => `<button type="button" data-subnav="${key}" class="${it.on ? 'active' : ''}${it.count ? ' has-count' : ''}"` +
-      `${it.on ? ' aria-current="page"' : ''}${it.disabled ? ' disabled' : ''}>${icon(it.icon)}<span class="label">${esc(it.label)}</span>` +
-      `${it.count ? `<span class="sub-count">${esc(it.count)}</span>` : ''}</button>`;
-    box.innerHTML = items.map((it, i) => btn(it, 'p' + i) +
+    // 아이콘 없이 이름 + 오른쪽 번호(01, 02 …). 세부 메뉴는 번호 없이 이름만
+    const btn = (it, key, no) => `<button type="button" data-subnav="${key}" class="${it.on ? 'active' : ''}${it.count ? ' has-count' : ''}${it.quiet ? ' sub-quiet' : ''}"` +
+      `${it.on ? ' aria-current="page"' : ''}${it.disabled ? ' disabled' : ''}><span class="label">${esc(it.label)}</span>` +
+      `${it.count ? `<span class="sub-count">${esc(it.count)}</span>` : ''}${no ? `<span class="sub-no" aria-hidden="true">${no}</span>` : ''}</button>`;
+    const groupLabel = (it, i) => it.group && (i === 0 || items[i - 1].group !== it.group) ? `<div class="sub-section-label">${esc(it.group)}</div>` : '';
+    box.innerHTML = items.map((it, i) => groupLabel(it, i) + btn(it, 'p' + i, String(i + 1).padStart(2, '0')) +
       (it.on && subs.length ? `<div class="nested">${subs.map((s, j) => btn(s, 's' + j)).join('')}</div>` : '')).join('');
     const on = items.find(x => x.on);
     const subOn = subs.find(x => x.on);
@@ -521,6 +610,114 @@
     const toggle = $('menu-toggle');
     if (side) side.classList.remove('open');
     if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  /* ───────── 표: 머리글 끝을 끌어 칸 너비 조절 · 마우스 휠로 가로 스크롤 (모든 탭 공통) ─────────
+     - 탭이 직접 너비 조절을 붙인 표(data-cols)는 건드리지 않음
+     - 너비는 이 브라우저에 표(머리글 이름)별로 기억, 손잡이를 두 번 누르면 처음 너비로 */
+  const COLW_KEY = 'reboot-colw';
+  const colwAll = () => { try { return JSON.parse(global.localStorage.getItem(COLW_KEY)) || {}; } catch (e) { return {}; } };
+  const colwSave = (key, w) => {
+    const all = colwAll();
+    if (w) all[key] = w; else delete all[key];
+    try { global.localStorage.setItem(COLW_KEY, JSON.stringify(all)); } catch (e) { /* 저장 못 해도 화면은 그대로 */ }
+  };
+  const headRow = t => (t.tHead && t.tHead.rows.length === 1 ? t.tHead.rows[0] : null);
+  const tableKey = t => (current || '') + ':' + [...headRow(t).cells].map(c => c.textContent.trim()).join('|');
+  function setColWidths(table, w) {
+    let group = table.querySelector(':scope > colgroup');
+    if (!group || group.children.length !== w.length) {
+      if (group) group.remove();
+      group = doc.createElement('colgroup');
+      group.innerHTML = w.map(() => '<col>').join('');
+      table.insertBefore(group, table.firstChild);
+    }
+    [...group.children].forEach((c, i) => { c.style.width = w[i] + 'px'; });
+    table.style.width = w.reduce((a, b) => a + b, 0) + 'px';
+    table.classList.add('rb-fixed');
+  }
+  function enhanceTable(table) {
+    if (table.dataset.rbCols || table.dataset.cols) return;
+    table.dataset.rbCols = '1';
+    const row = headRow(table);
+    if (!row || [...row.cells].some(c => c.colSpan > 1)) return;
+    const box = table.parentElement;
+    if (box && !/auto|scroll/.test(getComputedStyle(box).overflowX)) {
+      const wrap = doc.createElement('div');
+      wrap.className = 'table-wrap';
+      box.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    }
+    [...row.cells].forEach((th, i) => {
+      th.classList.add('rb-col-th');
+      th.insertAdjacentHTML('beforeend', `<span class="rb-col-rs" data-col="${i}" title="끌어서 칸 너비 조절 · 두 번 누르면 처음대로" aria-hidden="true"></span>`);
+    });
+    const saved = colwAll()[tableKey(table)];
+    if (Array.isArray(saved) && saved.length === row.cells.length) setColWidths(table, saved);
+  }
+  function enhanceTables() {
+    doc.querySelectorAll('#part-root table, .modal table, dialog table').forEach(enhanceTable);
+  }
+  function watchTables() {
+    enhanceTables();
+    let queued = false;
+    if (global.MutationObserver) {
+      new global.MutationObserver(() => {
+        if (queued) return;
+        queued = true;
+        setTimeout(() => { queued = false; enhanceTables(); }, 30);
+      }).observe(doc.body, { subtree: true, childList: true });
+    }
+    doc.addEventListener('mousedown', e => {
+      const h = e.target.closest && e.target.closest('.rb-col-rs');
+      if (!h) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const table = h.closest('table');
+      const i = Number(h.dataset.col);
+      const w = [...headRow(table).cells].map(c => Math.round(c.getBoundingClientRect().width));
+      setColWidths(table, w);
+      const x0 = e.clientX, w0 = w[i];
+      let moved = false;
+      h.classList.add('on');
+      const move = ev => {
+        moved = true;
+        w[i] = Math.max(48, Math.round(w0 + ev.clientX - x0));
+        setColWidths(table, w);
+      };
+      const up = () => {
+        doc.removeEventListener('mousemove', move);
+        doc.removeEventListener('mouseup', up);
+        h.classList.remove('on');
+        if (moved) colwSave(tableKey(table), w);
+      };
+      doc.addEventListener('mousemove', move);
+      doc.addEventListener('mouseup', up);
+    }, true);
+    // 손잡이를 눌러도 머리글 정렬 등이 같이 눌리지 않게
+    doc.addEventListener('click', e => { if (e.target.closest && e.target.closest('.rb-col-rs')) { e.preventDefault(); e.stopPropagation(); } }, true);
+    doc.addEventListener('dblclick', e => {
+      const h = e.target.closest && e.target.closest('.rb-col-rs');
+      if (!h) return;
+      const table = h.closest('table');
+      colwSave(tableKey(table), null);
+      const group = table.querySelector(':scope > colgroup');
+      if (group) group.remove();
+      table.style.width = '';
+      table.classList.remove('rb-fixed');
+    }, true);
+    // 표가 옆으로 넘치면 휠(위아래)을 가로 스크롤로 — 끝에 닿으면 원래대로 화면이 내려감
+    doc.addEventListener('wheel', e => {
+      if (e.ctrlKey || e.shiftKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      const wrap = e.target.closest && e.target.closest('.table-wrap');
+      if (!wrap || wrap.scrollHeight > wrap.clientHeight + 1) return;
+      const max = wrap.scrollWidth - wrap.clientWidth;
+      if (max < 2) return;
+      const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? wrap.clientWidth : 1);
+      if ((dy > 0 && wrap.scrollLeft >= max - 1) || (dy < 0 && wrap.scrollLeft <= 0)) return;
+      e.preventDefault();
+      wrap.scrollLeft += dy;
+    }, { passive: false });
   }
 
   /* ───────── 시작: 현재 파트 그리기 · 메뉴 숫자 · 상단 바 ───────── */
@@ -582,6 +779,11 @@
       const delta = activeTop.getBoundingClientRect().left - topNav.getBoundingClientRect().left;
       topNav.scrollLeft = Math.max(0, topNav.scrollLeft + delta - (topNav.clientWidth - activeTop.offsetWidth) / 2);
     }
+    // 파일 메뉴 (ui.fileMenu): 항목을 누르거나 바깥을 누르면 닫힘
+    doc.addEventListener('click', e => {
+      const inItem = e.target.closest('.file-menu-list');
+      doc.querySelectorAll('details.file-menu[open]').forEach(d => { if (inItem ? d.contains(inItem) : !d.contains(e.target)) d.open = false; });
+    });
     doc.addEventListener('click', e => {
       if (e.target.closest('[data-close-sidebar]')) { closeSidebar(); return; }
       if (side && side.classList.contains('open') && !e.target.closest('#sidebar') && !e.target.closest('#menu-toggle')) closeSidebar();
@@ -645,6 +847,7 @@
         watchNav(root);
       }
     }
+    watchTables();
     updateCounts();
     // 파트가 비동기로 값을 바꿀 수 있어 한 번 더
     setTimeout(updateCounts, 1500);

@@ -9,8 +9,9 @@ import time
 
 from server.core.ai import AIError
 from . import options as O
-from . import prompts, providers, review, schemas
+from . import assets, brandkit, prompts, providers, repository, review, schemas
 
+ASSET_KINDS = ("copy", "cardnews", "script")  # 장·장면·이미지에 쓸 자산 ID를 적는 결과물
 SLIDE_HEAD_RE = re.compile(r"^#{2,3}\s*S(\d{1,2})\b.*$", re.M)
 SCENE_ROW_RE = re.compile(r"^\|\s*SC\s*(\d{1,2})\s*\|.*$", re.M | re.I)
 
@@ -126,6 +127,10 @@ def build_user(*, kind, mode, n, sheet, decisions, facts, labels, base, request,
                   "extra_request": sheet["extra_request"] or ""},
         "decisions": {k: {"value": v.get("value"), "status": v.get("status")} for k, v in decisions.items()},
         "brand_facts": _brand(facts), "product_facts": facts.get("products") or [], "facts_version": facts.get("facts_version"),
+        "character_use": assets.character_choice(decisions),
+        "brand_assets": assets.catalog_for(sheet["product_ids"], assets.character_choice(decisions),
+                                           assets.product_flavors_of(decisions, sheet["product_ids"], repository.products_index()))
+                        if kind in ASSET_KINDS else None,
         "base_version": base, "unit_targets": targets if mode == "edit" else None,
         "user_request": request, "instructions": instructions,
         "user_materials": {"reference_text": reference} if reference else None,
@@ -134,14 +139,13 @@ def build_user(*, kind, mode, n, sheet, decisions, facts, labels, base, request,
 
 
 def _brand(facts):
-    b = facts.get("brand") or {}
-    return {k: b.get(k) for k in ("name", "slogan", "colors", "character", "cm_song", "category", "intro", "market")}
+    return brandkit.brand_view(facts)
 
 
 def generate(kind, *, mode, sheet, decisions, settings, facts, labels, base=None, request="", instructions="",
              targets=None, reference="", deadline=None):
     """→ (drafts, meta). AI 실패는 AIError. deadline(time.monotonic 기준)이 지나면 자동 재작성은 건너뜀."""
-    if mode == "edit" or kind == "plan":
+    if mode == "edit":
         n = 1
     else:
         n = max(1, min(3, int(settings.get("candidates") or 3)))
@@ -155,7 +159,7 @@ def generate(kind, *, mode, sheet, decisions, settings, facts, labels, base=None
                               max_tokens=7000, timeout=85)
     items = sanitize(out, n)
     if not items:
-        raise AIError("AI가 초안을 돌려주지 않았습니다. 다시 요청하세요.")
+        raise AIError("AI가 초안을 돌려주지 않았어요. 다시 요청하세요.")
     merge_info = None
     if mode == "edit" and base is not None and targets:
         items[0], merge_info = apply_unit_merge(kind, base.body, items[0], targets)
@@ -197,5 +201,5 @@ def _rewrite(kind, system, drafts, sheet, facts, language):
                               max_tokens=7000, timeout=80)
     fixed = sanitize(out, len(drafts))
     if len(fixed) != len(drafts):
-        raise AIError("재작성 결과 개수가 맞지 않습니다.")
+        raise AIError("재작성 결과 개수가 맞지 않아요.")
     return fixed

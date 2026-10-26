@@ -23,6 +23,13 @@ TURN = _obj({
     })},
     "candidates": {"type": "array", "items": _obj({"field": _STR, "label": _STR, "value": _STR, "reason": _STR})},
     "clarification_questions": _STR_LIST,
+    # 질문에 붙는 보기 칩 (고르면 그 글이 사용자 메시지로 감) — 고르기 쉬운 질문에만
+    "chips": {"type": "array", "items": _obj({"label": _STR, "value": _STR, "reason": _STR})},
+    # 만들기 제안 — 브리프가 찼을 때 "이대로 만들까요?" (사용자가 '좋아요'로 답하면 서버가 이 type으로 실행)
+    "offer": {"anyOf": [{"type": "null"}, _obj({
+        "type": {"type": "string", "enum": [t for t in ACTION_TYPES if t not in ("none", "select_version")]},
+        "summary": _STR,
+    })]},
     "action_request": _obj({
         "type": {"type": "string", "enum": list(ACTION_TYPES)},
         "target_version_id": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
@@ -52,7 +59,23 @@ IMAGE_PLAN = _obj({
     "change": _STR_LIST,
     "text_layers": {"type": "array", "items": _obj({"role": _STR, "text": _STR})},
     "notes_ko": _STR,
-    "character_draft": {"type": "boolean"},
+    "flavors": {"type": "array", "items": {"type": "string", "enum": ["cherry", "lemon", "lime"]}},
+    "include_character": {"type": "boolean"},
+})
+
+# 영상 프롬프트 (video_v1) — Higgsfield Seedance 2.0
+VIDEO_PLAN = _obj({
+    "prompt_en": _STR,
+    "notes_ko": _STR,
+    "flavors": {"type": "array", "items": {"type": "string", "enum": ["cherry", "lemon", "lime"]}},
+    "include_character": {"type": "boolean"},
+})
+
+# 완성된 이미지·영상 → 캡션 3안 · 해시태그 (social_v1)
+SOCIAL = _obj({
+    "captions": {"type": "array", "items": _obj({"angle": _STR, "text": _STR})},
+    "hashtags": _STR_LIST,
+    "note_ko": _STR,
 })
 
 # 인터뷰 질문 하나 (interview_v1) — 보기는 서버가 정확히 3개만 씀
@@ -65,6 +88,41 @@ INTERVIEW = _obj({
     "question": _STR,
     "options": {"type": "array", "items": _obj({"label": _STR, "value": _STR, "reason": _STR})},
 })
+
+# 카드뉴스 덱 (cardnews_v1) — 레이아웃마다 쓰는 칸이 달라서 안 쓰는 칸은 빈 문자열 · 빈 배열
+CARDNEWS = _obj({
+    "deckTitle": _STR,
+    "caption": _STR,
+    "hashtags": _STR_LIST,
+    "needs_check": _STR_LIST,
+    "note_ko": _STR,
+    "cards": {"type": "array", "items": _obj({
+        "layout": {"type": "string", "enum": ["cover", "list", "quote", "stat", "outro"]},
+        "kicker": _STR,
+        "title": _STR,
+        "sub": _STR,
+        "items": {"type": "array", "items": _obj({"head": _STR, "body": _STR})},
+        "quote": _STR,
+        "number": _STR,
+        "desc": _STR,
+        "cta": _STR,
+        "photo_asset": _STR,
+        "visual_en": _STR,
+        "bg_ai": {"type": "boolean"},
+        "bg_reason_ko": _STR,
+    })},
+})
+
+# 카드뉴스 AI 배경 추천 (cardnews_bg_plan_v1) — 카드마다 쓸지 · 장면 · 이유
+CARDNEWS_BG_PLAN = _obj({"cards": {"type": "array", "items": _obj({
+    "index": {"type": "integer"},
+    "use": {"type": "boolean"},
+    "visual_en": _STR,
+    "reason_ko": _STR,
+})}})
+
+# 레퍼런스 이미지 요약 (reference_v1)
+REFERENCE = _obj({"summary": _STR})
 
 # 보조 검토 (review_v2)
 REVIEW = _obj({

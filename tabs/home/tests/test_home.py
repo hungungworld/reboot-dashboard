@@ -11,6 +11,7 @@ from server.extensions import db
 from tabs.home import news, routes, rss, todos
 from tabs.home.models import HomeNewsArticle, HomeNewsRun
 
+REAL_ACTIVE_SEASONS = news.active_seasons  # no_seasons가 바꾸기 전 원래 함수
 TODAY = date(2026, 10, 23)  # 금요일 → 이번 주 월요일 10-19
 
 
@@ -18,6 +19,12 @@ TODAY = date(2026, 10, 23)  # 금요일 → 이번 주 월요일 10-19
 def today(monkeypatch):
     monkeypatch.setattr("server.catalog.service._today", lambda: TODAY)
     return TODAY
+
+
+@pytest.fixture(autouse=True)
+def no_seasons(monkeypatch):
+    """기본은 준비 중인 시즌 없음 (실행 날짜에 따라 검색어 수가 바뀌지 않게). 시즌 테스트는 따로 바꿈."""
+    monkeypatch.setattr("tabs.home.news.active_seasons", lambda today=None: [])
 
 
 @pytest.fixture()
@@ -108,7 +115,7 @@ def test_queries_are_plain_search_terms():
         assert g["kind"] in ("signal", "flow", "trend") and g["areaLabel"]
     for g in feeds:
         assert g["feed"].startswith("https://") and g.get("source") and not g.get("query")
-    assert {a for a, _ in news.AREAS} == {g["area"] for g in cfg["groups"]}
+    assert {a for a, _ in news.AREAS} - {"season"} == {g["area"] for g in cfg["groups"]}   # 시즌 검색어는 시즌 캘린더에서 자동으로
     assert {g["area"] for g in cfg["groups"] if g["kind"] == "signal"} == {"category", "competitor", "regulation"}
     assert {"DUI", "drunk driving", "crash"} <= set(cfg["exclude"])
 
@@ -170,6 +177,34 @@ def test_pick_spreads_trends_across_sources():
     assert sorted(c["id"] for c in out) == [0, 1, 10, 11]          # 한 매체 2개까지 · 다른 매체로 채움
     only = news.pick(mr + others[:1], kinds)
     assert sorted(c["id"] for c in only) == [0, 1, 2, 10]          # 다른 매체가 모자라면 점수순으로 채움
+
+
+def test_pick_keeps_seasons_last_and_spread():
+    kinds = {"behavior": "flow", "trend": "trend", "season": "season"}.get
+    hw = [{"id": i, "area": "season", "season": "Halloween", "score": 9} for i in range(4)]
+    tg = [{"id": 10, "area": "season", "season": "Thanksgiving Eve", "score": 2}]
+    out = news.pick([{"id": 20, "area": "behavior", "score": 1}, {"id": 30, "area": "trend", "score": 1}] + hw + tg, kinds)
+    assert [c["area"] for c in out] == ["behavior", "trend"] + ["season"] * news.SEASON_ITEMS   # 시즌은 맨 뒤 따로
+    assert 10 in [c["id"] for c in out]                                         # 점수가 낮아도 다른 시즌 먼저 (한 시즌 2개)
+    assert sorted(c["id"] for c in news.pick(hw[:3] + tg, kinds, season_limit=3)) == [0, 1, 10]
+
+
+def test_season_queries():
+    cfg = news.load_queries()
+    gs = news.season_groups(cfg, [{"id": 1, "name": "Halloween"}, {"id": 2, "name": "Thanksgiving Eve"},
+                                  {"id": 3, "name": "Super Bowl LXI"}, {"id": 4, "name": "Juneteenth"}, {"id": 5, "name": "Halloween"}])
+    q = {g["id"]: g["query"] for g in gs}
+    assert list(q) == ["season-halloween", "season-thanksgiving-eve", "season-super-bowl", "season-juneteenth"]   # 같은 시즌은 한 번
+    assert q["season-halloween"].startswith("Halloween (") and q["season-thanksgiving-eve"].startswith("Thanksgiving (")
+    assert q["season-super-bowl"].startswith('"Super Bowl"')                                       # 회차(LXI)는 뗌
+    assert q["season-juneteenth"] == f'"Juneteenth" {cfg["seasonDefault"]}'                         # 없는 시즌은 기본 낱말
+    assert all(g["kind"] == "season" and g["area"] == "season" for g in gs)
+
+
+def test_active_seasons_from_calendar(app):
+    with app.app_context():
+        names = [s["name"] for s in REAL_ACTIVE_SEASONS(today=date(2026, 10, 26))]
+    assert "Halloween" in names and "Thanksgiving Eve" in names and "Christmas" not in names   # 준비 기간 · 진행 중만
 
 
 def test_client_parses_rss_and_retries(monkeypatch):
@@ -252,11 +287,31 @@ def test_requires_login(client):
     assert client.get("/api/home/todos").status_code == 401
     assert client.post("/api/home/todos", json={"title": "x"}).status_code == 401
     assert client.post("/api/home/news/collect").status_code == 401
+    assert client.get("/api/home/news/saved").status_code == 401
+
+
+def test_saved_news(auth_client):
+    assert auth_client.get("/api/home/news/saved").get_json()["items"] == []
+    assert auth_client.post("/api/home/news/saved", json={"url": "javascript:alert(1)", "title": "x"}).status_code == 400
+    assert auth_client.post("/api/home/news/saved", json={"url": "https://example.com/a"}).status_code == 400
+    body = {"url": "https://example.com/a", "title": "FDA Finalizes NDI Guidance", "titleKo": "FDA NDI 지침 확정",
+            "summaryKo": "요약", "whyKo": "성분 표기 다시 점검", "kind": "nope", "areaLabel": "규제", "domain": "BevNET",
+            "date": "2026-10-20T13:00:00Z"}
+    r = auth_client.post("/api/home/news/saved", json=body)
+    s = r.get_json()
+    assert r.status_code == 201 and s["kind"] == "flow" and s["date"] == "2026-10-20T13:00:00Z" and s["savedBy"]
+    r = auth_client.post("/api/home/news/saved", json=dict(body, kind="trend", whyKo="고친 시선", date="bad"))
+    assert r.status_code == 200 and r.get_json()["id"] == s["id"] and r.get_json()["date"] is None   # 같은 URL은 덮어씀
+    items = auth_client.get("/api/home/news/saved").get_json()["items"]
+    assert len(items) == 1 and items[0]["kind"] == "trend" and items[0]["whyKo"] == "고친 시선"
+    assert auth_client.delete(f"/api/home/news/saved/{s['id']}").get_json()["ok"] is True
+    assert auth_client.delete(f"/api/home/news/saved/{s['id']}").status_code == 404
+    assert auth_client.get("/api/home/news/saved").get_json()["items"] == []
 
 
 def test_news_before_first_collection(auth_client):
     j = auth_client.get("/api/home/news").get_json()
-    assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False
+    assert j["status"] == "never" and j["articles"] == [] and j["ai"] is None and j["aiReady"] is False and j["issueNo"] == 0
     assert len(j["groups"]) >= 3 and "판매량" in j["limitNote"]
     assert len(j["queryStats"]) == 14 and not any(q["replace"] for q in j["queryStats"])   # 돌린 적 없으면 교체 후보 없음
 
@@ -281,7 +336,7 @@ def test_collect_stores_dedupes_and_signals(fast, auth_client, monkeypatch):
         again = news.collect(trigger="manual", user_name="테스터")
         assert sum(c["new"] for c in json.loads(again.counts).values()) == 0
     j = auth_client.get("/api/home/news").get_json()
-    assert j["status"] == "ok" and j["running"] is False and j["ai"] is None
+    assert j["status"] == "ok" and j["running"] is False and j["ai"] is None and j["issueNo"] == 2   # 마켓 레터 호수 = 성공한 수집 횟수
     assert 0 < len(j["articles"]) <= 8 and all(a["url"].startswith("https://") for a in j["articles"])
     assert j["signals"][0]["group"] == "category" and j["signals"][0]["surge"] is True
     hang = next(q for q in j["queryStats"] if q["id"] == "category")
@@ -411,6 +466,45 @@ def test_feed_drops_old_articles_and_ai_trend_slot(fast, auth_client, monkeypatc
     assert it["kind"] == "trend" and it["areaLabel"] == "트렌드" and it["whyKo"].startswith("런칭")
 
 
+def test_season_news_collected_into_season_slot(fast, auth_client, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
+    monkeypatch.setattr("tabs.home.news.active_seasons", lambda today=None: [{"id": 1, "name": "Halloween"}])
+    hq = news.season_query(news.load_queries(), "Halloween")
+
+    def responder(p):
+        if p.get("q") == f"{hq} when:14d":
+            now = _now()
+            return FakeRes(body=rss_xml([{"url": f"https://hw.example.com/{i}", "title": f"Halloween party spending hits record {i}",
+                                          "source": "NRF", "date": now - timedelta(hours=i)} for i in range(6)]))
+        return good_responder(p)
+
+    calls = make_session(monkeypatch, responder)
+    sections = []
+
+    def fake_openai_json(system, user, **kw):
+        sections.append(user["section"])
+        if user["section"] != "season":
+            return {"relevant_ids": [], "headline": "", "articles": []}
+        a = user["articles"][0]
+        assert a["season"] == "Halloween" and all(g["kind"] == "season" for g in user["groups"])
+        return {"relevant_ids": [a["id"]], "headline": "할로윈 지출 기사",
+                "articles": [{"id": a["id"], "title_en": a["title"], "title_ko": "할로윈 파티 지출 최고치", "summary_ko": "s",
+                              "why_ko": "11/1 아침 숙취 카피 게시 시점 확인", "area": "behavior", "topic": "소비 트렌드",
+                              "distance": 1, "action": 2, "source": 1, "novelty": 1}]}
+
+    monkeypatch.setattr("tabs.home.news.openai_json", fake_openai_json)
+    with fast.app_context():
+        run = news.collect()
+        assert json.loads(run.counts)["season-halloween"]["new"] == 6
+        assert "season-halloween" not in {s["group"] for s in json.loads(run.signals)}   # 시즌은 보도 급증에서 뺌
+    assert any(c.get("q") == f"{hq} when:14d" for c in calls) and sections == ["news", "trend", "season"]
+    j = auth_client.get("/api/home/news").get_json()
+    it = next(i for i in j["ai"]["items"] if i["titleKo"] == "할로윈 파티 지출 최고치")
+    assert it["kind"] == "season" and it["season"] == "Halloween" and it["area"] == "season"   # AI가 다른 분야를 골라도 시즌 칸
+    assert "시즌: 할로윈 지출 기사" in j["ai"]["headline"]
+    assert any(q["id"] == "season-halloween" and q["replace"] is False for q in j["queryStats"])
+
+
 def test_ai_error_keeps_articles(fast, auth_client, monkeypatch):
     from server.core.ai import AIError
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
@@ -490,8 +584,8 @@ def test_rule_todos_without_key(auth_client, today):
     assert "Halloween 캠페인 소재·카피 준비" in titles
     assert "D-8" in by["Halloween 캠페인 소재·카피 준비"]["reason"]          # 근거
     assert any("Thanksgiving Eve 준비 일정 잡기" == t for t in titles)       # 준비 시작이 2주 안
-    assert by["미처리 CS 문의 5건 답변"]["source"] == "cs" and "긴급 1" in by["미처리 CS 문의 5건 답변"]["reason"]
-    assert "검토 대기 카피 2건 확인" in titles and "실제 성과 CSV 올리기" in titles
+    assert by["미처리 CS 문의 5건 답장"]["source"] == "cs" and "긴급 1" in by["미처리 CS 문의 5건 답장"]["reason"]
+    assert "검토 대기 카피 2건 확인" in titles and "실제 성과 CSV 업로드" in titles
     assert all(i["origin"] == "rule" and i["ai"] is False and i["reason"] for i in j["items"])
     assert j["open"] == len(j["items"])
     # 같은 주 자동 생성은 한 번만
@@ -509,7 +603,7 @@ def test_regenerate_keeps_manual_and_done(auth_client, today):
     titles = [i["title"] for i in j2["items"]]
     assert "파트너 미팅 자료 준비" in titles
     assert titles.count(first["title"]) == 1                     # 완료 항목은 남고 중복으로 다시 생기지 않음
-    assert "미처리 CS 문의 5건 답변" not in titles                # 현황이 없으니 빠짐
+    assert "미처리 CS 문의 5건 답장" not in titles               # 현황이 없으니 빠짐
     done = [i for i in j2["items"] if i["done"]]
     assert done and done[0]["id"] == first["id"] and done[0]["doneBy"] == "테스터"
     assert j2["items"][-1]["done"] is True                       # 완료 항목은 아래로
@@ -582,3 +676,35 @@ def test_home_page_loads_part_files(auth_client):
     assert html.index("/parts/performance/metrics.js") < html.index("/parts/performance/performance.js")
     for f in ("home/home.js", "home/home.css", "performance/metrics.js", "performance/performance.js", "performance/performance.css"):
         assert auth_client.get(f"/parts/{f}").status_code == 200, f
+
+
+# ───────── 노란 체크 패널 · 인사이트 자료 ─────────
+
+def test_dock_items_save_dedupe_and_download(auth_client):
+    """담기 · 같은 자료는 덮어씀 · 위험한 주소는 버림 · 메모 · 파일 3종 · 삭제."""
+    assert auth_client.get("/api/home/dock/items").get_json()["items"] == []
+    assert auth_client.post("/api/home/dock/items", json={"kind": "action", "title": "x"}).status_code == 400   # 구분 키 없음
+    body = {"kind": "action", "sourceKey": "action:price_cut", "title": "경쟁 제품 가격 인하", "text": "Flyby $30 → $24",
+            "href": "/dashboard/insights#market/changes", "url": "javascript:alert(1)", "data": {"grade": "긴급"}}
+    r = auth_client.post("/api/home/dock/items", json=body)
+    assert r.status_code == 201
+    item = r.get_json()
+    assert item["url"] == "" and item["href"] == "/dashboard/insights#market/changes" and item["data"] == {"grade": "긴급"}
+    assert auth_client.post("/api/home/dock/items", json=dict(body, title="고친 제목", href="https://evil.example")).status_code == 200
+    auth_client.post("/api/home/dock/items", json={"kind": "weird", "sourceKey": "k2", "title": "기타 자료"})
+    items = auth_client.get("/api/home/dock/items").get_json()["items"]
+    assert len(items) == 2 and items[0]["kind"] == "other"
+    same = next(x for x in items if x["sourceKey"] == "action:price_cut")
+    assert same["title"] == "고친 제목" and same["href"] == ""
+    assert [x["kind"] for x in auth_client.get("/api/home/dock/items?kind=action").get_json()["items"]] == ["action"]
+    assert auth_client.patch(f"/api/home/dock/items/{same['id']}", json={"memo": "릴스 소재로"}).get_json()["memo"] == "릴스 소재로"
+
+    md = auth_client.get("/api/home/dock/items.md")
+    assert "attachment" in md.headers["Content-Disposition"] and "## [이번 주 액션] 고친 제목" in md.get_data(as_text=True)
+    csv_text = auth_client.get("/api/home/dock/items.csv").get_data(as_text=True)
+    assert csv_text.startswith("﻿종류") and "릴스 소재로" in csv_text
+    assert len(auth_client.get("/api/home/dock/items.json").get_json()) == 2
+
+    assert auth_client.delete(f"/api/home/dock/items/{same['id']}").status_code == 200
+    assert auth_client.delete(f"/api/home/dock/items/{same['id']}").status_code == 404
+    assert len(auth_client.get("/api/home/dock/items").get_json()["items"]) == 1

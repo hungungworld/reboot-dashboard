@@ -17,34 +17,41 @@ from server.extensions import db
 from server.models import iso, utcnow
 from tabs.settings.config import get_collect_config
 from . import ai as insights_ai
-from . import amazon, competitors, rules, service, trends, weee, youtube
+from . import accuracy, amazon, channel_reviews, competitors, rules, service, trends, weee, yami, youtube
 from .http import CollectError
-from .models import Comment, Monthly, Review, Run, load_json
+from .models import Comment, Monthly, Review, Run, ShelfItem, load_json
 from .util import review_month, week_key
 
 JOB = "insights-update"
 ITEMS = [
-    {"id": "weee", "label": "Weee! 진열대", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
-     "desc": "목록 · 상품 페이지에서 가격 · 품절 · 핵심 메시지"},
+    {"id": "weee", "label": "Weee! 진열대 · 리뷰", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
+     "desc": "목록 · 제품 페이지에서 가격 · 품절 · 핵심 메시지 · 제품별 구매자 리뷰"},
     {"id": "amazon", "label": "Amazon 진열대 · 리뷰", "group": "weekly", "needs": ["SERPAPI_KEY"],
-     "desc": "검색 상위(광고 제외) · 리뷰 많은 상품 상세 · 대표 리뷰"},
+     "desc": "검색 상위(광고 제외) · 리뷰 많은 제품 상세 · 대표 리뷰"},
+    {"id": "yami", "label": "Yami 진열대", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
+     "desc": "숙취 검색 결과 첫 페이지: 브랜드 · 가격 · 정가 · 판매량"},
+    {"id": "channel_reviews", "label": "판매처 리뷰 (Olive Young · Amazon · Yami)", "group": "weekly", "needs": ["FIRECRAWL_API_KEY"],
+     "desc": "알디콤 제품의 구매자 리뷰 · 별점 (Olive Young 영어 리뷰 전부 · Amazon 대표 리뷰는 SerpApi)"},
     {"id": "trends", "label": "검색 트렌드", "group": "weekly", "needs": ["SERPAPI_KEY"],
      "desc": "트렌드 키워드마다 미국 12개월 (키가 없으면 CSV 올리기)"},
     {"id": "reviews", "label": "리뷰 분류", "group": "weekly", "needs": [], "ai": True,
      "desc": "주제(효과 · 맛·향 · 복용 편의 · 부작용 · 가격) · 칭찬/불만"},
-    {"id": "competitors", "label": "경쟁사 분석", "group": "weekly", "needs": [], "ai": True,
-     "desc": "새 경쟁사 등록 · 상품 위치(제형 · 타이밍) 분류 · 리뷰 상위 15개 브랜드 분석(25일 지난 것만)"},
+    {"id": "competitors", "label": "경쟁 브랜드 분석", "group": "weekly", "needs": [], "ai": True,
+     "desc": "새 경쟁 브랜드 등록 · 제형 분류 · 리뷰 상위 15개 브랜드 분석(진열대 · 홈페이지 · 뉴스 → AI 웹 검색, 25일 지난 것만)"},
     {"id": "actions", "label": "이번 주 액션", "group": "weekly", "needs": [], "ai": True,
      "desc": "규칙으로 신호를 고르고, AI 키가 있으면 문장을 다듬음"},
-    {"id": "youtube", "label": "유튜브 수집", "group": "monthly", "needs": ["YOUTUBE_API_KEY"],
+    {"id": "youtube", "label": "유튜브 댓글", "group": "monthly", "needs": ["YOUTUBE_API_KEY"],
      "desc": "검색어 세트 A · B · K → 영상 · 댓글"},
     {"id": "voc", "label": "VOC 분류", "group": "monthly", "needs": [], "ai": True,
-     "desc": "댓글의 관련 여부 · 질문 주제"},
+     "desc": "댓글의 관련 여부 · 질문 주제 (사람 정답 예시 24건을 함께 줌)"},
+    {"id": "accuracy", "label": "정확도 검증", "group": "monthly", "needs": [], "ai": True, "manual": True,
+     "desc": "정답 76건으로 규칙 / AI 예시 없이 / AI 예시 포함 채점 (월간 묶음에 자동으로 들어가지 않음)"},
     {"id": "monthly", "label": "요약 · 전략", "group": "monthly", "needs": ["OPENAI_API_KEY"],
      "desc": "이달의 요약 3줄 · 고객 인사이트 · 페르소나 · SWOT"},
 ]
 BY_ID = {i["id"]: i for i in ITEMS}
-ORDER = ["weee", "amazon", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly"]
+ORDER = ["weee", "amazon", "yami", "channel_reviews", "trends", "youtube", "reviews", "voc", "competitors", "actions", "monthly",
+         "accuracy"]
 LIMITS = {"serpapi": 250, "firecrawl": 1000, "youtube": 10000}
 REVIEW_BATCH, REVIEW_MAX = 40, 200
 COMMENT_BATCH, COMMENT_MAX = 80, 400
@@ -63,11 +70,21 @@ def estimate(item_id, cfg):
     ai = envkeys.has("OPENAI_API_KEY")
     sets = sum(len(v) for v in (cfg.get("search_sets") or {}).values())
     per = int(cfg.get("videos_per_query") or 0)
-    if item_id == "weee":
-        return {"firecrawl": len(cfg.get("weee_urls") or [])}
+    if item_id == "weee":  # 진열대 페이지 + 지난번 상품 수만큼 리뷰 페이지 (리뷰가 있으면 JSON 추출 더)
+        last = db.session.query(db.func.max(ShelfItem.week)).filter(ShelfItem.source == "weee").scalar()
+        n = ShelfItem.query.filter_by(source="weee", week=last).count() if last else 0
+        return {"firecrawl": len(cfg.get("weee_urls") or []) + n}
+    if item_id == "yami":
+        return {"firecrawl": len(yami.queries())}
     if item_id == "amazon":
         return {"serpapi": len(cfg.get("amazon_queries") or []) + int(cfg.get("amazon_product_lookups") or 0)
                 + len(cfg.get("tracked_asins") or [])}
+    if item_id == "channel_reviews":  # Olive Young은 첫 페이지 + 더 보기 = 상품마다 약 2
+        src = channel_reviews.load_sources()
+        cost = {"firecrawl": sum(2 if s["channel"] == "oliveyoung" else 1 for s in src if s["channel"] != "amazon")}
+        if envkeys.has("SERPAPI_KEY"):
+            cost["serpapi"] = sum(1 for s in src if s["channel"] == "amazon")
+        return {k: v for k, v in cost.items() if v}
     if item_id == "trends":
         return {"serpapi": len(cfg.get("trend_keywords") or [])}
     if item_id == "youtube":
@@ -80,6 +97,8 @@ def estimate(item_id, cfg):
         return _competitor_cost(ai)
     if item_id in ("actions", "monthly"):
         return {"openai": 1 if ai else 0}
+    if item_id == "accuracy":
+        return {"openai": accuracy.calls_needed(ai)}
     return {}
 
 
@@ -92,8 +111,8 @@ def _competitor_cost(ai, force=False, only=None):
     else:
         targets = [c for c in competitors.deep_targets(now) if competitors.stale(c, force)]
         n, site = len(targets), sum(1 for c in targets if not c.website)
-    fc = n + site if envkeys.has("FIRECRAWL_API_KEY") else 0
-    return {k: v for k, v in {"openai": n + 1, "firecrawl": fc}.items() if v}
+    fc = n * 2 + site if envkeys.has("FIRECRAWL_API_KEY") else 0  # 홈페이지 1장 + 뉴스 검색 1회 (+ 처음이면 홈페이지 찾기)
+    return {k: v for k, v in {"openai": n * 2 + 1, "firecrawl": fc}.items() if v}  # 분석 + 못 채운 칸 웹 검색
 
 
 def month_usage():
@@ -121,8 +140,12 @@ def plan():
         note, ready = "", not missing
         if it.get("ai") and not keys["OPENAI_API_KEY"]:
             note = "AI 키가 없어 규칙으로만 처리해요 (무료)."
-        if it["id"] == "weee" and not cfg.get("weee_urls"):
+        if (cfg.get("enabled") or {}).get(it["id"]) is False:
+            ready, note = False, "설정 › 수집 설정에서 꺼 두었어요."
+        elif it["id"] == "weee" and not cfg.get("weee_urls"):
             ready, note = False, "설정 › 수집 설정에 Weee! 주소가 없어요."
+        if it["id"] == "channel_reviews" and not channel_reviews.load_sources():
+            ready, note = False, "리뷰를 받을 알디콤 제품 주소가 없어요. 인사이트 담당자에게 알려 주세요."
         items.append(dict(it, ready=ready, missing=missing, cost=estimate(it["id"], cfg), note=note))
     return {"items": items, "keys": keys, "usage": month_usage(), "limits": LIMITS, "running": jobs.is_running(JOB),
             "lastRun": service.last_run(), "reviewMonth": review_month(service.today()), "week": week_key(service.today())}
@@ -132,7 +155,7 @@ def start(items, user, options=None):
     """options: 경쟁사 분석용 {force: 상위 15개 모두 다시 조사, only: 경쟁사 id 한 곳}."""
     items = [i for i in ORDER if i in set(items)]
     if not items:
-        raise ValueError("업데이트할 항목을 하나 이상 고르세요.")
+        raise ValueError("받을 항목을 하나 이상 고르세요.")
     # 잠금 파일은 뒤 작업이 시작돼야 생겨서, 막 시작한 실행 기록(2분 안)도 함께 확인 (두 번 누름 방지)
     fresh = Run.query.filter(Run.status == "running", Run.started_at >= utcnow() - timedelta(minutes=2)).first()
     if jobs.is_running(JOB) or fresh is not None:
@@ -164,8 +187,15 @@ def _collect_log(label, res, user, failed=False, collector=True):
 
 def _run_weee(cfg, ctx):
     r = weee.collect(cfg, envkeys.get("FIRECRAWL_API_KEY"), ctx["week"])
+    r["usage"] = {"firecrawl": r["credits"]}
+    r["message"] = f"Weee! 상품 {r['count']}개 · 리뷰 {r['reviews']}개(새 리뷰 {r['newReviews']}개)를 모았어요 (페이지 {r['calls']}개)."
+    return r
+
+
+def _run_yami(cfg, ctx):
+    r = yami.collect(cfg, envkeys.get("FIRECRAWL_API_KEY"), ctx["week"])
     r["usage"] = {"firecrawl": r["calls"]}
-    r["message"] = f"Weee! 상품 {r['count']}개를 모았어요 (페이지 {r['calls']}개)."
+    r["message"] = f"Yami 상품 {r['count']}개를 모았어요 (검색 {r['calls']}회)."
     return r
 
 
@@ -173,6 +203,15 @@ def _run_amazon(cfg, ctx):
     r = amazon.collect(cfg, envkeys.get("SERPAPI_KEY"), ctx["week"])
     r["usage"] = {"serpapi": r["calls"]}
     r["message"] = f"Amazon 상품 {r['count']}개 · 새 리뷰 {r['reviews']}개를 모았어요 (SerpApi {r['calls']}회)."
+    return r
+
+
+def _run_channel_reviews(cfg, ctx):
+    serp = envkeys.get("SERPAPI_KEY") if envkeys.has("SERPAPI_KEY") else None
+    r = channel_reviews.collect(envkeys.get("FIRECRAWL_API_KEY"), ctx["week"], serp)
+    r["usage"] = {"firecrawl": r["credits"], "serpapi": r["serpapi"]}
+    r["message"] = (f"채널 리뷰 {r['count']}개를 읽고 새 리뷰 {r['reviews']}개를 넣었어요 "
+                    f"(Firecrawl 약 {r['credits']} 크레딧 · SerpApi {r['serpapi']}회).")
     return r
 
 
@@ -237,8 +276,9 @@ def _run_voc(cfg, ctx):
             o = out.get(c.id)
             if not o:
                 continue
-            c.relevant, c.is_question = bool(o["relevant"]), bool(o["question"]) and bool(o["relevant"])
-            c.topic = o["topic"] if c.is_question and o["topic"] != "none" else ""
+            c.relevant = bool(o["relevant"])
+            c.is_question = bool(o["question"]) and c.relevant and o["topic"] != "none"
+            c.topic = o["topic"] if c.is_question else ""
             c.classified_by = "ai"
             done += 1
         db.session.commit()
@@ -270,7 +310,9 @@ def _run_actions(cfg, ctx):
 
 def _run_monthly(cfg, ctx):
     month = ctx["month"]
-    out = insights_ai.monthly_analysis(service.monthly_payload(month, ctx["today"]))
+    payload = service.monthly_payload(month, ctx["today"])
+    out = insights_ai.monthly_analysis(payload)
+    out["sources"] = service.monthly_sources(payload)   # 화면 'AI가 읽은 자료' (실행 때 실제로 넘긴 개수)
     row = db.session.get(Monthly, month) or Monthly(month=month)
     row.data = json.dumps(out, ensure_ascii=False)
     row.model, row.created_at, row.created_by = insights_ai.openai_model(), utcnow(), (ctx["user"] or "")[:100]
@@ -279,9 +321,19 @@ def _run_monthly(cfg, ctx):
     return {"ok": True, "count": 1, "message": f"{month} 월간 요약 · 전략을 만들었어요.", "usage": {"openai": 1}}
 
 
-RUNNERS = {"weee": _run_weee, "amazon": _run_amazon, "trends": _run_trends, "youtube": _run_youtube, "reviews": _run_reviews,
-           "voc": _run_voc, "competitors": _run_competitors, "actions": _run_actions, "monthly": _run_monthly}
-COLLECTORS = {"weee", "amazon", "trends", "youtube"}
+def _run_accuracy(cfg, ctx):
+    r, calls = accuracy.run(ctx["user"])
+    m = r["methods"]
+    name = dict(accuracy.METHODS)
+    text = " · ".join(f"{name[k]} {v['exact']}%" for k, v in m.items())
+    note = "" if "few" in m else " AI 키가 없어 규칙만 채점했어요."
+    return {"ok": True, "count": r["tests"], "message": f"정답 {r['tests']}건 채점: {text}.{note}", "usage": {"openai": calls}}
+
+
+RUNNERS = {"weee": _run_weee, "amazon": _run_amazon, "yami": _run_yami, "channel_reviews": _run_channel_reviews, "trends": _run_trends, "youtube": _run_youtube, "reviews": _run_reviews,
+           "voc": _run_voc, "competitors": _run_competitors, "actions": _run_actions, "monthly": _run_monthly,
+           "accuracy": _run_accuracy}
+COLLECTORS = {"weee", "amazon", "yami", "channel_reviews", "trends", "youtube"}
 
 
 def run_update(run_id, items, user, options=None):
@@ -330,8 +382,11 @@ def status():
     if r is None:
         return {"run": None, "running": False}
     running = jobs.is_running(JOB)
-    if r.status == "running" and not running and r.started_at < utcnow() - timedelta(minutes=2):
-        r.status, r.finished_at, r.current = "failed", utcnow(), ""  # 서버가 중간에 꺼진 경우
+    age = utcnow() - r.started_at
+    # 서버가 중간에 꺼진 경우: 잠금이 없거나, 잠금이 남아 있어도 30분 넘게 '진행 중'이면 멈춘 것으로 봄
+    if r.status == "running" and ((not running and age > timedelta(minutes=2)) or age > timedelta(minutes=30)):
+        running = False
+        r.status, r.finished_at, r.current = "failed", utcnow(), ""
         results = load_json(r.results, {})
         results.setdefault("_", {"ok": False, "message": "업데이트가 중간에 멈췄어요. 다시 실행하세요."})
         r.results = json.dumps(results, ensure_ascii=False)

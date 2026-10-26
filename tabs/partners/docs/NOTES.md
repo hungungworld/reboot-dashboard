@@ -6,7 +6,7 @@
 
 | 파일 | 하는 일 | CSS 접두사 · 저장 키 |
 |---|---|---|
-| `tabs/partners/static/partners.js` | 대표: 메뉴 등록 · 탭 틀 · 제목 옆 '업체 파일 가져오기' 버튼만 | `ptn-` · `partners.tab.u<id>` |
+| `tabs/partners/static/partners.js` | 대표: 메뉴 등록 · 탭 틀 | `ptn-` · `(저장 키 없음)` |
 | `tabs/partners/static/outreach.js` · `data-outreach.js` | 🔎 업체 컨택(3-1) · ✉️ 협업 메일(3-2) · 📘 협업 가이드(3-3) | `ptn-out-` · `outreach.*` |
 | `tabs/partners/static/records.js` · `data-records.js` | 🗂️ 협업 이력(3-4) · 협업 보드 · 📈 판매 실적(3-5) · `creatorSales` | `ptn-rec-` · `records.*` |
 | `tabs/partners/static/partners.css` | 세 파일의 스타일 (`.part-partners` 안에서만) | — |
@@ -16,7 +16,7 @@
 | `tabs/partners/prompts.py` | 메일·가이드·번역·회신 요약 프롬프트 · **`DEFAULT_PROMPTS`** · **`GUIDE_PURPOSES`** | — |
 | `tabs/partners/mailer.py` | Gmail SMTP 발송 · IMAP 답장/반송 확인 (테스트는 `connect_smtp`·`connect_imap`을 바꿔 끼움) | — |
 | `tabs/partners/guide_docx.py` | 가이드 Markdown → Word | — |
-| `tabs/partners/sales.py` | 크리에이터별 판매 실적 더미 데이터 | — |
+| `tabs/partners/sales.py` | 크리에이터별 판매 실적 예시 데이터 | — |
 | `tabs/partners/data/examples.json` | '예시 데이터로 둘러보기' · 양식 내려받기용 가상 업체 2곳씩 (example.com) | — |
 | `tabs/partners/tests/test_partners.py` | 서버 테스트 (OpenAI·SMTP·IMAP 가짜) + JS 문법 확인(`node --check`) | — |
 
@@ -55,7 +55,7 @@
 5. 번역은 서버 OpenAI(`POST /api/partners/translate`)로 합니다 (컴플라이언스의 `translate()`는 브라우저 내장 영→한만 가능해서 양방향이 안 됨).
 6. 시안의 클래스 이름은 접두사 규칙에 맞춰 바꿨습니다: `partner-hero`→`ptn-out-hero` · `partner-detail`→`ptn-out-detail` · `partner-stats`→`ptn-out-stats` · `kanban`→`ptn-rec-kanban` · `kanban-col`→`ptn-rec-col` · `mini-card`→`ptn-rec-card` (값은 시안 그대로, 다크 모드는 변수). 협업 보드 열은 시안의 4열 대신 README 진행 상태 6열(보류·중단 한 열).
 7. 상단 숫자(어두운 띠): 컨택 업체 수 · 진행 중인 협업(협의·협업·마케팅) · 회신 받음 — 모두 실제 이력 기준 업체 수(샘플 제외).
-8. 판매 실적 더미: 이름·날짜마다 고정 시드라 언제 불러도 같은 값, **가상 단가 $24**(제품 가격 미정이라 더미임을 화면에 표시), 환불 약 5%는 합계에서 제외, 기간은 오늘(Asia/Seoul)까지 60일.
+8. 판매 실적 예시: 이름·날짜마다 고정 시드라 언제 불러도 같은 값, **예시 단가 $24**(제품 가격 미정이라 예시임을 화면에 표시), 환불 약 5%는 합계에서 제외, 기간은 오늘(Asia/Seoul)까지 60일.
 9. 첨부 한도는 README대로 원본 합계 25MB로 막습니다. Gmail은 인코딩 후 크기(약 1.37배)로 세므로 실제로는 약 18MB부터 거절될 수 있습니다.
 
 ## 5. 키 · 실제 파일이 있어야 확인되는 것 (테스트는 가짜로만 확인)

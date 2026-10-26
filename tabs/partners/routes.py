@@ -1,13 +1,14 @@
 """인플루언서 · 파트너 API (담당: 혁주). 모든 주소는 로그인 필요 (server/security.py).
 
 상태·설정
-  GET    /api/partners/status                 규제 DB · OpenAI · Gmail 발송 연결 상태
+  GET    /api/partners/status                 규제 DB(컴플라이언스 파트 규칙 · 모니터링) · OpenAI · Gmail 발송 연결 상태
   GET    /api/partners/config                 상태 + 세부 카테고리 · 기본 프롬프트 · 가이드 목적 · 첨부 규칙
 업체 (3-1)
   GET    /api/partners  · /contacts           업체 목록 (?type=케이터링,인플루언서 &tags=festival,vip &q=검색어)
   POST   /api/partners/import                 업체 파일 가져오기 (multipart: catering=CSV, influencer=XLSX, file=자동 판단)
   POST   /api/partners/example                예시 데이터(가상 업체 · example.com) 불러오기 — 비어 있는 구분만
   GET    /api/partners/template/<catering.csv|influencer.xlsx>   가져오기 양식
+  GET    /api/partners/export/<catering.csv|influencer.csv>      지금 업체 목록 내보내기 (가져오기와 같은 머리글)
   GET    /api/partners/overview               컨택 업체 수 · 진행 중 협업 · 회신 받음 · 회신 대기 · 업체별 최신 진행 상태
 협업 메일 (3-2)
   POST   /api/partners/email/generate         영문 제목·본문 생성 (OpenAI JSON)
@@ -29,8 +30,18 @@
   POST   /api/partners/history/<id>/reply-summary   회신 AI 요약 (한국어: 핵심·요청사항·분위기·다음 액션)
   POST   /api/partners/history/<id>/reply-draft     AI 영문 답장 초안 {points}
 판매 실적 (3-5)
-  GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 🧪 더미 데이터
+  GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 올린 시연 사이트 CSV가 있으면 그 집계, 없으면 더미
+  POST   /api/partners/sales/upload           시연 사이트 관리자 CSV (multipart file — Order details · Creator performance)
+  DELETE /api/partners/sales/upload           올린 CSV 지우기 → 더미로 되돌림
+유튜브 크리에이터 추천 (youtube.py · 영미권 + 미국 타겟 추정 · 소개란 공개 이메일만 · 30일 안에 갱신, 못 하면 삭제)
+  GET    /api/partners/youtube                목록 (?refresh=0이면 오래된 값 갱신 안 함)
+  POST   /api/partners/youtube/search         {keywords:[…]} 추천 받기 (YouTube Data API)
+  POST   /api/partners/youtube/keywords       {current:[…]} 관련 키워드 AI 추천 (OpenAI · 참고용, 키 없으면 503)
+  POST   /api/partners/youtube/delete         {ids:[…]} 삭제 (크리에이터 삭제 요청 시)
+  GET    /api/partners/youtube/export.csv     CSV 내보내기 (이 표만)
+  POST   /api/partners/youtube/import         CSV 가져오기 (multipart file — 내보내기 형식, 기준일 30일 이내만)
 """
+import csv
 import io
 import json
 import mimetypes
@@ -50,9 +61,9 @@ from server.core import ai as core_ai
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
-from . import guide_docx, importer, mailer, prompts, sales
+from . import guide_docx, importer, mailer, prompts, regulation, sales, youtube
 from .importer import CATERING, INFLUENCER, TYPES
-from .models import PartnerAttachment, PartnerContact, PartnerHistory
+from .models import PartnerAttachment, PartnerContact, PartnerHistory, PartnerYoutubeCreator
 
 bp = Blueprint("partners", __name__, url_prefix="/api/partners")
 
@@ -96,7 +107,7 @@ def _parse_at(value):
     try:
         dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError:
-        raise ApiError("일시 형식이 올바르지 않습니다.")
+        raise ApiError("일시 형식이 올바르지 않아요.")
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=_tz())
     return dt.astimezone(timezone.utc).replace(tzinfo=None)
@@ -110,7 +121,7 @@ def _ptype(value, default=None):
         return INFLUENCER
     if default is not None:
         return default
-    raise ApiError("구분은 케이터링 또는 인플루언서입니다.")
+    raise ApiError("구분은 케이터링 또는 인플루언서예요.")
 
 
 def _one_line(s):
@@ -121,7 +132,7 @@ def _int(v):
     try:
         return int(v)
     except (TypeError, ValueError):
-        raise ApiError("번호가 올바르지 않습니다.")
+        raise ApiError("번호가 올바르지 않아요.")
 
 
 def _display_name(filename):
@@ -136,19 +147,15 @@ def _display_name(filename):
 def _history_or_404(hid):
     rec = db.session.get(PartnerHistory, hid)
     if rec is None:
-        raise ApiError("없는 이력입니다.", 404)
+        raise ApiError("없는 기록이에요.", 404)
     return rec
-
-
-def _regulation_db():
-    # 통합 규제 DB가 정해지면 여기서 실제 접속 확인 (README 3-2). 지금은 주소가 있는지만 봄
-    return bool((envkeys.get("REGULATION_DB_URL") or "").strip())
 
 
 def _status():
     sender, _ = mailer.credentials()
-    return {"regulationDb": _regulation_db(), "openai": core_ai.openai_ready(), "model": core_ai.openai_model(),
-            "smtp": mailer.ready(), "sender": sender if mailer.ready() else ""}
+    reg = regulation.status()   # 컴플라이언스 파트의 규제 DB를 실제로 읽어 확인
+    return {"regulationDb": reg["connected"], "regulation": reg, "openai": core_ai.openai_ready(),
+            "model": core_ai.openai_model(), "smtp": mailer.ready(), "sender": sender if mailer.ready() else ""}
 
 
 # ───────── 상태 · 설정 ─────────
@@ -220,7 +227,7 @@ def import_contacts():
     if not uploads:
         raise ApiError("가져올 파일을 고르세요 (케이터링 CSV · 인플루언서 XLSX).")
     if len(uploads) > 4:
-        raise ApiError("한 번에 4개 파일까지 가져올 수 있습니다.")
+        raise ApiError("한 번에 4개 파일까지 올릴 수 있어요.")
     parsed = []
     for ptype, name, raw in uploads:
         shown = _display_name(name)
@@ -231,7 +238,7 @@ def import_contacts():
             raise ApiError(f"{shown}: {e}")
         parsed.append((t, shown, recs, warnings))
     if len({p[0] for p in parsed}) != len(parsed):
-        raise ApiError("같은 구분의 파일을 두 개 올렸습니다. 구분별로 하나씩 올려 주세요.")
+        raise ApiError("같은 구분의 파일을 두 개 올렸어요. 구분별로 하나씩 올려 주세요.")
     results = []
     for t, shown, recs, warnings in parsed:   # 모두 읽은 뒤에 바꿈 (하나라도 실패하면 아무것도 안 바뀜)
         n = importer.replace_contacts(t, recs, shown, _who())
@@ -249,7 +256,7 @@ def load_example():
         for t in TYPES:
             if PartnerContact.query.filter_by(ptype=t).count():
                 continue   # 실제로 가져온 업체가 있으면 건드리지 않음
-            importer.replace_contacts(t, importer.example_records(t), "예시 데이터 (가상 업체)", _who())
+            importer.replace_contacts(t, importer.example_records(t), "예시 데이터 (지어낸 업체)", _who())
             loaded.append(t)
     except importer.ImportFailed as e:
         raise ApiError(str(e), 500)
@@ -271,8 +278,8 @@ def _add_samples():
             partner_id=a.id, partner_name=a.name, partner_type=a.ptype, kind="샘플", activity="메일 발송",
             mail_status="회신 받음", progress="협의 중", owner="예시", at=now - timedelta(days=3), to_addr=a.email,
             subject="REBOOT x Sample Catering A — event sampling (예시)",
-            body="Hi Sample Catering A team,\n\n(예시 기록 — 실제로 보낸 메일이 아닙니다.)\n\nREBOOT Partnerships Team",
-            memo="[예시] 화면 확인용 샘플 기록입니다.", reply_from=f"Sample Catering A <{a.email}>",
+            body="Hi Sample Catering A team,\n\n(예시 기록 — 실제로 보낸 메일이 아니에요.)\n\nREBOOT Partnerships Team",
+            memo="[예시] 화면 확인용 예시 기록이에요.", reply_from=f"Sample Catering A <{a.email}>",
             reply_subject="Re: REBOOT x Sample Catering A — event sampling (예시)",
             reply_body=("Hi REBOOT team,\n\nThanks for reaching out — this is an example reply for the dashboard demo. "
                         "We would be glad to talk about sampling at our November events. Could you share the product "
@@ -285,11 +292,23 @@ def _add_samples():
             partner_id=b.id, partner_name=b.name, partner_type=b.ptype, kind="샘플", activity="메일 발송",
             mail_status="발송 성공", progress="컨택 중", owner="예시", at=now - timedelta(days=1), to_addr=b.email,
             subject="REBOOT x Sample Creator Agency — creator seeding (예시)",
-            body="Hi Sample Creator Agency team,\n\n(예시 기록 — 실제로 보낸 메일이 아닙니다.)\n\nREBOOT Partnerships Team",
-            memo="[예시] 화면 확인용 샘플 기록입니다.", created_by="예시"))
+            body="Hi Sample Creator Agency team,\n\n(예시 기록 — 실제로 보낸 메일이 아니에요.)\n\nREBOOT Partnerships Team",
+            memo="[예시] 화면 확인용 예시 기록이에요.", created_by="예시"))
         made += 1
     db.session.commit()
     return made
+
+
+@bp.get("/export/<name>")
+def export_contacts(name):
+    ptype = {"catering.csv": CATERING, "influencer.csv": INFLUENCER}.get(name)
+    if ptype is None:
+        raise ApiError("없는 다운로드 파일이에요.", 404)
+    _sync_bundled()
+    rows = PartnerContact.query.filter_by(ptype=ptype).order_by(PartnerContact.sort).all()
+    today = _local(utcnow()).date().isoformat()
+    return Response(importer.export_csv(ptype, rows), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=reboot-partners-{name[:-4]}-{today}.csv"})
 
 
 @bp.get("/template/<name>")
@@ -301,7 +320,7 @@ def template(name):
         return send_file(io.BytesIO(importer.template_xlsx()), as_attachment=True,
                          download_name="reboot-partners-influencer-template.xlsx",
                          mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    raise ApiError("없는 양식입니다.", 404)
+    raise ApiError("없는 양식이에요.", 404)
 
 
 def _partner_key(h):
@@ -371,9 +390,10 @@ def email_generate():
         rec = _history_or_404(_int(data.get("reply_to")))
         reply = {"subject": rec.subject, "body": rec.body, "from": rec.reply_from, "reply": rec.reply_body}
     period = data.get("period") if isinstance(data.get("period"), dict) else {}
+    facts = _contact_facts(contact) or {"name": name, "type": ptype}
     system, user = prompts.mail_messages(
         ptype, clip(data.get("prompt"), 6000), prompts.product_desc(catalog.get_brand(), catalog.get_products()),
-        clip(data.get("ideal"), 1500).strip(), name, _contact_facts(contact) or {"name": name, "type": ptype},
+        clip(data.get("ideal"), 1500).strip(), name, facts,
         clip(data.get("purpose"), 2000), clip(period.get("start"), 10), clip(period.get("end"), 10),
         clip(data.get("proposal"), 3000), clip(data.get("requests"), 3000), reply=reply)
     out = core_ai.openai_json(system, user, schema=prompts.MAIL_SCHEMA, schema_name="partner_email", max_tokens=1500,
@@ -381,7 +401,7 @@ def email_generate():
     subject = _one_line(out.get("subject"))[:300]
     body = str(out.get("body") or "").strip()
     if not subject or not body:
-        raise ApiError("AI가 제목·본문을 만들지 못했습니다. 다시 시도하세요.", 502)
+        raise ApiError("AI가 제목·본문을 만들지 못했어요. 다시 시도하세요.", 502)
     return jsonify(subject=subject, body=body, words=len(body.split()), model=core_ai.openai_model(), ai=True)
 
 
@@ -391,17 +411,17 @@ def translate():
     text = str(data.get("text") or "")
     to = data.get("to")
     if to not in ("ko", "en"):
-        raise ApiError("번역 방향(to)은 ko 또는 en입니다.")
+        raise ApiError("번역 방향은 한국어 또는 영어만 돼요.")
     if not text.strip():
-        raise ApiError("번역할 내용이 없습니다.")
+        raise ApiError("번역할 내용이 없어요.")
     if len(text) > 30000:
-        raise ApiError("번역할 내용이 너무 깁니다 (30,000자까지).")
+        raise ApiError("번역할 내용이 너무 길어요 (30,000자까지).")
     out = core_ai.openai_json(prompts.translate_system(to), text, schema=prompts.TEXT_SCHEMA, schema_name="translation",
                               max_tokens=8000, timeout=120, part="partners",
                               action="번역 (영→한)" if to == "ko" else "번역 (한→영)")
     result = str(out.get("text") or "")
     if not result.strip():
-        raise ApiError("번역 결과가 비어 있습니다. 다시 시도하세요.", 502)
+        raise ApiError("번역 결과가 비어 있어요. 다시 시도하세요.", 502)
     return jsonify(text=result, to=to, ai=True)
 
 
@@ -415,13 +435,13 @@ def _recipients(value):
         m = re.match(r"^(.*)<([^<>]+)>\s*$", s)
         addr = (m.group(2) if m else s).strip()
         if not EMAIL_RE.match(addr):
-            raise ApiError(f"수신자 이메일 형식이 올바르지 않습니다: {s[:80]}")
+            raise ApiError(f"수신자 이메일 형식이 올바르지 않아요: {s[:80]}")
         if addr.lower() not in (o.lower() for o in out):
             out.append(addr)
     if not out:
         raise ApiError("수신자 이메일을 입력하세요.")
     if len(out) > 5:
-        raise ApiError("수신자는 5명까지 넣을 수 있습니다.")
+        raise ApiError("수신자는 5명까지 넣을 수 있어요.")
     return out
 
 
@@ -429,20 +449,20 @@ def _attachments_for(ids):
     if not ids:
         return []
     if not isinstance(ids, list) or len(ids) > 20:
-        raise ApiError("첨부파일 목록이 올바르지 않습니다.")
+        raise ApiError("첨부파일 목록이 올바르지 않아요.")
     rows = []
     for aid in ids:
         aid = str(aid)
         if not ATT_ID.match(aid):
-            raise ApiError("첨부파일 목록이 올바르지 않습니다.")
+            raise ApiError("첨부파일 목록이 올바르지 않아요.")
         a = db.session.get(PartnerAttachment, aid)
         if a is None:
-            raise ApiError("보관함에 없는 첨부파일이 있습니다. 목록을 새로고침하세요.", 404)
+            raise ApiError("보관함에 없는 첨부파일이 있어요. 목록을 새로고침하세요.", 404)
         if a not in rows:
             rows.append(a)
     total = sum(a.size for a in rows)
     if total > MAX_ATTACH_TOTAL:
-        raise ApiError(f"첨부파일 합계가 {total / MB:.1f}MB입니다. Gmail 한도 25MB를 넘어 보낼 수 없습니다.")
+        raise ApiError(f"첨부파일 합계가 {total / MB:.1f}MB예요. Gmail 한도 25MB를 넘어 보낼 수 없어요.")
     return rows
 
 
@@ -466,7 +486,7 @@ def _auto_progress(partner_id, reply):
 def email_send():
     data = json_body()
     if data.get("confirm") is not True:
-        raise ApiError("발송 전 '확인' 체크가 필요합니다.")
+        raise ApiError("보내기 전에 '확인' 체크가 필요해요.")
     owner = clip(data.get("owner"), 60).strip()
     if not owner:
         raise ApiError("담당자를 입력하세요.")
@@ -480,7 +500,7 @@ def email_send():
     if data.get("reply_to") not in (None, "", 0):
         reply_of = _history_or_404(_int(data.get("reply_to")))
     if not mailer.ready():
-        raise ApiError("Gmail이 연결되지 않았습니다. 설정 › 연결에서 GMAIL_ADDRESS와 GMAIL_APP_PASSWORD를 넣으면 발송할 수 있습니다.", 503)
+        raise ApiError("Gmail이 연결되지 않았어요. 설정 › 연결에서 Gmail 주소와 앱 비밀번호를 넣으면 보낼 수 있어요.", 503)
 
     partner_id = clip(data.get("partner_id"), 20).strip() or (reply_of.partner_id if reply_of else "")
     contact = db.session.get(PartnerContact, partner_id) if partner_id else None
@@ -498,7 +518,7 @@ def email_send():
     for a in att_rows:
         p = _att_path(a)
         if not p.is_file():
-            raise ApiError(f"첨부파일을 찾지 못했습니다: {a.filename}. 보관함에서 지우고 다시 올려 주세요.", 404)
+            raise ApiError(f"첨부파일을 찾지 못했어요: {a.filename}. 보관함에서 삭제하고 다시 올려 주세요.", 404)
         paths.append((a.filename, p))
     sender, password = mailer.credentials()
     msg, message_id = mailer.build_message(sender, recipients, subject, body, paths, in_reply_to, refs)
@@ -525,8 +545,8 @@ def email_send():
         current_app.logger.exception("파트너 메일 이력 저장 실패")
         payload = {k: v for k, v in rec.to_dict().items() if k not in ("id", "createdAt", "updatedAt")}
         payload["at"] = iso(rec.at)
-        return jsonify(error=("발송은 끝났지만 협업 이력 저장에 실패했습니다. '기록만 다시 저장'을 누르세요 (다시 발송하지 않음)."
-                              if status_ == "발송 성공" else "발송에 실패했고 이력 저장도 실패했습니다."),
+        return jsonify(error=("보내기는 끝났지만 협업 기록을 저장하지 못했어요. '기록만 다시 저장'을 누르세요 (다시 보내지 않음)."
+                              if status_ == "발송 성공" else "보내지 못했고 협업 기록도 저장하지 못했어요."),
                        sent=status_ == "발송 성공", record=payload), 500
     worklog.add("partners", "승인 · 선정", f"협업 메일 {'답장 ' if reply_of else ''}발송 — {partner_name}",
                 status="완료" if status_ == "발송 성공" else "실패", approval=owner,
@@ -547,7 +567,7 @@ def _att_path(a):
     base = _att_dir().resolve()
     p = (base / a.stored_name).resolve()
     if p.parent != base:   # 경로 벗어남 방지 (stored_name은 서버가 만든 이름이지만 한 번 더 확인)
-        raise ApiError("없는 첨부파일입니다.", 404)
+        raise ApiError("없는 첨부파일이에요.", 404)
     return p
 
 
@@ -564,10 +584,10 @@ def _save_attachment(name, data, source):
 
 def _attachment_or_404(aid):
     if not ATT_ID.match(str(aid)):
-        raise ApiError("없는 첨부파일입니다.", 404)
+        raise ApiError("없는 첨부파일이에요.", 404)
     a = db.session.get(PartnerAttachment, aid)
     if a is None:
-        raise ApiError("없는 첨부파일입니다.", 404)
+        raise ApiError("없는 첨부파일이에요.", 404)
     return a
 
 
@@ -584,17 +604,17 @@ def attachments_upload():
     if not files:
         raise ApiError("올릴 파일을 고르세요.")
     if len(files) > 10:
-        raise ApiError("한 번에 10개까지 올릴 수 있습니다.")
+        raise ApiError("한 번에 10개까지 올릴 수 있어요.")
     ready = []
     for f in files:   # 모두 확인한 뒤 저장
         name = _display_name(f.filename)
         if Path(name).suffix.lower() not in ALLOWED_EXT:
-            raise ApiError(f"올릴 수 없는 형식입니다: {name} (PDF · CSV · Word · Excel · PowerPoint · PNG · JPG · ZIP · TXT)")
+            raise ApiError(f"올릴 수 없는 형식이에요: {name} (PDF · CSV · Word · Excel · PowerPoint · PNG · JPG · ZIP · TXT)")
         data = f.read(MAX_ATTACH_FILE + 1)
         if len(data) > MAX_ATTACH_FILE:
-            raise ApiError(f"파일이 너무 큽니다: {name} (25MB까지).")
+            raise ApiError(f"파일이 너무 커요: {name} (25MB까지).")
         if not data:
-            raise ApiError(f"빈 파일입니다: {name}")
+            raise ApiError(f"빈 파일이에요: {name}")
         ready.append((name, data))
     saved = [_save_attachment(name, data, "upload") for name, data in ready]
     db.session.commit()
@@ -606,7 +626,7 @@ def attachments_download(aid):
     a = _attachment_or_404(aid)
     p = _att_path(a)
     if not p.is_file():
-        raise ApiError("파일이 보관함에 없습니다.", 404)
+        raise ApiError("파일이 보관함에 없어요.", 404)
     # 메모리로 읽어 보냄 (25MB 이하) — 내려받는 중에도 Windows에서 파일이 잠기지 않게
     return send_file(io.BytesIO(p.read_bytes()), as_attachment=True, download_name=a.filename,
                      mimetype=mimetypes.guess_type(a.filename)[0] or "application/octet-stream")
@@ -618,7 +638,7 @@ def attachments_delete(aid):
     try:
         _att_path(a).unlink(missing_ok=True)
     except OSError:
-        raise ApiError("파일을 사용 중이라 지우지 못했습니다. 잠시 뒤 다시 시도하세요.", 409)
+        raise ApiError("파일을 사용 중이라 삭제하지 못했어요. 잠시 뒤 다시 시도하세요.", 409)
     db.session.delete(a)
     db.session.commit()
     return jsonify(ok=True)
@@ -651,7 +671,7 @@ def guide_generate():
     md = str(out.get("markdown") or "").strip()
     title = _one_line(out.get("title"))[:120] or f"REBOOT {ptype} 협업 가이드"
     if not md:
-        raise ApiError("AI가 가이드를 만들지 못했습니다. 다시 시도하세요.", 502)
+        raise ApiError("AI가 협업 가이드를 만들지 못했어요. 다시 시도하세요.", 502)
     if not md.lstrip().startswith("# "):
         md = f"# {title}\n\n{md}"
     return jsonify(title=title, markdown=md, ai=True, model=core_ai.openai_model())
@@ -662,7 +682,7 @@ def guide_docx_route():
     data = json_body(max_bytes=512 * 1024)
     md = clip(data.get("markdown"), 60000).strip()
     if not md:
-        raise ApiError("가이드 내용이 없습니다. 먼저 초안을 만들거나 원문을 입력하세요.")
+        raise ApiError("협업 가이드 내용이 없어요. 먼저 초안을 만들거나 원문을 입력하세요.")
     ptype = _ptype(data.get("type"), INFLUENCER)
     purpose = _one_line(clip(data.get("purpose"), 120))
     today = catalog._today()
@@ -708,7 +728,7 @@ def _check_choice(value, choices, label, allow_empty=False):
     if allow_empty and v == "":
         return ""
     if v not in choices:
-        raise ApiError(f"{label} 값이 올바르지 않습니다: {v[:20]}")
+        raise ApiError(f"{label} 값이 올바르지 않아요: {v[:20]}")
     return v
 
 
@@ -795,7 +815,7 @@ def history_delete():
 @bp.post("/replies/check")
 def replies_check():
     if not mailer.ready():
-        raise ApiError("Gmail이 연결되지 않았습니다. 설정 › 연결에서 GMAIL_ADDRESS와 GMAIL_APP_PASSWORD를 넣으면 답장을 확인할 수 있습니다.", 503)
+        raise ApiError("Gmail이 연결되지 않았어요. 설정 › 연결에서 Gmail 주소와 앱 비밀번호를 넣으면 새 회신을 확인할 수 있어요.", 503)
     pending = PartnerHistory.query.filter(PartnerHistory.kind != "샘플", PartnerHistory.mail_status.in_(AWAITING)).all()
     records = [{"id": r.id, "message_id": r.message_id, "to": r.to_addr, "subject": r.subject, "at": r.at}
                for r in pending if r.message_id or (r.to_addr and r.subject)]
@@ -839,7 +859,7 @@ def replies_check():
 def reply_summary(hid):
     rec = _history_or_404(hid)
     if not rec.reply_body.strip():
-        raise ApiError("요약할 회신 내용이 없습니다.")
+        raise ApiError("요약할 받은 답장이 없어요.")
     data = request.get_json(silent=True) or {}
     if rec.reply_summary and not data.get("force"):
         cached = rec.to_dict()["reply"]["summary"]
@@ -865,7 +885,7 @@ def reply_draft(hid):
     rec = _history_or_404(hid)
     data = json_body()
     if not rec.reply_body.strip():
-        raise ApiError("답장할 회신 내용이 없습니다.")
+        raise ApiError("답장할 받은 답장이 없어요.")
     system, user = prompts.reply_draft_messages(
         rec.subject, rec.body, rec.partner_name, rec.reply_from, rec.reply_body, clip(data.get("points"), 4000),
         prompts.product_desc(catalog.get_brand(), catalog.get_products()))
@@ -873,7 +893,7 @@ def reply_draft(hid):
                               part="partners", action="AI 답장 초안")
     body = str(out.get("body") or "").strip()
     if not body:
-        raise ApiError("AI가 답장을 만들지 못했습니다. 다시 시도하세요.", 502)
+        raise ApiError("AI가 답장을 만들지 못했어요. 다시 시도하세요.", 502)
     return jsonify(subject=_re_subject(rec), body=body, ai=True)
 
 
@@ -886,12 +906,241 @@ def _date_arg(name):
     try:
         return date.fromisoformat(v)
     except ValueError:
-        raise ApiError("날짜 형식이 올바르지 않습니다 (YYYY-MM-DD).")
+        raise ApiError("날짜 형식이 올바르지 않아요 (YYYY-MM-DD).")
+
+
+def _shop_dir():
+    return Path(current_app.config["DATA_DIR"]) / "uploads" / "partners" / "shop"
+
+
+def _shop_file(kind):
+    return _shop_dir() / f"{kind}.csv"
 
 
 @bp.get("/sales")
 def sales_report():
+    orders = _shop_file("orders")
+    if orders.exists():
+        creators = _shop_file("creators")
+        try:
+            _, order_rows = sales.read_csv(orders.read_bytes())
+            creator_rows = sales.read_csv(creators.read_bytes())[1] if creators.exists() else []
+            at = datetime.fromtimestamp(orders.stat().st_mtime, timezone.utc).replace(tzinfo=None)
+            return jsonify(sales.shop_report(order_rows, creator_rows, _date_arg("start"), _date_arg("end"), iso(at)))
+        except sales.ShopCsvError as e:
+            raise ApiError(str(e))
     _sync_bundled()
     rows = PartnerContact.query.filter_by(ptype=INFLUENCER).order_by(PartnerContact.sort).all()
     names = [c.name for c in rows if not c.is_example]
     return jsonify(sales.report(names, catalog._today(), _date_arg("start"), _date_arg("end")))
+
+
+@bp.post("/sales/upload")
+def sales_upload():
+    """시연 사이트 관리자 CSV (주문 · 크리에이터) — 종류는 머리글로 판단, 같은 종류는 새 파일로 바꿈."""
+    files = [f for f in request.files.getlist("file") if f and f.filename][:4]
+    if not files:
+        raise ApiError("올릴 CSV 파일을 고르세요.")
+    parsed = {}
+    for f in files:
+        raw = f.read(sales.SHOP_MAX_BYTES + 1)
+        if len(raw) > sales.SHOP_MAX_BYTES:
+            raise ApiError(f"{f.filename}: CSV는 5MB까지 올릴 수 있어요.")
+        header, rows = sales.read_csv(raw)
+        kind = sales.csv_kind(header)
+        if kind is None:
+            raise ApiError(f"{f.filename}: 시연 사이트의 Order details · Creator performance CSV가 아니에요.")
+        h, r = parsed.get(kind, ([], []))   # 같은 종류 여러 개 (Instagram · TikTok order lines) → 합침
+        parsed[kind] = (h + [c for c in header if c not in h], r + rows)
+    ready = {}
+    for kind, (header, rows) in parsed.items():
+        out = io.StringIO()
+        w = csv.DictWriter(out, fieldnames=header, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+        ready[kind] = out.getvalue().encode("utf-8")
+    if "orders" not in ready and not _shop_file("orders").exists():
+        raise ApiError("주문 CSV(Order details)를 같이 올려 주세요. 매출은 주문 CSV로 계산해요.")
+    if "orders" in ready:
+        try:
+            sales.shop_report(sales.read_csv(ready["orders"])[1], [])
+        except sales.ShopCsvError as e:
+            raise ApiError(str(e))
+    _shop_dir().mkdir(parents=True, exist_ok=True)
+    for kind, raw in ready.items():
+        _shop_file(kind).write_bytes(raw)
+    worklog.add("partners", "수집", "판매 실적 CSV 업로드 (시연 사이트)", detail={"files": sorted(ready)})
+    return jsonify(ok=True, saved=sorted(ready))
+
+
+@bp.delete("/sales/upload")
+def sales_upload_clear():
+    for kind in ("orders", "creators"):
+        _shop_file(kind).unlink(missing_ok=True)
+    return jsonify(ok=True)
+
+
+# ───────── 유튜브 크리에이터 추천 (youtube.py) ─────────
+
+YT_CSV_HEADER = ["channel_id", "크리에이터", "핸들", "국가", "구독자", "평균 조회수(최근 10개)", "영상 수", "총 조회수",
+                 "이메일(소개란 공개)", "이메일 가져온 날짜", "매칭 키워드", "기준일", "채널 URL", "프로필 사진"]
+YT_ID = re.compile(r"^UC[A-Za-z0-9_-]{22}$")
+YT_CSV_MAX = 2 * MB
+
+
+def _yt_error(e):
+    return ApiError(str(e), e.status if e.status in (400, 409, 429, 503) else 502)
+
+
+@bp.before_request
+def _yt_schema():
+    if request.path.startswith("/api/partners/youtube"):
+        youtube.ensure_schema()
+
+
+@bp.get("/youtube")
+def youtube_list():
+    info = {"refreshed": 0, "removed": 0, "warning": ""}
+    if request.args.get("refresh", "1") != "0":
+        info = youtube.refresh()
+    rows = PartnerYoutubeCreator.query.all()
+    rows.sort(key=lambda r: -(r.subscribers or 0))
+    return jsonify(items=[r.to_dict() for r in rows], ready=youtube.ready(), keywords=youtube.KEYWORDS,
+                   staleDays=youtube.STALE_DAYS, maxDays=youtube.MAX_DAYS, **info)
+
+
+@bp.post("/youtube/search")
+def youtube_search():
+    kws = json_body().get("keywords") or []
+    if not isinstance(kws, list):
+        raise ApiError("키워드 목록이 올바르지 않아요.")
+    if not youtube.ready():
+        raise ApiError("YouTube 키가 없어요. 설정 › 연결에서 YouTube 키를 넣어 주세요.", 503)
+    try:
+        out = youtube.search([clip(k, 60) for k in kws], _who())
+    except youtube.YoutubeError as e:
+        raise _yt_error(e)
+    worklog.add("partners", "수집", f"유튜브 크리에이터 추천 ({out['found']}개 채널, 새로 {out['added']}개)",
+                detail={"keywords": out["keywords"]})
+    return jsonify(out)
+
+
+@bp.post("/youtube/keywords")
+def youtube_keywords():
+    current = json_body().get("current") or []
+    if not isinstance(current, list):
+        raise ApiError("키워드 목록이 올바르지 않아요.")
+    if not core_ai.openai_ready():
+        raise ApiError("OpenAI가 연결되어 있지 않아요. 설정 › 연결에서 OpenAI 키를 넣어 주세요.", 503)
+    try:
+        return jsonify(youtube.suggest_keywords(current))
+    except core_ai.AIError as e:
+        raise ApiError(str(e), e.status)
+
+
+@bp.post("/youtube/delete")
+def youtube_delete():
+    ids = json_body().get("ids") or []
+    if not isinstance(ids, list) or not ids:
+        raise ApiError("지울 채널을 고르세요.")
+    n = 0
+    for cid in ids[:500]:
+        row = db.session.get(PartnerYoutubeCreator, str(cid))
+        if row is not None:
+            db.session.delete(row)
+            n += 1
+    db.session.commit()
+    worklog.add("partners", "기타", f"유튜브 크리에이터 {n}개 삭제", detail={"count": n})
+    return jsonify(deleted=n)
+
+
+def _num_cell(v):
+    return "" if v is None else v
+
+
+@bp.get("/youtube/export.csv")
+def youtube_export():
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(YT_CSV_HEADER)
+    rows = PartnerYoutubeCreator.query.all()
+    rows.sort(key=lambda r: -(r.subscribers or 0))
+    for r in rows:
+        w.writerow([r.id, r.title, r.handle, r.country, _num_cell(r.subscribers), _num_cell(r.avg_views),
+                    _num_cell(r.video_count), _num_cell(r.total_views), r.email,
+                    _local(r.email_at).date().isoformat() if r.email_at else "", " | ".join(r.keyword_list()),
+                    _local(r.stats_at).date().isoformat(), r.url, r.thumb])
+    today = _local(utcnow()).date().isoformat()
+    return Response("﻿" + buf.getvalue(), mimetype="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f"attachment; filename=reboot-youtube-creators-{today}.csv"})
+
+
+def _csv_int(v):
+    s = re.sub(r"[,\s]", "", str(v or ""))
+    return int(s) if s.isdigit() else None
+
+
+def _csv_date(v):
+    try:
+        d = date.fromisoformat(str(v or "").strip()[:10])
+    except ValueError:
+        return None
+    return datetime(d.year, d.month, d.day, tzinfo=_tz()).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+@bp.post("/youtube/import")
+def youtube_import():
+    f = request.files.get("file")
+    if not f or not f.filename:
+        raise ApiError("가져올 CSV 파일을 고르세요.")
+    raw = f.read(YT_CSV_MAX + 1)
+    if len(raw) > YT_CSV_MAX:
+        raise ApiError("CSV는 2MB까지 올릴 수 있어요.")
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = raw.decode("cp949", errors="replace")
+    reader = csv.DictReader(io.StringIO(text))
+    if "channel_id" not in (reader.fieldnames or []):
+        raise ApiError("유튜브 크리에이터 CSV 다운로드 형식이 아니에요 (channel_id 열 없음).")
+    now = utcnow()
+    oldest = now - timedelta(days=youtube.MAX_DAYS)
+    added = updated = skipped = 0
+    for rec in reader:
+        cid = str(rec.get("channel_id") or "").strip()
+        stats_at = _csv_date(rec.get("기준일"))
+        target = youtube.target_from_country(rec.get("국가"))
+        # 형식이 틀렸거나 기준일이 보관 기간(30일)보다 오래된 값, 영미권·미국 타겟이 아니거나 구독자 1,000명 이하인 줄은 건너뜀
+        if (not YT_ID.match(cid) or stats_at is None or stats_at < oldest or stats_at > now + timedelta(days=1)
+                or target is None or (_csv_int(rec.get("구독자")) or 0) <= youtube.MIN_SUBSCRIBERS):
+            skipped += 1
+            continue
+        row = db.session.get(PartnerYoutubeCreator, cid)
+        if row is not None and row.stats_at >= stats_at:
+            skipped += 1        # 이미 더 최근 값이 있음
+            continue
+        if row is None:
+            row = PartnerYoutubeCreator(id=cid, created_by=_who())
+            db.session.add(row)
+            added += 1
+        else:
+            updated += 1
+        email = str(rec.get("이메일(소개란 공개)") or "").strip().lower()
+        row.title = clip(rec.get("크리에이터"), 200)
+        row.handle = clip(rec.get("핸들"), 100)
+        row.country = clip(rec.get("국가"), 10)
+        row.target = target
+        thumb = str(rec.get("프로필 사진") or "").strip()
+        row.thumb = thumb[:500] if thumb.startswith("https://") else ""
+        row.subscribers = _csv_int(rec.get("구독자"))
+        row.avg_views = _csv_int(rec.get("평균 조회수(최근 10개)"))
+        row.video_count = _csv_int(rec.get("영상 수"))
+        row.total_views = _csv_int(rec.get("총 조회수"))
+        row.email = email if EMAIL_RE.match(email) else ""
+        row.email_at = (_csv_date(rec.get("이메일 가져온 날짜")) or stats_at) if row.email else None
+        row.set_keywords([k.strip() for k in str(rec.get("매칭 키워드") or "").split("|") if k.strip()])
+        row.stats_at = stats_at
+    db.session.commit()
+    worklog.add("partners", "수집", f"유튜브 크리에이터 CSV 가져오기 (새로 {added} · 갱신 {updated} · 건너뜀 {skipped})",
+                detail={"file": _display_name(f.filename)})
+    return jsonify(added=added, updated=updated, skipped=skipped)

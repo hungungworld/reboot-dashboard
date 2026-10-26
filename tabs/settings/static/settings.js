@@ -1,6 +1,6 @@
 /* 설정 및 브랜드 관리 (담당: 이현경) — tabs/settings/docs/README.md 기준.
    탭: 브랜드 · 제품 / 수집 설정 / 연결 / 작업 로그 / 계정 (주소 끝 #account 등으로 바로 열림)
-   - 제목 오른쪽 '변경 사항 적용' = 지금 탭에서 고친 입력 저장 (제품 상세·시즌·키·계정 관리는 창에서 바로 저장)
+   - 제목 오른쪽 '변경 사항 저장' = 수집 설정 · 계정 탭에서만 보임 (브랜드 · 제품 · 시즌 · 키 · 계정 관리는 창에서 바로 저장)
    - 팩트시트·시즌·계정은 공용 API, 수집 설정·연결은 /api/settings/…
    - 다른 파트에는 REBOOT.use('settings')로 facts · brand · products 공개 (제품별 값은 비워 둠) */
 (function (global) {
@@ -12,10 +12,10 @@
   const { esc, badge, icon, fmt, toast } = ui;
   const api = REBOOT.api;
 
-  const TABS = [['brand', '브랜드 · 제품'], ['collect', '수집 설정'], ['connections', '연결'], ['worklog', '작업 로그'], ['account', '계정']];
+  const TABS = [['brand', '브랜드 · 제품'], ['collect', '수집 설정'], ['connections', '연결'], ['worklog', '작업 기록'], ['account', '계정']];
   const TAB_IDS = TABS.map(t => t[0]);
   const BRAND_FIELDS = ['name', 'base_company', 'market', 'founded', 'intro', 'slogan', 'colors', 'character', 'cm_song', 'category'];
-  const PRODUCT_EDIT = ['category', 'form', 'flavors', 'flavor_status', 'pack', 'direction', 'ingredients', 'allergens', 'volume',
+  const PRODUCT_EDIT = ['category', 'form', 'flavors', 'pack', 'direction', 'ingredients', 'allergens', 'volume',
     'usage', 'consumer_name', 'price', 'cost', 'evidence', 'notes'];
   const SRC_FIELDS = [['flavors', '맛'], ['ingredients', '성분'], ['allergens', '알레르기 성분'], ['volume', '용량'], ['pack', '포장'],
     ['usage', '섭취법'], ['form', '제형'], ['category', '제품 분류'], ['etc', '기타']];
@@ -24,6 +24,7 @@
   const KIND_TONE = { '수집': 'blue', 'AI 프롬프트': 'purple', '승인 · 선정': 'lime', '기타': '' };
   const STATUS_TONE = { '완료': 'green', '검토 대기': 'orange', '실패': 'red' };
   const CONN_TONE = { '정상': 'green', '오류': 'red', '미연결': '', '확인 전': 'blue' };
+  const connLabel = s => ({ '미연결': '연결 안 됨', '확인 전': '연결됨 · 테스트 전' }[s] || s);   // 서버 상태 값은 그대로, 화면 이름만
   const SEASON_CAT = { holiday: '공휴일 · 명절', sports: '스포츠', occasion: '행사 · 기념일' };
   const SEASON_PRI = { 1: '1 · 최우선', 2: '2 · 보통', 3: '3 · 참고' };
   const LISTS = {
@@ -32,7 +33,7 @@
     'search_sets.K': { label: '검색어 세트 K · 한국 숙취해소제', ph: '예) korean hangover drink', max: 10 },
     amazon_queries: { label: 'Amazon 검색어', ph: '예) korean hangover', max: 15 },
     trend_keywords: { label: '트렌드 키워드', ph: '예) hangover drink', max: 10 },
-    own_terms: { label: '자사 상품 표시 단어', ph: '예) aldicom', max: 10, len: 60 },
+    own_terms: { label: '알디콤 제품 표시 단어', ph: '예) aldicom', max: 10, len: 60 },
     weee_urls: { label: 'Weee! 주소', ph: 'https://www.sayweee.com/en/…', max: 15, len: 500, url: true },
     exclude_terms: { label: '제외 단어', ph: '예) soup', max: 20, len: 60 }
   };
@@ -70,10 +71,10 @@
 
   /* ───────── 상태 ───────── */
   const S = {
-    root: null, tab: 'brand', rendered: {}, dirty: { brand: false, collect: false, account: false },
-    collect: null, collectMeta: {}, seasons: [], showPast: false,
+    root: null, tab: 'brand', rendered: {}, dirty: { collect: false, account: false },
+    collect: null, collectMeta: {}, editEl: null, seasons: [], showPast: false,
     conns: null, setup: {}, isAdmin: !!REBOOT.user().isAdmin, gmail: null,
-    wl: { kind: '', part: '', items: [], done: false, loading: false, seq: 0 },
+    wl: { kind: '', part: '', q: '', items: [], done: false, loading: false, seq: 0 },
     users: null
   };
   const panel = id => $(S.root, `[data-panel="${id}"]`);
@@ -90,6 +91,10 @@
   }
   function area(name, value, rows) {
     return `<textarea class="input" name="${name}" rows="${rows || 3}" maxlength="2000">${esc(val(value))}</textarea>`;
+  }
+  /** 켜기/끄기 토글: 체크박스를 스위치 모양으로 (.checked로 읽기) */
+  function toggle(attrs, on, label) {
+    return `<label class="set-tgl"><input type="checkbox" role="switch" ${attrs}${on ? ' checked' : ''}><span>${label}</span></label>`;
   }
   function showErr(box, msg) {
     if (!box) return toast(msg, 'error');
@@ -153,6 +158,7 @@
     root.addEventListener('input', onInput);
     root.addEventListener('change', onChange);
     root.addEventListener('keydown', onKeydown);
+    root.addEventListener('mousedown', colResize);
     global.addEventListener('beforeunload', e => {
       if (Object.values(S.dirty).some(Boolean)) { e.preventDefault(); e.returnValue = ''; }
     });
@@ -176,6 +182,8 @@
       b.setAttribute('aria-selected', String(on));
     });
     $$(S.root, '[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== tab; });
+    const applyBtn = $(REBOOT.page.actions(), '[data-act="set-apply"]');
+    if (applyBtn) applyBtn.hidden = !(tab in S.dirty);
     if (!S.rendered[tab]) {
       S.rendered[tab] = true;
       ({ brand: renderBrand, collect: renderCollect, connections: renderConnections, worklog: renderWorklog, account: renderAccount })[tab](panel(tab));
@@ -193,7 +201,7 @@
     const box = REBOOT.page.actions();
     if (!box) return;
     box.innerHTML = `<span class="badge orange" data-ref="set-dirty" hidden></span>` +
-      `<button type="button" class="btn lime" data-act="set-apply">${icon('check')}변경 사항 적용</button>`;
+      `<button type="button" class="btn lime" data-act="set-apply">${icon('check')}변경 사항 저장</button>`;
     box.addEventListener('click', e => {
       const b = e.target.closest('[data-act="set-apply"]');
       if (b) apply(b);
@@ -213,9 +221,9 @@
 
   async function apply(btn) {
     const tab = S.tab;
-    const fn = { brand: saveBrand, collect: saveCollect, account: saveMe }[tab];
+    const fn = { collect: saveCollect, account: saveMe }[tab];
     if (!fn) {
-      toast(tab === 'connections' ? '연결 값은 「키 입력」 창에서 바로 저장돼요.' : '작업 로그는 자동으로 기록돼요. 고치거나 지울 수 없어요.');
+      toast({ brand: '브랜드 · 제품은 「수정」 창에서 바로 저장돼요.', connections: '연결 값은 「키 입력」 창에서 바로 저장돼요.' }[tab] || '작업 기록은 자동으로 남아요. 고치거나 삭제할 수 없어요.');
       return;
     }
     if (!S.dirty[tab]) { toast('이 탭에는 저장할 변경 사항이 없어요.'); return; }
@@ -225,7 +233,7 @@
       const others = Object.keys(S.dirty).filter(k => S.dirty[k]);
       if (others.length) toast(`저장했어요. ${others.map(k => (TABS.find(t => t[0] === k) || [k, k])[1]).join(', ')} 탭에도 저장 안 된 변경이 있어요.`);
     } catch (e) {
-      toast(e.message || String(e), 'error');
+      toast('저장하지 못했어요: ' + (e.message || String(e)), 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -236,16 +244,18 @@
     const tabBtn = e.target.closest('[data-tab]');
     if (tabBtn && S.root.contains(tabBtn)) { show(tabBtn.dataset.tab); return; }
     const b = e.target.closest('[data-act]');
-    if (!b || !S.root.contains(b) || b.disabled) return;
+    if (!b || !(S.root.contains(b) || (S.editEl && S.editEl.contains(b))) || b.disabled) return;
     const id = b.dataset.id;
     switch (b.dataset.act) {
       case 'product': openProduct(id); break;
+      case 'brand-edit': openBrand(); break;
       case 'list-add': addToList(b.dataset.list); break;
       case 'list-del': removeFromList(b.dataset.list, +b.dataset.i); break;
       case 'lang': setLang(b.dataset.v); break;
       case 'asin-add': addAsin(); break;
       case 'asin-del': removeAsin(+b.dataset.i); break;
       case 'collect-reset': resetCollect(); break;
+      case 'src-edit': openSource(id); break;
       case 'season-add': openSeason(null); break;
       case 'season-edit': openSeason(S.seasons.find(s => String(s.id) === id)); break;
       case 'season-del': deleteSeason(S.seasons.find(s => String(s.id) === id)); break;
@@ -254,10 +264,24 @@
       case 'conn-key': openKey(b.dataset.name); break;
       case 'conn-test': testConn(b, b.dataset.name); break;
       case 'conn-reload': loadConnections(); break;
+      case 'conn-fold': {
+        const open = b.getAttribute('aria-expanded') !== 'true';
+        store.set('fold-' + b.dataset.k, open);
+        b.setAttribute('aria-expanded', String(open));
+        b.closest('.card').querySelector('.set-fold-body').hidden = !open;
+        break;
+      }
       case 'gmail-login': global.location.href = '/api/cs/gmail/connect'; break;
       case 'gmail-off': gmailDisconnect(b); break;
       case 'copy': copyText(b.dataset.text); break;
       case 'wl-kind': S.wl.kind = b.dataset.v || ''; drawWlFilters(); loadWorklog(true); break;
+      case 'wl-reset': {
+        S.wl.kind = ''; S.wl.part = ''; S.wl.q = '';
+        const el = panel('worklog');
+        $(el, '[data-ref="wl-q"]').value = '';
+        $(el, '[data-ref="wl-part"]').value = '';
+        drawWlFilters(); loadWorklog(true); break;
+      }
       case 'wl-more': loadWorklog(false); break;
       case 'wl-open': openLog(S.wl.items.find(x => String(x.id) === id)); break;
       case 'wl-csv': worklogCsv(b); break;
@@ -274,12 +298,8 @@
 
   function onInput(e) {
     const t = e.target;
-    if (t.closest('[data-form="brand"]')) {
-      setDirty('brand', true);
-      if (t.name === 'colors') drawSwatches();
-      return;
-    }
     if (t.closest('[data-form="account"]')) { setDirty('account', true); return; }
+    if (t.dataset.ref === 'wl-q') { S.wl.q = t.value; drawWorklog(false); drawWlActive(); return; }
     if (t.dataset.num) {
       S.collect[t.dataset.num] = t.value;
       setDirty('collect', true);
@@ -304,13 +324,14 @@
 
   function onChange(e) {
     const t = e.target;
+    if (t.dataset.src) { setSource(t.dataset.src, t.checked); return; }
     if (t.dataset.asin != null && t.dataset.k === 'own') {
       const row = S.collect.tracked_asins[+t.dataset.asin];
       if (row) { row.own = t.checked; setDirty('collect', true); }
       return;
     }
     if (t.dataset.act === 'season-past') { S.showPast = t.checked; drawSeasons(); return; }
-    if (t.dataset.ref === 'wl-part') { S.wl.part = t.value; loadWorklog(true); }
+    if (t.dataset.ref === 'wl-part') { S.wl.part = t.value; drawWlActive(); loadWorklog(true); }
   }
 
   function onKeydown(e) {
@@ -321,37 +342,15 @@
   /* ═════════ 1. 브랜드 · 제품 ═════════ */
   function renderBrand(el) {
     el.innerHTML = `
-    <div class="workbench">
-      <div class="stack">
-        <section class="card">
-          <div class="card-head"><h2>브랜드 기본 정보</h2><span class="small muted" data-ref="brand-meta"></span></div>
-          <form class="set-form" data-form="brand" autocomplete="off"></form>
-        </section>
-        <section class="card">
-          <div class="card-head"><h2>제품 정보 시트</h2>${badge('REBOOT 4종 · 가상 출시', 'dark')}</div>
-          <div data-ref="products"></div>
-        </section>
-      </div>
-      <aside class="stack">
-        <section class="card tinted">
-          <div class="card-head"><h2>규칙</h2>${badge('설정 README 2장', 'lime')}</div>
-          <ul class="set-rules">
-            <li><b>실제와 가상을 섞지 않아요.</b> 성분 · 용량 · 맛 · 섭취법은 알디콤 기존 제품의 기사 · 공식 정보로만 채우고, 가격 · 원가만 <span class="badge purple">가상값</span>이에요.</li>
-            <li><b>가상 가격은 실제 시장을 참고해요.</b> <a class="link" href="/dashboard/insights#data/shelf">인사이트 › 진열대</a>의 1회분 단가 구간($3 미만 / $3~6 / $6 이상)을 보고 정해요.</li>
-            <li>알디콤의 <b>실제 판매가</b>는 팩트시트에 넣지 않아요. 인사이트가 Weee! · 아마존에서 모아 보여줘요.</li>
-            <li><b>내부 제품명은 광고 문구에 자동으로 쓰지 않아요.</b> "저당" 같은 이름이 효능 · 당류 주장처럼 보일 수 있어서, 소비자에게 보이는 문구는 컴플라이언스 검토를 거쳐요.</li>
-          </ul>
-        </section>
-        <section class="card">
-          <h3>근거 상태</h3>
-          <div class="set-legend">
-            <p>${badge('제품 근거 확인 필요', 'orange')} 출처가 없거나 아직 확인하지 않음</p>
-            <p>${badge('근거 확인 완료', 'green')} 항목별 출처(기사 · 공식 페이지 URL)를 확인함</p>
-            <p>${badge('맛 임시', 'blue')} 맛 구성이 확정되지 않음</p>
-          </div>
-          <p class="panel-note mt-16">출처가 하나도 없으면 '확인 완료'로 바꿀 수 없어요. 모르는 값은 비워 두세요 (지어내지 않기).</p>
-        </section>
-      </aside>
+    <div class="stack">
+      <section class="card">
+        <div class="card-head"><h2>브랜드 기본 정보</h2><div class="set-row-actions"><span class="small muted" data-ref="brand-meta"></span><button type="button" class="btn small" data-act="brand-edit">${icon('edit')}수정</button></div></div>
+        <div data-ref="brand-view"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>제품 정보 시트</h2><div class="set-row-actions"><span class="small muted" data-ref="products-sum"></span>${badge('REBOOT 4종', 'dark')}</div></div>
+        <div data-ref="products"></div>
+      </section>
     </div>`;
     fillBrand();
     renderProducts();
@@ -362,29 +361,56 @@
     try {
       const d = await api('/api/facts');
       FACTS.products = d.products || [];
-      if (!S.dirty.brand) { FACTS.brand = d.brand || {}; fillBrand(); }
+      FACTS.brand = d.brand || {};
+      fillBrand();
       renderProducts();
     } catch (e) { /* 페이지에 실린 값으로 계속 */ }
   }
 
+  /** 읽기 화면: 값이 없으면 '—' (지어내지 않기) */
   function fillBrand() {
     const el = panel('brand');
-    const form = $(el, '[data-form="brand"]');
-    if (!form) return;
+    const box = $(el, '[data-ref="brand-view"]');
+    if (!box) return;
     const b = FACTS.brand || {};
-    const f = (k, label, hint) => field(label, inp(k, b[k]), hint);
-    form.innerHTML = `
-      <div class="field-grid">${f('name', '브랜드명')}${f('market', '주요 시장')}</div>
-      <div class="field-grid">${f('base_company', '기준 기업', '실제 데이터(진열대 · 리뷰)를 모으는 기업')}${f('founded', '설립')}</div>
-      ${field('브랜드 소개', area('intro', b.intro, 3))}
-      <div class="field-grid">${f('slogan', '슬로건')}${f('category', '식품 분류')}</div>
-      ${field('브랜드 컬러', inp('colors', b.colors, 'maxlength="500"'), 'HEX 코드(예: #D7FF3F)를 적으면 아래 견본에 보여요.')}
-      <div class="set-swatches" data-ref="swatches"></div>
-      <div class="field-grid">${f('character', '캐릭터')}${f('cm_song', 'CM송')}</div>`;
-    drawSwatches();
+    const v = k => (b[k] ? esc(b[k]) : '<span class="muted">—</span>');
+    const kv = (k, label) => `<div><span>${label}</span>${v(k)}</div>`;
+    box.innerHTML = `
+      <div class="set-brand-head">
+        <strong>${v('name')}</strong>
+        ${b.slogan ? `<span class="muted">“${esc(b.slogan)}”</span>` : ''}
+        <div class="set-swatches">${swatchHtml(b.colors, true)}</div>
+      </div>
+      <p class="set-brand-intro">${v('intro')}</p>
+      <div class="set-kv3">${kv('market', '주요 시장')}${kv('base_company', '기준 기업')}${kv('category', '식품 분류')}${kv('founded', '설립')}${kv('character', '캐릭터')}${kv('cm_song', 'CM송')}</div>`;
+    paintSwatches(box);
     const meta = $(el, '[data-ref="brand-meta"]');
     if (meta) meta.textContent = b.updatedAt ? `최종 수정 ${fmt.datetime(b.updatedAt)} · ${b.updatedBy || ''}` : '';
-    setDirty('brand', false);
+  }
+
+  function openBrand() {
+    const b = FACTS.brand || {};
+    const f = (k, label, hint) => field(label, inp(k, b[k]), hint);
+    const body = `
+      <div class="part-settings set-modal">
+        <div class="note error mb-16" data-ref="err" hidden></div>
+        <div class="field-grid">${f('name', '브랜드명')}${f('market', '주요 시장')}</div>
+        <div class="field-grid">${f('base_company', '기준 기업', '실제 데이터(진열대 · 리뷰)를 모으는 기업')}${f('founded', '설립')}</div>
+        ${field('브랜드 소개', area('intro', b.intro, 3))}
+        <div class="field-grid">${f('slogan', '슬로건')}${f('category', '식품 분류')}</div>
+        ${field('브랜드 컬러', inp('colors', b.colors, 'maxlength="500"'), 'HEX 코드(예: #D7FF3F)를 적으면 아래 견본에 보여요.')}
+        <div class="set-swatches mt-8" data-ref="swatches"></div>
+        <div class="field-grid">${f('character', '캐릭터')}${f('cm_song', 'CM송')}</div>
+      </div>`;
+    formModal({
+      title: '브랜드 기본 정보 수정', body, wide: true,
+      onOpen: el => {
+        const draw = () => { const box = $(el, '[data-ref="swatches"]'); box.innerHTML = swatchHtml($(el, '[name="colors"]').value); paintSwatches(box); };
+        draw();
+        el.addEventListener('input', e => { if (e.target.name === 'colors') draw(); });
+      },
+      onSave: el => saveBrand(el)
+    });
   }
 
   function parseColors(text) {
@@ -395,22 +421,18 @@
     return out;
   }
 
-  function drawSwatches() {
-    const el = panel('brand');
-    const box = $(el, '[data-ref="swatches"]');
-    const input = $(el, '[name="colors"]');
-    if (!box || !input) return;
-    const list = parseColors(input.value);
-    box.innerHTML = list.length
-      ? list.map(c => `<div class="set-swatch"><i data-hex="${c.hex}" aria-hidden="true"></i><span>${esc(c.name || '색상')}<small>${c.hex}</small></span></div>`).join('')
-      : '<span class="small muted">HEX 코드가 없어 견본을 그리지 않았어요.</span>';
+  function swatchHtml(text, compact) {
+    const list = parseColors(text);
+    if (!list.length) return compact ? '' : '<span class="small muted">HEX 코드가 없어 견본을 그리지 않았어요.</span>';
+    return list.map(c => `<div class="set-swatch"><i data-hex="${c.hex}" aria-hidden="true"></i><span>${esc(c.name || '색상')}<small>${c.hex}</small></span></div>`).join('');
+  }
+  function paintSwatches(box) {
     $$(box, 'i[data-hex]').forEach(i => { if (/^#[0-9A-F]{6}$/.test(i.dataset.hex)) i.style.background = i.dataset.hex; });
   }
 
-  async function saveBrand() {
-    const form = $(panel('brand'), '[data-form="brand"]');
+  async function saveBrand(el) {
     const body = {};
-    BRAND_FIELDS.forEach(k => { const f = form.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
+    BRAND_FIELDS.forEach(k => { const f = el.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
     if (!body.name) throw new Error('브랜드명을 입력하세요.');
     const saved = await api('/api/facts/brand', body, { method: 'PUT' });
     FACTS.brand = saved;
@@ -422,28 +444,30 @@
     return p.evidence === '확인 완료' ? badge('근거 확인 완료', 'green') : badge('제품 근거 확인 필요', 'orange');
   }
   function money(v) {
-    return v == null || v === '' ? '<span class="muted">미정</span>' : `${esc(fmt.usd(Number(v)))} ${badge('가상값', 'purple')}`;
+    return v == null || v === '' ? '<span class="muted">미정</span>' : esc(fmt.usd(Number(v)));
   }
 
   function renderProducts() {
-    const box = $(panel('brand'), '[data-ref="products"]');
+    const el = panel('brand');
+    const box = $(el, '[data-ref="products"]');
     if (!box) return;
     const list = FACTS.products || [];
-    box.innerHTML = list.length ? list.map(p => `
-      <div class="setting-row set-product">
-        <div class="grow">
-          <strong class="set-pname">${esc(p.ko || p.name)}</strong>
-          <p>${esc(p.code || p.id)} · 내부 제품명 ${esc(p.name || '—')} · 소비자용 영문명 ${esc(p.consumer_name || '미정')}</p>
-          <div class="set-pmeta">
-            <span>${esc(p.form || '제형 미정')}</span>
-            <span>맛 ${esc(p.flavors || '미정')} ${p.flavor_status === 'confirmed' ? '' : badge('임시', 'blue')}</span>
-            <span>가격 ${money(p.price)}</span>
-            <span>원가 ${money(p.cost)}</span>
-            <span class="muted">${(p.sources || []).length ? `출처 ${(p.sources || []).length}개` : '출처 없음'}${p.updatedAt ? ` · 최종 수정 ${esc(fmt.date(p.updatedAt))}` : ''}</span>
-          </div>
-        </div>
-        <div class="set-row-actions">${evidenceBadge(p)}<button type="button" class="btn small" data-act="product" data-id="${esc(p.id)}">${icon('edit')}상세 보기/수정</button></div>
-      </div>`).join('') : ui.empty('등록된 제품이 없어요.', 'doc');
+    const sum = $(el, '[data-ref="products-sum"]');
+    if (sum) sum.textContent = list.length
+      ? `근거 확인 ${list.filter(p => p.evidence === '확인 완료').length}/${list.length}`
+      : '';
+    box.innerHTML = list.length ? `
+      <div class="table-wrap"><table class="data-table set-ptable"><thead><tr><th>제품</th><th>제형</th><th>맛</th><th>가격 ${badge('예시', 'orange')}</th><th>원가 ${badge('예시', 'orange')}</th><th>근거</th><th></th></tr></thead><tbody>
+      ${list.map(p => `<tr>
+        <td><strong>${esc(p.ko || p.name)}</strong><span class="set-sub">${esc(p.code || p.id)}</span></td>
+        <td>${esc(p.form || '미정')}</td>
+        <td>${esc(p.flavors || '미정')}</td>
+        <td>${money(p.price)}</td>
+        <td>${money(p.cost)}</td>
+        <td>${evidenceBadge(p)}</td>
+        <td><button type="button" class="btn small" data-act="product" data-id="${esc(p.id)}">${icon('edit')}수정</button></td>
+      </tr>`).join('')}
+      </tbody></table></div>` : ui.empty('아직 등록된 제품이 없어요.', 'doc');
   }
 
   function sourceRow(s) {
@@ -453,7 +477,7 @@
       <select class="input" data-k="field" aria-label="출처 항목">${SRC_FIELDS.map(([k, l]) => `<option value="${k}"${k === s.field ? ' selected' : ''}>${l}</option>`).join('')}${!known && s.field ? `<option value="${esc(s.field)}" selected>${esc(s.field)}</option>` : ''}</select>
       <input class="input" data-k="url" value="${esc(val(s.url))}" placeholder="https://… (기사 · 공식 페이지)" maxlength="500" aria-label="출처 주소">
       <input class="input" data-k="note" value="${esc(val(s.note))}" placeholder="메모 (기사 제목 · 날짜)" maxlength="200" aria-label="출처 메모">
-      <button type="button" class="btn small ghost" data-src="del" aria-label="출처 지우기">${icon('trash')}</button>
+      <button type="button" class="btn small ghost" data-src="del" aria-label="출처 삭제">${icon('trash')}</button>
     </div>`;
   }
 
@@ -462,19 +486,18 @@
     if (!p) return;
     const body = `
       <div class="part-settings set-modal">
-        <div class="flex wrap mb-16">${badge(p.code || p.id, 'dark')}${badge('내부 제품명 · ' + (p.name || '—'))}${evidenceBadge(p)}${p.flavor_status === 'confirmed' ? badge('맛 확정', 'green') : badge('맛 임시', 'blue')}</div>
+        <div class="flex wrap mb-16">${badge(p.code || p.id, 'dark')}${badge('내부 제품명 · ' + (p.name || '—'))}${evidenceBadge(p)}</div>
         <div class="note error mb-16" data-ref="err" hidden></div>
         <div class="field-grid">${field('제품 분류', inp('category', p.category))}${field('제형', inp('form', p.form))}</div>
-        <div class="field-grid">${field('맛', inp('flavors', p.flavors), '기사 · 공식 정보 기준')}${field('맛 상태', `<select class="input" name="flavor_status"><option value="provisional"${p.flavor_status !== 'confirmed' ? ' selected' : ''}>임시</option><option value="confirmed"${p.flavor_status === 'confirmed' ? ' selected' : ''}>확정</option></select>`)}</div>
-        <div class="field-grid">${field('포장', inp('pack', p.pack))}${field('용량', inp('volume', p.volume))}</div>
-        ${field('개발 방향', inp('direction', p.direction))}
+        <div class="field-grid">${field('맛', inp('flavors', p.flavors), '기사 · 공식 정보 기준')}${field('포장', inp('pack', p.pack))}</div>
+        <div class="field-grid">${field('용량', inp('volume', p.volume))}${field('개발 방향', inp('direction', p.direction))}</div>
         ${field('성분', area('ingredients', p.ingredients, 2), '모르면 비워 두세요 (출처 필수)')}
         ${field('알레르기 성분', inp('allergens', p.allergens))}
         ${field('섭취법', area('usage', p.usage, 2))}
-        <div class="field-grid">${field('소비자용 영문명', inp('consumer_name', p.consumer_name), '미정이면 "미정"')}${field('근거 상태', `<select class="input" name="evidence"><option${p.evidence !== '확인 완료' ? ' selected' : ''}>확인 필요</option><option${p.evidence === '확인 완료' ? ' selected' : ''}>확인 완료</option></select>`)}</div>
+        <div class="field-grid">${field('소비자용 영문명', inp('consumer_name', p.consumer_name), '미정이면 "미정"')}${group('근거 상태', toggle('name="evidence"', p.evidence === '확인 완료', '근거 확인 완료'), '출처가 하나도 없으면 켤 수 없어요')}</div>
         <div class="field-grid">
-          ${field('가격 (USD)', inp('price', p.price, 'type="number" min="0" step="0.01" inputmode="decimal"'), `${badge('가상값', 'purple')} 실제 판매가가 아니에요`)}
-          ${field('원가 (USD)', inp('cost', p.cost, 'type="number" min="0" step="0.01" inputmode="decimal"'), `${badge('가상값', 'purple')} 발표용 가정`)}
+          <label class="set-fld"><span class="field-label">가격 (USD) ${badge('예시', 'orange')}</span>${inp('price', p.price, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
+          <label class="set-fld"><span class="field-label">원가 (USD) ${badge('예시', 'orange')}</span>${inp('cost', p.cost, 'type="number" min="0" step="0.01" inputmode="decimal"')}</label>
         </div>
         <div class="set-fld">
           <span class="field-label">출처 (항목별)</span>
@@ -485,7 +508,7 @@
         <p class="panel-note">${p.updatedAt ? `최종 수정 ${esc(fmt.datetime(p.updatedAt))} · ${esc(p.updatedBy || '')}` : ''}</p>
       </div>`;
     formModal({
-      title: `${p.ko || p.name} · 상세 보기/수정`, body, wide: true,
+      title: `${p.ko || p.name} 정보 수정`, body, wide: true,
       onOpen: el => {
         el.addEventListener('click', e => {
           const b = e.target.closest('[data-src]');
@@ -508,6 +531,7 @@
   async function saveProduct(p, el) {
     const body = {};
     PRODUCT_EDIT.forEach(k => { const f = el.querySelector(`[name="${k}"]`); if (f) body[k] = f.value.trim(); });
+    body.evidence = el.querySelector('[name="evidence"]').checked ? '확인 완료' : '확인 필요';
     for (const k of ['price', 'cost']) {
       if (body[k] !== '' && !(Number(body[k]) >= 0)) throw new Error('가격 · 원가는 0 이상의 숫자(달러)로 입력하세요.');
     }
@@ -565,55 +589,187 @@
     const items = getPath(S.collect, path) || [];
     if (!items.length) return '<span class="small muted">비어 있어요</span>';
     return items.map((v, i) => `<span class="set-chip${LISTS[path].url ? ' url' : ''}"><span>${esc(v)}</span>` +
-      `<button type="button" data-act="list-del" data-list="${path}" data-i="${i}" aria-label="${esc(v)} 지우기">${icon('x')}</button></span>`).join('');
+      `<button type="button" data-act="list-del" data-list="${path}" data-i="${i}" aria-label="${esc(v)} 삭제">${icon('x')}</button></span>`).join('');
+  }
+
+  // 수집 대상 (인사이트 › 데이터 업데이트 항목과 같은 id) — 줄마다 켜기/끄기, 편집은 창에서
+  const SRC = [
+    { id: 'weee', label: 'Weee! 진열대 · 리뷰', used: '진열대 · 구매자 리뷰', cycle: '주 1회', edit: true },
+    { id: 'amazon', label: 'Amazon 진열대 · 리뷰', used: '진열대 · 구매자 리뷰', cycle: '주 1회', edit: true },
+    { id: 'yami', label: 'Yami 진열대', used: '진열대', cycle: '주 1회' },
+    { id: 'channel_reviews', label: '판매처 리뷰', used: '알디콤 구매자 리뷰 · 별점', cycle: '주 1회' },
+    { id: 'trends', label: '검색 트렌드', used: '검색 수요 · 홈 다음 급등 예상', cycle: '주 1회', edit: true },
+    { id: 'youtube', label: '유튜브 댓글', used: '잠재 고객 · 월간 분석', cycle: '월 1회', edit: true }
+  ];
+  const SRC_TITLE = { weee: 'Weee! 진열대 · 리뷰', amazon: 'Amazon 진열대 · 리뷰', trends: '검색 트렌드 (Google Trends · 미국 · 12개월)', youtube: '유튜브 댓글 (잠재 고객)' };
+  const COLLECT_COLS = ['켜기', '수집 대상', '주기', '지금 설정', '예상 사용량 (1회)', ''];
+  const COLLECT_W = [80, 200, 80, 340, 170, 90];
+  const isOn = id => !S.collect.enabled || S.collect.enabled[id] !== false;
+  const nn = v => Math.max(0, Number(v) || 0);
+
+  /* 칸 너비 고정 표 (인사이트 경쟁사 표와 같은 방식) — 머리글 오른쪽 끝을 끌어 너비 조절, 표(key)별로 이 브라우저에 기억 */
+  const store = REBOOT.store('settings');
+  function fixedTable(key, cols, defaults, cls) {
+    const saved = store.get('colW-' + key, null);
+    const w = Array.isArray(saved) && saved.length === defaults.length ? saved : defaults.slice();
+    return `<table class="data-table set-fixed ${cls || ''}" data-cols="${esc(key)}" style="width:${w.reduce((a, b) => a + b, 0)}px">` +
+      `<colgroup>${w.map(x => `<col style="width:${x}px">`).join('')}</colgroup>` +
+      `<thead><tr>${cols.map((c, i) => {
+        const [label, thCls] = Array.isArray(c) ? c : [c, ''];
+        return `<th${thCls ? ` class="${thCls}"` : ''}>${esc(label)}<span class="set-col-rs" data-col="${i}" title="끌어서 칸 너비 조절" aria-hidden="true"></span></th>`;
+      }).join('')}</tr></thead>`;
+  }
+  // 칸 너비 끌어서 조절 — 표는 다시 그리지 않고 <col> 너비만 바꿈
+  function colResize(e) {
+    const h = e.target.closest && e.target.closest('.set-col-rs');
+    if (!h) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const table = h.closest('table');
+    const cols = table.querySelectorAll('col');
+    const i = Number(h.dataset.col);
+    const w = [...cols].map(c => parseFloat(c.style.width) || c.getBoundingClientRect().width);
+    const x0 = e.clientX, w0 = w[i];
+    h.classList.add('on');
+    const move = ev => {
+      w[i] = Math.max(50, Math.round(w0 + ev.clientX - x0));
+      cols[i].style.width = `${w[i]}px`;
+      table.style.width = `${w.reduce((a, b) => a + b, 0)}px`;
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      h.classList.remove('on');
+      if (table.dataset.cols) store.set('colW-' + table.dataset.cols, w);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  }
+
+  // 편집 창이 열려 있으면 그 안에서, 아니면 수집 설정 패널에서 찾음
+  const ed = () => S.editEl || panel('collect');
+
+  function srcSummary(id) {
+    const c = S.collect;
+    const len = k => (c[k] || []).length;
+    const list = k => (c[k] || []).join(', ');
+    if (id === 'weee') return `주소 ${len('weee_urls')}개 · 제외 단어 ${len('exclude_terms')}개 · 알디콤 표시 단어 ${len('own_terms')}개`;
+    if (id === 'amazon') return `검색어 ${len('amazon_queries')}개 (${list('amazon_queries') || '없음'}) · 상세 조회 ${nn(c.amazon_product_lookups)}개 · 추적 ASIN ${(c.tracked_asins || []).filter(a => a.asin).length}개`;
+    if (id === 'yami') return '숙취 검색 결과 첫 페이지 — 검색어는 인사이트 담당이 정해요';
+    if (id === 'channel_reviews') return 'Olive Young · Amazon · Yami 알디콤 판매 페이지 — 주소는 인사이트 담당이 정해요';
+    if (id === 'trends') return `키워드 ${len('trend_keywords')}개 · ${list('trend_keywords') || '없음'}`;
+    const sets = ['A', 'B', 'K'].reduce((t, k) => t + ((c.search_sets || {})[k] || []).length, 0);
+    return `검색어 ${sets}개 (A · B · K) · 조회수 ${fmt.num(nn(c.min_views))} 이상 · 검색어당 ${nn(c.videos_per_query)}개 · ${c.video_language === 'ko_en' ? '한국어 · 영어' : '영어'}`;
+  }
+
+  // 한 번 돌릴 때 대략 {serpapi, firecrawl, youtube} — 설정으로 알 수 없는 항목은 null
+  function srcCost(id) {
+    const c = S.collect;
+    if (id === 'weee') return { firecrawl: (c.weee_urls || []).length };
+    if (id === 'amazon') return { serpapi: (c.amazon_queries || []).length + nn(c.amazon_product_lookups) + (c.tracked_asins || []).filter(a => a.asin).length };
+    if (id === 'trends') return { serpapi: (c.trend_keywords || []).length };
+    if (id === 'youtube') {
+      const q = ['A', 'B', 'K'].reduce((t, k) => t + ((c.search_sets || {})[k] || []).length, 0);
+      return { youtube: q * 100 + q + q * nn(c.videos_per_query) };
+    }
+    return null;
+  }
+  const COST_TXT = { serpapi: n => `SerpApi 약 ${fmt.num(n)}회`, firecrawl: n => `Firecrawl 약 ${fmt.num(n)}+ 크레딧`, youtube: n => `YouTube 최대 ${fmt.num(n)} units` };
+
+  function srcRow(s) {
+    const on = isOn(s.id);
+    const sum = srcSummary(s.id);
+    const cost = srcCost(s.id);
+    const costTxt = cost ? Object.keys(cost).map(k => COST_TXT[k](cost[k])).join(' · ') : '인사이트 › 최신 데이터 받기에서 확인';
+    return `<tr class="${on ? '' : 'set-off'}">
+      <td>${toggle(`data-src="${s.id}" aria-label="${esc(s.label)} 수집"`, on, on ? '켬' : '끔')}</td>
+      <td><strong>${esc(s.label)}</strong><small class="set-sub">${esc(s.used)}</small></td>
+      <td>${badge(s.cycle, s.cycle === '월 1회' ? 'blue' : 'green')}</td>
+      <td title="${esc(sum)}">${esc(sum)}</td>
+      <td class="small" title="${esc(costTxt)}">${on ? `<span class="${cost ? '' : 'muted'}">${esc(costTxt)}</span>` : '<span class="muted">꺼짐 · 사용 안 함</span>'}</td>
+      <td>${s.edit ? `<button type="button" class="btn small" data-act="src-edit" data-id="${s.id}">${icon('edit')}편집</button>` : ''}</td>
+    </tr>`;
   }
 
   function drawCollect() {
     const el = panel('collect');
-    const c = S.collect;
-    const num = (k, label, attrs, hint) => field(label, `<input class="input" type="number" data-num="${k}" value="${esc(val(c[k]))}" ${attrs}>`, hint);
     $(el, '[data-ref="collect-main"]').innerHTML = `
       <section class="card">
-        <div class="card-head"><h2>잠재 고객 (유튜브)</h2>${badge('월 1회 · 월간 분석', 'blue')}</div>
-        <div class="set-form">
-          ${group(LISTS['search_sets.A'].label, listEditor('search_sets.A'))}
-          ${group(LISTS['search_sets.B'].label, listEditor('search_sets.B'))}
-          ${group(LISTS['search_sets.K'].label, listEditor('search_sets.K'))}
-          <div class="field-grid three">
-            ${num('min_views', '영상 최소 조회수', 'min="0" step="1000"', '이보다 조회수가 낮은 영상은 제외')}
-            ${num('videos_per_query', '검색어당 영상 수', 'min="1" max="50"', '검색 결과에서 살펴볼 영상 수')}
-            <div class="set-fld"><span class="field-label">영상 언어</span>
-              <div class="seg set-seg" role="group" aria-label="영상 언어">
-                <button type="button" data-act="lang" data-v="en" aria-pressed="${c.video_language === 'en'}">영어</button>
-                <button type="button" data-act="lang" data-v="ko_en" aria-pressed="${c.video_language === 'ko_en'}">한국어 · 영어</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2>진열대 · 구매자 리뷰</h2>${badge('주 1회 · 데이터 업데이트', 'green')}</div>
-        <div class="set-form">
-          ${group(LISTS.amazon_queries.label, listEditor('amazon_queries'), '검색마다 광고를 뺀 상위 8개 상품을 모아요.')}
-          ${num('amazon_product_lookups', '상세 조회 상품 수 (리뷰 많은 순)', 'min="0" max="10"', '상품마다 SerpApi 1회 · 재고 · 대표 리뷰를 가져와요.')}
-          <div class="set-fld">
-            <span class="field-label">추적 ASIN</span>
-            <div class="table-wrap"><table class="data-table set-asins"><thead><tr><th>ASIN</th><th>메모</th><th>자사 (알디콤)</th><th></th></tr></thead>
-              <tbody data-ref="asins"></tbody></table></div>
-            <button type="button" class="btn small mt-8" data-act="asin-add">${icon('plus')}ASIN 추가</button>
-            <small class="hint">검색에 안 나와도 꼭 따라볼 아마존 상품 번호 (영문 대문자 · 숫자 10자리, 예: B0ABCDEFGH). 알디콤은 아마존 검색에 나오지 않아요 — ASIN을 알면 넣고 '자사'를 켜세요.</small>
-          </div>
-          ${group(LISTS.own_terms.label, listEditor('own_terms'), '상품명에 이 단어가 있으면 자사(알디콤)로 표시해요.')}
-          ${group(LISTS.weee_urls.label, listEditor('weee_urls'), 'Firecrawl로 읽을 Weee! 목록 · 상품 페이지 (주소마다 약 1 크레딧). 알디콤 상품 페이지를 따로 넣으면 재고를 더 정확히 봐요.')}
-          ${group(LISTS.exclude_terms.label, listEditor('exclude_terms'), '상품명에 이 단어가 있으면 진열대에서 빼요 (예: 해장국 같은 음식).')}
-        </div>
-      </section>
-      <section class="card">
-        <div class="card-head"><h2>검색 수요</h2>${badge('Google Trends · 미국 · 12개월', 'blue')}</div>
-        ${group(LISTS.trend_keywords.label, listEditor('trend_keywords'), '키워드마다 따로 조회해요 (같이 조회하면 큰 키워드가 작은 키워드를 납작하게 만들어요). 키워드마다 SerpApi 1회.')}
+        <div class="card-head"><h2>수집 대상<span class="head-cap" data-ref="src-count"></span></h2>${badge('주 1회 · 최신 데이터 받기 / 월 1회 · 월간 분석', 'blue')}</div>
+        <p class="panel-note mb-16">끈 항목은 인사이트 › 최신 데이터 받기에서 실행되지 않아요. 검색어 · 주소 같은 기준은 <b>편집</b>에서 바꿔요.</p>
+        <div class="table-wrap">${fixedTable('collect', COLLECT_COLS, COLLECT_W)}<tbody data-ref="src-body"></tbody></table></div>
       </section>`;
-    drawAsins();
     drawCollectSide();
+    redrawSources();
+  }
+
+  function redrawSources() {
+    const el = panel('collect');
+    const body = $(el, '[data-ref="src-body"]');
+    if (body) body.innerHTML = SRC.map(srcRow).join('');
+    const cnt = $(el, '[data-ref="src-count"]');
+    if (cnt) cnt.textContent = `${SRC.filter(s => isOn(s.id)).length}/${SRC.length} 켬`;
+    drawEstimate();
+  }
+
+  function setSource(id, on) {
+    S.collect.enabled = Object.assign({}, S.collect.enabled, { [id]: on });
+    setDirty('collect', true);
+    redrawSources();
+  }
+
+  function editBody(kind) {
+    const c = S.collect;
+    const num = (k, label, attrs, hint) => field(label, `<input class="input" type="number" data-num="${k}" value="${esc(val(c[k]))}" ${attrs}>`, hint);
+    const shelf = `${group(LISTS.own_terms.label, listEditor('own_terms'), '제품명에 이 단어가 있으면 알디콤으로 표시해요. (Amazon · Weee! 공통)')}
+      ${group(LISTS.exclude_terms.label, listEditor('exclude_terms'), '제품명에 이 단어가 있으면 진열대에서 빼요 (예: 해장국 같은 음식). (Amazon · Weee! 공통)')}`;
+    if (kind === 'youtube') return `
+      ${group(LISTS['search_sets.A'].label, listEditor('search_sets.A'))}
+      ${group(LISTS['search_sets.B'].label, listEditor('search_sets.B'))}
+      ${group(LISTS['search_sets.K'].label, listEditor('search_sets.K'))}
+      <div class="field-grid three">
+        ${num('min_views', '영상 최소 조회수', 'min="0" step="1000"', '이보다 조회수가 낮은 영상은 제외')}
+        ${num('videos_per_query', '검색어당 영상 수', 'min="1" max="50"', '검색 결과에서 살펴볼 영상 수')}
+        <div class="set-fld"><span class="field-label">영상 언어</span>
+          <div class="seg set-seg" role="group" aria-label="영상 언어">
+            <button type="button" data-act="lang" data-v="en" aria-pressed="${c.video_language === 'en'}">영어</button>
+            <button type="button" data-act="lang" data-v="ko_en" aria-pressed="${c.video_language === 'ko_en'}">한국어 · 영어</button>
+          </div>
+        </div>
+      </div>`;
+    if (kind === 'amazon') return `
+      ${group(LISTS.amazon_queries.label, listEditor('amazon_queries'), '검색마다 광고를 뺀 상위 8개 제품을 모아요.')}
+      ${num('amazon_product_lookups', '상세 조회 제품 수 (리뷰 많은 순)', 'min="0" max="10"', '제품마다 SerpApi 1회 · 재고 · 대표 리뷰를 받아요.')}
+      <div class="set-fld">
+        <span class="field-label">추적 ASIN</span>
+        <div class="table-wrap"><table class="data-table set-asins"><thead><tr><th>ASIN</th><th>메모</th><th>알디콤</th><th></th></tr></thead>
+          <tbody data-ref="asins"></tbody></table></div>
+        <button type="button" class="btn small mt-8" data-act="asin-add">${icon('plus')}ASIN 추가</button>
+        <small class="hint">검색에 안 나와도 꼭 따라볼 아마존 제품 번호 (영문 대문자 · 숫자 10자리, 예: B0ABCDEFGH). 알디콤은 아마존 검색에 나오지 않아요 — ASIN을 알면 넣고 '알디콤'을 켜세요.</small>
+      </div>
+      ${shelf}`;
+    if (kind === 'weee') return `
+      ${group(LISTS.weee_urls.label, listEditor('weee_urls'), 'Firecrawl로 읽을 Weee! 목록 · 제품 페이지 (주소마다 약 1 크레딧). 알디콤 제품 페이지를 따로 넣으면 재고를 더 정확히 봐요.')}
+      ${shelf}`;
+    return group(LISTS.trend_keywords.label, listEditor('trend_keywords'), '키워드마다 따로 조회해요 (같이 조회하면 큰 키워드가 작은 키워드를 납작하게 만들어요). 키워드마다 SerpApi 1회.');
+  }
+
+  // 편집 창: 바꾼 값은 바로 화면 상태에 들어가고, 오른쪽 위 '변경 사항 저장'으로 저장
+  function openSource(kind) {
+    if (!SRC_TITLE[kind]) return;
+    const body = document.createElement('div');
+    body.className = 'part-settings set-modal set-form';
+    body.innerHTML = editBody(kind) + '<p class="panel-note">창을 닫은 뒤 오른쪽 위 <b>변경 사항 저장</b>을 눌러야 저장돼요.</p>';
+    body.addEventListener('click', onClick);
+    body.addEventListener('input', onInput);
+    body.addEventListener('change', onChange);
+    body.addEventListener('keydown', onKeydown);
+    S.editEl = body;
+    if (kind === 'amazon') drawAsins();
+    ui.modal({ title: SRC_TITLE[kind], body, wide: true, actions: [{ label: '닫기', value: true, tone: 'lime' }] }).then(() => {
+      S.editEl = null;
+      redrawSources();
+    });
   }
 
   function drawCollectSide() {
@@ -621,47 +777,32 @@
     const m = S.collectMeta || {};
     $(el, '[data-ref="collect-side"]').innerHTML = `
       <section class="card tinted">
-        <h3>다음 데이터 업데이트부터 반영</h3>
-        <p class="panel-note mt-8">수집 설정을 바꾸면 <b>다음 데이터 업데이트부터</b> 반영돼요. 이미 모은 데이터는 그대로예요. 오른쪽 위 <b>변경 사항 적용</b>을 눌러야 저장돼요.</p>
+        <h3>다음에 데이터를 받을 때부터 반영</h3>
+        <p class="panel-note mt-8">수집 설정을 바꾸면 <b>다음에 최신 데이터를 받을 때부터</b> 반영돼요. 이미 모은 데이터는 그대로예요. 오른쪽 위 <b>변경 사항 저장</b>을 눌러야 저장돼요.</p>
         <p class="small muted mt-8">${m.updatedAt ? `마지막 저장 ${esc(fmt.datetime(m.updatedAt))} · ${esc(m.updatedBy || '')}` : '아직 기본값을 쓰고 있어요.'}</p>
         <button type="button" class="btn small mt-16" data-act="collect-reset">${icon('refresh')}기본값으로 되돌리기</button>
       </section>
       <section class="card">
-        <h3>예상 사용량</h3>
+        <h3>예상 사용량 합계</h3>
         <div data-ref="estimate" class="mt-8"></div>
-        <p class="panel-note mt-8">한 번 돌릴 때 대략이에요. 남은 사용량은 연결 탭의 연결 테스트로 확인하세요.</p>
-      </section>
-      <section class="card">
-        <h3>어디에 쓰이나요</h3>
-        <div class="mt-8">
-          ${ui.row('검색어 세트 · 영상 기준', '잠재 고객 (유튜브)')}
-          ${ui.row('Amazon 검색어 · 추적 ASIN', '진열대 · 구매자 리뷰')}
-          ${ui.row('Weee! 주소', '진열대')}
-          ${ui.row('트렌드 키워드', '검색 수요')}
-          ${ui.row('모니터링 시즌', '주간 리뷰 · 검색 수요')}
-        </div>
+        <p class="panel-note mt-8">켠 항목만, 한 번 돌릴 때 대략이에요. 남은 사용량은 연결 탭의 연결 테스트로 확인하세요.</p>
       </section>`;
-    drawEstimate();
   }
 
   function drawEstimate() {
     const box = $(panel('collect'), '[data-ref="estimate"]');
     if (!box || !S.collect) return;
-    const c = S.collect;
-    const n = v => Math.max(0, Number(v) || 0);
-    const queries = ['A', 'B', 'K'].reduce((t, k) => t + ((c.search_sets || {})[k] || []).length, 0);
-    const serp = (c.amazon_queries || []).length + n(c.amazon_product_lookups) + (c.tracked_asins || []).filter(a => a.asin).length +
-      (c.trend_keywords || []).length;
-    const yt = queries * 100 + queries + queries * n(c.videos_per_query);
+    const t = { serpapi: 0, firecrawl: 0, youtube: 0 };
+    SRC.filter(s => isOn(s.id)).forEach(s => { const c = srcCost(s.id) || {}; Object.keys(c).forEach(k => { t[k] += c[k]; }); });
     box.innerHTML = `
-      ${ui.row('SerpApi (주간)', `약 ${fmt.num(serp)}회 <span class="muted">/ 월 250회</span>`)}
-      ${ui.row('Firecrawl (주간)', `약 ${fmt.num((c.weee_urls || []).length)} 크레딧 <span class="muted">/ 월 1,000</span>`)}
-      ${ui.row('YouTube (월간)', `최대 약 ${fmt.num(yt)} units <span class="muted">/ 하루 10,000</span>`)}`;
+      ${ui.row('SerpApi (주간)', `약 ${fmt.num(t.serpapi)}회 <span class="muted">/ 월 250회</span>`)}
+      ${ui.row('Firecrawl (주간)', `약 ${fmt.num(t.firecrawl)}+ 크레딧 <span class="muted">/ 월 1,000</span>`)}
+      ${ui.row('YouTube (월간)', `최대 약 ${fmt.num(t.youtube)} units <span class="muted">/ 하루 10,000</span>`)}`;
   }
 
   function addToList(path) {
     const d = LISTS[path];
-    const input = $(panel('collect'), `[data-add="${path}"]`);
+    const input = $(ed(), `[data-add="${path}"]`);
     if (!d || !input) return;
     const v = input.value.replace(/\s+/g, ' ').trim();
     if (!v) { input.focus(); return; }
@@ -671,7 +812,7 @@
       try { const u = new URL(v); ok = u.protocol === 'https:' && /(^|\.)sayweee\.com$/i.test(u.hostname); } catch (e) { ok = false; }
       if (!ok) { toast('Weee! 주소는 https://www.sayweee.com/… 형식만 넣을 수 있어요.', 'error'); return; }
     }
-    if (items.some(x => String(x).toLowerCase() === v.toLowerCase())) { toast('이미 있어요.', 'error'); return; }
+    if (items.some(x => String(x).toLowerCase() === v.toLowerCase())) { toast('이미 넣은 값이에요.', 'error'); return; }
     if (items.length >= d.max) { toast(`${d.label}은(는) ${d.max}개까지 넣을 수 있어요.`, 'error'); return; }
     setPath(S.collect, path, items.concat([v]));
     input.value = '';
@@ -687,7 +828,7 @@
   }
 
   function redrawList(path) {
-    const box = $(panel('collect'), `[data-chips="${path}"]`);
+    const box = $(ed(), `[data-chips="${path}"]`);
     if (box) box.innerHTML = chipsHtml(path);
     setDirty('collect', true);
     drawEstimate();
@@ -695,27 +836,27 @@
 
   function setLang(v) {
     S.collect.video_language = v;
-    $$(panel('collect'), '[data-act="lang"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    $$(ed(), '[data-act="lang"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
     setDirty('collect', true);
   }
 
   function drawAsins() {
-    const body = $(panel('collect'), '[data-ref="asins"]');
+    const body = $(ed(), '[data-ref="asins"]');
     if (!body) return;
     const list = S.collect.tracked_asins || [];
     body.innerHTML = list.length ? list.map((a, i) => `<tr>
       <td><input class="input mono set-asin${a.asin && !ASIN_RE.test(a.asin) ? ' set-invalid' : ''}" data-asin="${i}" data-k="asin" value="${esc(a.asin)}" maxlength="10" placeholder="B0ABCDEFGH" aria-label="ASIN"></td>
       <td><input class="input" data-asin="${i}" data-k="label" value="${esc(val(a.label))}" maxlength="60" placeholder="예) 알디콤 젤리" aria-label="메모"></td>
-      <td><label class="check"><input type="checkbox" data-asin="${i}" data-k="own"${a.own ? ' checked' : ''}>자사</label></td>
-      <td><button type="button" class="btn small ghost" data-act="asin-del" data-i="${i}" aria-label="ASIN 지우기">${icon('trash')}</button></td>
-    </tr>`).join('') : `<tr><td colspan="4" class="muted small">추적하는 ASIN이 없어요.</td></tr>`;
+      <td>${toggle(`data-asin="${i}" data-k="own" aria-label="알디콤 제품"`, a.own, '알디콤')}</td>
+      <td><button type="button" class="btn small ghost" data-act="asin-del" data-i="${i}" aria-label="ASIN 삭제">${icon('trash')}</button></td>
+    </tr>`).join('') : `<tr><td colspan="4" class="muted small">아직 추적하는 ASIN이 없어요. ASIN 추가를 눌러 시작하세요.</td></tr>`;
   }
 
   function addAsin() {
     if ((S.collect.tracked_asins || []).length >= 30) { toast('추적 ASIN은 30개까지 넣을 수 있어요.', 'error'); return; }
     S.collect.tracked_asins = (S.collect.tracked_asins || []).concat([{ asin: '', label: '', own: false }]);
     drawAsins();
-    const inputs = $$(panel('collect'), '[data-k="asin"]');
+    const inputs = $$(ed(), '[data-k="asin"]');
     if (inputs.length) inputs[inputs.length - 1].focus();
     setDirty('collect', true);
   }
@@ -729,7 +870,7 @@
 
   async function resetCollect() {
     if (!S.collectDefaults) return;
-    const ok = await ui.confirm('수집 설정을 기본값으로 되돌릴까요? 변경 사항 적용을 눌러야 저장돼요.', { ok: '되돌리기' });
+    const ok = await ui.confirm('수집 설정을 기본값으로 되돌릴까요? 변경 사항 저장을 눌러야 저장돼요.', { ok: '되돌리기' });
     if (!ok) return;
     S.collect = copy(S.collectDefaults);
     drawCollect();
@@ -746,7 +887,7 @@
     S.collectMeta = { updatedAt: d.updatedAt, updatedBy: d.updatedBy };
     drawCollect();
     setDirty('collect', false);
-    toast(d.changed && d.changed.length ? '수집 설정을 저장했어요. 다음 데이터 업데이트부터 반영돼요.' : '바뀐 항목이 없어요.');
+    toast(d.changed && d.changed.length ? '수집 설정을 저장했어요. 다음에 최신 데이터를 받을 때부터 반영돼요.' : '바뀐 항목이 없어요.');
   }
 
   /* 모니터링 시즌 (공용 /api/seasons) */
@@ -766,31 +907,31 @@
     const list = S.seasons.filter(s => S.showPast || !s.past);
     const watching = S.seasons.filter(s => s.monitor && !s.past).length;
     box.innerHTML = `
-      <div class="card-head"><h2>모니터링 시즌 <span class="muted small">모니터링 ${watching}개</span></h2>
+      <div class="card-head"><h2>모니터링 시즌<span class="head-cap">모니터링 ${watching}개</span></h2>
         <div class="flex wrap">
-          <label class="check"><input type="checkbox" data-act="season-past"${S.showPast ? ' checked' : ''}>지난 시즌도 보기</label>
-          <a class="btn small" href="/api/seasons/export.csv" download="reboot-settings-seasons.csv">${icon('download')}CSV 받기</a>
-          <button type="button" class="btn small" data-act="season-import">${icon('upload')}CSV 가져오기</button>
+          ${toggle('data-act="season-past"', S.showPast, '지난 시즌도 보기')}
+          ${ui.fileBtn('upload', { label: '시즌 목록 업로드', type: 'CSV', act: 'season-import' })}
+          ${ui.fileBtn('download', { label: '시즌 목록 다운로드', type: 'CSV', href: '/api/seasons/export.csv', download: 'reboot-settings-seasons.csv' })}
           <button type="button" class="btn small lime" data-act="season-add">${icon('plus')}시즌 추가</button>
         </div>
       </div>
-      <p class="panel-note mb-16">모니터링을 켠 시즌만 인사이트의 주간 리뷰 · 검색 수요에 나와요. 시즌은 여기에서만 고쳐요 (홈 · 콘텐츠 캘린더에도 반영돼요).</p>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>시즌</th><th>기간</th><th class="num">D-day</th><th>구분</th><th>우선순위</th><th class="num">준비 기간</th><th>모니터링</th><th></th></tr></thead>
-        <tbody>${list.length ? list.map(seasonRow).join('') : `<tr><td colspan="8">${ui.empty('시즌이 없어요. 시즌 추가 또는 CSV 가져오기를 누르세요.', 'calendar')}</td></tr>`}</tbody></table></div>`;
+      <p class="panel-note mb-16">모니터링을 켠 시즌만 인사이트 주간 리뷰와 홈 › 콘텐츠 캘린더의 다음 급등 예상에 나와요. 시즌은 여기에서만 고쳐요 (홈 · 콘텐츠 캘린더에도 반영돼요).</p>
+      <div class="table-wrap">${fixedTable('seasons', ['시즌', '기간', ['D-day', 'num'], '구분', '우선순위', ['준비 기간', 'num'], '모니터링', ''], [210, 190, 90, 120, 100, 90, 90, 160])}
+        <tbody>${list.length ? list.map(seasonRow).join('') : `<tr><td colspan="8" class="set-wrap">${ui.empty('아직 시즌이 없어요. 시즌 추가나 시즌 목록 업로드를 눌러 시작하세요.', 'calendar')}</td></tr>`}</tbody></table></div>`;
   }
 
   function seasonRow(s) {
     const range = s.start === s.end ? fmt.date(s.start) : `${fmt.date(s.start)} ~ ${fmt.date(s.end)}`;
-    const dd = s.past ? badge('지남') : s.ongoing ? badge('진행 중', 'lime') : s.inLead ? badge(fmt.dday(s.start), 'orange') : esc(fmt.dday(s.start));
+    const dd = s.past ? badge('지남') : s.ongoing ? badge('진행 중', 'lime') : s.inLead ? badge(fmt.dday(s.start), 'orange') : badge(fmt.dday(s.start));
     return `<tr>
-      <td><strong>${esc(s.name)}</strong>${s.notes ? `<small class="set-sub">${esc(s.notes)}</small>` : ''}</td>
-      <td class="nowrap">${esc(range)}</td>
+      <td title="${esc(s.notes || s.name)}"><strong>${esc(s.name)}</strong>${s.notes ? `<small class="set-sub">${esc(s.notes)}</small>` : ''}</td>
+      <td>${esc(range)}</td>
       <td class="num">${dd}</td>
       <td>${esc(SEASON_CAT[s.category] || s.category)}</td>
       <td>${esc(SEASON_PRI[s.priority] || s.priority)}</td>
       <td class="num">${esc(s.leadDays)}일 전</td>
       <td><button type="button" class="switch${s.monitor ? '' : ' off'}" role="switch" aria-checked="${s.monitor ? 'true' : 'false'}" aria-label="${esc(s.name)} 모니터링" data-act="season-monitor" data-id="${esc(s.id)}"></button></td>
-      <td class="nowrap"><button type="button" class="btn small ghost" data-act="season-edit" data-id="${esc(s.id)}">${icon('edit')}수정</button><button type="button" class="btn small ghost" data-act="season-del" data-id="${esc(s.id)}">${icon('trash')}삭제</button></td>
+      <td><button type="button" class="btn small ghost" data-act="season-edit" data-id="${esc(s.id)}">${icon('edit')}수정</button><button type="button" class="btn small ghost" data-act="season-del" data-id="${esc(s.id)}">${icon('trash')}삭제</button></td>
     </tr>`;
   }
 
@@ -804,7 +945,7 @@
       toast(`${s.name} 모니터링을 ${s.monitor ? '켰어요' : '껐어요'}.`);
     } catch (e) {
       btn.disabled = false;
-      toast(e.message, 'error');
+      toast('모니터링을 바꾸지 못했어요: ' + e.message, 'error');
     }
   }
 
@@ -822,7 +963,7 @@
         ${field('준비 기간 (일 전)', inp('leadDays', s.leadDays, 'type="number" min="0" max="365"'))}
       </div>
       ${field('메모', area('notes', s.notes, 2))}
-      <label class="check mt-16"><input type="checkbox" name="monitor"${s.monitor ? ' checked' : ''}>인사이트에서 모니터링 (주간 리뷰 · 검색 수요)</label>
+      <div class="mt-16">${toggle('name="monitor"', s.monitor, '모니터링 (인사이트 주간 리뷰 · 홈 다음 급등 예상)')}</div>
     </div>`;
     formModal({
       title: isNew ? '시즌 추가' : `시즌 수정 · ${s.name}`, body,
@@ -846,29 +987,29 @@
 
   async function deleteSeason(s) {
     if (!s) return;
-    const ok = await ui.confirm(`${s.name} (${s.start}) 시즌을 지울까요? 홈 · 콘텐츠 캘린더에서도 사라져요.`, { ok: '지우기', danger: true });
+    const ok = await ui.confirm(`${s.name} (${s.start}) 시즌을 삭제할까요? 홈 · 콘텐츠 캘린더에서도 사라져요.`, { ok: '삭제', danger: true });
     if (!ok) return;
     try {
       await api(`/api/seasons/${s.id}`, undefined, { method: 'DELETE' });
       S.seasons = S.seasons.filter(x => x.id !== s.id);
       drawSeasons();
-      toast('시즌을 지웠어요.');
-    } catch (e) { toast(e.message, 'error'); }
+      toast('시즌을 삭제했어요.');
+    } catch (e) { toast('시즌을 삭제하지 못했어요: ' + e.message, 'error'); }
   }
 
   function importSeasons() {
     const body = `<div class="part-settings set-modal">
-      <p>첫 줄은 <code>name,start_date,end_date,category,priority,lead_days,notes</code> 이어야 해요. 'CSV 받기'로 받은 파일을 고쳐서 올리면 편해요.</p>
+      <p>첫 줄은 <code>name,start_date,end_date,category,priority,lead_days,notes</code> 이어야 해요. '시즌 목록 다운로드'로 받은 파일을 고쳐서 업로드하면 편해요.</p>
       <div class="note error mb-16" data-ref="err" hidden></div>
       ${field('CSV 파일', '<input type="file" accept=".csv,text/csv" data-ref="file">')}
       ${field('또는 CSV 내용 붙여 넣기', '<textarea class="input mono" rows="7" data-ref="csv" spellcheck="false"></textarea>')}
-      <div class="set-fld"><span class="field-label">가져오는 방법</span>
+      <div class="set-fld"><span class="field-label">올리는 방법</span>
         <label class="check"><input type="radio" name="mode" value="merge" checked>합치기 (지금 시즌에 더하기)</label>
-        <label class="check set-ml"><input type="radio" name="mode" value="replace">전체 바꾸기 (지금 시즌을 모두 지우고 바꾸기)</label>
+        <label class="check set-ml"><input type="radio" name="mode" value="replace">전체 바꾸기 (지금 시즌을 모두 삭제하고 바꾸기)</label>
       </div>
     </div>`;
     formModal({
-      title: '시즌 CSV 가져오기', body, saveLabel: '가져오기',
+      title: '시즌 목록 업로드 (CSV)', body, saveLabel: '업로드',
       onOpen: el => {
         $(el, '[data-ref="file"]').addEventListener('change', async e => {
           const f = e.target.files && e.target.files[0];
@@ -881,11 +1022,11 @@
         const csv = $(el, '[data-ref="csv"]').value.trim();
         if (!csv) throw new Error('CSV 파일을 고르거나 내용을 붙여 넣으세요.');
         const mode = (el.querySelector('[name="mode"]:checked') || {}).value || 'merge';
-        if (mode === 'replace' && !(await ui.confirm('지금 시즌을 모두 지우고 CSV로 바꿀까요?', { ok: '전체 바꾸기', danger: true }))) return false;
+        if (mode === 'replace' && !(await ui.confirm('지금 시즌을 모두 삭제하고 CSV로 바꿀까요?', { ok: '전체 바꾸기', danger: true }))) return false;
         const d = await api('/api/seasons/import', { csv, mode });
         S.seasons = d.items || [];
         drawSeasons();
-        toast(`시즌 ${d.count}개를 가져왔어요.`);
+        toast(`시즌 ${d.count}개를 올렸어요.`);
       }
     });
   }
@@ -905,7 +1046,7 @@
             <ul class="set-rules mt-8">
               <li>저장한 키는 다시 볼 수 없고 <b>끝 4자리만</b> 보여요 (<span class="mono">••••abcd</span>). 바꿀 때는 새로 입력해요.</li>
               <li>키는 서버에 <b>암호화</b>해서 저장해요. 브라우저에는 저장하지 않아요.</li>
-              <li>화면에서 입력한 키가 <b>.env보다 우선</b>이에요. 화면에서 지우면 .env 값으로 돌아가요.</li>
+              <li>화면에서 입력한 키가 <b>.env보다 우선</b>이에요. 화면에서 삭제하면 .env 값으로 돌아가요.</li>
               <li>발표 자료 · 스크린샷에 키가 보이지 않게 해요.</li>
             </ul>
           </section>
@@ -930,11 +1071,11 @@
   }
 
   function statusCell(it) {
-    const label = it.status === '확인 전' ? '연결됨 · 테스트 전' : it.status;
+    const label = connLabel(it.status);
     const last = it.lastCheck;
     const src = it.source === 'screen' ? '화면 입력' : it.source === 'env' ? '.env' : '';
     return `${badge(label, CONN_TONE[it.status])}${src ? ` <span class="small muted">${esc(src)}</span>` : ''}` +
-      (last ? `<small class="set-sub">${esc(last.message)} · ${esc(fmt.relative(last.at))}</small>` : '');
+      (last ? `<small class="set-sub" title="${esc(last.message)}">${esc(last.message)} · ${esc(fmt.relative(last.at))}</small>` : '');
   }
 
   function drawConnections() {
@@ -944,32 +1085,37 @@
     const admin = S.isAdmin;
     const actions = it => {
       const test = it.testable
-        ? `<button type="button" class="btn small" data-act="conn-test" data-name="${esc(it.name)}"${it.connected ? '' : ' disabled title="키를 먼저 넣으세요"'}>${icon('refresh')}연결 테스트</button>`
-        : '<span class="small muted">테스트 미지원</span>';
+        ? `<button type="button" class="btn small" data-act="conn-test" data-name="${esc(it.name)}"${it.connected ? '' : ' disabled title="키를 넣은 뒤 테스트할 수 있어요"'}>${icon('refresh')}연결 테스트</button>`
+        : '<span class="small muted">테스트 지원 안 함</span>';
       const key = admin ? `<button type="button" class="btn small${it.connected ? '' : ' lime'}" data-act="conn-key" data-name="${esc(it.name)}">${icon('edit')}${it.group === 'key' ? '키 입력' : '값 입력'}</button>` : '';
       return `<div class="set-row-actions">${test}${key}</div>`;
     };
     const connected = keys.filter(i => i.connected).length;
+    // 카드 접기: 제목을 누르면 아래 표를 펴고 접음 (처음엔 접힘 · 펼친 상태는 이 브라우저에 기억)
+    const foldHead = (k, title) => `<h2><button type="button" class="set-fold" data-act="conn-fold" data-k="${k}" aria-expanded="${!!store.get('fold-' + k, false)}">` +
+      `${icon('chevron', 'icon set-fold-caret')}${title}</button></h2>`;
+    const foldBody = k => `<div class="set-fold-body"${store.get('fold-' + k, false) ? '' : ' hidden'}>`;
     $(el, '[data-ref="keys"]').innerHTML = `
-      <div class="card-head"><h2>API 키 <span class="muted small">${connected}/${keys.length} 연결</span></h2>
+      <div class="card-head">${foldHead('keys', `API 키<span class="head-cap">${connected}/${keys.length} 연결</span>`)}
         <div class="flex">${admin ? badge('관리자 · 키 입력 가능', 'lime') : badge('보기 전용')}<button type="button" class="btn small ghost" data-act="conn-reload" aria-label="새로고침">${icon('refresh')}</button></div></div>
+      ${foldBody('keys')}
       ${admin ? '' : '<div class="note mb-16">키 입력은 관리자만 할 수 있어요. 키가 필요하면 관리자에게 요청하세요. 연결 테스트는 누구나 할 수 있어요.</div>'}
-      <div class="table-wrap"><table class="data-table set-conn"><thead><tr><th>서비스</th><th>쓰는 곳</th><th>무료 한도</th><th>상태</th><th>값</th><th></th></tr></thead>
+      <div class="table-wrap">${fixedTable('conn-keys', ['서비스', '쓰는 곳', '무료 한도', '상태', '값', ''], [170, 230, 130, 210, 110, 140], 'set-conn')}
         <tbody>${keys.map(it => `<tr>
           <td><strong>${esc(it.label)}</strong><small class="set-sub mono">${esc(it.name)}</small></td>
-          <td class="set-used">${esc(it.usedBy)}</td>
-          <td class="nowrap">${esc(it.limit || '—')}</td>
+          <td class="set-used" title="${esc(it.usedBy)}">${esc(it.usedBy)}</td>
+          <td title="${esc(it.limit || '')}">${esc(it.limit || '—')}</td>
           <td>${statusCell(it)}</td>
           <td class="mono nowrap">${esc(it.masked || '—')}</td>
-          <td>${actions(it)}</td></tr>`).join('')}</tbody></table></div>`;
+          <td>${actions(it)}</td></tr>`).join('')}</tbody></table></div></div>`;
     $(el, '[data-ref="values"]').innerHTML = `
-      <div class="card-head"><h2>설정값</h2>${badge('키가 아닌 값 · 그대로 보임')}</div>
-      <div class="table-wrap"><table class="data-table set-conn"><thead><tr><th>항목</th><th>쓰는 곳</th><th>지금 값</th><th></th></tr></thead>
+      <div class="card-head">${foldHead('values', '설정값')}${badge('키가 아닌 값 · 그대로 보임')}</div>
+      ${foldBody('values')}<div class="table-wrap">${fixedTable('conn-values', ['항목', '쓰는 곳', '지금 값', ''], [200, 260, 280, 110], 'set-conn')}
         <tbody>${values.map(it => `<tr>
           <td><strong>${esc(it.label)}</strong><small class="set-sub mono">${esc(it.name)}</small></td>
-          <td class="set-used">${esc(it.usedBy)}</td>
-          <td>${it.masked ? `<span class="set-value">${esc(it.masked)}</span>` : `<span class="muted">${it.default ? `기본값 · ${esc(it.default)}` : '없음'}</span>`}${it.source ? ` <span class="small muted">${it.source === 'screen' ? '화면 입력' : '.env'}</span>` : ''}</td>
-          <td>${admin ? `<button type="button" class="btn small" data-act="conn-key" data-name="${esc(it.name)}">${icon('edit')}값 입력</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+          <td class="set-used" title="${esc(it.usedBy)}">${esc(it.usedBy)}</td>
+          <td title="${esc(it.masked || it.default || '')}">${it.masked ? `<span class="set-value">${esc(it.masked)}</span>` : `<span class="muted">${it.default ? `기본값 · ${esc(it.default)}` : '없음'}</span>`}${it.source ? ` <span class="small muted">${it.source === 'screen' ? '화면 입력' : '.env'}</span>` : ''}</td>
+          <td>${admin ? `<button type="button" class="btn small" data-act="conn-key" data-name="${esc(it.name)}">${icon('edit')}값 입력</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     drawSetup();
   }
 
@@ -1009,10 +1155,10 @@ GOOGLE_CLIENT_SECRET=...</pre>
       <p>${esc(it.label)} · ${esc(it.usedBy)}</p>
       <div class="note error mb-16" data-ref="err" hidden></div>
       ${field(isKey ? '새 키' : '값', control, `지금 값: <span class="mono">${esc(now)}</span>${it.secret ? ' · 저장한 키는 다시 볼 수 없어요.' : ''}`)}
-      <div class="note mt-16">비워 두고 저장하면 화면 입력 값을 지우고 .env 값(있으면)으로 돌아가요.${name === 'GMAIL_APP_PASSWORD' ? ' 앱 비밀번호는 띄어 써도 돼요.' : ''}</div>
+      <div class="note mt-16">비워 두고 저장하면 화면 입력 값을 삭제하고 .env 값(있으면)으로 돌아가요.${name === 'GMAIL_APP_PASSWORD' ? ' 앱 비밀번호는 띄어 써도 돼요.' : ''}</div>
     </div>`;
     const extra = it.source === 'screen' ? [{
-      label: '화면 입력 지우기', tone: 'danger', onClick: bodyEl => { saveKey(it, '', bodyEl); return false; }
+      label: '저장한 값 삭제', tone: 'danger', onClick: bodyEl => { saveKey(it, '', bodyEl); return false; }
     }] : [];
     formModal({ title: `${it.label} · ${isKey ? '키 입력' : '값 입력'}`, body, extra, onSave: el => saveKey(it, $(el, '[data-ref="val"]').value, el, true) });
   }
@@ -1025,7 +1171,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       drawConnections();
       watchHealth(true);
       if (!viaSave) closeModal(el);
-      toast(saved.connected ? `${it.label} 값을 저장했어요.` : `${it.label} 화면 입력을 지웠어요.`);
+      toast(saved.connected ? `${it.label} 값을 저장했어요.` : `${it.label} 화면 입력을 삭제했어요.`);
       if (saved.connected && saved.testable) {
         const btn = $(panel('connections'), `[data-act="conn-test"][data-name="${it.name}"]`);
         testConn(btn, it.name);
@@ -1048,10 +1194,10 @@ GOOGLE_CLIENT_SECRET=...</pre>
         it.lastCheck = { status: r.status, message: r.message, detail: r.detail, at: r.at };
       });
       drawConnections();
-      toast(`${r.status} · ${r.message}`, r.status === '오류' ? 'error' : undefined);
+      toast(`${connLabel(r.status)} · ${r.message}`, r.status === '오류' ? 'error' : undefined);
     } catch (e) {
       if (btn) ui.busy(btn, false);
-      toast(e.message, 'error');
+      toast('연결 테스트를 하지 못했어요: ' + e.message, 'error');
     }
   }
 
@@ -1069,7 +1215,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       ? `<button type="button" class="btn danger" data-act="gmail-off">${icon('x')}연결 해제</button>`
       : `<button type="button" class="btn lime" data-act="gmail-login"${g.webLogin ? '' : ' disabled'}>${icon('mail')}Google로 로그인</button>`;
     box.innerHTML = `
-      <div class="card-head"><h2>Google 로그인 <span class="muted small">CS Gmail 문의함 · 답장 초안</span></h2>${g.connected ? badge('정상', 'green') : badge('미연결')}</div>
+      <div class="card-head"><h2>Google 로그인<span class="head-cap">CS Gmail 문의함 · 답장 초안</span></h2>${g.connected ? badge('정상', 'green') : badge('연결 안 됨')}</div>
       <div class="setting-row">
         <div><strong class="set-pname">${g.connected ? esc(g.email || '연결된 계정') : '연결된 Google 계정이 없어요'}</strong>
           <p>${g.connected ? 'CS 문의함이 이 계정의 메일을 읽고 답장 초안을 만들어요. 발송은 사람이 Gmail에서 직접 해요.' : 'Google로 로그인을 누르고 문의 메일을 받을 계정을 고르면 연결돼요.'}</p></div>
@@ -1090,7 +1236,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       await loadGmail();
     } catch (e) {
       ui.busy(btn, false);
-      toast(e.message, 'error');
+      toast('연결을 해제하지 못했어요: ' + e.message, 'error');
     }
   }
 
@@ -1113,20 +1259,21 @@ GOOGLE_CLIENT_SECRET=...</pre>
       <section class="card">
         <div class="filters">
           <div class="flex wrap">
-            <div class="chips" role="group" aria-label="구분" data-ref="wl-kinds"></div>
-            <select class="input set-select" data-ref="wl-part" aria-label="파트">
-              <option value="">모든 파트</option>${parts.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('')}
-            </select>
+            <input class="input set-search" type="search" data-ref="wl-q" placeholder="작업 · 사람 검색" aria-label="작업 기록 검색 (작업 · 사람 · 승인)">
+            <label class="set-wl-field"><span>메뉴</span>
+              <select class="input set-select" data-ref="wl-part" aria-label="메뉴">
+                <option value="">전체</option>${parts.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('')}
+              </select></label>
           </div>
-          <div class="flex wrap">
-            <button type="button" class="btn small" data-act="wl-csv">${icon('download')}CSV 받기</button>
-            <button type="button" class="btn small" data-act="wl-xlsx">${icon('download')}Excel 받기 (구분별 시트)</button>
-          </div>
+          ${ui.fileActions(ui.fileMenu('download', { label: '작업 기록 다운로드', items: [
+            { label: 'CSV', act: 'wl-csv' }, { label: 'XLSX (구분별 시트)', act: 'wl-xlsx', title: '구분별로 시트를 나눠 다운로드해요' }] }))}
         </div>
-        <div class="table-wrap"><table class="data-table set-wl"><thead><tr><th>일시</th><th>구분</th><th>작업</th><th>상태</th><th>승인</th><th>상세</th></tr></thead>
+        <div class="linetabs set-wl-kinds" role="group" aria-label="구분" data-ref="wl-kinds"></div>
+        <div class="set-wl-active" data-ref="wl-active" hidden></div>
+        <div class="table-wrap">${fixedTable('worklog', ['일시', '메뉴', '구분', '작업', '상태', '승인', '상세'], [160, 130, 110, 330, 100, 120, 120], 'set-wl')}
           <tbody data-ref="wl-body"></tbody></table></div>
         <div class="set-more" data-ref="wl-more"></div>
-        <p class="panel-note mt-16">대시보드에서 일어난 일을 자동으로 기록해요 (과제 제출용). 로그는 고치거나 지울 수 없고, API 키 · 이메일 주소는 가려서 저장돼요.</p>
+        <p class="panel-note mt-16">대시보드에서 일어난 일을 자동으로 기록해요 (과제 제출용). 기록은 고치거나 삭제할 수 없고, API 키 · 이메일 주소는 가려서 저장돼요.</p>
       </section>`;
     drawWlFilters();
     loadWorklog(true);
@@ -1136,7 +1283,18 @@ GOOGLE_CLIENT_SECRET=...</pre>
     const box = $(panel('worklog'), '[data-ref="wl-kinds"]');
     if (!box) return;
     box.innerHTML = [['', '전체']].concat(KINDS.map(k => [k, k])).map(([v, l]) =>
-      `<button type="button" class="chip${v === S.wl.kind ? ' selected' : ''}" data-act="wl-kind" data-v="${esc(v)}" aria-pressed="${v === S.wl.kind}">${esc(l)}</button>`).join('');
+      `<button type="button" data-act="wl-kind" data-v="${esc(v)}" aria-pressed="${v === S.wl.kind}">${esc(l)}</button>`).join('');
+    drawWlActive();
+  }
+
+  // 지금 걸린 필터 (SAP 'Filtered by'): 구분 · 메뉴 · 검색어 + 한 번에 초기화
+  function drawWlActive() {
+    const box = $(panel('worklog'), '[data-ref="wl-active"]');
+    if (!box) return;
+    const on = [S.wl.kind && `구분 ${S.wl.kind}`, S.wl.part && `메뉴 ${partLabel(S.wl.part)}`, (S.wl.q || '').trim() && `검색 '${S.wl.q.trim()}'`].filter(Boolean);
+    box.hidden = !on.length;
+    box.innerHTML = on.length ? `<span class="small muted">필터: ${esc(on.join(' · '))}</span>
+      <button type="button" class="btn small ghost" data-act="wl-reset">${icon('x')}초기화</button>` : '';
   }
 
   function wlQuery() {
@@ -1162,7 +1320,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       S.wl.done = items.length < 50;
     } catch (e) {
       if (seq !== S.wl.seq) return;
-      toast('작업 로그를 불러오지 못했어요: ' + e.message, 'error');
+      toast('작업 기록을 불러오지 못했어요: ' + e.message, 'error');
       S.wl.done = true;
     }
     S.wl.loading = false;
@@ -1174,17 +1332,20 @@ GOOGLE_CLIENT_SECRET=...</pre>
     const body = $(el, '[data-ref="wl-body"]');
     const more = $(el, '[data-ref="wl-more"]');
     if (!body) return;
-    if (loading) { body.innerHTML = '<tr><td colspan="6"><div class="skeleton set-skel"></div></td></tr>'; more.innerHTML = ''; return; }
-    body.innerHTML = S.wl.items.length ? S.wl.items.map(r => `<tr>
-      <td class="nowrap">${esc(fmt.datetime(r.at))}<small class="set-sub">${esc(r.user || '')}</small></td>
+    if (loading) { body.innerHTML = '<tr><td colspan="7"><div class="skeleton set-skel"></div></td></tr>'; more.innerHTML = ''; return; }
+    const q = (S.wl.q || '').trim().toLowerCase();
+    const rows = q ? S.wl.items.filter(r => [r.action, r.user, r.approval].join(' ').toLowerCase().includes(q)) : S.wl.items;
+    body.innerHTML = rows.length ? rows.map(r => `<tr>
+      <td>${esc(fmt.datetime(r.at))}<small class="set-sub">${esc(r.user || '')}</small></td>
+      <td>${esc(partLabel(r.part) || '–')}</td>
       <td>${badge(r.kind, KIND_TONE[r.kind])}</td>
-      <td>${esc(r.action)}<small class="set-sub">${esc(partLabel(r.part))}</small></td>
+      <td title="${esc(r.action)}">${esc(r.action)}</td>
       <td>${badge(r.status, STATUS_TONE[r.status])}</td>
-      <td>${esc(r.approval || '–')}</td>
-      <td><button type="button" class="btn small ghost" data-act="wl-open" data-id="${esc(r.id)}">${r.kind === 'AI 프롬프트' ? '프롬프트 보기' : '보기'}</button></td>
-    </tr>`).join('') : `<tr><td colspan="6">${ui.empty('조건에 맞는 기록이 없어요.', 'clock')}</td></tr>`;
-    more.innerHTML = S.wl.done ? (S.wl.items.length ? `<span class="small muted">모두 ${fmt.num(S.wl.items.length)}건을 불러왔어요.</span>` : '')
-      : `<button type="button" class="btn small" data-act="wl-more">더 보기</button>`;
+      <td title="${esc(r.approval || '')}">${esc(r.approval || '–')}</td>
+      <td><button type="button" class="btn small ghost" data-act="wl-open" data-id="${esc(r.id)}">${r.kind === 'AI 프롬프트' ? '프롬프트 보기' : '상세 보기'}</button></td>
+    </tr>`).join('') : `<tr><td colspan="7" class="set-wrap">${ui.empty(q ? `'${S.wl.q.trim()}' 검색 결과가 불러온 기록에 없어요. 기록 더 보기로 더 찾아보세요.` : '조건에 맞는 기록이 없어요.', 'clock')}</td></tr>`;
+    more.innerHTML = S.wl.done ? (S.wl.items.length ? `<span class="small muted">모두 ${fmt.num(S.wl.items.length)}건을 불러왔어요${q ? ` · 검색 결과 ${fmt.num(rows.length)}건` : ''}.</span>` : '')
+      : `<button type="button" class="btn small" data-act="wl-more">기록 더 보기</button>`;
   }
 
   const DETAIL_LABEL = { count: '건수', fields: '바꾼 항목', message: '메시지', name: '항목', source: '출처', model: '모델',
@@ -1214,7 +1375,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
     } else {
       const keys = Object.keys(d);
       body = `<div class="part-settings set-modal">
-        ${ui.row('파트', esc(partLabel(item.part)))}
+        ${ui.row('탭', esc(partLabel(item.part)))}
         ${ui.row('구분 · 상태', `${badge(item.kind, KIND_TONE[item.kind])} ${badge(item.status, STATUS_TONE[item.status])}`)}
         ${ui.row('승인', esc(item.approval || '–'))}
         ${ui.row('일시 · 실행', esc(`${fmt.datetime(item.at)} · ${item.user || ''}`))}
@@ -1240,12 +1401,12 @@ GOOGLE_CLIENT_SECRET=...</pre>
         before = items[items.length - 1].id;
       }
       const safe = v => { const s = v == null ? '' : String(v); return /^[=+\-@]/.test(s) ? "'" + s : s; };
-      const rows = [['일시', '구분', '파트', '작업', '상태', '승인', '작성자', '상세']].concat(all.map(r =>
+      const rows = [['일시', '구분', '탭', '작업', '상태', '승인', '작성자', '상세']].concat(all.map(r =>
         [stamp(r.at), r.kind, partLabel(r.part), r.action, r.status, r.approval, r.user, JSON.stringify(r.detail || {})].map(safe)));
       ui.download(`reboot-settings-worklog-${REBOOT.today()}.csv`, ui.csv(rows), 'text/csv;charset=utf-8');
-      toast(`작업 로그 ${fmt.num(all.length)}건을 CSV로 받았어요.`);
+      toast(`작업 기록 ${fmt.num(all.length)}건을 CSV로 다운로드했어요.`);
     } catch (e) {
-      toast(e.message, 'error');
+      toast('작업 기록을 내려받지 못했어요: ' + e.message, 'error');
     } finally {
       ui.busy(btn, false);
     }
@@ -1272,7 +1433,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
             ${field('이메일 (로그인 아이디)', `<input class="input" value="${esc(me.email || '')}" readonly>`)}
             <div class="field-grid">${field('이름', inp('name', me.name, 'maxlength="100"'))}${field('소속 · 역할', inp('title', me.title, 'maxlength="100" placeholder="예) 글로벌사업팀 · 미국 채널"'))}</div>
           </form>
-          <p class="panel-note mt-16">고친 뒤 오른쪽 위 <b>변경 사항 적용</b>을 누르세요. 상단 프로필에는 새로고침 후 보여요.</p>
+          <p class="panel-note mt-16">고친 뒤 오른쪽 위 <b>변경 사항 저장</b>을 누르세요. 상단 프로필에는 새로고침 후 보여요.</p>
         </section>
         <section class="card">
           <div class="card-head"><h2>비밀번호 변경</h2></div>
@@ -1344,7 +1505,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
     const list = S.users || [];
     const sw = (u, flag, on, label, disabled) => `<button type="button" class="switch${on ? '' : ' off'}" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(u.name)} ${label}" data-act="user-flag" data-id="${esc(u.id)}" data-flag="${flag}"${disabled ? ' disabled title="내 계정은 여기서 끌 수 없어요"' : ''}></button>`;
     box.innerHTML = `
-      <div class="card-head"><h2>계정 관리 <span class="muted small">${list.length}명</span></h2>
+      <div class="card-head"><h2>계정 관리<span class="head-cap">${list.length}명</span></h2>
         <div class="flex"><button type="button" class="btn small ghost" data-act="users-reload" aria-label="새로고침">${icon('refresh')}</button><button type="button" class="btn small lime" data-act="user-add">${icon('plus')}계정 추가</button></div></div>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>이름 · 이메일</th><th>소속</th><th>관리자</th><th>사용</th><th>마지막 로그인</th><th></th></tr></thead>
         <tbody>${list.map(u => `<tr>
@@ -1365,7 +1526,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       Object.assign(u, saved);
       drawUsers();
       if (msg) toast(msg);
-    } catch (e) { toast(e.message, 'error'); drawUsers(); }
+    } catch (e) { toast('계정을 바꾸지 못했어요: ' + e.message, 'error'); drawUsers(); }
   }
 
   async function toggleUser(btn) {
@@ -1406,8 +1567,8 @@ GOOGLE_CLIENT_SECRET=...</pre>
         ${field('이메일', '<input class="input" type="email" name="email" maxlength="255" autocomplete="off">')}
         <div class="field-grid">${field('이름', '<input class="input" name="name" maxlength="100">')}${field('소속 · 역할', '<input class="input" name="title" maxlength="100">')}</div>
         ${field('임시 비밀번호', '<input class="input" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128">', '8자 이상')}
-        <label class="check mt-16"><input type="checkbox" name="isAdmin">관리자 (키 입력 · 계정 관리 가능)</label></div>`,
-      saveLabel: '만들기',
+        <div class="mt-16">${toggle('name="isAdmin"', false, '관리자 (키 입력 · 계정 관리 가능)')}</div></div>`,
+      saveLabel: '계정 만들기',
       onSave: async el => {
         const g = n => el.querySelector(`[name="${n}"]`);
         const body = { email: g('email').value.trim(), name: g('name').value.trim(), title: g('title').value.trim(),

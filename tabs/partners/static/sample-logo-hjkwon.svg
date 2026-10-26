@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="HJ Kwon 예시 로고 (가상)">
+  <!-- 예시(테스트) 업체 HJ Kwon용 가상 비즈니스 로고 — 실제 회사 로고가 아님 -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f2a44"/>
+      <stop offset="1" stop-color="#3b4f7a"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="32" fill="url(#g)"/>
+  <circle cx="32" cy="32" r="22" fill="none" stroke="#d7f25a" stroke-width="2"/>
+  <text x="32" y="38" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="18" font-weight="700" fill="#ffffff" letter-spacing="1">HJ</text>
+  <text x="32" y="49" text-anchor="middle" font-family="Arial, sans-serif" font-size="5.5" fill="#d7f25a" letter-spacing="1.5">MEDIA</text>
+</svg>

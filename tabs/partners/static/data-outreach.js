@@ -9,11 +9,11 @@
 
   P.outreach = {
     types: ['케이터링', '인플루언서'],
-    typeIcon: { 케이터링: '🍽️', 인플루언서: '📱' },
+    typeIcon: { 케이터링: '', 인플루언서: '' },
     typeTone: { 케이터링: 'orange', 인플루언서: 'purple' },
     periodDays: 30,   // 기간 기본값: 오늘 ~ 30일 뒤
 
-    // 📐 메일 구조 (서버 설정을 못 불러올 때 표시용)
+    // 메일 구조 (서버 설정을 못 불러올 때 표시용)
     mailSteps: ['인사', '회사 소개', '협업 이유', '제안 (2–3개 항목)', '일정', '다음 단계', '맺음말'],
 
     // 구분별 기본 문구 — 원하는 파트너 · 협업 목적 · 제안 내용 · 요청사항
@@ -35,23 +35,37 @@
     // 협업 가이드 입력 기본값 (일정 · 필수 전달사항 · 결과물·제출 기준)
     guideDefaults: {
       인플루언서: {
-        schedule: '• 제품 발송: 협업 확정 후 3일 이내\n• 콘텐츠 초안 제출: 제품 수령 후 7일 이내\n• REBOOT 검토·피드백: 초안을 받은 뒤 2영업일\n• 게시: 최종 승인 후 3일 이내 (정확한 날짜는 협의 후 확정)',
+        schedule: '• 제품 발송: 협업 확정 후 3일 이내\n• 콘텐츠 초안 제출: 제품 수령 후 7일 이내\n• REBOOT 검토·피드백: 초안을 받은 뒤 2영업일\n• 게시: 최종 승인 후 3일 이내 (정확한 날짜는 협의 후 확정)\n• 기간: { }',
         must: '• 21세 이상 팔로워 대상 · 음주 장면은 책임 있는 음주로만\n• 건강 효능을 말하지 않고 애프터파티·모닝 리추얼로 소개 (금지 표현은 Do & Don\'t 표 참고)\n• #ad 또는 Paid partnership 표시를 캡션 첫 줄·영상 첫 화면에\n• 할인코드와 링크는 REBOOT이 준 것만 사용',
         deliverables: '• Instagram Reels 1개 (15–30초) + 스토리 2개 (링크 스티커)\n• 게시 전 초안(영상·캡션) 제출 → 승인 후 게시\n• 게시 7일 뒤 인사이트 캡처 (도달 · 조회 · 링크 클릭)'
       },
       케이터링: {
-        schedule: '• 현장 운영 계획 공유: 이벤트 2주 전\n• 제품 입고: 이벤트 5일 전\n• 현장 샘플링: 이벤트 당일\n• 결과 공유: 이벤트 후 7일 이내 (정확한 날짜는 협의 후 확정)',
+        schedule: '• 현장 운영 계획 공유: 이벤트 2주 전\n• 제품 입고: 이벤트 5일 전\n• 현장 샘플링: 이벤트 당일\n• 결과 공유: 이벤트 후 7일 이내 (정확한 날짜는 협의 후 확정)\n• 기간: { }',
         must: '• 21세 이상 참석자에게만 제공 · 과음을 권하는 멘트 금지\n• 건강 효능을 말하지 않고 애프터파티 리추얼로 소개 (금지 표현은 Do & Don\'t 표 참고)\n• 제품은 개별 포장 그대로 제공\n• 현장 사진 촬영은 참석자 동의를 받은 경우만',
         deliverables: '• 현장 사진 10장 이상 (브랜드 노출 컷 포함)\n• 샘플링 수량 · 참석 인원 간단 보고\n• 참석자 반응 메모 (자주 나온 질문 3개)'
       }
     },
 
-    // 📎 첨부파일 (서버와 같은 규칙)
+    // 첨부파일 (서버와 같은 규칙)
     attach: {
       accept: '.pdf,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.zip,.txt',
       exts: ['pdf', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'png', 'jpg', 'jpeg', 'zip', 'txt'],
       maxFileMB: 25,
       maxTotalMB: 25
+    },
+
+    // 유튜브 크리에이터 — 검색 키워드 추천 묶음 (영어 검색어. 키워드 편집 창에서 눌러 추가)
+    ytSuggest: [
+      { label: '성인 파티 · 나이트라이프', items: ['bachelorette party', 'bachelor party vegas', 'nightlife vlog', 'bar crawl', '21st birthday'] },
+      { label: '술 · 칵테일', items: ['cocktail recipes', 'whiskey review', 'bourbon tasting', 'home bartender'] },
+      { label: '미국 시즌 행사', items: ['tailgate party', 'music festival vlog', 'spring break vlog'] },
+      { label: '파티 다음 날', items: ['hangover cure', 'hangover remedies', 'morning after party'] }
+    ],
+    // 대상: 유튜브 API는 시청자 국가를 주지 않으므로 EST는 추정 (국가 미표시 + 영어 채널)
+    ytTargets: {
+      US: { label: '미국', tone: 'blue' },
+      EN: { label: '영미권', tone: 'purple', help: '영국 · 캐나다 · 호주 · 뉴질랜드 · 아일랜드' },
+      EST: { label: '미국 타겟 (추정)', tone: 'orange', help: '국가 미표시 + 영어 채널 + 미국 지역 검색에 걸림 — 시청자 국가는 채널에서 직접 확인' }
     },
 
     // 업체 파일 형식 안내
