@@ -55,7 +55,7 @@
 .part-home .home-top4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; }
 .part-home .home-top4 > .card { display: flex; flex-direction: column; height: 400px; min-width: 0; }
 .part-home .home-top4 .home-box-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 0; }
-.part-home .home-top4 .home-mini-cal { overflow-y: auto; }
+.part-home .home-top4 .home-mini-cal { overflow: hidden; }   /* 달력에 스크롤바 없이 · 아래 시즌 목록은 넘치면 잘림 */
 .part-home .home-main2 { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 22px; align-items: start; }
 @media (max-width: 1300px) { .part-home .home-top4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .part-home .home-main2 { grid-template-columns: 1fr; } }
@@ -70,7 +70,7 @@
 .part-home .home-mini-cal .icon-btn { width: 28px; height: 28px; font-size: 15px; }
 .part-home .home-mini-week, .part-home .home-mini-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; text-align: center; }
 .part-home .home-mini-week { margin-bottom: 4px; font-size: 11px; color: var(--faint); }
-.part-home .home-mini-day { position: relative; height: 38px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; padding: 4px 0 12px; }
+.part-home .home-mini-day { position: relative; height: 32px; border: 0; border-radius: var(--radius-xs); background: none; color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; padding: 2px 0 10px; }
 .part-home .home-mini-day:hover, .part-home .home-mini-day:focus-visible { background: var(--soft); }
 .part-home .home-mini-day.week { background: var(--soft-2); }
 .part-home .home-mini-day.dim { color: var(--faint); }
