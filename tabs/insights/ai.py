@@ -331,3 +331,33 @@ def content_brief(themes):
              for i in out.get("items") or [] if i.get("id") in ids and i.get("angle")}
     cache_put("content_brief", themes, {"items": items})
     return items
+
+
+# ───────── 시즌별 프로모션 제안 (promo.py) ─────────
+
+PROMO_SCHEMA = {
+    "type": "object", "additionalProperties": False, "required": ["items"],
+    "properties": {"items": {"type": "array", "items": {
+        "type": "object", "additionalProperties": False, "required": ["season", "idea", "price", "channel"],
+        "properties": {"season": _STR, "idea": _STR, "price": _STR, "channel": _STR}}}},
+}
+
+
+def season_promos(payload):
+    """다가오는 시즌마다 프로모션 제안 → [{season, idea, price, channel}]. 숫자는 받은 단가 요약만 씀."""
+    data, _ = cache_get("season_promos", payload)
+    if data:
+        return data.get("items") or []
+    system = ("너는 미국에 진출한 한국 젤리 · 음료 브랜드(REBOOT, 실제 데이터는 알디콤)의 마케팅 보조야. "
+              "prices는 미국 진열대(Weee! · Amazon · Yami)의 1회분 단가 요약(달러)이고, seasons는 다가오는 시즌이야. "
+              "시즌마다 season(받은 이름 그대로), idea(프로모션 아이디어 1문장), "
+              "price(가격 전략 1문장 · 알디콤 단가를 보통 가격 · 최저가와 견줘 할인 · 묶음 · 증정 중 무엇이 맞는지), "
+              "channel(먼저 할 판매처 · 채널 1개와 이유 짧게)을 써. "
+              "단가 숫자는 prices에 있는 값만 쓰고, 할인율 같은 새 숫자를 지어내지 마. 과음을 부추기지 마. " + SAFE)
+    out = openai_json(system, payload, schema=PROMO_SCHEMA, schema_name="season_promos", part=PART,
+                      action="시즌 프로모션 제안", max_tokens=1500)
+    names = {s["name"] for s in payload["seasons"]}
+    items = [{k: i[k].strip() for k in ("season", "idea", "price", "channel")}
+             for i in out.get("items") or [] if i.get("season") in names and i.get("idea")]
+    cache_put("season_promos", payload, {"items": items})
+    return items

@@ -1403,7 +1403,7 @@ def test_content_brief_rules_check_and_approve(app, auth_client, monkeypatch, fi
     assert {x["theme"] for x in d["excluded"]} >= {"효능", "안전 · 부작용"}
     taste = next(t for t in d["themes"] if t["id"] == "taste")
     assert taste["evidence"] == "자사 리뷰 칭찬 6 · 불만 0" and taste["confidence"] == "중간"
-    assert all(t["use"] and t["by"] == "AI" and t["check"]["verdict"] == "PASS" for t in d["themes"])
+    assert all(not t["use"] and t["by"] == "AI" and t["check"]["verdict"] == "PASS" for t in d["themes"])
     assert auth_client.get("/api/insights/brief").get_json() is None          # 승인 전에는 공개 안 됨
 
     # '숙취'를 넣으면 컴플라이언스 BLOCK → 승인 막힘 (고친 문장은 남음)
@@ -1426,3 +1426,34 @@ def test_content_brief_rules_check_and_approve(app, auth_client, monkeypatch, fi
     again = auth_client.post("/api/insights/brief/draft", json={}).get_json()["draft"]
     assert len(seen) == 1 and all(t["carried"] for t in again["themes"])
     assert next(t for t in again["themes"] if t["id"] == "timing")["angle"] == "언제 먹는지 한눈에"
+
+
+# ───────── 시즌별 프로모션 제안 (promo.py) ─────────
+
+def test_season_promo_uses_server_numbers(app, auth_client, monkeypatch, fixed_today):
+    """단가 요약 · 시즌은 서버가 셈, AI는 시즌마다 문장만 · 모르는 시즌 이름은 버림 · 키 없으면 400."""
+    from tabs.insights import ai as insights_ai, promo
+    _seed_two_weeks(app)
+    seasons = [{"name": "Thanksgiving", "start": "2026-11-26", "end": "2026-11-26", "dday": 31, "ongoing": False, "notes": "", "past": False},
+               {"name": "Far Away", "start": "2027-06-01", "end": "2027-06-01", "dday": 218, "ongoing": False, "notes": "", "past": False}]
+    monkeypatch.setattr(promo.catalog, "list_seasons", lambda: seasons)
+    v = auth_client.get("/api/insights/promo").get_json()
+    assert v["summary"] is None
+    if not v["aiReady"]:
+        assert auth_client.post("/api/insights/promo", json={}).status_code == 400
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-openai-key-zzzz")
+    seen = []
+
+    def fake_openai(system, user, *, schema=None, schema_name="result", **kw):
+        assert schema_name == "season_promos"
+        seen.append(user)
+        return {"items": [{"season": "Thanksgiving", "idea": "모임 전 묶음 구성", "price": "보통 가격과 견줘 묶음", "channel": "Weee! 먼저"},
+                          {"season": "Unknown", "idea": "x", "price": "y", "channel": "z"}]}
+
+    monkeypatch.setattr(insights_ai, "openai_json", fake_openai)
+    d = auth_client.post("/api/insights/promo", json={}).get_json()
+    assert [s["name"] for s in seen[0]["seasons"]] == ["Thanksgiving"]          # 120일 밖 시즌은 안 보냄
+    assert seen[0]["prices"]["products"] == 2 and seen[0]["prices"]["min"] == 0.8   # 회분 모르는 제품은 뺌
+    items = d["summary"]["items"]
+    assert len(items) == 1 and items[0]["start"] == "2026-11-26" and items[0]["dday"] == 31
+    assert auth_client.get("/api/insights/promo").get_json()["summary"]["items"] == items

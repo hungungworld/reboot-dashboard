@@ -36,6 +36,9 @@
   GET   /api/insights/brief/draft?month=       이 달 초안 + 공개 중인 승인본 요약
   POST  /api/insights/brief/draft              초안 만들기 {month} (새 주제만 OpenAI 1회 · 키 없으면 빈 칸)
   PUT   /api/insights/brief/draft              고치기 · 승인 {month, themes:[{id, angle, say, avoid, use}], approve}
+시즌 프로모션 (가격 위치 화면 · promo.py)
+  GET   /api/insights/promo                    {summary: {items:[{season, start, dday, idea, price, channel}], prices, createdAt} | null, aiReady}
+  POST  /api/insights/promo                    다시 만들기 (OpenAI 1회 · 같은 입력이면 저장된 결과)
 """
 import csv
 import io
@@ -50,7 +53,7 @@ from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
 from . import ai as insights_ai
-from . import accuracy, brief, competitors, lines, reports, service, slack, store, trends, update
+from . import accuracy, brief, competitors, lines, promo, reports, service, slack, store, trends, update
 from .http import CollectError
 from .models import Competitor, Review, ReviewCS, ServingOverride, ShelfItem, kv_get, kv_set
 from .util import clean, review_month, week_key
@@ -473,6 +476,22 @@ def brief_save():
     if data.get("approve"):
         worklog.add("insights", "기타", "콘텐츠 브리프 승인", detail={"month": month})
     return jsonify(brief.view(month))
+
+
+# ───────── 시즌 프로모션 (가격 위치 화면 · promo.py) ─────────
+
+@bp.get("/promo")
+def promo_view():
+    return jsonify(promo.view())
+
+
+@bp.post("/promo")
+def promo_make():
+    data, err = promo.make(_who()[:100])
+    if err:
+        raise ApiError(err)
+    worklog.add("insights", "기타", "시즌 프로모션 제안", detail={"seasons": len(data["summary"]["items"])})
+    return jsonify(data)
 
 
 @bp.get("/meta")
