@@ -1006,18 +1006,8 @@
     const tab = S.tab;
     S.subs[tab] = sub;
     const el = panel(tab);
-    if (!$(el, '[data-ref="data-body"]')) {
-      // 시장 · 고객은 질문 카드 아래에 화면 안 탭을 따로 그림 (pageTabs)
-      const tabs = tab === 'market' || tab === 'customers' || SUBS[tab].length < 2 ? '' : `<div class="linetabs ins-subtabs" role="tablist" aria-label="${esc(tab)} 보기">${SUBS[tab].map(([id, l]) =>
-        `<button type="button" role="tab" data-sub="${id}" aria-pressed="false">${esc(l)}</button>`).join('')}</div>`;
-      el.innerHTML = `${tabs}<div data-ref="data-body"></div>`;
-    }
-    $$(el, '.ins-subtabs [data-sub]').forEach(b => {
-      const on = b.dataset.sub === sub;
-      b.classList.toggle('selected', on);
-      b.setAttribute('aria-pressed', String(on));
-      b.setAttribute('aria-selected', String(on));
-    });
+    // 화면 안 탭은 각 화면이 질문 카드 아래에 그림 (pageTabs) — 왼쪽 하위 메뉴로 옮기지 않음
+    if (!$(el, '[data-ref="data-body"]')) el.innerHTML = '<div data-ref="data-body"></div>';
     setHash(`${tab}/${sub}`);
     const need = NEEDS[sub].filter(k => !S.data[k]);
     if (!need.length) drawSub(sub);
@@ -1058,7 +1048,7 @@
     }
   }
 
-  // 시장 · 고객 화면 안 탭: 질문 카드 바로 아래. 컴플라이언스처럼 왼쪽 메뉴로 옮기지 않음 (data-subnav="off")
+  // 시장 · 고객 · 데이터 관리 화면 안 탭: 질문 카드 바로 아래. 컴플라이언스처럼 왼쪽 메뉴로 옮기지 않음 (data-subnav="off")
   function pageTabs(tab, sub) {
     return `<div class="ins-ptabs"><div class="linetabs ins-ptabs-in" role="tablist" data-subnav="off" aria-label="${esc((TABS.find(t => t[0] === tab) || [])[1] || tab)} 보기">${SUBS[tab].map(([k, l]) =>
       `<button type="button" role="tab" data-sub="${k}" aria-selected="${sub === k}">${esc(l)}</button>`).join('')}</div></div>`;
@@ -1369,7 +1359,7 @@
     const unserved = d.items.filter(x => x.servingsSource === 'default').length;
     const unchecked = d.items.filter(x => x.line && !x.line.confirmed).length;
     const one = d.items.length ? `제품 ${d.items.length}개 · 회분 확인 필요 ${unserved}개 · 묶음 확인 필요 ${unchecked}개` : '';
-    return qHead('edit', one) + runStatus() + `<section class="card mt-24">
+    return qHead('edit', one) + pageTabs('manage', 'edit') + runStatus() + `<section class="card mt-24">
       <div class="flex wrap mb-16">
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 최신 데이터 받기</button>
         <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 최신 데이터 받기</button>
@@ -2896,7 +2886,7 @@
     }
     const ex = fold('acc-examples', `프롬프트에 넣는 예시 ${d.examples.length}건 (퓨샷)`,
       `<ul class="ins-reviews">${d.examples.map(x => `<li><p>${esc(x.text)}</p><small class="muted">${ans(x)} · 근거: ${esc(x.reason)}</small></li>`).join('')}</ul>`);
-    return qHead('accuracy', one, run) + `<div class="stack mt-24">${table}${how}</div>${ex}
+    return qHead('accuracy', one, run) + pageTabs('manage', 'accuracy') + `<div class="stack mt-24">${table}${how}</div>${ex}
       ${d.aiReady ? '' : '<p class="panel-note mt-8">AI 키가 없으면 규칙만 채점해요 (설정 › 연결).</p>'}`;
   }
 

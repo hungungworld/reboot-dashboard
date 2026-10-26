@@ -864,3 +864,6 @@
   .part-insights .ins-rh-t { grid-template-columns: 72px minmax(0, 1fr) 84px; }
   .part-insights .ins-rh-b { grid-template-columns: 1fr auto; }
 }
+
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-insights .linetabs { overflow-y: hidden; }
