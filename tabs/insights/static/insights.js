@@ -1,7 +1,7 @@
 /* 시장 · 고객 인사이트 (담당: 이현경) — tabs/insights/docs/README.md '3번째 대시보드'.
-   왼쪽 메뉴 (마케터의 한 주 순서): 이번 주 · 시장 · 고객 · 이번 달 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
+   왼쪽 메뉴 (2026-10-26 묶음): TO DO = 이번 주 · 이번 달 / 데이터 = 시장 · 고객 · 데이터 관리 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
    - 시장: 변화 · 가격 위치 · 브랜드 비교 / 고객: 구매자 리뷰 · 유튜브 댓글
-   - 메뉴 밖: 데이터 관리(마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증, 머리글 버튼)
+   - 데이터 관리: 마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증 (예전엔 머리글 버튼으로만 열렸음)
    - 보관한 기사는 2026-10-26 홈 › 미국 시장 브리핑 보관함 창으로 옮김 (옛 주소는 홈으로 넘김)
    - 검색 수요 탭은 2026-10-25 삭제 → '다음 급등 예상'은 홈 › 콘텐츠 캘린더 맨 아래로 옮김
    - 판단은 규칙(서버 rules.py), AI는 문장 · 분류 · 요약만 (AI 배지 · 참고용)
@@ -19,14 +19,15 @@
   const api = REBOOT.api;
   const store = REBOOT.store('insights');   // 저장 키: reboot:insights:summary (메뉴 숫자용)
 
-  const TABS = [['weekly', '이번 주'], ['market', '시장'], ['customers', '고객'], ['monthly', '이번 달']];
-  // 화면 안 탭. manage(데이터 관리)는 왼쪽 메뉴에 없고 머리글 버튼으로만 열림
+  // [id, 이름, 왼쪽 메뉴 묶음, 흐린 글씨] — 묶음 이름표는 core.js가 data-group으로 그림
+  const TABS = [['weekly', '이번 주', 'TO DO'], ['monthly', '이번 달', 'TO DO'],
+    ['market', '시장', '데이터'], ['customers', '고객', '데이터'], ['manage', '데이터 관리', '데이터', true]];
+  // 화면 안 탭
   const SUBS = {
     market: [['changes', '변화'], ['price', '가격 위치'], ['brands', '브랜드 비교']],
     customers: [['reviews', '구매자 리뷰'], ['audience', '유튜브 댓글']],
     manage: [['edit', '진열대 수집 · 고치기'], ['accuracy', 'AI 정확도 검증']]
   };
-  const HIDDEN = ['manage'];
   // 화면 안 탭 → 읽어야 할 데이터 (/api/insights/data/<이름>)
   const NEEDS = { changes: ['shelf', 'competitors'], price: ['shelf', 'competitors'], brands: ['shelf', 'competitors'], edit: ['shelf'],
     reviews: ['reviews'], audience: ['audience'], accuracy: ['accuracy'] };
@@ -199,9 +200,9 @@
     root.innerHTML = `
       <div class="kpis" data-ref="kpis">${'<div class="kpi"><div class="skeleton ins-skel-sm"></div></div>'.repeat(4)}</div>
       <div class="ins-run" data-ref="run" hidden></div>
-      <div class="tabs" role="tablist" aria-label="인사이트 보기">${TABS.map(([id, l]) =>
-        `<button type="button" role="tab" data-tab="${id}" aria-selected="false">${esc(l)}</button>`).join('')}</div>
-      ${TABS.map(t => t[0]).concat(HIDDEN).map(id => `<div class="ins-panel" data-panel="${id}" role="tabpanel" hidden></div>`).join('')}`;
+      <div class="tabs" role="tablist" aria-label="인사이트 보기">${TABS.map(([id, l, g, quiet]) =>
+        `<button type="button" role="tab" data-tab="${id}" data-group="${esc(g)}"${quiet ? ' data-quiet' : ''} aria-selected="false">${esc(l)}</button>`).join('')}</div>
+      ${TABS.map(([id]) => `<div class="ins-panel" data-panel="${id}" role="tabpanel" hidden></div>`).join('')}`;
     const actions = REBOOT.page.actions();
     if (actions) {
       actions.addEventListener('click', e => {
@@ -209,7 +210,6 @@
         if (!b) return;
         if (b.dataset.act === 'ins-update') openUpdate('weekly');
         if (b.dataset.act === 'ins-monthly-run') openUpdate('monthly');
-        if (b.dataset.act === 'ins-manage') { show('manage'); toTop(); }
       });
     }
     root.addEventListener('click', onClick);
@@ -247,7 +247,7 @@
     if (NEWS_HASH.includes(h)) { global.location.replace('/dashboard#briefing'); return { tab: '', sub: '' }; }
     if (OLD_HASH[h]) { h = OLD_HASH[h]; setHash(h); }
     const [tab, sub] = h.split('/');
-    const ok = TABS.some(t => t[0] === tab) || HIDDEN.includes(tab);
+    const ok = TABS.some(t => t[0] === tab);
     return { tab: ok ? tab : '', sub: ok && SUBS[tab] && SUBS[tab].some(x => x[0] === sub) ? sub : '' };
   }
 
@@ -316,7 +316,7 @@
       : S.tab === 'monthly' ? `<button type="button" class="btn" data-act="ins-monthly-run">${icon('spark')}월간 분석 실행</button>` +
         dl('/api/insights/report/monthly.docx' + (month ? `?month=${encodeURIComponent(month)}` : ''), '월간 리포트 다운로드', 'Word') +
         dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX')
-        : dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX') + (S.tab === 'manage' ? '' : `<button type="button" class="btn" data-act="ins-manage">${icon('settings')}데이터 관리</button>`);
+        : dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX');
     box.innerHTML = `${extra}<button type="button" class="btn lime" data-act="ins-update">${icon('refresh')}최신 데이터 받기</button>`;
   }
 
