@@ -105,8 +105,6 @@
 .part-insights .ins-demo-tip > i { width: 11px; height: 11px; font-size: 7.5px; line-height: 9px; font-family: Georgia, serif; font-style: italic; }
 .part-insights details.ins-fold:not(.card) { border-top: 1px solid var(--line-3); padding-top: 14px; }
 .part-insights .ins-fold-body { margin-top: 16px; }
-.part-insights .ins-fold-h > summary { flex-wrap: wrap; gap: 6px 10px; font-weight: 400; }   /* 큰 제목(h2)을 단 접는 카드 — 브랜드 × 주제 · 아마존 리뷰 요약 */
-.part-insights .ins-fold-h > summary h2 { margin: 0; font-size: 15px; color: var(--ink); }   /* 카드 제목(.card-head h2)과 같은 크기 */
 .part-insights .ins-title-cell > b + .badge { margin-left: 8px; padding: 2px 5px; font-size: 9px; vertical-align: 1px; }   /* 브랜드 옆 자사 배지: 띄우고 작게 */
 
 /* 진열대 변화 · 새 리뷰 · 시즌 */
@@ -313,13 +311,10 @@
 .part-insights .ins-sw-svg { display: block; }
 .part-insights .ins-sw-band { fill: transparent; }
 .part-insights .ins-sw-band.mid { fill: var(--soft-2); }
-.part-insights .ins-sw-pillar { stroke: var(--lime-line, var(--lime)); stroke-width: 2; stroke-linecap: round; pointer-events: none; }
-.part-insights .ins-gauge { position: relative; height: 4px; margin-top: 8px; border-radius: 4px; background: var(--lime-soft-line); }
-.part-insights .ins-gauge u { position: absolute; top: -2px; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); opacity: .6; }
-.part-insights .ins-gauge i { position: absolute; top: -4px; width: 13px; height: 13px; margin-left: -6.5px; border-radius: 50%; background: var(--lime); border: 2px solid var(--lime-deep); }
-.part-insights .ins-stat.own-soft { background: var(--lime-soft); border-color: var(--lime-soft-line); }
 .part-insights .ins-sw-band-t { font-size: 11px; fill: var(--muted); }
 .part-insights .ins-sw-band-n { font-weight: 700; fill: var(--ink-2); }
+.part-insights .ins-sw-grid { stroke: var(--line); stroke-dasharray: 2 4; }
+.part-insights .ins-sw-grid.major { stroke: var(--line-2); stroke-dasharray: none; }
 .part-insights .ins-sw-tick { font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 .part-insights .ins-sw-axis { stroke: var(--line-2); stroke-width: 1.5; }
 .part-insights .ins-sw-med { stroke: var(--ink-2); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .55; }
@@ -364,14 +359,14 @@
 .part-insights .ins-pre { margin: 0; background: var(--soft-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; max-height: 280px; overflow: auto;
   white-space: pre-wrap; word-break: break-word; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: 0; }
 .part-insights .ins-axis { font-size: 10px; fill: var(--muted); }
-.part-insights .ins-dot { fill: var(--fi, var(--muted)); fill-opacity: .55; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; transition: fill-opacity .12s, transform .12s; }
-.part-insights .ins-dot:hover { fill-opacity: 1; stroke: var(--ink); }
-.part-insights .ins-dot.watched { stroke: var(--ink-2); stroke-width: 2; }
+.part-insights .ins-dot { fill: var(--muted); fill-opacity: .42; stroke: var(--surface); stroke-width: 1.5; cursor: pointer; transition: fill-opacity .12s, transform .12s; }
+.part-insights .ins-dot:hover { fill-opacity: .9; stroke: var(--ink); }
+.part-insights .ins-dot.watched { fill: var(--orange); fill-opacity: .8; }
 .part-insights .ins-dot.own { fill: var(--lime); fill-opacity: 1; stroke: var(--ink); stroke-width: 2; }
 .part-insights .ins-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0; color: var(--muted); }
 .part-insights .ins-lg { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; background: var(--gray); opacity: .6; }
 .part-insights .ins-lg.own { background: var(--lime); border: 1px solid var(--lime-deep); opacity: 1; }
-.part-insights .ins-lg.watched { background: transparent; border: 2px solid var(--ink-2); opacity: 1; }
+.part-insights .ins-lg.watched { background: var(--orange); opacity: .8; }
 /* 칸 너비 고정 — 글자 길이와 상관없이 모든 페이지의 표 폭 · 칸 위치 · 가로 스크롤이 같게 */
 .part-insights .ins-comp-table td.ins-field { font-size: 11px; line-height: 1.5; }
 .part-insights .ins-src { font-size: 9px; color: var(--blue); white-space: nowrap; }
@@ -462,11 +457,6 @@
 .part-insights .ins-cf.on { background: var(--lime-soft); color: var(--ink); border-color: var(--lime-line); font-weight: 600; }
 .part-insights .ins-cf.sort { border-radius: var(--radius-sm); }
 .part-insights .ins-cf-bar > .ins-cf-gap { flex: 1 1 0; min-width: 0; }
-/* '필터 +' 작은 창 (브랜드 비교): 필터 줄은 옆 스크롤이라 창은 줄 밖에 두고, 왼쪽 위치는 JS(placeMkPop)가 버튼에 맞춤 */
-.part-insights .ins-cf-wrap { position: relative; }
-.part-insights .ins-cf-pop { position: absolute; top: calc(100% - 6px); left: 0; z-index: 5; display: grid; gap: 6px; min-width: 170px; padding: 8px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); font-size: 12px; }
-.part-insights .ins-cf-pop .ins-cf { max-width: none; text-align: left; }
 .part-insights .ins-pg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; min-height: 32px; }
 .part-insights .ins-pg-nav { display: flex; gap: 4px; }
 .part-insights .ins-pg { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
@@ -502,8 +492,6 @@
 .part-insights .ins-mini > summary { font-size: 11px; color: var(--muted-2); }
 .part-insights .ins-matrix td, .part-insights .ins-matrix th { text-align: center; }
 .part-insights .ins-matrix td:first-child, .part-insights .ins-matrix th:first-child { text-align: left; }
-.part-insights .ins-rvm-scroll { max-height: 520px; overscroll-behavior: contain; border: 1px solid var(--line); border-radius: 12px; }   /* 브랜드 × 주제: 표 안에서 스크롤 */
-.part-insights .ins-rvm-scroll .ins-fixed th { position: sticky; top: 0; z-index: 1; }   /* 스크롤해도 머리글 고정 (끌기 손잡이도 그대로) */
 .part-insights .ins-cell { font-size: 11px; font-weight: 650; padding: 4px 7px; border-radius: 6px; margin: 1px; }
 .part-insights .ins-cell.pos { background: var(--green-bg); color: var(--green); }
 .part-insights .ins-cell.neg { background: var(--red-bg); color: var(--red); }
@@ -541,7 +529,9 @@
 .part-insights .ins-rv-pre { grid-column: 2; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .part-insights .ins-rv[open] .ins-rv-pre { display: none; }
 .part-insights .ins-rv-body { padding: 4px 0 0 20px; }
-/* 아마존 리뷰 요약 창 (2026-10-26): 표 행을 누르면 열림 · 번역 보기 · 아마존 원문 링크 */
+/* 아마존 리뷰 요약 (2026-10-26): 줄 전체를 눌러 펼침 · 펼치면 번역 보기 · 아마존 원문 링크 */
+.part-insights .ins-sum-rv > summary { padding: 8px 10px; margin: 0 -10px; border-radius: 10px; }
+.part-insights .ins-sum-rv > summary:hover { background: var(--soft-2); }
 .part-insights .ins-sum-act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-top: 10px; }
 .part-insights .ins-sum-ko { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--soft); }
 .part-insights .ins-sum-ko p { margin: 6px 0 0; }
@@ -575,7 +565,7 @@
 .part-insights .ins-view-bar { display: flex; justify-content: flex-start; margin-top: 20px; }
 /* 보기 바꾸기 버튼 (진열대 · 구매자 리뷰 공통): 글자 · 안쪽 여백 · 개수 표시 같게 */
 .part-insights .ins-view-bar .seg { max-width: 100%; overflow-x: auto; }
-.part-insights .ins-view-bar .seg button { font-size: 12px; padding: 9px 13px; }   /* 하위 탭 공통 크기 (core .subtabs) */
+.part-insights .ins-view-bar .seg button { font-size: 12px; padding: 7px 14px; }
 .part-insights .ins-view-bar .seg .n { opacity: .55; margin-left: 2px; }
 .part-insights .ins-view-bar + .card { margin-top: 10px; }
 /* 진열대 커버플로우 · 애플 스타일 (2026-10-26): 타일은 제형 아이콘만, 정보는 가운데 아래 캡션 · 위치는 JS(initPantryFlow)가 transform으로 */
@@ -591,30 +581,10 @@
   display: flex; align-items: center; justify-content: center; border-radius: 22px; background: var(--soft); border: 1px solid var(--line); will-change: transform; }
 .part-insights .ins-pf-tile .ins-pc-ico { width: 64px; height: 64px; stroke: var(--ink-2); stroke-width: 1.2; }
 .part-insights .ins-pf-tile .ins-pc-ico .dot { fill: var(--ink-2); }
-/* 제형 색 (2026-10-26): 진열대 타일 · 단가 차트 점이 같은 색 — 눈이 편하게 회색에 가까운 옅은 색만, 알디콤은 라임, 빨강 · 주황은 품절 · 가격 변동에만 */
-.part-insights { --f-liquid-bg: #eff2f7; --f-liquid: #7d8fae; --f-powder-bg: #f4f1ec; --f-powder: #a08f74; --f-stick-bg: #f1f0f5; --f-stick: #9289aa;
-  --f-gummy-bg: #f5f0f2; --f-gummy: #a98f9c; --f-pellet-bg: #eff3f0; --f-pellet: #7f9a8a; --f-tablet-bg: #eef3f3; --f-tablet: #7c9a9f; }
-:root[data-theme="dark"] .part-insights { --f-liquid-bg: #24272d; --f-liquid: #8e9cb6; --f-powder-bg: #29261f; --f-powder: #ab9d86; --f-stick-bg: #26252c; --f-stick: #9f98b4;
-  --f-gummy-bg: #2a2528; --f-gummy: #b19ca6; --f-pellet-bg: #232825; --f-pellet: #8fa699; --f-tablet-bg: #222829; --f-tablet: #8ca6aa; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .part-insights { --f-liquid-bg: #24272d; --f-liquid: #8e9cb6; --f-powder-bg: #29261f; --f-powder: #ab9d86; --f-stick-bg: #26252c; --f-stick: #9f98b4;
-    --f-gummy-bg: #2a2528; --f-gummy: #b19ca6; --f-pellet-bg: #232825; --f-pellet: #8fa699; --f-tablet-bg: #222829; --f-tablet: #8ca6aa; }
-}
-}
-.part-insights .f-liquid { --fb: var(--f-liquid-bg); --fi: var(--f-liquid); }
-.part-insights .f-powder { --fb: var(--f-powder-bg); --fi: var(--f-powder); }
-.part-insights .f-stick { --fb: var(--f-stick-bg); --fi: var(--f-stick); }
-.part-insights .f-gummy { --fb: var(--f-gummy-bg); --fi: var(--f-gummy); }
-.part-insights .f-pellet { --fb: var(--f-pellet-bg); --fi: var(--f-pellet); }
-.part-insights .f-tablet { --fb: var(--f-tablet-bg); --fi: var(--f-tablet); }
-.part-insights .ins-pf-tile { background: var(--fb, var(--soft)); border-color: transparent; }
-.part-insights .ins-pf-tile .ins-pc-ico { stroke: var(--fi, var(--ink-2)); stroke-width: 1.3; }
-.part-insights .ins-pf-tile .ins-pc-ico .dot { fill: var(--fi, var(--ink-2)); }
-.part-insights .ins-lg.form { background: var(--fi, var(--gray)); opacity: 1; border-radius: 3px; }
 .part-insights .ins-pf-tile.own { background: var(--lime-soft); border: 2px solid var(--lime-line, var(--lime)); }
 .part-insights .ins-pf-tile.own .ins-pc-ico { stroke: var(--lime-ink); }
 .part-insights .ins-pf-tile.own .ins-pc-ico .dot { fill: var(--lime-ink); }
-.part-insights .ins-pf-tile.watched { border: 2px solid var(--ink-2); }
+.part-insights .ins-pf-tile.watched { border-color: var(--orange); }
 .part-insights .ins-pf-tile.oos { background: var(--surface); border: 1.5px dashed var(--red); }
 .part-insights .ins-pf-tile.oos .ins-pc-ico { stroke: var(--muted); opacity: .5; }
 .part-insights .ins-pf-pill { position: absolute; top: 12px; right: 12px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
@@ -720,6 +690,7 @@
 /* 데이터 › 뉴스 수집 (홈에서 보관한 기사) */
 
 /* 유튜브 댓글: 사기 전에 묻는 것 (주제별 막대) */
+.part-insights .ins-aud-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; }
 .part-insights .ins-aq-list { margin-top: 12px; }
 .part-insights .ins-aq { display: grid; grid-template-columns: 22px minmax(120px, 190px) minmax(0, 1fr) 82px; align-items: center; gap: 12px;
   width: 100%; padding: 11px 6px; border: 0; border-bottom: 1px solid var(--line-3); background: none; font: inherit; font-size: 12px; text-align: left; cursor: pointer; border-radius: 6px; }
@@ -729,6 +700,7 @@
 .part-insights .ins-aq-rank { color: var(--muted); font-weight: 700; text-align: center; }
 .part-insights .ins-aq-n { text-align: right; font-weight: 700; }
 .part-insights .ins-aq-n small { color: var(--muted); font-weight: 400; margin-left: 2px; }
+@media (max-width: 900px) { .part-insights .ins-aud-grid { grid-template-columns: 1fr; } }
 .part-insights .ins-aud-cm { display: block; color: inherit; text-decoration: none; margin: -4px -8px; padding: 4px 8px; border-radius: 6px; }
 .part-insights .ins-aud-cm:hover { background: var(--soft-2); }
 .part-insights .ins-aud-cm:hover small { color: var(--lime-deep); }
@@ -771,10 +743,7 @@
 .part-insights .ins-brands { font-size: 13px; }
 .part-insights .ins-brands td { vertical-align: top; }
 .part-insights .ins-brands .ins-br-sub > td { white-space: normal; }
-/* 이름 · 배지는 한 줄: 긴 이름만 …로 줄이고 배지(우리 · 새 · 분석 전 · ★)는 그대로 */
-.part-insights .ins-br-name { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; min-width: 0; }
-.part-insights .ins-br-name > * { flex: none; }
-.part-insights .ins-br-name > .ins-bn, .part-insights .ins-br-name > .ins-bn-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.part-insights .ins-br-name { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .part-insights .ins-tg { flex: none; width: 24px; height: 24px; display: inline-grid; place-items: center; border: 1px solid var(--line-2); border-radius: 6px;
   background: var(--surface); color: var(--ink-2); font-size: 12px; cursor: pointer; }
 .part-insights .ins-tg:hover { background: var(--soft); }
@@ -782,11 +751,10 @@
 .part-insights .ins-bn { border: 0; background: none; padding: 0; font: inherit; font-weight: 650; color: var(--ink); cursor: pointer; text-align: left;
   text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
 .part-insights .ins-bn:hover { text-decoration-color: var(--ink); }
-/* 제형 칸: 칩 대신 글자 한 줄 (좁으면 다음 줄로) · 순서는 JS가 고정 */
-.part-insights .ins-brands td.ins-fms { white-space: normal; color: var(--ink-2); line-height: 1.5; }
-.part-insights .ins-br-add { margin: 4px 0 0 30px; }
+.part-insights .ins-fms { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 5px 0 0 30px; }
+.part-insights .ins-fm { font-size: 12px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
 .part-insights .ins-ps { display: block; white-space: nowrap; }
-.part-insights .ins-ps-f { display: block; color: var(--muted); font-size: 12px; }
+.part-insights .ins-ps small { color: var(--muted); font-size: 12px; }
 .part-insights .ins-fix { margin-left: 4px; border: 0; border-radius: 5px; padding: 1px 6px; font: inherit; font-size: 12px; font-weight: 600;
   background: var(--orange-bg); color: var(--orange); cursor: pointer; white-space: nowrap; }
 .part-insights .ins-br.open td { border-bottom-color: transparent; }
@@ -820,9 +788,8 @@
 .part-insights .ins-brief-f .input { width: 100%; }
 
 /* 구매자 리뷰 맨 위 카드: 한 줄 답 · 평점 · 별점 분포 · 주제 막대 (세로선 = 상대편 칭찬 비율) */
-.part-insights .ins-rh { --rh-pos: color-mix(in srgb, var(--green) 40%, var(--green-bg));   /* 리뷰 배지 올리브 · 벽돌의 중간 톤 (다크 모드도 따라감) */
-  --rh-neg: color-mix(in srgb, var(--red) 40%, var(--red-bg)); }
-.part-insights .ins-rh .seg button { font-size: 12px; padding: 9px 13px; }
+.part-insights .ins-rh { --rh-pos: #bfead2; --rh-neg: #f9cccc; }   /* SWOT 강점 · 위협과 같은 연한 색 */
+.part-insights .ins-rh .seg button { font-size: 12px; padding: 6px 14px; }
 .part-insights .ins-rh-h { margin-top: 16px; font-size: 24px; line-height: 1.35; letter-spacing: -.6px; }
 .part-insights .ins-rh-qs { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; }
 .part-insights .ins-rh-q { display: flex; flex-direction: column; gap: 2px; max-width: 420px; padding: 0 0 0 10px; border: 0; border-left: 3px solid var(--rh-pos);
