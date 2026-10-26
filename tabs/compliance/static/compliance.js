@@ -443,7 +443,7 @@
   // 번역 블록: 버튼을 누르면 data-tr-text의 영어 원문을 번역해 바로 아래에 보여 줌 (render의 위임 처리)
   function trBlock(text, label) {
     return `<div class="cmp-trblock" data-tr-text="${esc(text)}">
-  <button type="button" class="cmp-btn cmp-btn-sm cmp-btn-tr" data-act="translate" data-toggle="1" aria-pressed="false">${icon('translate')}<span>${esc(label || '한글로 번역')}</span></button>
+  ${REBOOT.ui.trBtn({ title: label })}
   <div data-tr-out aria-live="polite"></div></div>`;
   }
 
@@ -640,11 +640,9 @@
       if (tr && !tr.disabled) {
         const block = tr.closest('[data-tr-text]');
         const out = block.querySelector('[data-tr-out]');
-        if (tr.dataset.toggle) {   // 점검 기록의 번역 아이콘은 다시 누르면 접힘
-          const open = tr.getAttribute('aria-pressed') === 'true';
-          tr.setAttribute('aria-pressed', String(!open));
-          if (open) { out.innerHTML = ''; return; }
-        }
+        const open = tr.getAttribute('aria-pressed') === 'true';   // 번역 버튼은 다시 누르면 접힘
+        REBOOT.ui.trOn(tr, !open);
+        if (open) { out.innerHTML = ''; return; }
         const row = tr.closest('.cmp-hrow');   // 점검 기록 표: 번역은 펼친 칸 안에 나오니 줄을 펼침
         if (row) setHistOpen(row, true);
         runTranslate(block);
@@ -809,7 +807,7 @@
 
   /** 입력 방식 전환 (직접 입력 · CSV 업로드) — 두 화면의 카드 머리에 같은 버튼 */
   function modeSegHTML(cur) {
-    return `<div class="cmp-seg" role="group" aria-label="입력 방식">${SUBS.review.map(([id, label]) =>
+    return `<div class="linetabs cmp-modetabs" role="group" aria-label="입력 방식">${SUBS.review.map(([id, label]) =>
       `<button type="button" class="cmp-subtab" data-subtab="${id}" aria-pressed="${id === cur}">${label}</button>`).join('')}</div>`;
   }
 
@@ -895,7 +893,7 @@
     const verdicts = loadHistory().map(x => recheck(x).verdict);
     const hp = root.querySelector('[data-panel="history"]');
     const cur = hp && hp.dataset.filter ? hp.dataset.filter : 'all';
-    box.innerHTML = HIST_FILTERS.map(([id, label]) => `<button type="button" class="cmp-filter" data-act="kpi" data-filter="${id}" aria-pressed="${id === cur}">${label} <b>${verdicts.filter(v => matchFilter(v, id)).length}</b></button>`).join('');
+    box.innerHTML = HIST_FILTERS.map(([id, label]) => `<button type="button" data-act="kpi" data-filter="${id}" aria-pressed="${id === cur}">${label} <span class="n">${verdicts.filter(v => matchFilter(v, id)).length}</span></button>`).join('');
   }
 
   // Balance 제품에 'Zero Sugar'를 쓰면 법적 조건 한 줄 (21 CFR 101.60(c)(1) · 2026-10-26 최종 검토) — 안전 안내라 화면에 남김
@@ -964,9 +962,12 @@
     const sig = passSignals(text);
     return `
 <div class="cmp-pass">
-  <p><b>왜 통과했나요?</b> ${DATA.rules.some(x => x.off) ? `사용 중인 규칙 ${checks.length}개(${RULE_SPAN} 중 꺼 둔 규칙 제외)` : `규칙 ${RULE_SPAN} ${checks.length}개`}를 모두 확인했고 걸린 표현이 없어요.
-    ${ex.length ? `비슷한 표현 ${ex.length}개는 문맥상 괜찮은 쓰임으로 봤어요.` : ''}
-    ${sig.warn.length ? `<span class="cmp-pass-warn">다만 사람이 볼 부분이 ${sig.warn.length}가지 있어요.</span>` : ''}</p>
+  <div class="cmp-pass-text">
+    <p class="cmp-pass-q">왜 통과했나요?</p>
+    <p>${DATA.rules.some(x => x.off) ? `사용 중인 규칙 ${checks.length}개(${RULE_SPAN} 중 꺼 둔 규칙 제외)` : `규칙 ${RULE_SPAN} ${checks.length}개`}를 모두 확인했고 걸린 표현이 없어요.
+      ${ex.length ? `비슷한 표현 ${ex.length}개는 문맥상 괜찮은 쓰임으로 봤어요.` : ''}</p>
+    ${sig.warn.length ? `<p class="cmp-pass-warn">다만 사람이 볼 부분이 ${sig.warn.length}가지 있어요.</p>` : ''}
+  </div>
   <button type="button" class="cmp-btn cmp-btn-sm cmp-more" data-act="pass-detail" aria-haspopup="dialog">자세히</button>
 </div>`;
   }
@@ -1867,7 +1868,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
   <span class="cmp-hrow-hits">${hitN ? `${hitN}개 · ${r.codes.map(esc).join(' ')}` : '없음'}</span>
   <span class="cmp-hrow-time" title="${esc(fmt(ts))}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}${item.by ? ` · 점검 ${esc(item.by)}` : ''}${item.batch ? ' · 일괄 심의' : ''}">${histTime(ts)}${item.by || item.batch ? `<small class="cmp-muted"> · ${[item.batch ? '일괄' : '', esc(item.by || '')].filter(Boolean).join(' · ')}</small>` : ''}</span>
   <span class="cmp-hrow-acts">
-    ${ko ? '' : `<button type="button" class="cmp-icon-btn" data-act="translate" data-toggle="1" aria-pressed="false" aria-label="한글로 보기" title="한글로 보기">${icon('translate')}</button>`}
+    ${ko ? '' : REBOOT.ui.trBtn()}
     <button type="button" class="cmp-icon-btn" data-act="hist-copy" aria-label="문구 복사" title="${block ? '사용 불가 문구는 복사할 수 없어요' : '문구 복사'}"${block ? ' disabled' : ''}>${icon('copy')}</button>
     <button type="button" class="cmp-icon-btn" data-act="hist-recheck" aria-label="문구 점검에서 다시 보기" title="문구 점검에서 다시 보기">${icon('redo')}</button>
   </span>
@@ -1920,7 +1921,7 @@ ${rest.length ? `<div class="cmp-hist-rest" data-day="${esc(day)}"${open ? '' : 
     const p = root.querySelector('[data-panel="history"]');
     p.innerHTML = `
 <div class="cmp-hist-tools">
-  <div class="cmp-filters" data-el="kpis" role="group" aria-label="판정별 점검 기록 · 누르면 그 판정만"></div>
+  <div class="linetabs cmp-filters" data-el="kpis" role="group" aria-label="판정별 점검 기록 · 누르면 그 판정만"></div>
   <label class="cmp-hist-search">${icon('search')}<input type="search" data-el="hist-q" value="${esc(p.dataset.q || '')}" placeholder="문구 · 채널 · 제품 · 걸린 표현 검색" aria-label="점검 기록 검색"></label>
 </div>
 <section class="cmp-card cmp-paper cmp-hist-table" data-el="hist-list"></section>
@@ -2384,8 +2385,8 @@ ${monHead('manual')}
     return `
 <div class="cmp-mon-filter2">
   <label class="cmp-mon-search"><span class="cmp-sr">검색어 (제목·회사·요약·한글 요약)</span><input class="cmp-input" type="search" data-monf="q" value="${esc(MON_F.q)}" placeholder="검색 · jelly · hangover · 젤리 · Korea"></label>
-  <div class="cmp-seg" role="group" aria-label="기관">
-    ${[['all', '전체']].concat(ag.map(a => [a.code, a.code])).map(([v, l]) => `<button type="button" class="cmp-pill${MON_F.agency === v ? ' is-on' : ''}" data-act="mon-agency" data-v="${esc(v)}" aria-pressed="${MON_F.agency === v}"${v === 'all' ? '' : ` title="${esc((ag.find(a => a.code === v) || {}).ko || '')}"`}>${esc(l)}</button>`).join('')}
+  <div class="linetabs cmp-agtabs" role="group" aria-label="기관">
+    ${[['all', '전체']].concat(ag.map(a => [a.code, a.code])).map(([v, l]) => `<button type="button" class="${MON_F.agency === v ? 'is-on' : ''}" data-act="mon-agency" data-v="${esc(v)}" aria-pressed="${MON_F.agency === v}"${v === 'all' ? '' : ` title="${esc((ag.find(a => a.code === v) || {}).ko || '')}"`}>${esc(l)}</button>`).join('')}
   </div>
   <label class="cmp-check cmp-mon-hot"><input type="checkbox" data-monf="hot"${MON_F.hot ? ' checked' : ''}> 새 항목·변경만</label>
   <details class="cmp-more cmp-mon-more"${more ? ' open' : ''}><summary>필터 더 보기${more ? ' · 적용 중' : ''}</summary>
@@ -2504,7 +2505,7 @@ ${monFilterHTML()}
 <div data-el="mon-results">${monResultsHTML(sources)}</div>`;
 
     cbox.innerHTML = `
-<p class="cmp-summary">후보 ${cands.length}개 · 승인 대기 ${nCand}개 · 승인 ${approved.length}개</p>
+<p class="cmp-summary"><span class="cmp-muted">후보 ${cands.length}개${approved.length ? ` · 승인 ${approved.length}개` : ''}</span>${nCand ? `<span class="badge orange">승인 대기 ${nCand}</span>` : ''}</p>
 <p class="cmp-muted">수집한 경고장·NAD 결정 문구(NAD는 식품·음료·건강 결정만)는 자동으로 사례집이나 규칙에 들어가지 않아요.</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">사람이 승인한 문구만 내려받아 컴플라이언스 담당자가 경고장 사례집에 옮기고 규칙 시험을 다시 실행해요. <b>'규칙 미탐지'로 나온 후보</b>는 규칙이 놓친 문구이니 규칙 보강이 필요해요.</p></details>
 ${cands.length ? `
 <div class="cmp-row">
@@ -2652,7 +2653,7 @@ ${cands.length ? `
   <tbody>${results.map((x, i) => `<tr><td class="cmp-nowrap">${esc(x.date)}</td><td>${esc(x.agencies.join(', '))}</td><td>${esc(x.type)}</td>
     <td>${link(x.url, x.title)}<span data-ko-id="fr-${i}" data-ko-field="title"></span>
       ${x.abstract ? `<br><span class="cmp-muted">${esc(x.abstract.slice(0, 220))}${x.abstract.length > 220 ? '…' : ''}</span><span data-ko-id="fr-${i}" data-ko-field="summary"></span>` : ''}
-      ${trBlock(x.abstract ? `${x.title}\n${x.abstract}` : x.title, '제목·요약 번역')}</td></tr>`).join('')}</tbody>
+      ${trBlock(x.abstract ? `${x.title}\n${x.abstract}` : x.title, '제목·요약 한국어로 보기')}</td></tr>`).join('')}</tbody>
 </table></div>` : '');
         fillKo(out, results.map((x, i) => ({ id: `fr-${i}`, source: 'Federal Register', title: x.title, summary: x.abstract || '' })));
       } catch (e) { fail(out, e); }

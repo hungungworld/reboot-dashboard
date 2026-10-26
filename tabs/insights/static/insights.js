@@ -98,7 +98,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit' }, weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1 }, chg: 'all',
+    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1, f: '' }, chg: 'all',
     rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, pf: 'all',
     sum: { q: '', dir: 1, page: 1 },   // 아마존 리뷰 요약 표 (제품 이름순)
     rvm: { sort: '', dir: 1 },         // 브랜드 × 주제 표 ('' = 서버 순서: 주시 중 → 리뷰 많은 순)
@@ -371,6 +371,7 @@
       case 'run-close': S.showResult = false; drawRun(S.run); break;
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'tbl-page': S.tbl.page = Number(d.p) || 1; drawShelfTable(); break;
+      case 'tbl-todo': S.tbl.f = S.tbl.f === d.f ? '' : d.f; S.tbl.page = 1; drawSub('edit'); break;
       case 'pf-tier': S.pf = d.k; drawSub('price'); break;
       case 'sw-zoom': if (S.swarm) zoomSwarm(d.z === 'fit' ? 1 : d.z === 'in' ? S.swarm.zoom * 1.5 : S.swarm.zoom / 1.5); break;
       case 'brand-go': openBrand(d.brand); break;
@@ -381,7 +382,7 @@
       case 'mk-more': S.mk.more = !S.mk.more; drawBrandTable(); break;
       case 'mk-ftog': S.mk[d.k] = !S.mk[d.k]; S.mk.page = 1; drawBrandTable(); break;
       case 'mk-fclear': Object.assign(S.mk, MK_F_EMPTY, { page: 1 }); drawBrandTable(); break;
-      case 'mk-fix': S.tbl.q = d.q || ''; S.tbl.page = 1; show('manage', 'edit'); toTop(); break;
+      case 'mk-fix': S.tbl.q = d.q || ''; S.tbl.f = ''; S.tbl.page = 1; show('manage', 'edit'); toTop(); break;
       case 'watch': toggleWatch(b, d.brand, d.on === '1'); break;
       case 'comp-discover': compAction(b, 'discover'); break;
       case 'comp-research-all': compAction(b, 'all'); break;
@@ -1006,18 +1007,8 @@
     const tab = S.tab;
     S.subs[tab] = sub;
     const el = panel(tab);
-    if (!$(el, '[data-ref="data-body"]')) {
-      // 시장 · 고객은 질문 카드 아래에 화면 안 탭을 따로 그림 (pageTabs)
-      const tabs = tab === 'market' || tab === 'customers' || SUBS[tab].length < 2 ? '' : `<div class="linetabs ins-subtabs" role="tablist" aria-label="${esc(tab)} 보기">${SUBS[tab].map(([id, l]) =>
-        `<button type="button" role="tab" data-sub="${id}" aria-pressed="false">${esc(l)}</button>`).join('')}</div>`;
-      el.innerHTML = `${tabs}<div data-ref="data-body"></div>`;
-    }
-    $$(el, '.ins-subtabs [data-sub]').forEach(b => {
-      const on = b.dataset.sub === sub;
-      b.classList.toggle('selected', on);
-      b.setAttribute('aria-pressed', String(on));
-      b.setAttribute('aria-selected', String(on));
-    });
+    // 화면 안 탭은 각 화면이 질문 카드 아래에 그림 (pageTabs) — 왼쪽 하위 메뉴로 옮기지 않음
+    if (!$(el, '[data-ref="data-body"]')) el.innerHTML = '<div data-ref="data-body"></div>';
     setHash(`${tab}/${sub}`);
     const need = NEEDS[sub].filter(k => !S.data[k]);
     if (!need.length) drawSub(sub);
@@ -1058,7 +1049,7 @@
     }
   }
 
-  // 시장 · 고객 화면 안 탭: 질문 카드 바로 아래. 컴플라이언스처럼 왼쪽 메뉴로 옮기지 않음 (data-subnav="off")
+  // 시장 · 고객 · 데이터 관리 화면 안 탭: 질문 카드 바로 아래. 컴플라이언스처럼 왼쪽 메뉴로 옮기지 않음 (data-subnav="off")
   function pageTabs(tab, sub) {
     return `<div class="ins-ptabs"><div class="linetabs ins-ptabs-in" role="tablist" data-subnav="off" aria-label="${esc((TABS.find(t => t[0] === tab) || [])[1] || tab)} 보기">${SUBS[tab].map(([k, l]) =>
       `<button type="button" role="tab" data-sub="${k}" aria-selected="${sub === k}">${esc(l)}</button>`).join('')}</div></div>`;
@@ -1347,14 +1338,17 @@
 
   // 표로 보기: 검색(상품명 · 브랜드 · 판매처) + 한 페이지 TABLE_PAGE개 — 검색창은 그대로 두고 표만 다시 그림
   const TABLE_PAGE = 5;
+  // 할 일 배지로 거르기: 회분을 못 읽은 행 · 묶음을 아직 확인 안 한 행
+  const TBL_TODO = { serv: x => x.servingsSource === 'default', line: x => x.line && !x.line.confirmed };
   function shelfTable(d) {
     const q = S.tbl.q.trim().toLowerCase();
-    const list = q ? d.items.filter(x => `${x.title} ${x.brand} ${x.sourceLabel}`.toLowerCase().includes(q)) : d.items;
+    const base = TBL_TODO[S.tbl.f] ? d.items.filter(TBL_TODO[S.tbl.f]) : d.items;
+    const list = q ? base.filter(x => `${x.title} ${x.brand} ${x.sourceLabel}`.toLowerCase().includes(q)) : base;
     const pages = Math.max(1, Math.ceil(list.length / TABLE_PAGE));
     S.tbl.page = Math.min(Math.max(1, S.tbl.page), pages);
     const cur = S.tbl.page;
     const shown = list.slice((cur - 1) * TABLE_PAGE, cur * TABLE_PAGE);
-    if (!shown.length) return `<p class="small muted">${q ? `'${esc(S.tbl.q.trim())}'에 맞는 제품이 없어요.` : '아직 받은 제품이 없어요. 위 최신 데이터 받기를 눌러 시작하세요.'}</p>`;
+    if (!shown.length) return `<p class="small muted">${q ? `'${esc(S.tbl.q.trim())}'에 맞는 제품이 없어요.` : base !== d.items ? '이 항목은 모두 처리했어요.' : '아직 받은 제품이 없어요. 위 최신 데이터 받기를 눌러 시작하세요.'}</p>`;
     const pager = compPager(cur, pages, list.length, (cur - 1) * TABLE_PAGE + 1, (cur - 1) * TABLE_PAGE + shown.length, 'tbl-page', '표 페이지');
     return `${q ? `<p class="small muted mb-8">검색 결과 ${list.length}개 (전체 ${d.items.length}개)</p>` : ''}
       <div class="table-wrap"><table class="data-table ins-table"><thead><tr><th>판매처</th><th>제품</th><th>묶음 (브랜드 · 제형)</th><th>가격 ($)</th><th>회분</th><th class="num">1회분</th><th>재고</th><th>알디콤</th><th>변화</th><th></th></tr></thead><tbody>${shown.map(x => shelfRow(x, d)).join('')}</tbody></table></div>${pager}`;
@@ -1365,11 +1359,13 @@
   }
 
   // 데이터 관리 › 진열대 수집 · 고치기: 판매처별 수집 · 묶음 확인 · 표에서 바로 고치기 (시장 화면 숫자의 원본)
+  // 수량 표시 규칙: 총 개수는 제목 옆 작은 글씨, 처리할 일은 0보다 클 때만 배지(누르면 그 행만), 0이면 숨김
   function editHtml(d) {
-    const unserved = d.items.filter(x => x.servingsSource === 'default').length;
-    const unchecked = d.items.filter(x => x.line && !x.line.confirmed).length;
-    const one = d.items.length ? `제품 ${d.items.length}개 · 회분 확인 필요 ${unserved}개 · 묶음 확인 필요 ${unchecked}개` : '';
-    return qHead('edit', one) + runStatus() + `<section class="card mt-24">
+    const todo = [['serv', '회분 입력'], ['line', '묶음 확인']].map(([f, l]) => [f, l, d.items.filter(TBL_TODO[f]).length]).filter(t => t[2]);
+    if (!todo.some(t => t[0] === S.tbl.f)) S.tbl.f = '';
+    const chips = todo.map(([f, l, n]) => `<button type="button" class="badge orange ins-todo" data-act="tbl-todo" data-f="${f}" aria-pressed="${S.tbl.f === f}" title="${S.tbl.f === f ? '다시 누르면 전체 보기' : `${l}할 제품만 보기`}">${esc(l)} ${n}</button>`).join('');
+    return qHead('edit', '', '', d.items.length ? ' ' : '') + pageTabs('manage', 'edit') + runStatus() + `<section class="card mt-24">
+      <div class="card-head"><h2>진열대 제품${d.items.length ? `<span class="head-cap">${d.items.length}개</span>` : ''}</h2>${chips ? `<div class="flex wrap">${chips}</div>` : ''}</div>
       <div class="flex wrap mb-16">
         <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 최신 데이터 받기</button>
         <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 최신 데이터 받기</button>
@@ -2044,8 +2040,8 @@
     const tools = `<div class="flex wrap">
       <button type="button" class="btn small" data-act="comp-discover" title="진열대에 새로 보인 브랜드를 경쟁 브랜드로 넣어요 (무료)">${icon('refresh')}새 브랜드 넣기</button>
       <button type="button" class="btn small dark" data-act="comp-research-all"${cp.aiReady ? '' : ' disabled'} title="리뷰 상위 ${cp.deepTop}개 브랜드의 핵심 메시지 · 성분을 AI로 새로 채워요 (API 사용)">${icon('spark')}AI 분석 실행</button>
-      <details class="ins-export"><summary class="btn small file-btn">${icon('download')}브랜드 비교 다운로드 <span class="tiny muted">CSV · JSON</span></summary>
-        <div class="ins-export-menu"><a href="/api/insights/competitors.csv" download>CSV 다운로드</a><a href="/api/insights/competitors.json" download>JSON 다운로드</a></div></details></div>`;
+      ${ui.fileMenu('download', { label: '브랜드 비교 다운로드', items: [
+        { label: 'CSV', href: '/api/insights/competitors.csv' }, { label: 'JSON', href: '/api/insights/competitors.json' }] })}</div>`;
     const arch = (cp.archived || []).length ? fold('comp-arch', `보관함 ${cp.archived.length}개 · 브랜드 카드에서 '보관'한 브랜드 (표에 안 올라와요)`, compTableHtml(cp.archived)) : '';
     return `${notes}<section class="card mt-24"><div class="card-head wrap"><div class="ins-head-title"><h2>브랜드 비교</h2>${badge(`${brandRows().length}개`)}</div>${tools}</div>
       <div data-ref="brand-body">${brandTable()}</div>
@@ -2629,7 +2625,7 @@
         <p class="ins-quote mt-8">${esc(x.title ? x.title + ' — ' : '')}${esc(x.text)}</p>
         <div class="ins-quote ins-ko" data-ko hidden></div>
         <div class="ins-cs-bar">${seg ? `<div class="seg" role="group" aria-label="대응 상태">${seg}</div>` : ''}
-          <button type="button" class="btn small" data-rv="ko">번역 보기</button>
+          ${ui.trBtn({ act: false, attrs: 'data-rv="ko"' })}
           ${d.slackReady ? `<button type="button" class="btn small${x.slackBy ? ' ins-slack-done' : ''}" data-rv="slack"${slack ? ' aria-pressed="true"' : ''}${x.slackBy ? ' title="누르면 다시 보낼 수 있어요"' : ''}>${x.slackBy
             ? `${icon('check')}슬랙 공유됨 · ${esc(x.slackBy)} ${esc(fmt.date(x.slackAt))}` : `${icon('chat')}슬랙으로 보내기`}</button>` : ''}
           ${x.csBy ? `<span class="small muted">${esc(x.csBy)} · ${esc(fmt.datetime(x.csAt))}</span>` : ''}
@@ -2762,7 +2758,7 @@
     const box = document.createElement('div');
     box.className = 'part-insights ins-modal';
     box.innerHTML = `<p class="small muted">ASIN ${esc(s.asin)}</p><p class="ins-quote mt-8">${esc(s.text)}</p>
-      <div class="ins-sum-act"><button type="button" class="btn small" data-sum="ko">번역 보기</button>
+      <div class="ins-sum-act">${ui.trBtn({ act: false, attrs: 'data-sum="ko"' })}
         ${extLink(`https://www.amazon.com/dp/${encodeURIComponent(s.asin)}#customerReviews`, '아마존에서 리뷰 보기')}</div>
       <div class="ins-sum-ko" data-ko hidden></div>`;
     box.addEventListener('click', e => {
@@ -2802,7 +2798,7 @@
   // url을 주면 그 주소로 번역 (아마존 리뷰 요약), 없으면 리뷰 번호로
   async function showKo(btn, id, box, url) {
     if (!box) return;
-    if (box.dataset.loaded) { box.hidden = !box.hidden; btn.textContent = box.hidden ? '번역 보기' : '번역 숨기기'; return; }
+    if (box.dataset.loaded) { box.hidden = !box.hidden; ui.trOn(btn, !box.hidden); return; }
     ui.busy(btn, true);
     try {
       const res = await api(url || `/api/insights/reviews/${encodeURIComponent(id)}/translate`, {});
@@ -2810,7 +2806,7 @@
       box.dataset.loaded = '1';
       box.hidden = false;
       ui.busy(btn, false);
-      btn.textContent = '번역 숨기기';
+      ui.trOn(btn, true);
     } catch (e) {
       ui.busy(btn, false);
       toast('번역하지 못했어요: ' + e.message, 'error');
@@ -2896,7 +2892,7 @@
     }
     const ex = fold('acc-examples', `프롬프트에 넣는 예시 ${d.examples.length}건 (퓨샷)`,
       `<ul class="ins-reviews">${d.examples.map(x => `<li><p>${esc(x.text)}</p><small class="muted">${ans(x)} · 근거: ${esc(x.reason)}</small></li>`).join('')}</ul>`);
-    return qHead('accuracy', one, run) + `<div class="stack mt-24">${table}${how}</div>${ex}
+    return qHead('accuracy', one, run) + pageTabs('manage', 'accuracy') + `<div class="stack mt-24">${table}${how}</div>${ex}
       ${d.aiReady ? '' : '<p class="panel-note mt-8">AI 키가 없으면 규칙만 채점해요 (설정 › 연결).</p>'}`;
   }
 

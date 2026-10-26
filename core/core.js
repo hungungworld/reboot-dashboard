@@ -201,7 +201,9 @@
     upload: 'M12 16V4 m-5 5 5-5 5 5 M4 16v5h16v-5',
     link: 'M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
     user: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10 M3 22a9 9 0 0 1 18 0',
-    x: 'M6 6l12 12 M18 6 6 18'
+    x: 'M6 6l12 12 M18 6 6 18',
+    chevron: 'm6 9 6 6 6-6',
+    translate: 'M4 6h9 M8.5 4v2c0 4-2 7-4.5 8.5 M6 9.5c1.3 2.2 3.3 3.8 5.5 4.5 M13 20l4-9 4 9 M14.5 17h5'
   };
 
   function esc(s) {
@@ -258,18 +260,49 @@
         `<div class="trend">${o.change ? `<b class="${tone}">${esc(o.change)}</b>` : ''}${esc(o.foot || '')}</div></div>`;
     },
     empty: (text, iconName) => `<div class="empty-art">${icon(iconName || 'doc')}<span>${esc(text)}</span></div>`,
-    /** 파일 버튼 (모든 탭 같은 이름·모양): kind = 'upload' | 'download' | 'report'
-        o = { label: '매출 데이터 업로드', type: 'CSV', act, href(있으면 <a download>), attrs, cls, title, disabled }
-        이름은 '… 업로드' · '… 다운로드' · '보고서 만들기', 형식은 뒤에 작은 글씨. lime은 보고서 만들기만 */
+    /** 파일 버튼 (모든 탭 같은 이름·모양 · SAP Fiori 툴바 버튼처럼): kind = 'upload' | 'download' | 'report'
+        o = { label: '매출 데이터 업로드', type: 'CSV', act, href(있으면 <a download>), download(저장 파일 이름), attrs, cls, title, disabled }
+        버튼 하나에 동작 하나 — '… 업로드 · 다운로드'처럼 묶지 않음 (둘 다 필요하면 버튼 둘, 같은 동작의 형식만 다르면 fileMenu)
+        형식(type)은 버튼 글자 대신 툴팁으로. lime은 보고서 만들기만 */
     fileBtn(kind, o) {
       o = o || {};
       const K = { upload: ['upload', '업로드'], download: ['download', '다운로드'], report: ['doc', '보고서 만들기'] }[kind] || ['download', '다운로드'];
       const cls = `btn small file-btn${kind === 'report' ? ' lime' : ''}${o.cls ? ' ' + o.cls : ''}`;
-      const inner = `${icon(K[0])}${esc(o.label || K[1])}${o.type ? ` <span class="tiny muted">${esc(o.type)}</span>` : ''}`;
-      const attrs = `${o.act ? ` data-act="${esc(o.act)}"` : ''}${o.title ? ` title="${esc(o.title)}"` : ''}${o.attrs ? ' ' + o.attrs : ''}`;
+      const inner = `${icon(K[0])}${esc(o.label || K[1])}`;
+      const title = [o.title, o.type ? `${o.type} 파일` : ''].filter(Boolean).join(' · ');
+      const attrs = `${o.act ? ` data-act="${esc(o.act)}"` : ''}${title ? ` title="${esc(title)}"` : ''}${o.attrs ? ' ' + o.attrs : ''}`;
       return o.href
-        ? `<a class="${cls}" href="${esc(o.href)}" download${attrs}>${inner}</a>`
+        ? `<a class="${cls}" href="${esc(o.href)}" download${o.download ? `="${esc(o.download)}"` : ''}${attrs}>${inner}</a>`
         : `<button type="button" class="${cls}"${attrs}${o.disabled ? ' disabled' : ''}>${inner}</button>`;
+    },
+    /** 파일 메뉴 버튼 (SAP Menu Button): 같은 동작을 형식·대상별로 고를 때 — '다운로드 ▾' 하나에 항목 여럿
+        o = { label, cls, items: [{ label: 'CSV', act | href, attrs, title }] } · 항목을 누르면 메뉴는 닫힘 */
+    fileMenu(kind, o) {
+      o = o || {};
+      const K = kind === 'upload' ? ['upload', '업로드'] : ['download', '다운로드'];
+      const items = (o.items || []).map(it => {
+        const attrs = `${it.act ? ` data-act="${esc(it.act)}"` : ''}${it.title ? ` title="${esc(it.title)}"` : ''}${it.attrs ? ' ' + it.attrs : ''}`;
+        return it.href
+          ? `<a role="menuitem" href="${esc(it.href)}" download${attrs}>${esc(it.label)}</a>`
+          : `<button type="button" role="menuitem"${attrs}>${esc(it.label)}</button>`;
+      }).join('');
+      return `<details class="file-menu${o.cls ? ' ' + o.cls : ''}"><summary class="btn small file-btn">${icon(K[0])}${esc(o.label || K[1])}${icon('chevron', 'icon file-menu-caret')}</summary>` +
+        `<div class="file-menu-list" role="menu">${items}</div></details>`;
+    },
+    /** AI 번역 버튼 (모든 탭 같은 모양: 네모 아이콘 버튼 하나, 글자는 툴팁으로)
+        o = { act(기본 'translate' · false면 없음), title(기본 '한국어로 보기'), on(번역이 펼쳐진 채 그림), attrs, cls, disabled } · 번역을 펼치면 ui.trOn(btn, true) → 툴팁 '번역 닫기' */
+    trBtn(o) {
+      o = o || {};
+      const t = o.title || '한국어로 보기', now = o.on ? '번역 닫기' : t;
+      return `<button type="button" class="tr-btn${o.cls ? ' ' + o.cls : ''}"${o.act === false ? '' : ` data-act="${esc(o.act || 'translate')}"`} data-tr-title="${esc(t)}" aria-pressed="${!!o.on}" aria-label="${esc(now)}" title="${esc(now)}"` +
+        `${o.attrs ? ' ' + o.attrs : ''}${o.disabled ? ' disabled' : ''}>${icon('translate')}</button>`;
+    },
+    trOn(btn, on) {
+      if (!btn) return;
+      const t = on ? '번역 닫기' : btn.dataset.trTitle || '한국어로 보기';
+      btn.setAttribute('aria-pressed', String(!!on));
+      btn.setAttribute('aria-label', t);
+      btn.title = t;
     },
     /** 파일 버튼 줄: 카드 머리 오른쪽 · 순서는 업로드 → 다운로드 → 보고서 만들기 */
     fileActions: (html) => `<div class="file-actions">${html}</div>`,
@@ -377,9 +410,11 @@
     },
     confirm(message, o) {
       o = o || {};
+      // "삭제할까요? 되돌릴 수 없어요."처럼 질문 뒤에 설명이 붙으면 질문 줄과 설명 줄을 나눔
+      const qa = String(message).match(/^([^?]*\?)\s+(\S[\s\S]*)$/);
       return ui.modal({
         title: o.title || '확인',
-        body: `<p>${esc(message)}</p>`,
+        body: qa ? `<p><b>${esc(qa[1])}</b></p><p class="muted mt-8">${esc(qa[2])}</p>` : `<p>${esc(message)}</p>`,
         actions: [{ label: o.cancel || '취소', value: false }, { label: o.ok || '확인', value: true, tone: o.danger ? 'danger' : 'lime' }]
       }).then(v => v === true);
     },
@@ -744,6 +779,11 @@
       const delta = activeTop.getBoundingClientRect().left - topNav.getBoundingClientRect().left;
       topNav.scrollLeft = Math.max(0, topNav.scrollLeft + delta - (topNav.clientWidth - activeTop.offsetWidth) / 2);
     }
+    // 파일 메뉴 (ui.fileMenu): 항목을 누르거나 바깥을 누르면 닫힘
+    doc.addEventListener('click', e => {
+      const inItem = e.target.closest('.file-menu-list');
+      doc.querySelectorAll('details.file-menu[open]').forEach(d => { if (inItem ? d.contains(inItem) : !d.contains(e.target)) d.open = false; });
+    });
     doc.addEventListener('click', e => {
       if (e.target.closest('[data-close-sidebar]')) { closeSidebar(); return; }
       if (side && side.classList.contains('open') && !e.target.closest('#sidebar') && !e.target.closest('#menu-toggle')) closeSidebar();

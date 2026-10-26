@@ -634,3 +634,5 @@
   .part-content .cnt-cn-grid { grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px; }
   .part-content .cnt-cn-pad, .part-content .cnt-cn-head, .part-content .cnt-cn-toolbar, .part-content .cnt-cn-sizebar { padding-left: 16px; padding-right: 16px; }
 }
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-content .linetabs { overflow-y: hidden; }

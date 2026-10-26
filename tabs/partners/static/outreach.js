@@ -259,7 +259,7 @@
     </section>`;
   }
 
-  /* 업체 파일 가져오기 (업체가 0곳일 때만 · 평소엔 파트너 목록의 업로드 · 다운로드 팝업을 씀) */
+  /* 업체 파일 가져오기 (업체가 0곳일 때만 · 평소엔 파트너 목록의 업로드 팝업 · 다운로드 메뉴를 씀) */
   function paintImport(st, empty, scroll) {
     const box = st.el.querySelector('[data-ref="import"]');
     if (!empty) { box.innerHTML = ''; return; }
@@ -282,29 +282,19 @@
     if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /* 업체 목록 › CSV 팝업: 지금 목록 내보내기 · CSV(또는 XLSX) 가져오기
+  /* 업체 목록 › 업로드 팝업: CSV(또는 XLSX) 가져오기 (내보내기는 목록 머리의 다운로드 메뉴)
      내보낸 파일에 줄을 추가해 다시 가져오면 그 구분 목록이 파일 내용으로 바뀜 (협업 이력은 그대로) */
   function csvModal(st) {
-    const im = st.data.imports || {};
-    const n = t => fmt.num((im[t] && im[t].count) || 0);
     const body = doc.createElement('div');
     body.className = 'part-partners ptn-csv';
     body.innerHTML = `
-      <h3 class="ptn-csv-h">업로드 (추가 · 바꾸기)</h3>
       <p class="small muted">CSV 또는 XLSX를 고르면 머리글을 보고 케이터링 · 인플루언서를 알아서 구분해요.
-        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 아래에서 다운로드한 파일에 줄을 더해 업로드하세요. 협업 기록은 그대로 남아요.</p>
+        <b>그 구분의 목록이 파일 내용으로 바뀌니</b>, 업체를 추가하려면 파트너 목록의 '다운로드'로 받은 파일에 줄을 더해 업로드하세요. 협업 기록은 그대로 남아요.</p>
       <label class="dropzone ptn-out-drop mt-8">${icon('upload')}<span data-ref="csv-picked">파일을 눌러 고르세요</span>
-        <input type="file" class="sr-only" accept=".csv,.xlsx" data-ref="csv-file" aria-label="업체 CSV · XLSX 고르기"></label>
-      <h3 class="ptn-csv-h mt-24">다운로드</h3>
-      <p class="small muted">지금 업체 목록을 업로드와 같은 형식의 CSV로 받아요. 엑셀에서 열어 줄을 추가 · 수정할 수 있어요.</p>
-      ${ui.fileActions(
-        ui.fileBtn('download', { label: `케이터링 업체 다운로드 (${n('케이터링')}곳)`, type: 'CSV', href: '/api/partners/export/catering.csv' }) +
-        ui.fileBtn('download', { label: `인플루언서 업체 다운로드 (${n('인플루언서')}곳)`, type: 'CSV', href: '/api/partners/export/influencer.csv' }) +
-        ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv' }) +
-        ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx' }))}`;
+        <input type="file" class="sr-only" accept=".csv,.xlsx" data-ref="csv-file" aria-label="업체 CSV · XLSX 고르기"></label>`;
     let file = null;
     const ok = ui.modal({
-      title: '업체 목록 업로드 · 다운로드 (CSV)', body,
+      title: '업체 목록 업로드', body,
       onOpen: b => b.querySelector('[data-ref="csv-file"]').addEventListener('change', e => {
         file = e.target.files && e.target.files[0];
         b.querySelector('[data-ref="csv-picked"]').textContent = file ? `선택: ${file.name} (${fmtBytes(file.size)})` : '파일을 눌러 고르세요';
@@ -387,7 +377,11 @@
     body.innerHTML = `<div class="workbench ptn-out-bench">
       <section class="card ptn-out-listcard ptn-cf-card">
         <div class="card-head wrap"><div class="ptn-head-title"><h2>파트너 목록</h2><span data-ref="total"></span></div>
-          ${ui.fileActions(ui.fileBtn('upload', { label: '업체 목록 업로드 · 다운로드', type: 'CSV', act: 'csv-open' }))}</div>
+          ${ui.fileActions(ui.fileBtn('upload', { type: 'CSV · XLSX', act: 'csv-open' }) + ui.fileMenu('download', { items: [
+            { label: '케이터링 업체 (CSV)', href: '/api/partners/export/catering.csv' },
+            { label: '인플루언서 업체 (CSV)', href: '/api/partners/export/influencer.csv' },
+            { label: '케이터링 양식 (CSV)', href: '/api/partners/template/catering.csv' },
+            { label: '인플루언서 양식 (XLSX)', href: '/api/partners/template/influencer.xlsx' }] }))}</div>
         <div data-ref="bar"></div>
         <div data-ref="rows"></div>
         <p class="panel-note mt-8" data-ref="foot"></p>
@@ -680,9 +674,8 @@
       <button type="button" class="btn small" data-act="yt-kw" title="추천 받기에 쓸 검색 키워드: ${esc(kws.join(', '))}">${icon('edit')}검색 키워드 · 추천</button>
       <button type="button" class="btn small dark" data-act="yt-search"${d.ready ? '' : ' disabled title="설정 › 연결에서 YouTube 키를 넣어 주세요"'}>${icon('search')}추천 받기</button>
       <button type="button" class="btn small ghost" data-act="yt-delete" disabled>선택 삭제</button>
-      <details class="ptn-export"><summary class="btn small file-btn">${icon('upload')}크리에이터 목록 업로드 · 다운로드 <span class="tiny muted">CSV</span></summary>
-        <div class="ptn-export-menu"><button type="button" data-act="yt-upload">${icon('upload')} 업로드</button>
-          <a href="/api/partners/youtube/export.csv" download>${icon('download')} 다운로드</a></div></details>`;
+      ${ui.fileBtn('upload', { type: 'CSV', act: 'yt-upload', title: '크리에이터 목록' })}
+      ${ui.fileBtn('download', { type: 'CSV', href: '/api/partners/youtube/export.csv', title: '크리에이터 목록' })}`;
     const total = st.el.querySelector('[data-ref="total"]');
     if (total) total.innerHTML = badge(`${fmt.num(d.items.length)}명`);
     const tgCur = Array.isArray(f.ytTargets) && f.ytTargets[0] ? f.ytTargets[0] : '';
@@ -1108,8 +1101,7 @@
             <details class="ptn-v2-tools">
               <summary>첨부파일 · 번역 · 문구 심의 도구 <span data-ref="att-sum"></span></summary>
               <div class="flex wrap mt-8">
-                <button type="button" class="btn soft small" data-act="to-ko"${s.openai ? '' : ' disabled'}>한국어로 보기</button>
-                <button type="button" class="btn soft small" data-act="to-en"${s.openai ? '' : ' disabled'}>영어로 변환</button>
+                ${ui.trBtn({ act: 'mail-tr', title: s.openai ? MAIL_TR_TITLE : 'AI 키가 없어 번역할 수 없어요 · 설정 › 연결', on: !!d.ko, disabled: !s.openai })}
                 <button type="button" class="btn soft small" data-act="review">문구 심의</button>
               </div>
               <label class="dropzone ptn-out-attdrop mt-8" data-drop="attach">${icon('upload')}
@@ -1213,11 +1205,33 @@
     </section>`;
   }
 
+  // 번역 버튼 (ui.trBtn 하나로 양쪽 방향): 툴팁 문구
+  const MAIL_TR_TITLE = '번역 · 영어면 한국어로 보기, 한글이 있으면 영어로 바꾸기 (본문이 바뀌어요)';
+  const GUIDE_TR_TITLE = '번역 · 한국어면 영어로, 영어면 한국어로 바꾸기 (↶ 번역 전으로 되돌릴 수 있어요)';
+  const HANGUL = /[가-힣]/;
+  // 글자 중 한글이 20% 이상이면 한국어 문서로 봄 (영어 가이드 안의 한글 메모 몇 줄은 무시)
+  function mostlyKo(text) {
+    const ko = (String(text).match(/[가-힣]/g) || []).length;
+    const en = (String(text).match(/[A-Za-z]/g) || []).length;
+    return ko > 0 && ko / (ko + en / 3) >= 0.2;
+  }
+  // 한국어 번역 칸 그리기 · 닫기 (번역 버튼의 눌림 상태도 같이)
+  function paintKo(box, text) {
+    box.querySelector('[data-ref="ko"]').innerHTML = text ? koBox(text) : '';
+    ui.trOn(box.querySelector('[data-act="mail-tr"]'), !!text);
+  }
+  function closeKo(box) {
+    const d = getDraft();
+    d.ko = '';
+    saveDraft(d);
+    paintKo(box, '');
+  }
+
   function koBox(text) {
-    return `<div class="result ptn-out-ko mt-16">
-      <div class="between"><strong class="small">한국어 번역</strong>${badge('AI 번역 · 참고용 (발송 본문은 영어 그대로)', 'purple')}</div>
-      <pre class="ptn-out-pre mt-8">${esc(text)}</pre>
-      <button type="button" class="link mt-8" data-act="ko-close">번역 닫기</button>
+    return `<div class="ptn-out-ko mt-16">
+      <span class="ptn-ko-tag">AI 번역 · 참고용</span>
+      <pre class="ptn-out-pre">${esc(text)}</pre>
+      <p class="ptn-ko-note">발송 본문은 영어 그대로예요. <button type="button" class="link" data-act="ko-close">번역 닫기</button></p>
     </div>`;
   }
 
@@ -1361,9 +1375,14 @@
       if (!b || b.disabled) return;
       const a = b.dataset.act;
       if (a === 'generate') generate(st, box, b);
-      else if (a === 'to-ko') toKo(box, b);
-      else if (a === 'to-en') toEn(st, box, b);
-      else if (a === 'ko-close') { const d = getDraft(); d.ko = ''; saveDraft(d); box.querySelector('[data-ref="ko"]').innerHTML = ''; }
+      else if (a === 'mail-tr') {   // 번역 버튼 하나: 펼친 번역은 닫고, 한글이 있으면 영어로 바꾸고, 영어면 한국어로 보기
+        const d = getDraft();
+        if (d.ko) closeKo(box);
+        else if (HANGUL.test(`${d.subject}
+${d.body}`)) toEn(st, box, b);
+        else toKo(box, b);
+      }
+      else if (a === 'ko-close') closeKo(box);
       else if (a === 'review') reviewMail(box);
       else if (a === 'send') doSend(st, box, b);
       else if (a === 'att-del') deleteAttachment(st, box, b.dataset.id);
@@ -1448,7 +1467,7 @@
         setField(box, 'body', dd.body);
         wordCount(box, dd.body);
         box.querySelector('[data-ref="ai-badge"]').innerHTML = badge('AI 초안 · 참고용', 'purple');
-        box.querySelector('[data-ref="ko"]').innerHTML = '';
+        paintKo(box, '');
         unconfirm(box);
         clearReview(box);
         updateSend(st, box);
@@ -1471,7 +1490,7 @@
       const dd = getDraft();
       dd.ko = out.text;
       saveDraft(dd);
-      if (box.isConnected) box.querySelector('[data-ref="ko"]').innerHTML = koBox(out.text);
+      if (box.isConnected) paintKo(box, out.text);
     } catch (e) {
       toast(`번역하지 못했어요: ${e.message}`, 'error');
     } finally {
@@ -1496,7 +1515,7 @@
         setField(box, 'body', dd.body);
         wordCount(box, dd.body);
         box.querySelector('[data-ref="ai-badge"]').innerHTML = badge('AI 번역 포함 · 참고용', 'purple');
-        box.querySelector('[data-ref="ko"]').innerHTML = '';
+        paintKo(box, '');
         unconfirm(box);
         clearReview(box);
         updateSend(st, box);
@@ -1760,8 +1779,7 @@
           </div>
           <div class="mt-16" data-ref="g-view"></div>
           <div class="flex wrap mt-16">
-            <button type="button" class="btn soft small" data-act="g-en"${s.openai ? '' : ' disabled'}>영어로 번역</button>
-            <button type="button" class="btn soft small" data-act="g-ko"${s.openai ? '' : ' disabled'}>한국어로 번역</button>
+            ${ui.trBtn({ act: 'g-tr', title: s.openai ? GUIDE_TR_TITLE : 'AI 키가 없어 번역할 수 없어요 · 설정 › 연결', disabled: !s.openai })}
             <button type="button" class="btn ghost small" data-act="g-undo"${g.prev ? '' : ' hidden'}>↶ 번역 전으로</button>
           </div>
           <details class="ptn-out-gcheck mt-16">
@@ -1772,9 +1790,8 @@
           </details>
           <div class="flex wrap mt-16 ptn-out-gactions">
             <button type="button" class="btn lime" data-act="g-attach">이메일에 첨부하기</button>
-            ${ui.fileActions(
-              ui.fileBtn('download', { label: '가이드 다운로드', type: 'Word', act: 'g-docx', cls: 'ptn-btn-full' }) +
-              ui.fileBtn('download', { label: '가이드 다운로드', type: 'MD', act: 'g-md', cls: 'ptn-btn-full' }))}
+            ${ui.fileActions(ui.fileMenu('download', { label: '가이드 다운로드', cls: 'ptn-btn-full', items: [
+              { label: 'Word (.docx)', act: 'g-docx' }, { label: 'Markdown (.md)', act: 'g-md' }] }))}
           </div>
           <div data-ref="g-attached">${g.attached ? attachedNote(g.attached) : ''}</div>
           <p class="panel-note mt-8">첨부하면 REBOOT_${esc(g.type)}_협업가이드_날짜.docx로 첨부파일 보관함에 저장되고, 메일 작성 탭에서 체크된 상태로 함께 보내져요. 다운로드는 보관함에 저장하지 않아요.</p>
@@ -1933,7 +1950,7 @@
       if (!b || b.disabled) return;
       const a = b.dataset.act;
       if (a === 'g-generate') guideGenerate(st, box, b);
-      else if (a === 'g-en' || a === 'g-ko') guideTranslate(box, b, a === 'g-en' ? 'en' : 'ko');
+      else if (a === 'g-tr') guideTranslate(box, b, mostlyKo(getGuide().md) ? 'en' : 'ko');   // 한국어 가이드면 영어로, 영어면 한국어로
       else if (a === 'g-undo') {
         const g = getGuide();
         if (!g.prev) return;

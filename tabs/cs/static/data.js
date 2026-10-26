@@ -45,10 +45,10 @@
       text: "REBOOT 고객경험 매니저 '하나(Hana)'. 미국 식품 마케팅·CS 10년 경력, 한·영 원어민급. 젤리·음료 4종(Original·Balance)의 맛·성분·섭취법·보관·알레르기와 주문·배송·환불 정책을 꿰고 있다. 첫 문장에서 고객 이름을 부르며 불편에 공감하고, 따뜻한 미국식 비즈니스 영어로 정중히 답한다. 사과는 진심으로 한 번, 다음 할 일과 회신 시점을 약속한다. 모르는 사실은 지어내지 않고 [확인 필요]로 남긴다. 숙취 해소·예방·치료 같은 효능 주장은 절대 쓰지 않고, 건강·부작용 문의에는 섭취 중단과 의료 상담 안내를 먼저 한다."
     },
 
-    // ownerRequired: 지정 담당의 추가 검토 체크 전에는 최종 승인 불가 (즉시 에스컬레이션·담당자 필수 유형)
+    // ownerRequired: 지정 담당의 추가 검토 체크 전에는 최종 승인 불가 (바로 담당자에게 넘기기·담당자가 직접 답장 유형)
     types: [
       {
-        code: 'C1', name: '부작용 신고', mode: '즉시 에스컬레이션', owner: '품질·규제 담당', dueHours: 1, tag: '불만·건강', ownerRequired: true,
+        code: 'C1', name: '부작용 신고', mode: '바로 담당자에게 넘기기', owner: '품질·규제 담당', dueHours: 1, tag: '불만·건강', ownerRequired: true,
         keywords: ['rash', 'hives', 'itchy', 'allergic reaction', 'swelling', 'swollen', 'vomit', 'threw up', 'throw up', 'dizzy', 'faint',
           'hospital', 'emergency', 'chest pain', 'trouble breathing', 'felt sick', 'got sick', 'side effect',
           // 2026-10-24 보강 (GPT 검토 ④: 설사·호흡곤란이 C3·C10으로 빠짐) · 젤리라 질식(choke)도 C1
@@ -77,7 +77,7 @@
         ])
       },
       {
-        code: 'C2', name: '건강·복용·효능', mode: '담당자 필수', owner: 'CS 리드(건강)', dueHours: 24, tag: '효과', ownerRequired: true,
+        code: 'C2', name: '건강·복용·효능', mode: '담당자가 직접 답장', owner: 'CS 리드(건강)', dueHours: 24, tag: '효과', ownerRequired: true,
         keywords: ['pregnant', 'pregnancy', 'breastfeeding', 'nursing', 'medication', 'safe to take', 'okay to have',
           'how many can', 'how many should', 'how many per day', 'how many a day',
           'dosage', 'children', 'kids', 'does it work', 'effective', 'health condition',
@@ -97,7 +97,7 @@
         ])
       },
       {
-        code: 'C3', name: '환불·교환', mode: '담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '환불', ownerRequired: true,
+        code: 'C3', name: '환불·교환', mode: '담당자가 직접 답장', owner: 'CS 리드', dueHours: 24, tag: '환불', ownerRequired: true,
         keywords: ['refund', 'return', 'exchange', 'money back', 'cancel', 'cancellation', 'charged twice', 'double charged', 'overcharged', 'chargeback'],
         keywordsKo: ['환불', '교환', '반품', '취소'],
         template: t([
@@ -111,7 +111,7 @@
         ])
       },
       {
-        code: 'C4', name: '포장·품질 불량', mode: '담당자 필수', owner: '품질 담당', dueHours: 24, tag: '포장', ownerRequired: true,
+        code: 'C4', name: '포장·품질 불량', mode: '담당자가 직접 답장', owner: '품질 담당', dueHours: 24, tag: '포장', ownerRequired: true,
         keywords: ['damaged', 'leaking', 'leak', 'broken', 'expired', 'mold', 'moldy', 'defective', 'wrong item', 'missing item', 'melted', 'loose cap', 'cap was loose', 'spilled', 'cracked bottle',
           'only got', 'only received', 'instead of', 'short shipped', 'missing'],   // 2026-10-26 수량 부족
         keywordsKo: ['파손', '불량', '유통기한 지', '유통기한이 지', '기한 지난', '상했', '곰팡이', '누락', '개만 왔', '덜 왔'],
@@ -124,7 +124,7 @@
         ])
       },
       {
-        code: 'C5', name: '배송', mode: '자동 초안', owner: 'CS 담당', dueHours: 24, tag: '배송', ownerRequired: false,
+        code: 'C5', name: '배송', mode: 'AI가 초안 작성', owner: 'CS 담당', dueHours: 24, tag: '배송', ownerRequired: false,
         keywords: ['shipping', 'ship', 'shipped', 'delivery', 'deliver', 'delivered', 'tracking', 'where is my order',
           "haven't received", 'not received', 'arrive', 'arrived', 'late', 'delay', 'delayed', 'still waiting', 'order status'],   // 2026-10-26 지연
         keywordsKo: ['배송', '택배', '도착', '안 와', '안 왔', '늦어'],
@@ -140,7 +140,7 @@
         ])
       },
       {
-        code: 'C6', name: '제품 정보 (맛·성분·알레르기)', mode: '자동 초안', owner: 'CS 담당', dueHours: 24, tag: '맛', ownerRequired: false,
+        code: 'C6', name: '제품 정보 (맛·성분·알레르기)', mode: 'AI가 초안 작성', owner: 'CS 담당', dueHours: 24, tag: '맛', ownerRequired: false,
         keywords: ['flavor', 'flavour', 'taste', 'ingredient', 'allergen', 'allergy', 'allergic', 'nuts', 'gluten', 'vegan', 'sugar', 'calories', 'calorie', 'caffeine',
           'expiration', 'expiration date', 'shelf life', 'best by', 'made in', 'where is it made', 'halal', 'kosher', 'sweetener', 'soy', 'peanut'],   // 2026-10-26
         keywordsKo: ['맛', '성분', '알레르기', '알러지', '칼로리', '열량', '유통기한', '원산지', '감미료'],
@@ -157,7 +157,7 @@
         ])
       },
       {
-        code: 'C7', name: '가격·프로모션', mode: '자동 초안', owner: 'CS 담당', dueHours: 24, tag: '가격', ownerRequired: false,
+        code: 'C7', name: '가격·프로모션', mode: 'AI가 초안 작성', owner: 'CS 담당', dueHours: 24, tag: '가격', ownerRequired: false,
         keywords: ['price', 'pricing', 'discount', 'coupon', 'promo', 'promotion', 'sale', 'code', 'deal'],
         keywordsKo: ['가격', '할인', '쿠폰', '프로모션'],
         template: t([
@@ -169,7 +169,7 @@
         ])
       },
       {
-        code: 'C8', name: '리뷰·평점 (불만)', mode: '담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '불만', ownerRequired: true,
+        code: 'C8', name: '리뷰·평점 (불만)', mode: '담당자가 직접 답장', owner: 'CS 리드', dueHours: 24, tag: '불만', ownerRequired: true,
         keywords: ['1-star', 'one star', 'terrible', 'worst', 'awful', 'disappointed', 'waste of money', 'scam', 'rip-off',
           'leave a review', 'leaving a review', 'write a review', 'for a review', 'for leaving', 'in exchange for a review'],   // 2026-10-26 리뷰 보상 요구
         keywordsKo: ['최악', '실망', '별점'],
@@ -182,7 +182,7 @@
         ])
       },
       {
-        code: 'C9', name: 'B2B·대량 구매', mode: '영업 전달', owner: '해외영업 {확인 필요}', dueHours: 48, tag: '—', ownerRequired: false,
+        code: 'C9', name: 'B2B·대량 구매', mode: '영업팀에 넘기기', owner: '해외영업 {확인 필요}', dueHours: 48, tag: '—', ownerRequired: false,
         keywords: ['wholesale', 'bulk', 'distributor', 'distribution', 'B2B', 'MOQ', 'retail partner', 'reseller', 'carry your'],
         keywordsKo: ['도매', '대량', '유통사', '유통업체', '유통 계약', '유통 채널', '입점'],   // 2026-10-26 '유통' 단독은 '유통기한'과 겹침
         template: t([
@@ -192,7 +192,7 @@
         ])
       },
       {
-        code: 'C10', name: '기타·협업 제안', mode: '다른 탭 전달', owner: '인플루언서·파트너 (혁주)', dueHours: 72, tag: '—', ownerRequired: false,
+        code: 'C10', name: '기타·협업 제안', mode: '다른 팀에 넘기기', owner: '인플루언서·파트너 (혁주)', dueHours: 72, tag: '—', ownerRequired: false,
         keywords: ['collab', 'collaborate', 'collaboration', 'partnership', 'influencer', 'sponsor', 'sponsorship', 'creator', 'PR package', 'affiliate'],
         keywordsKo: ['협업', '제휴', '협찬'],
         template: t([
@@ -254,33 +254,33 @@
     ],
 
     // 시연·테스트용 가짜 문의. 이름은 지어낸 흔한 미국식 이름이고 주소는 예시용 도메인(example.com)이라 실제 고객 정보가 아닙니다.
-    // legacy: 예전 id(TEST-NN) — 이미 저장된 더미 문의를 새 이름으로 바꿀 때 씀 (cs.js load). expect는 분류 테스트용.
+    // legacy: 예전 id(TEST-NN) — 이미 저장된 더미 문의를 새 이름으로 바꿀 때 씀 (cs.js load). expect는 분류 테스트용. subjectKo: 화면에서 영어 제목 옆에 붙는 한글 뜻.
     dummyInquiries: [
       { id: 'CS-24101', legacy: 'TEST-01', expect: 'C1', hoursAgo: 0.4, name: 'Lauren Mitchell', from: 'lauren.mitchell@example.com', orderNo: 'RB-241001',
-        subject: 'Itchy spots after the jelly', body: 'I had one jelly last night and this morning I have red, itchy spots on my arms. Is this an allergic reaction?' },
+        subject: 'Itchy spots after the jelly', subjectKo: '젤리 먹고 가려운 반점이 생겼어요', body: 'I had one jelly last night and this morning I have red, itchy spots on my arms. Is this an allergic reaction?' },
       { id: 'CS-24102', legacy: 'TEST-02', expect: 'C1', hoursAgo: 2, name: 'Kevin Park', from: 'kevin.park@example.com', orderNo: 'RB-241002',
-        subject: 'Went to the ER', body: 'My partner felt dizzy and threw up after having two jellies, so we went to the emergency room. What is in this product?' },
+        subject: 'Went to the ER', subjectKo: '응급실에 갔어요', body: 'My partner felt dizzy and threw up after having two jellies, so we went to the emergency room. What is in this product?' },
       { id: 'CS-24103', legacy: 'TEST-03', expect: 'C2', hoursAgo: 3, name: 'Megan Foster', from: 'megan.foster@example.com', orderNo: '',
-        subject: 'Question before buying', body: "I'm 5 months pregnant. Is it okay to have these?" },
+        subject: 'Question before buying', subjectKo: '사기 전에 궁금해요', body: "I'm 5 months pregnant. Is it okay to have these?" },
       { id: 'CS-24104', legacy: 'TEST-04', expect: 'C3', hoursAgo: 20, name: 'Tyler Brooks', from: 'tyler.brooks@example.com', orderNo: 'RB-241004',
-        subject: 'Refund request', body: "I'd like to send back my unopened box and get a refund." },
+        subject: 'Refund request', subjectKo: '환불 요청', body: "I'd like to send back my unopened box and get a refund." },
       { id: 'CS-24105', legacy: 'TEST-05', expect: 'C4', hoursAgo: 30, name: 'Rachel Simmons', from: 'rachel.simmons@example.com', orderNo: 'RB-241005',
-        subject: 'Box arrived leaking', body: 'Two of the bottles were leaking and the box was damaged.' },
+        subject: 'Box arrived leaking', subjectKo: '상자가 새서 왔어요', body: 'Two of the bottles were leaking and the box was damaged.' },
       { id: 'CS-24106', legacy: 'TEST-06', expect: 'C5', hoursAgo: 5, name: 'Brandon Hughes', from: 'brandon.hughes@example.com', orderNo: 'RB-241006',
         tracking: 'RBX-48210-US', eta: 'Oct 27',
-        subject: 'Where is my order?', body: "I ordered last week and still haven't received it." },
+        subject: 'Where is my order?', subjectKo: '주문한 게 어디 있나요?', body: "I ordered last week and still haven't received it." },
       { id: 'CS-24107', legacy: 'TEST-07', expect: 'C6', hoursAgo: 8, name: 'Natalie Rivera', from: 'natalie.rivera@example.com', orderNo: '',
-        subject: 'Flavor and allergens', body: 'What flavor is it, and does it contain nuts or gluten?' },
+        subject: 'Flavor and allergens', subjectKo: '맛과 알레르기 성분', body: 'What flavor is it, and does it contain nuts or gluten?' },
       { id: 'CS-24108', legacy: 'TEST-08', expect: 'C7', hoursAgo: 12, name: 'Jordan Bennett', from: 'jordan.bennett@example.com', orderNo: '',
-        subject: 'First order', body: 'Is there a discount for first orders? My code did not go through.' },
+        subject: 'First order', subjectKo: '첫 주문', body: 'Is there a discount for first orders? My code did not go through.' },
       { id: 'CS-24109', legacy: 'TEST-09', expect: 'C8', hoursAgo: 26, name: 'Samantha Price', from: 'samantha.price@example.com', orderNo: 'RB-241009',
-        subject: 'Not happy', body: 'Tastes terrible. Worst purchase this month.' },
+        subject: 'Not happy', subjectKo: '불만이에요', body: 'Tastes terrible. Worst purchase this month.' },
       { id: 'CS-24110', legacy: 'TEST-10', expect: 'C9', hoursAgo: 6, name: 'Daniel Cho', from: 'daniel.cho@example.com', orderNo: '',
-        subject: 'Wholesale inquiry', body: 'We run a few convenience stores in LA and are interested in wholesale pricing and your MOQ.' },
+        subject: 'Wholesale inquiry', subjectKo: '도매 문의', body: 'We run a few convenience stores in LA and are interested in wholesale pricing and your MOQ.' },
       { id: 'CS-24111', legacy: 'TEST-11', expect: 'C10', hoursAgo: 40, name: 'Ashley Morgan', from: 'ashley.morgan@example.com', orderNo: '',
-        subject: 'Hello from a creator', body: "I'm a creator with 80k followers and would love to collaborate." },
+        subject: 'Hello from a creator', subjectKo: '크리에이터 협업 제안', body: "I'm a creator with 80k followers and would love to collaborate." },
       { id: 'CS-24112', legacy: 'TEST-12', expect: 'C10', hoursAgo: 1, name: 'Ethan Collins', from: 'ethan.collins@example.com', orderNo: '',
-        subject: 'Question', body: 'Hi, I have a quick question about your company. Who should I contact?' }
+        subject: 'Question', subjectKo: '질문이 있어요', body: 'Hi, I have a quick question about your company. Who should I contact?' }
     ]
   };
 })(typeof window !== 'undefined' ? window : globalThis);

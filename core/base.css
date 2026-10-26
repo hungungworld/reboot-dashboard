@@ -165,6 +165,14 @@ p { margin: 0; line-height: 1.65; }
 .top-actions .icon-btn .icon { width: 16px; height: 16px; }
 .top-actions .icon-btn:hover { background: var(--nav-hover); }
 .top-actions .icon-btn.is-on { background: var(--lime-soft); border-color: var(--lime-soft-line); }
+/* AI 번역 버튼 (ui.trBtn): 모든 탭 같은 네모 아이콘 버튼 · 누르면(번역 펼침) 연두 */
+.tr-btn { display: inline-grid; place-items: center; flex: none; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line-2); border-radius: 8px;
+  background: var(--surface); color: var(--muted); cursor: pointer; font: inherit; vertical-align: middle; }
+.tr-btn .icon { width: 15px; height: 15px; }
+.tr-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--muted-2); }
+.tr-btn[aria-pressed="true"] { background: var(--lime-soft); border-color: var(--lime-soft-line); color: var(--ink); }
+.tr-btn:disabled { opacity: .4; cursor: not-allowed; }
+.tr-btn.is-busy { opacity: .6; cursor: progress; }
 .icon-btn .dot { position: absolute; right: 6px; top: 5px; width: 6px; height: 6px; background: var(--lime-dot); border: 1px solid var(--surface); border-radius: 50%; }
 .profile-wrap { position: relative; }
 .profile { display: flex; align-items: center; gap: 10px; text-align: left; padding: 0; border-radius: 50%; }
@@ -261,8 +269,21 @@ p { margin: 0; line-height: 1.65; }
 .btn.small { padding: 7px 10px; font-size: 11px; }
 /* 파일 버튼 (ui.fileBtn) · 카드 머리 오른쪽 줄 (ui.fileActions) */
 .file-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; margin-left: auto; }
-.btn.file-btn .tiny { font-weight: 600; letter-spacing: .02em; }
-.btn.file-btn.lime .tiny { color: inherit; opacity: .7; }
+/* SAP Fiori 툴바 버튼처럼: 카드 머리·버튼 줄의 파일 버튼은 테두리·배경 없이, 올렸을 때만 옅은 배경 (보고서 만들기 lime은 강조 그대로) */
+.card-head .btn.file-btn:not(.lime), .file-actions .btn.file-btn:not(.lime), .file-menu > .btn.file-btn { background: transparent; border-color: transparent; }
+.card-head .btn.file-btn:not(.lime):hover:not(:disabled), .file-actions .btn.file-btn:not(.lime):hover:not(:disabled),
+.file-menu > .btn.file-btn:hover, .file-menu[open] > .btn.file-btn { background: var(--soft); filter: none; }
+/* 파일 메뉴 (ui.fileMenu) */
+.file-menu { position: relative; display: inline-block; }
+.file-menu > summary { list-style: none; cursor: pointer; }
+.file-menu > summary::-webkit-details-marker { display: none; }
+.file-menu .file-menu-caret { width: 12px; height: 12px; margin-left: -2px; transition: transform .15s; }
+.file-menu[open] .file-menu-caret { transform: rotate(180deg); }
+.file-menu-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; min-width: 100%; padding: 4px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); }
+.file-menu-list > a, .file-menu-list > button { display: block; width: 100%; padding: 7px 10px; border: 0; border-radius: var(--radius-xs); background: none;
+  font: inherit; font-size: 12px; text-align: left; color: var(--text); text-decoration: none; white-space: nowrap; cursor: pointer; }
+.file-menu-list > a:hover, .file-menu-list > button:hover { background: var(--soft); }
 .btn.pill { border-radius: 24px; padding: 12px 18px; font-size: 11px; }
 .btn.block { width: 100%; }
 .btn.is-busy { position: relative; color: transparent !important; pointer-events: none; }

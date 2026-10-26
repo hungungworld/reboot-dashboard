@@ -185,8 +185,7 @@
   border-top: 1px solid var(--line-3); font-size: 11px; color: var(--muted); }
 .part-home .home-news-more:hover { color: var(--ink); background: var(--soft-2); }
 .part-home .home-news-more-ic { font-size: 12px; line-height: 1; }
-.part-home .home-kind .chip { padding: 6px 11px; }
-.part-home .home-kind .chip:disabled { opacity: .45; cursor: default; }
+.part-home .home-kind button:disabled { opacity: .45; cursor: default; }
 .part-home .home-lead { margin-top: 14px; padding: 15px 16px; border-radius: var(--radius-sm); background: var(--soft-2); }
 .part-home .home-lead-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .part-home .home-lead-meta { font-size: 11px; color: var(--muted); }
@@ -247,3 +246,5 @@
 .part-home .home-todo-more > summary::before { content: "▸"; font-size: 11px; transition: transform .15s; }
 .part-home .home-todo-more[open] > summary::before { transform: rotate(90deg); }
 .part-home .home-todo-more > summary:hover { color: var(--ink, inherit); }
+/* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
+.part-home .linetabs { overflow-y: hidden; }
