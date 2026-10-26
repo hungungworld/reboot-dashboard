@@ -119,8 +119,10 @@ def saved_delete(sid):
 
 # ───────── 노란 체크 패널 · 인사이트 자료 ─────────
 
-DOCK_KINDS = {"action": "이번 주 액션", "brief": "콘텐츠 브리프", "price": "1회분 단가", "promo": "시즌 프로모션",
-              "brand": "브랜드", "change": "경쟁사 변화", "review": "리뷰", "other": "기타"}
+DOCK_KINDS = {"action": "주간 액션", "brief": "콘텐츠 브리프", "price": "1회분 단가", "promo": "시즌 프로모션",
+              "brand": "브랜드", "change": "경쟁사 변화", "review": "리뷰",
+              "summary": "이달의 요약", "insight": "고객 인사이트", "trend": "경쟁 동향", "priority": "개선 우선순위",
+              "persona": "페르소나", "swot": "SWOT", "strategy": "전략", "other": "기타"}
 DOCK_MAX_DATA = 20000   # 원본 필드 JSON 최대 글자 수
 
 

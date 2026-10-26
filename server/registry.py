@@ -54,7 +54,7 @@ PARTS = (
     Part("performance", "성과 분석", "chart", "혁주", "",
          "숫자에서 찾는, 다음 성장의 힌트.", "채널별 성과를 비교하고, 다음 캠페인을 위한 인사이트를 발견하세요.",
          scripts=("metrics.js", "performance.js"), styles=("performance.css",), short="성과 분석", kicker="PERFORMANCE",
-         links=(("성과 대시보드", "chart", ""), ("주간 성과 보고서", "doc", "report"))),
+         links=(("성과 대시보드", "chart", ""), ("성과 보고서", "doc", "report"))),
     Part("settings", "설정 및 브랜드 관리", "settings", "이현경", "",
          "우리다운 기준을 만드는 곳.", "브랜드의 기본 정보와 워크스페이스 환경을 관리하세요.",
          scripts=("settings.js",), styles=("settings.css",), nav=False,
