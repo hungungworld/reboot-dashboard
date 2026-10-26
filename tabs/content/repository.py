@@ -57,6 +57,14 @@ def products_index():
     return {p["id"]: dict(p, ko=(kit.get(p["id"]) or {}).get("ko") or p.get("ko")) for p in catalog.get_products() if p.get("id")}
 
 
+def ref_product_ids(sheet):
+    """참고 사진을 고를 제품 — Reboot 브랜드 자체를 골랐으면 전 제품 (직접 고른 제품이 앞), 아니면 고른 제품만."""
+    pids = list((sheet or {}).get("product_ids") or [])
+    if not (sheet or {}).get("brand_focus"):
+        return pids
+    return pids + [pid for pid in products_index() if pid not in pids]
+
+
 def clip_text(value, n):
     return re.sub(r"[ \t]+\n", "\n", str(value if value is not None else "")).strip()[:n]
 
