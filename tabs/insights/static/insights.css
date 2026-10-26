@@ -773,7 +773,8 @@
 .part-insights .ins-brief-f .input { width: 100%; }
 
 /* 구매자 리뷰 맨 위 카드: 한 줄 답 · 평점 · 별점 분포 · 주제 막대 (세로선 = 상대편 칭찬 비율) */
-.part-insights .ins-rh { --rh-pos: #bfead2; --rh-neg: #f9cccc; }   /* SWOT 강점 · 위협과 같은 연한 색 */
+.part-insights .ins-rh { --rh-pos: color-mix(in srgb, var(--green) 40%, var(--green-bg));   /* 리뷰 배지 올리브 · 벽돌의 중간 톤 (다크 모드도 따라감) */
+  --rh-neg: color-mix(in srgb, var(--red) 40%, var(--red-bg)); }
 .part-insights .ins-rh .seg button { font-size: 12px; padding: 6px 14px; }
 .part-insights .ins-rh-h { margin-top: 16px; font-size: 24px; line-height: 1.35; letter-spacing: -.6px; }
 .part-insights .ins-rh-qs { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 12px; }
