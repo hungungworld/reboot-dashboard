@@ -51,6 +51,8 @@
   const ALL_FLAVORS = FLAVORS.map(f => f[0]);
   const flavorsOf = (s, id) => { const f = s.product_flavors && s.product_flavors[id]; return Array.isArray(f) && f.length ? f : ALL_FLAVORS.slice(); };
   const flavorMap = s => Object.fromEntries((s.product_ids || []).map(id => [id, flavorsOf(s, id)]));
+  // 참고 사진을 고를 제품 — 브랜드 자체를 골랐으면 전 제품 (고른 제품이 앞 · 서버 repository.ref_product_ids)
+  const refPids = s => s.brand_focus ? s.product_ids.concat(products().map(p => p.id).filter(id => !s.product_ids.includes(id))) : s.product_ids;
   const SHEET_LANGUAGES = ['한국어', '영어'];  // 새 시트의 콘텐츠 언어 (서버 routes.SHEET_LANGUAGES와 같은 이름)
   const rid = () => 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
   function lsGet(k, d) { try { const v = global.localStorage.getItem(LS + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
@@ -109,7 +111,7 @@
       product_ids: s.product_ids.slice(), goal: s.goal || '', extra_request: s.extra_request || '' };
     if (usesCharacter(s.content_type)) out.use_character = s.use_character || 'AI 판단';
     if (s.product_ids.length) out.product_flavors = flavorMap(s);
-    if (s.product_ids.length && s.ref_skip.length) out.ref_skip = s.ref_skip.slice();
+    if (refPids(s).length && s.ref_skip.length) out.ref_skip = s.ref_skip.slice();
     if (SHEET_LANGUAGES.includes(s.language)) out.language = s.language;
     return out;
   }
@@ -366,11 +368,11 @@
       <div class="field-label cnt-q">03 &nbsp; 제작 대상 <span class="cnt-req">필수 · 하나 이상</span><span class="cnt-opt">제품은 여러 개 선택 가능</span></div>
       <div class="cnt-targets">
         <label class="cnt-target${s.brand_focus ? ' on' : ''}"><input type="checkbox" data-sheet-check="brand" ${s.brand_focus ? 'checked' : ''}>
-          <span><b>Reboot 브랜드 자체</b><small>브랜드가 주제 · 제품 자동 선택 아님</small></span></label>
+          <span><b>Reboot 브랜드 자체</b><small>브랜드가 주제 · 이미지·영상에 전 제품 사진을 참고로 써요</small></span></label>
         ${products().map(p => { const on = s.product_ids.includes(p.id); return `<div class="cnt-target cnt-prod${on ? ' on' : ''}"><label class="cnt-prod-main"><input type="checkbox" data-sheet-check="product" value="${esc(p.id)}" ${on ? 'checked' : ''}>
           <span><b>${esc(p.ko || p.name)}</b><small>${esc(p.name)} · ${esc(productForm(p))}</small></span></label>${on ? flavorChipsHtml(s, p.id) : ''}</div>`; }).join('')}
       </div>
-      ${usesCharacter(s.content_type) && s.product_ids.length ? `<div class="cnt-prod-refs" data-ref-preview="${ctx}">${refPreviewHtml(s)}</div>` : ''}
+      ${usesCharacter(s.content_type) && refPids(s).length ? `<div class="cnt-prod-refs" data-ref-preview="${ctx}">${refPreviewHtml(s)}</div>` : ''}
       ${usesCharacter(s.content_type) ? characterFieldHtml(s) : ''}
       ${isNew ? `<div class="field-label cnt-q">04 &nbsp; 콘텐츠 언어 <span class="cnt-req">필수 · 하나</span><span class="cnt-opt">소비자에게 보일 문구의 언어</span></div>
       <div class="chips">${SHEET_LANGUAGES.map(x => `<button type="button" class="chip" data-act="sheet-language" data-value="${esc(x)}" aria-pressed="${(s.language || '영어') === x}">${esc(x)}</button>`).join('')}</div>` : ''}
@@ -397,7 +399,7 @@
   // 뺀 사진(ref_skip)은 제자리에 흐리게 두고, 쓰는 사진이 16장이 될 때까지 보여 줌
   function productRefs(s) {
     const all = (S.assets || []).filter(a => a.type === 'product' && a.ref);
-    const lists = s.product_ids.map(id => {
+    const lists = refPids(s).map(id => {
       const f = flavorsOf(s, id), subset = f.length < ALL_FLAVORS.length;
       const c = all.filter(a => a.productId === id).sort((a, b) => (a.priority - b.priority) || ((a.flavor != null) - (b.flavor != null)));
       return subset ? c.filter(a => f.includes(a.flavor)).concat(c.filter(a => a.flavor == null && a.view !== 'trio')) : c;
@@ -3152,7 +3154,9 @@
     if (!d) return;
     const busy = new Set(n.bgJobs.filter(j => ACTIVE_JOB.includes(j.status)).map(j => j.cardId));
     const m = { mode: i != null ? 'pick' : 'ai', count: Math.min(2, d.cards.length), loading: false,
-      picks: new Set(i != null ? [d.cards[i].id] : d.cards.filter(c => c.bgAi).map(c => c.id)) };
+      picks: new Set(i != null ? [d.cards[i].id] : d.cards.filter(c => c.bgAi).map(c => c.id)),
+      provider: S.camp && S.camp.settings && S.camp.settings.image_provider === 'higgsfield' ? 'higgsfield' : 'openai' };
+    const provReady = () => (m.provider === 'higgsfield' ? hfReady() : textReady());   // 고른 이미지 AI의 키 (다른 쪽으로 자동 전환 안 함)
     let box = null;
     const body = () => {
       const nAi = d.cards.filter(c => c.bgAi).length;
@@ -3176,10 +3180,14 @@
           .map(([k, l]) => `<button type="button" class="chip" data-bg-mode="${k}" aria-pressed="${m.mode === k}">${l}</button>`).join('')}</div>
         <div class="cnt-cn-bg-head">${m.loading ? '<span class="spinner"></span> AI가 카드를 고르는 중…' : head}</div>
         <div class="cnt-cn-bg-list">${rows}</div>
+        <div class="flex wrap cnt-cn-bg-prov"><span class="field-label">이미지 AI</span>
+          <div class="chips">${[['openai', 'OpenAI'], ['higgsfield', 'Higgsfield']]
+            .map(([k, l]) => `<button type="button" class="chip" data-bg-prov="${k}" aria-pressed="${m.provider === k}">${l}</button>`).join('')}</div>
+          ${m.provider === 'higgsfield' ? '<span class="panel-note">Higgsfield는 4:5가 없어 3:4로 만들어 카드에 꽉 채워요 (위아래가 조금 잘릴 수 있어요).</span>' : ''}</div>
         <div class="note cnt-cn-bg-note">고른 제품(맛)의 실제 사진${assetsCharacterOff() ? '' : ' · Rebu(설정에 따라)'}을 참고로 보내고 글자는 그리지 않아요.
           카드 1장 = 이미지 생성 1번(비용)이고 장당 수십 초~몇 분 걸려요. 제품 라벨 · 모양은 게시 전에 확인하세요.</div>
-        <div class="flex wrap cnt-cn-bg-go"><button type="button" class="btn lime" data-bg-act="start" ${nPick && textReady() && !m.loading ? '' : 'disabled'}>${icon('image')}${nPick}장 배경 만들기</button>
-          ${textReady() ? '' : '<span class="panel-note">OpenAI 키가 있어야 만들 수 있어요 (설정 › 연결).</span>'}</div>`;
+        <div class="flex wrap cnt-cn-bg-go"><button type="button" class="btn lime" data-bg-act="start" ${nPick && provReady() && !m.loading ? '' : 'disabled'}>${icon('image')}${nPick}장 배경 만들기 · ${m.provider === 'higgsfield' ? 'Higgsfield' : 'OpenAI'}</button>
+          ${provReady() ? '' : `<span class="panel-note">${m.provider === 'higgsfield' ? 'Higgsfield' : 'OpenAI'} 키가 있어야 만들 수 있어요 (설정 › 연결).</span>`}</div>`;
     };
     const draw = () => { const el = box && box.querySelector('[data-ref="cn-bg-body"]'); if (el) el.innerHTML = body(); };
     const syncVisuals = () => box.querySelectorAll('[data-bg-visual]').forEach(t => {
@@ -3205,7 +3213,7 @@
       if (!items.length) return;
       ui.busy(btn, true);
       try {
-        const res = await REBOOT.api(`${API}/campaigns/${S.camp.id}/cardnews/backgrounds`, { deck: d, cards: items });
+        const res = await REBOOT.api(`${API}/campaigns/${S.camp.id}/cardnews/backgrounds`, { deck: d, cards: items, provider: m.provider });
         res.jobs.forEach(j => { n.bgWatch[j.id] = true; });
         n.bgJobs = res.jobs.concat(n.bgJobs.filter(j => !res.jobs.some(x => x.id === j.id)));
         ui.closeModal(null);
@@ -3225,6 +3233,8 @@
         el.addEventListener('click', e => {
           const mb = e.target.closest('[data-bg-mode]');
           if (mb) { syncVisuals(); m.mode = mb.dataset.bgMode; draw(); return; }
+          const pb = e.target.closest('[data-bg-prov]');
+          if (pb) { syncVisuals(); m.provider = pb.dataset.bgProv; draw(); return; }
           const b = e.target.closest('[data-bg-act]');
           if (!b || b.disabled) return;
           if (b.dataset.bgAct === 'plan') plan(0);
@@ -3237,9 +3247,16 @@
         el.addEventListener('change', e => {
           const id = e.target.dataset && e.target.dataset.bgPick;
           if (id == null) return;
-          syncVisuals();
           if (e.target.checked) m.picks.add(id); else m.picks.delete(id);
-          draw();
+          // 전체를 다시 그리면 목록 스크롤이 맨 위로 돌아감 — 그 줄과 버튼만 고침
+          const row = e.target.closest('.cnt-cn-bg-row');
+          if (row) row.classList.toggle('on', e.target.checked);
+          const go = el.querySelector('[data-bg-act="start"]');
+          if (go) {
+            const nPick = Array.from(m.picks).filter(x => !busy.has(x)).length;
+            go.innerHTML = `${icon('image')}${nPick}장 배경 만들기 · ${m.provider === 'higgsfield' ? 'Higgsfield' : 'OpenAI'}`;
+            go.disabled = !(nPick && provReady() && !m.loading);
+          }
         });
       }
     });
