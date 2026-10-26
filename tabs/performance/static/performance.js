@@ -69,6 +69,31 @@
     if (n == null || !isFinite(n)) return '—';
     return (n > 0 ? '+' : n < 0 ? '-' : '') + fmt.krw(Math.abs(n));
   }
+  // 달러 표시는 성과분석 화면에서만 — 보고서(A4)는 늘 원화
+  const usdOn = () => S.view !== 'report' && S.currency === 'USD';
+  function cash(n) { return usdOn() ? money(n) : fmt.krw(n); }
+  function signedCash(n) {
+    if (n == null || !isFinite(n)) return '—';
+    return (n > 0 ? '+' : n < 0 ? '-' : '') + cash(Math.abs(n));
+  }
+  /** 차트 축용 짧은 금액: 원화 2,663만 · 달러 $12.3K */
+  function shortCash(n) {
+    if (!usdOn()) return man(n);
+    const v = n / rate(), a = Math.abs(v);
+    return '$' + (a >= 1e6 ? fmt.num(v / 1e6, 1) + 'M' : a >= 1e3 ? fmt.num(v / 1e3, 1) + 'K' : fmt.num(v, 0));
+  }
+  // AI 문장 속 "₩ 46,706,094"를 화면에서만 달러로 (원문·캐시는 원화 그대로)
+  function fxText(t) {
+    if (!usdOn() || t == null) return t;
+    return String(t).replace(/₩\s?(\d[\d,]*)/g, (m, d) => fmt.usd(Number(d.replace(/,/g, '')) / rate()));
+  }
+  function renderCurrency() {
+    renderTable();
+    renderKpis();
+    renderInsight();
+    renderAi();
+    drawCharts();
+  }
   function arrow(d) { return d > 0 ? '▲' : d < 0 ? '▼' : '–'; }
   function deltaHtml(metric, d) {
     const t = M.tone(metric, d);
@@ -121,12 +146,12 @@
         legend: { position: 'bottom', labels: { color: muted, font: font(11), boxWidth: 18, boxHeight: 8, padding: 14, usePointStyle: true, pointStyle: legendStyle, pointStyleWidth: legendStyle === 'line' ? 22 : undefined } },
         tooltip: {
           titleFont: font(11), bodyFont: font(12), padding: 10, boxPadding: 4,
-          callbacks: { label: c => ` ${c.dataset.label}: ${fmt.krw(c.parsed.y)}` }
+          callbacks: { label: c => ` ${c.dataset.label}: ${cash(c.parsed.y)}` }
         }
       },
       scales: {
         x: { grid: { display: false }, border: { color: line }, ticks: { color: muted, font: font(11), maxRotation: 0, autoSkipPadding: 14 } },
-        y: { beginAtZero: true, grid: { color: line }, border: { display: false }, ticks: { color: muted, font: font(11), callback: v => man(v) } }
+        y: { beginAtZero: true, grid: { color: line }, border: { display: false }, ticks: { color: muted, font: font(11), callback: v => shortCash(v) } }
       }
     };
   }
@@ -175,6 +200,8 @@
   function drawCharts() {
     destroyCharts();
     if (!S.sum || !S.sum.rows) return;
+    const barUnit = ref('bar-unit');
+    if (barUnit) barUnit.textContent = usdOn() ? '단위: 달러 ($K = 천 달러)' : '단위: 원 (만 원 표시)';
     drawBar(ref('bar'));
     drawLine(ref('line'));
     const note = ref('line-note');
@@ -219,7 +246,7 @@
     }
     if (btn) busy(btn, false);
     paintFx();
-    if (S.currency === 'USD') renderTable();
+    if (S.currency === 'USD' && S.sum && S.sum.rows) renderCurrency();
   }
 
   /* ───────── AI 해석 · 예산 제안 ───────── */
@@ -323,8 +350,8 @@
     let body;
     if (st === 'ok') {
       const d = S.insight.data;
-      const pts = (d.points || []).map(p => `<li>${p.label ? `<span class="perf-insight-label">${esc(p.label)}</span>` : ''}${boldHtml(p.text)}</li>`).join('');
-      body = `<div><p class="perf-insight-head">${boldHtml(d.headline)}</p>${pts ? `<ul class="perf-insight-lines">${pts}</ul>` : ''}</div>
+      const pts = (d.points || []).map(p => `<li>${p.label ? `<span class="perf-insight-label">${esc(p.label)}</span>` : ''}${boldHtml(fxText(p.text))}</li>`).join('');
+      body = `<div><p class="perf-insight-head">${boldHtml(fxText(d.headline))}</p>${pts ? `<ul class="perf-insight-lines">${pts}</ul>` : ''}</div>
         <button type="button" class="btn small ghost" data-act="insight-again" aria-label="AI 인사이트 다시 만들기">${icon('refresh')}</button>`;
     } else if (st === 'nokey') {
       body = `<p class="panel-note">AI 연결 안 됨 — 설정 › 연결에서 OpenAI 키를 넣으면 전체 성과 요약을 볼 수 있어요.</p>`;
@@ -379,8 +406,8 @@
     const items = (b.items || []).map(i => `
       <div class="perf-budget-row">
         <span class="perf-ch"><span class="perf-swatch" style="background:${esc(chColor(i.channel))}"></span>${esc(i.channel)}</span>
-        <span class="num"><b>${esc(fmt.krw(i.amount))}</b></span>
-        <span class="num perf-delta neutral">${esc(signedKrw(i.delta))}${i.deltaPct != null ? ` (${esc(fmt.signed(i.deltaPct, 1, '%'))})` : ''}</span>
+        <span class="num"><b>${esc(cash(i.amount))}</b></span>
+        <span class="num perf-delta neutral">${esc(signedCash(i.delta))}${i.deltaPct != null ? ` (${esc(fmt.signed(i.deltaPct, 1, '%'))})` : ''}</span>
         <span class="perf-share"><span class="progress-track"><i style="width:${Math.max(0, Math.min(100, Number(i.share) || 0))}%"></i></span>${esc(fmt.pct(i.share, 0))}</span>
         ${i.reason ? `<p>${esc(i.reason)}</p>` : ''}
       </div>`).join('');
@@ -389,9 +416,9 @@
     return `
       ${a.overview ? `<p class="perf-overview">${esc(a.overview)}</p>` : ''}
       <div class="perf-ai-sum">
-        <div class="perf-ai-stat"><span>다음 주 총 예산</span><strong>${esc(fmt.krw(b.total))}</strong><small>기준의 80~120%: ${esc(fmt.krw(b.min))} ~ ${esc(fmt.krw(b.max))}</small></div>
-        <div class="perf-ai-stat"><span>${b.scaled ? `이번 기간 광고비 (${esc(b.days)}일 → 7일 환산)` : '이번 주 광고비'}</span><strong>${esc(fmt.krw(b.current))}</strong></div>
-        <div class="perf-ai-stat"><span>증감</span><strong>${esc(signedKrw(b.delta))}</strong><small>${esc(fmt.signed(b.deltaPct, 1, '%'))}</small></div>
+        <div class="perf-ai-stat"><span>다음 주 총 예산</span><strong>${esc(cash(b.total))}</strong><small>기준의 80~120%: ${esc(cash(b.min))} ~ ${esc(cash(b.max))}</small></div>
+        <div class="perf-ai-stat"><span>${b.scaled ? `이번 기간 광고비 (${esc(b.days)}일 → 7일 환산)` : '이번 주 광고비'}</span><strong>${esc(cash(b.current))}</strong></div>
+        <div class="perf-ai-stat"><span>증감</span><strong>${esc(signedCash(b.delta))}</strong><small>${esc(fmt.signed(b.deltaPct, 1, '%'))}</small></div>
       </div>
       <div class="perf-budget">${items || '<p class="panel-note">아직 채널별 예산 제안이 없어요.</p>'}</div>
       ${(b.notes || []).length ? `<p class="panel-note mt-8">${b.notes.map(esc).join(' · ')}</p>` : ''}
@@ -453,13 +480,16 @@
         foot: cmp ? cmp.label : '비교 데이터 없음'
       });
     };
+    const usd = usdOn();
+    const big = n => (usd ? fmt.num(Math.round(n / rate())) : man(n));
+    const unit = usd ? '달러' : '원';
     box.innerHTML = [
-      card('spend', '총 광고비', man(t.spend), '원', true),
-      card('revenue', '총 매출', man(t.revenue), '원'),
+      card('spend', '총 광고비', big(t.spend), unit, true),
+      card('revenue', '총 매출', big(t.revenue), unit),
       card('roas', 'ROAS (광고비 대비 매출)', fmt.num(t.roas, 0), '%'),
       card('conversions', '전환수', fmt.num(t.conversions), '건'),
-      card('cpa', 'CPA (전환당 비용)', fmt.num(t.cpa), '원'),
-      card('profit', '순수익 (매출 − 광고비)', man(t.profit), '원')
+      card('cpa', 'CPA (전환당 비용)', usd ? fmt.num(t.cpa / rate(), 2) : fmt.num(t.cpa), unit),
+      card('profit', '순수익 (매출 − 광고비)', big(t.profit), unit)
     ].join('');
   }
 
@@ -555,10 +585,10 @@
           </div></div>
         <div class="perf-insight" data-ref="insight" aria-live="polite" hidden></div>
         <div id="perf-table-body"${S.tableOpen === false ? ' hidden' : ''}><div class="table-wrap" data-ref="table"></div>
-        <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나와요. 여러 채널을 고를 수 있고, 다시 누르면 해제돼요. 달러 표시는 이 표에만 적용돼요.</p></div>
+        <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나와요. 여러 채널을 고를 수 있고, 다시 누르면 해제돼요. 달러를 고르면 핵심 지표·차트·AI 문장도 달러로 보여요 (보고서·인쇄는 원화).</p></div>
       </section>
       <div class="grid-2">
-        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출</h2><span class="small muted">단위: 원 (만 원 표시)</span></div>
+        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출</h2><span class="small muted" data-ref="bar-unit">단위: 원 (만 원 표시)</span></div>
           <div class="perf-chart"><canvas data-ref="bar" role="img" aria-label="채널별 광고비와 매출 막대 차트 (숫자는 위 표에 있음)"></canvas></div></section>
         <section class="card"><div class="card-head"><h2>일별 매출 추이</h2><span class="small muted" data-ref="line-note"></span></div>
           <div class="perf-chart"><canvas data-ref="line" role="img" aria-label="일별 매출 추이 선 차트 (범례를 누르면 선을 숨기거나 보임)"></canvas></div></section>
@@ -883,7 +913,7 @@
     if (cur) {
       S.currency = cur.dataset.cur === 'USD' ? 'USD' : 'KRW';
       S.root.querySelectorAll('[data-cur]').forEach(b => { b.classList.toggle('selected', b === cur); b.setAttribute('aria-pressed', String(b === cur)); });
-      renderTable();
+      renderCurrency();
       return;
     }
     const tr = e.target.closest('tr[data-ch]');
