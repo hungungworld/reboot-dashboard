@@ -217,6 +217,7 @@
       if (ref === 'rv-q') { S.rv.q = e.target.value; S.rv.page = 1; drawRvTable(); }
       if (ref === 'sum-q') { S.sum.q = e.target.value; S.sum.page = 1; drawSumTable(); }
     });
+    root.addEventListener('dragstart', dockStart);
     root.addEventListener('mouseover', swarmTip);
     root.addEventListener('mousedown', colResize);
     root.addEventListener('mouseout', e => {
@@ -407,6 +408,7 @@
       case 'brief-make': makeBrief(b); break;
       case 'brief-save': saveBrief(b, false); break;
       case 'brief-approve': saveBrief(b, true); break;
+      case 'dock-add': dockAdd(d.id); break;
       case 'promo-make': makePromo(b); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'aud-q': openAudQuestion(Number(d.i)); break;
@@ -504,6 +506,35 @@
     return esc(v);
   }
 
+  /* ───────── 노란 체크 패널로 담기 (홈 dock · REBOOT.use('home').dockAdd) ─────────
+     그릴 때 dockable()로 자료를 등록 → 그 요소를 끌면 dragstart가 등록한 값을 넘김 (HTML 속성에 큰 JSON을 넣지 않음)
+     끌기 어려운 경우를 위해 dockBtn() [패널에 담기] 버튼도 같은 값을 씀 */
+  const DOCK = {};
+  const DOCK_MIME = 'application/x-reboot-insight';
+  const dockId = (kind, key) => `${kind}:${key}`;
+  function dockable(kind, key, p) {
+    const id = dockId(kind, key);
+    DOCK[id] = Object.assign({ kind, sourceKey: id, sourceTab: 'insights', text: '', data: {}, href: '', url: '' }, p);
+    return ` draggable="true" data-dock-id="${esc(id)}"`;
+  }
+  const dockBtn = (kind, key) => `<button type="button" class="ins-dock-btn" data-act="dock-add" data-id="${esc(dockId(kind, key))}"
+    title="노란 체크 패널 › 인사이트 자료에 담아요 (끌어다 놓아도 돼요)">${icon('plus')}패널에 담기</button>`;
+  function dockStart(e) {
+    const el = e.target.closest && e.target.closest('[data-dock-id]');
+    const p = el && DOCK[el.dataset.dockId];
+    if (!p) return;
+    e.dataTransfer.setData(DOCK_MIME, JSON.stringify(p));
+    e.dataTransfer.setData('text/plain', [p.title, p.text].filter(Boolean).join('\n'));
+    e.dataTransfer.effectAllowed = 'copy';
+  }
+  async function dockAdd(id) {
+    const p = DOCK[id];
+    let home = null;
+    try { home = REBOOT.use('home'); } catch (e) { home = null; }
+    if (!p || !home || typeof home.dockAdd !== 'function') { toast('노란 체크 패널을 쓸 수 없어요. 새로고침 후 다시 해 보세요.', 'error'); return; }
+    await home.dockAdd(p);
+  }
+
   // 액션의 근거 화면 (규칙 → 대시보드 안 주소)
   const ACTION_SRC = {
     own_oos_season: ['#market/brands', '시장 › 브랜드 비교'], price_cut: ['#market/changes', '시장 › 변화'], price_up: ['#market/changes', '시장 › 변화'],
@@ -563,7 +594,9 @@
     const comp = r.acts.some(a => /컴플라이언스/.test(a.todo));
     const seasons = r.rule === 'season_search' ? `<ul class="ins-aw-subs">${r.acts.map(a => `<li><span>${esc(a.facts['시즌'])} · D-${esc(a.facts['남은 날'])}</span>
       <b>'${esc(a.facts['키워드'])}' ${esc(a.metric || '')}</b></li>`).join('')}</ul>` : '';
-    return `<div class="ins-aw-row ${GRADE_CLASS[r.grade] || ''}${open ? ' open' : ''}">
+    const drag = dockable('action', r.rule, { title: r.title, text: [r.sub, r.metric ? `${r.metric} ${r.metricLabel}`.trim() : '', ...r.steps.map(t => '할 일: ' + t)].filter(Boolean).join('\n'),
+      href: src ? '/dashboard/insights' + src[0] : '/dashboard/insights#weekly', data: { grade: r.grade, rule: r.rule, metric: r.metric, metricLabel: r.metricLabel, steps: r.steps } });
+    return `<div class="ins-aw-row ${GRADE_CLASS[r.grade] || ''}${open ? ' open' : ''}"${drag}>
       <button type="button" class="ins-aw-btn" data-act="act-row" data-key="${esc(r.key)}" aria-expanded="${open}">
         <span class="ins-aw-dot" aria-hidden="true"></span>
         <span class="ins-aw-text"><span class="ins-aw-t">${esc(r.title)}</span><span class="ins-aw-s">${esc(r.sub)}</span></span>
@@ -572,7 +605,7 @@
         <p class="ins-aw-lbl">할 일</p><ol class="ins-aw-steps">${r.steps.map(t => `<li>${esc(t)}</li>`).join('')}</ol>
         ${comp ? '<p class="ins-aw-comp">ⓘ 광고 문구에 효능 표현이나 경쟁 브랜드 이름을 넣을 때는 컴플라이언스 탭에서 문구 심의를 거쳐요.</p>' : ''}
         <div class="ins-aw-foot">${src ? `<a class="link small" href="${src[0]}">${esc(src[1])}에서 근거 보기 ${icon('arrow')}</a>` : '<span></span>'}
-          ${go ? `<a class="btn small" href="${go[0]}">${esc(go[1])}</a>` : ''}</div></div>` : ''}
+          <span class="flex">${dockBtn('action', r.rule)}${go ? `<a class="btn small" href="${go[0]}">${esc(go[1])}</a>` : ''}</span></div></div>` : ''}
     </div>`;
   }
 
@@ -932,14 +965,18 @@
     const field = (k, label, val, ph) => `<label class="ins-brief-f"><span class="field-label">${label}</span>
       <input class="input" data-bf="${k}" value="${esc(val)}" placeholder="${esc(ph)}" maxlength="${k === 'avoid' ? 250 : 200}"></label>`;
     const open = t.carried ? S.open['brief-' + t.id] : S.open['brief-' + t.id] !== false;
+    const drag = dockable('brief', `${S.brief ? S.brief.month : ''}:${t.id}`, { title: `콘텐츠 브리프 · ${t.theme}`,
+      text: [t.angle && '콘텐츠 각도: ' + t.angle, t.say && '말할 방향: ' + t.say, (t.avoid || []).length && '피할 말: ' + t.avoid.join(', '), '근거: ' + t.evidence].filter(Boolean).join('\n'),
+      href: '/dashboard/insights#monthly', data: { theme: t.theme, angle: t.angle, say: t.say, avoid: t.avoid || [], evidence: t.evidence, confidence: t.confidence } });
     return `<details class="ins-brief-t" data-brief-id="${esc(t.id)}" data-fold="brief-${esc(t.id)}"${open ? ' open' : ''}>
-      <summary><input type="checkbox" data-bf="use"${t.use ? ' checked' : ''} aria-label="${esc(t.theme)} 공개">
+      <summary${drag}><input type="checkbox" data-bf="use"${t.use ? ' checked' : ''} aria-label="${esc(t.theme)} 공개">
         <b>${esc(t.theme)}</b> ${badge('신뢰도 ' + t.confidence, t.confidence === '높음' ? 'green' : '')} ${v ? badge(v[0], v[1]) : ''} ${by}
         <span class="small muted ins-brief-ev">${esc(t.evidence)}</span></summary>
       ${hits.length ? `<div class="note error">문구 심의에 걸린 말: ${esc(hits.join(', '))}</div>` : ''}${t.check.note ? `<div class="note warn">${esc(t.check.note)}</div>` : ''}
       ${field('angle', '콘텐츠 각도', t.angle, '예: 언제 · 어떻게 먹는지 한눈에 보여 주기')}
       ${field('say', '말할 방향', t.say, '예: 모임 전후 루틴, 가방 속 하나')}
       ${field('avoid', '피할 말 (쉼표로 구분 · 최대 3개)', (t.avoid || []).join(', '), '예: 맛있다고 단정')}
+      <div class="mt-8">${dockBtn('brief', `${S.brief ? S.brief.month : ''}:${t.id}`)}</div>
     </details>`;
   }
 
@@ -1096,7 +1133,10 @@
     const at = v => (vals[n - 1] > vals[0] ? (v - vals[0]) / (vals[n - 1] - vals[0]) * 100 : 50).toFixed(1);
     const gauge = own ? `<div class="ins-gauge" title="왼쪽 끝 최저 ${esc(money(vals[0]))} · 오른쪽 끝 최고 ${esc(money(vals[n - 1]))} · 세로 눈금 보통 가격">
       <u style="left:${at(median)}%"></u><i style="left:${at(own.perServing)}%"></i></div>` : '';
-    return `<div class="ins-stats three">
+    const drag = dockable('price', 'summary-' + REBOOT.today(), { title: `1회분 단가 요약 (${REBOOT.today()})`,
+      text: `최저 ${money(low.perServing)} (${low.brand}) · 보통 ${money(median)} (${n}개 기준) · 알디콤 ${own ? money(own.perServing) : '—'} (${ownSub})`,
+      href: '/dashboard/insights#market/price', data: { min: low.perServing, minBrand: low.brand, median, products: n, own: own ? own.perServing : null } });
+    return `<div class="ins-stats three"${drag}>
       <div class="ins-stat"><span>최저 1회분</span><b>${esc(money(low.perServing))}</b><small>${esc(low.brand)}</small></div>
       <div class="ins-stat"><span>보통 가격 ${infoTip(TIP.median)}</span><b>${esc(money(median))}</b><small>${n}개 기준</small></div>
       <div class="ins-stat${own ? ' own-soft' : ' red'}"><span>알디콤 1회분</span><b>${own ? esc(money(own.perServing)) : '—'}</b><small>${esc(ownSub)}</small>${own ? gauge : ''}</div>
@@ -2030,7 +2070,7 @@
 
   function priceView(sh) {
     const priced = sh.items.filter(knownPs);
-    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에<span class="head-cap">점 1개 = 제품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
+    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에<span class="head-cap">점 1개 = 제품 1개</span></h2>${dockBtn('price', 'summary-' + REBOOT.today())}</div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     const promoCard = `<section class="card mt-24 ins-promo"><div class="card-head"><h2>시즌별 프로모션 제안</h2>${badge('AI 제안', 'purple')}</div>
       <div data-ref="promo">${skel}</div></section>`;
     return pantryHtml(sh) + overview + promoCard;
@@ -2057,11 +2097,13 @@
       return;
     }
     const pr = sm.prices || {};
-    const rows = sm.items.map(x => `<li class="ins-promo-row">
+    const rows = sm.items.map(x => `<li class="ins-promo-row"${dockable('promo', `${x.season}:${x.start}`, { title: `${x.season} 프로모션 제안`,
+        text: [x.idea, '가격: ' + x.price, '채널: ' + x.channel].join('\n'), href: '/dashboard/insights#market/price', data: x })}>
         <div class="ins-promo-when"><b>${esc(x.season)}</b><span class="small muted">${esc(x.start)}</span>${x.dday > 0 ? badge('D-' + x.dday, x.dday <= 30 ? 'orange' : '') : badge('진행 중', 'lime')}</div>
         <div class="ins-promo-body"><p>${esc(x.idea)}</p>
           <p class="small"><span class="field-label">가격</span>${esc(x.price)}</p>
-          <p class="small"><span class="field-label">채널</span>${esc(x.channel)}</p></div></li>`).join('');
+          <p class="small"><span class="field-label">채널</span>${esc(x.channel)}</p>
+          <div>${dockBtn('promo', `${x.season}:${x.start}`)}</div></div></li>`).join('');
     el.innerHTML = `<ul class="ins-promo-list">${rows}</ul>
       <p class="panel-note mt-8">기준: 1회분 단가 최저 ${esc(money(pr.min))} · 보통 ${esc(money(pr.median))} · 최고 ${esc(money(pr.max))}${pr.own ? ` · 알디콤 ${esc(money(pr.own.perServing))}` : ''} (제품 ${esc(pr.products)}개)
         · ${esc(fmt.date(sm.createdAt))} ${esc(sm.createdBy || '')}</p>
@@ -2179,7 +2221,11 @@
     const chg = c0 ? `${badge(`${(CHG_GROUPS.find(g => g[0] === (c0.group || 'watch')) || [])[1]} · ${c0.label}${c0.kind === 'price' && c0.pct != null ? ' ' + fmt.signed(c0.pct, 1, '%') : ''}`,
       { threat: 'red', chance: 'green', watch: '' }[c0.group || 'watch'])}${r.ch.length > 1 ? ` <span class="muted small">외 ${r.ch.length - 1}</span>` : ''}` : '<span class="muted">—</span>';
     const cheap = r.cheapest ? `${esc(r.cheapest.sourceLabel)} ${esc(money(r.cheapest.price))}` : '<span class="muted">이번 진열대에 없음</span>';
-    return `<tr class="ins-br${r.own ? ' ins-own-row' : ''}${open ? ' open' : ''}" data-brand-row="${esc(r.brand)}">
+    const drag = dockable('brand', r.brand, { title: `브랜드 · ${r.brand}`,
+      text: [r.forms.length ? '제형: ' + r.forms.map(g => FORM_KO[g.f] || '기타').join(' · ') : '', b ? '1회분 ' + money(b.perServing) : '',
+        r.cheapest ? `최저가 ${r.cheapest.sourceLabel} ${money(r.cheapest.price)}` : '', c0 ? '최근 변화: ' + c0.label : ''].filter(Boolean).join(' · '),
+      href: '/dashboard/insights#market/brands', data: { brand: r.brand, own: !!r.own, perServing: b ? b.perServing : r.ps } });
+    return `<tr class="ins-br${r.own ? ' ins-own-row' : ''}${open ? ' open' : ''}" data-brand-row="${esc(r.brand)}"${drag}>
       <td><div class="ins-br-name">${tog}${name}${flags}</div>${add}</td>
       <td class="ins-fms">${forms}</td><td>${cheap}</td><td class="num">${ps}</td><td>${chg}</td><td>${r.stock.text}</td><td class="num">${esc(r.pop)}</td><td>${esc(r.tier)}</td></tr>${open ? brandItems(r) : ''}`;
   }
@@ -2311,11 +2357,16 @@
   }
   function chgCard(x) {
     const sub = x.kind === 'price' || x.kind === 'message' ? '' : `<small class="ins-chg-title" title="${esc(x.title)}">${esc(x.title)}</small>`;
-    return `<article class="ins-chg-card ${esc(x.group)}">
+    const key = [x.brand, x.label, x.title, x.source].join('|');
+    const drag = dockable('change', key, { title: `${x.brand || '브랜드 모름'} · ${x.label}`,
+      text: [x.title, x.kind === 'price' ? `${money(x.prevPrice)} → ${money(x.price)}` : '', x.impact ? '→ ' + x.impact : ''].filter(Boolean).join('\n'),
+      href: '/dashboard/insights#market/changes', url: safeUrl(x.link), data: { brand: x.brand, label: x.label, source: x.source, kind: x.kind, price: x.price, prevPrice: x.prevPrice } });
+    return `<article class="ins-chg-card ${esc(x.group)}"${drag}>
       <div class="between"><span class="ins-chg-kind">${esc(x.label)}${CHG_TODO[x.label] ? `<span class="ins-chg-do">${esc(CHG_TODO[x.label])}</span>` : ''}</span>${extLink(x.link, '판매 페이지 보기')}</div>
       <div class="ins-chg-brand"><b>${esc(x.brand || '브랜드 모름')}</b><span class="muted"> · ${esc(x.source)}</span></div>
       <div class="ins-chg-main${x.kind === 'message' ? ' msg' : ''}">${chgMain(x)}</div>${sub}
       ${x.impact ? `<p class="ins-chg-impact">→ ${esc(x.impact)}</p>` : ''}
+      <div class="mt-8">${dockBtn('change', key)}</div>
     </article>`;
   }
   // demo: 지난주 수집이 없어 서버가 만든 예시 지난주와 비교한 결과 (competitors.demo_prev)
@@ -2602,7 +2653,10 @@
   function rvRow(r, own) {
     const pre = r.summaryKo || (r.title ? r.title + ' — ' : '') + r.text;
     const st = (S.data.reviews.csStatus.find(([k]) => k === r.cs) || [])[1];
-    return `<tr class="${r.cs === 'todo' ? 'ins-rv-todo-row' : ''}" data-act="rv-open" data-id="${esc(r.id)}" tabindex="0">
+    const drag = dockable('review', r.id, { title: `리뷰 · ${r.brand || r.sourceLabel || r.source} ${r.rating != null ? '★' + r.rating : ''}`.trim(),
+      text: clip(pre, 600), href: '/dashboard/insights#customers/reviews',
+      data: { date: r.date, source: r.sourceLabel || r.source, brand: r.brand, rating: r.rating, sentiment: r.sentiment, topics: r.topics } });
+    return `<tr class="${r.cs === 'todo' ? 'ins-rv-todo-row' : ''}" data-act="rv-open" data-id="${esc(r.id)}" tabindex="0"${drag}>
       <td class="nowrap small">${esc(r.date || '—')}</td><td class="nowrap">${esc(r.sourceLabel || r.source)}</td>
       ${own ? `<td class="nowrap"><span class="ins-tag">${esc(hashTag(r.line))}</span></td>` : `<td><div class="ins-1l"><strong${r.own ? ' class="ins-own-name"' : ''}>${esc(r.brand || '—')}</strong></div></td>`}
       <td class="nowrap">${stars(r.rating)}</td><td class="nowrap">${sentBadge(r.sentiment)}</td>

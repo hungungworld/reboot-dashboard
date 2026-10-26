@@ -6,6 +6,11 @@
   GET    /api/home/news/saved        보관한 기사 (최신 보관 순) — 브리핑 보관함 창이 씀
   POST   /api/home/news/saved        {url, title, titleKo, summaryKo, whyKo, kind(flow · trend · season), areaLabel, domain, date} 보관 (같은 URL이면 덮어씀)
   DELETE /api/home/news/saved/<id>   보관 해제
+  GET    /api/home/dock/items        노란 체크 패널 '인사이트 자료' (최신 순) — ?kind= 로 거르기
+  POST   /api/home/dock/items        {kind, sourceKey, title, text, data, href, url} 담기 (같은 kind · sourceKey면 덮어씀)
+  PATCH  /api/home/dock/items/<id>   {memo}
+  DELETE /api/home/dock/items/<id>
+  GET    /api/home/dock/items.md · .csv · .json   파일로 받기
   GET    /api/home/todos             이번 주 To-Do (?week=YYYY-MM-DD 그 주 월요일)
   POST   /api/home/todos/generate    {auto, context} → AI(키 있을 때) 또는 규칙으로 생성
   POST   /api/home/todos             {title, reason} 직접 추가
@@ -13,10 +18,13 @@
   DELETE /api/home/todos/<id>
 하루 1회 작업: 뉴스 수집 → 이번 주 To-Do가 없으면 자동 생성 (POST /api/jobs/daily)
 """
+import csv
+import io
+import json
 import re
 from datetime import date, datetime, timezone
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 from flask_login import current_user
 
 from server import jobs
@@ -24,7 +32,7 @@ from server.extensions import db
 from server.models import utcnow
 from server.security import ApiError, clip, json_body
 from . import news, todos
-from .models import HomeNewsSaved, HomeTodo
+from .models import HomeDockItem, HomeNewsSaved, HomeTodo
 
 bp = Blueprint("home", __name__, url_prefix="/api/home")
 
@@ -107,6 +115,114 @@ def saved_delete(sid):
     db.session.delete(s)
     db.session.commit()
     return jsonify(ok=True)
+
+
+# ───────── 노란 체크 패널 · 인사이트 자료 ─────────
+
+DOCK_KINDS = {"action": "이번 주 액션", "brief": "콘텐츠 브리프", "price": "1회분 단가", "promo": "시즌 프로모션",
+              "brand": "브랜드", "change": "경쟁사 변화", "review": "리뷰", "other": "기타"}
+DOCK_MAX_DATA = 20000   # 원본 필드 JSON 최대 글자 수
+
+
+def _dock(did):
+    d = db.session.get(HomeDockItem, did)
+    if d is None:
+        raise ApiError("없는 인사이트 자료예요.", 404)
+    return d
+
+
+def _dock_rows():
+    kind = request.args.get("kind")
+    q = HomeDockItem.query
+    if kind:
+        q = q.filter_by(kind=kind)
+    return q.order_by(HomeDockItem.saved_at.desc(), HomeDockItem.id.desc()).all()
+
+
+@bp.get("/dock/items")
+def dock_list():
+    return jsonify(items=[d.to_dict() for d in _dock_rows()], kinds=DOCK_KINDS)
+
+
+@bp.post("/dock/items")
+def dock_add():
+    data = json_body(max_bytes=64 * 1024)
+    kind = data.get("kind") if data.get("kind") in DOCK_KINDS else "other"
+    key = clip(data.get("sourceKey"), 200).strip()
+    title = clip(data.get("title"), 300).strip()
+    if not key or not title:
+        raise ApiError("담을 자료의 제목과 구분 키가 필요해요.")
+    raw = data.get("data") if isinstance(data.get("data"), dict) else {}
+    body = json.dumps(raw, ensure_ascii=False, default=str)
+    if len(body) > DOCK_MAX_DATA:
+        body = "{}"
+    href = clip(data.get("href"), 300).strip()
+    url = clip(data.get("url"), 1000).strip()
+    d = HomeDockItem.query.filter_by(kind=kind, source_key=key).first()
+    created = d is None
+    if created:
+        d = HomeDockItem(kind=kind, source_key=key)
+        db.session.add(d)
+    d.source_tab = clip(data.get("sourceTab") or "insights", 40)
+    d.title, d.text, d.data = title, clip(data.get("text"), 4000).strip(), body
+    d.href = href if href.startswith("/dashboard") else ""
+    d.url = url if re.match(r"^https?://", url, re.I) else ""
+    d.saved_by, d.saved_at = _who(), utcnow()
+    db.session.commit()
+    return jsonify(d.to_dict()), 201 if created else 200
+
+
+@bp.patch("/dock/items/<int:did>")
+def dock_edit(did):
+    d = _dock(did)
+    d.memo = clip(json_body().get("memo"), 500).strip()
+    db.session.commit()
+    return jsonify(d.to_dict())
+
+
+@bp.delete("/dock/items/<int:did>")
+def dock_delete(did):
+    db.session.delete(_dock(did))
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+def _attach(body, ext, mime):
+    name = f"reboot-insight-notes-{date.today().isoformat()}.{ext}"
+    return Response(body, content_type=f"{mime}; charset=utf-8", headers={"Content-Disposition": f"attachment; filename={name}"})
+
+
+@bp.get("/dock/items.json")
+def dock_json():
+    return _attach(json.dumps([d.to_dict() for d in _dock_rows()], ensure_ascii=False, indent=2), "json", "application/json")
+
+
+@bp.get("/dock/items.csv")
+def dock_csv():
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["종류", "제목", "요약", "메모", "근거 화면", "링크", "저장한 사람", "저장한 때"])
+    for d in _dock_rows():
+        w.writerow([DOCK_KINDS.get(d.kind, d.kind), d.title, d.text, d.memo, d.href, d.url, d.saved_by, d.to_dict()["savedAt"]])
+    return _attach("\ufeff" + buf.getvalue(), "csv", "text/csv")
+
+
+@bp.get("/dock/items.md")
+def dock_md():
+    rows = _dock_rows()
+    out = [f"# REBOOT 인사이트 자료 ({len(rows)}건)", "", f"내려받은 날: {date.today().isoformat()}", ""]
+    for d in rows:
+        out += [f"## [{DOCK_KINDS.get(d.kind, d.kind)}] {d.title}", ""]
+        if d.text:
+            out += [d.text, ""]
+        if d.memo:
+            out += [f"- 메모: {d.memo}"]
+        if d.href:
+            out += [f"- 근거 화면: {d.href}"]
+        if d.url:
+            out += [f"- 링크: {d.url}"]
+        out += [f"- 저장: {d.saved_by} · {d.to_dict()['savedAt']}", ""]
+    return _attach("\n".join(out), "md", "text/markdown")
 
 
 @jobs.daily("home-news", "홈 데일리 브리핑: 미국 주류 업계 뉴스 수집(구글 뉴스) · AI 요약 → 이번 주 To-Do 자동 생성")
