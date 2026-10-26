@@ -2257,7 +2257,7 @@
     const list = b.themes;
     modal({
       title: `고객 브리프 (인사이트 탭 · ${esc(b.month)})`,
-      body: `<p>리뷰 · 유튜브 질문을 주제로 묶어 사람이 승인한 요약이에요. 참고용이고, 만든 문구는 컴플라이언스 검토를 거쳐요. 고르면 입력창에 넣어 드려요 (자동 전송 안 함).</p>
+      body: `<p>리뷰 · 유튜브 질문을 주제로 묶어 사람이 승인한 요약이에요. 참고용이고, 만든 문구는 컴플라이언스 검토를 거쳐요. 고르면 ${cnActive() ? "'카드뉴스에 넣을 내용' 칸 뒤에 덧붙여요 (자동 생성 안 함)" : '입력창에 넣어 드려요 (자동 전송 안 함)'}.</p>
         <div class="cnt-persona-list">${list.map((t, i) => `<button type="button" class="choice" data-brief="${i}"><span><b>${esc(t.theme)}</b> ${badge(`신뢰도 ${t.confidence}`, t.confidence === '높음' ? 'green' : 'blue')}
           <br><small>각도: ${esc(t.angle)}</small><br><small>말할 방향: ${esc(t.say)}</small>
           ${t.avoid && t.avoid.length ? `<br><small class="muted">피할 말: ${esc(t.avoid.join(' · '))}</small>` : ''}
@@ -2273,7 +2273,7 @@
           const close = el.closest('.modal-backdrop') && el.closest('.modal-backdrop').querySelector('[data-modal-close]');
           if (t && cnActive()) {  // 카드뉴스 편집기: 1단계 '넣을 내용' 칸 뒤에 덧붙임 (파일 업로드와 같은 방식)
             const n = S.cn;
-            const add = `## 고객 브리프: ${t.theme}\n각도: ${t.angle}\n말할 방향: ${t.say}${avoid.length ? `\n피할 말: ${avoid.join(', ')}` : ''}`;
+            const add = `[제작 방향 · 인사이트 고객 브리프 '${t.theme}' — 카드 문구로 그대로 쓰지 말고 방향으로만 참고]\n각도: ${t.angle}\n말할 방향: ${t.say}${avoid.length ? `\n피할 말: ${avoid.join(', ')}` : ''}`;
             n.source = n.source.trim() ? `${n.source.trim()}\n\n${add}` : add;
             lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
             if (close) close.click();
