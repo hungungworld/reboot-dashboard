@@ -57,8 +57,8 @@
           'heart racing', 'passed out', 'seizure', 'anaphylaxis', 'the ER', 'urgent care', 'food poisoning', 'made me sick',
           'feel sick', 'feeling sick', 'sick after', 'numb', 'tingling', 'fever', 'bleeding'],
         keywordsKo: ['부작용', '두드러기', '가려', '구토', '어지러', '응급', '병원', '입원',
-          '알레르기', '알러지', '발진', '부었', '붓기', '부어', '토했', '토할', '설사', '복통', '배탈', '숨이', '호흡', '식중독', '이상 반응',
-          '숨쉬', '숨 쉬', '메스꺼', '울렁', '두통', '열이', '기절', '경련', '질식', '목에 걸', '체했', '저리'],   // 2026-10-24 보강: '알러지 올라오는데'가 C2로 분류된 사례
+          '알레르기 반응', '알러지 반응', '알레르기가 올라', '알레르기 올라', '알러지 올라', '알레르기가 생', '알러지가 생', '발진', '부었', '붓기', '부어', '토했', '토할', '설사', '복통', '배탈', '숨이', '호흡', '식중독', '이상 반응',
+          '숨쉬', '숨 쉬', '메스꺼', '울렁', '두통', '열이', '기절', '경련', '질식', '목에 걸', '체했', '저리'],   // 2026-10-24 보강: '알러지 올라오는데'가 C2로 분류된 사례 · 2026-10-26 '알레르기' 단독은 C6
         template: t([
           'Hi {name},',
           '',
@@ -78,9 +78,13 @@
       },
       {
         code: 'C2', name: '건강·복용·효능', mode: '🟠 담당자 필수', owner: 'CS 리드(건강)', dueHours: 24, tag: '효과', ownerRequired: true,
-        keywords: ['pregnant', 'pregnancy', 'breastfeeding', 'nursing', 'medication', 'safe to take', 'okay to have', 'how many',
-          'dosage', 'children', 'kids', 'does it work', 'effective', 'health condition'],
-        keywordsKo: ['임신', '수유', '복용', '효과'],
+        keywords: ['pregnant', 'pregnancy', 'breastfeeding', 'nursing', 'medication', 'safe to take', 'okay to have',
+          'how many can', 'how many should', 'how many per day', 'how many a day',
+          'dosage', 'children', 'kids', 'does it work', 'effective', 'health condition',
+          // 2026-10-26 최종 검토: 처음 보는 문의에서 '기타'로 떨어진 효능·숙취·음주 시점·나이 질문
+          'hangover', 'hangovers', 'hungover', 'cure', 'does it help', 'before drinking', 'after drinking', 'before or after', 'night out',
+          'year-old', 'years old', 'toddler', 'safe for'],
+        keywordsKo: ['임신', '수유', '복용', '효과', '숙취', '효능', '술 마시기', '음주 전', '음주 후', '아이가', '어린이'],
         template: t([
           'Hi {name},',
           '',
@@ -94,7 +98,7 @@
       },
       {
         code: 'C3', name: '환불·교환', mode: '🟠 담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '환불', ownerRequired: true,
-        keywords: ['refund', 'return', 'exchange', 'money back', 'cancel', 'cancellation'],
+        keywords: ['refund', 'return', 'exchange', 'money back', 'cancel', 'cancellation', 'charged twice', 'double charged', 'overcharged', 'chargeback'],
         keywordsKo: ['환불', '교환', '반품', '취소'],
         template: t([
           'Hi {name},',
@@ -108,8 +112,9 @@
       },
       {
         code: 'C4', name: '포장·품질 불량', mode: '🟠 담당자 필수', owner: '품질 담당', dueHours: 24, tag: '포장', ownerRequired: true,
-        keywords: ['damaged', 'leaking', 'leak', 'broken', 'expired', 'mold', 'moldy', 'defective', 'wrong item', 'missing item', 'melted', 'loose cap', 'cap was loose', 'spilled', 'cracked bottle'],
-        keywordsKo: ['파손', '불량', '유통기한', '곰팡이', '누락'],
+        keywords: ['damaged', 'leaking', 'leak', 'broken', 'expired', 'mold', 'moldy', 'defective', 'wrong item', 'missing item', 'melted', 'loose cap', 'cap was loose', 'spilled', 'cracked bottle',
+          'only got', 'only received', 'instead of', 'short shipped', 'missing'],   // 2026-10-26 수량 부족
+        keywordsKo: ['파손', '불량', '유통기한 지', '유통기한이 지', '기한 지난', '상했', '곰팡이', '누락', '개만 왔', '덜 왔'],
         template: t([
           'Hi {name},',
           '',
@@ -121,8 +126,8 @@
       {
         code: 'C5', name: '배송', mode: '🟢 자동 초안', owner: 'CS 담당', dueHours: 24, tag: '배송', ownerRequired: false,
         keywords: ['shipping', 'ship', 'shipped', 'delivery', 'deliver', 'delivered', 'tracking', 'where is my order',
-          "haven't received", 'not received', 'arrive', 'arrived'],
-        keywordsKo: ['배송', '택배', '도착'],
+          "haven't received", 'not received', 'arrive', 'arrived', 'late', 'delay', 'delayed', 'still waiting', 'order status'],   // 2026-10-26 지연
+        keywordsKo: ['배송', '택배', '도착', '안 와', '안 왔', '늦어'],
         template: t([
           'Hi {name},',
           '',
@@ -136,8 +141,9 @@
       },
       {
         code: 'C6', name: '제품 정보 (맛·성분·알레르기)', mode: '🟢 자동 초안', owner: 'CS 담당', dueHours: 24, tag: '맛', ownerRequired: false,
-        keywords: ['flavor', 'flavour', 'taste', 'ingredient', 'allergen', 'allergy', 'nuts', 'gluten', 'vegan', 'sugar', 'calories', 'caffeine'],
-        keywordsKo: ['맛', '성분', '알레르기'],
+        keywords: ['flavor', 'flavour', 'taste', 'ingredient', 'allergen', 'allergy', 'allergic', 'nuts', 'gluten', 'vegan', 'sugar', 'calories', 'calorie', 'caffeine',
+          'expiration', 'expiration date', 'shelf life', 'best by', 'made in', 'where is it made', 'halal', 'kosher', 'sweetener', 'soy', 'peanut'],   // 2026-10-26
+        keywordsKo: ['맛', '성분', '알레르기', '알러지', '칼로리', '열량', '유통기한', '원산지', '감미료'],
         template: t([
           'Hi {name},',
           '',
@@ -164,7 +170,8 @@
       },
       {
         code: 'C8', name: '리뷰·평점 (불만)', mode: '🟠 담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '불만', ownerRequired: true,
-        keywords: ['1-star', 'one star', 'terrible', 'worst', 'awful', 'disappointed', 'waste of money', 'scam', 'rip-off'],
+        keywords: ['1-star', 'one star', 'terrible', 'worst', 'awful', 'disappointed', 'waste of money', 'scam', 'rip-off',
+          'leave a review', 'leaving a review', 'write a review', 'for a review', 'for leaving', 'in exchange for a review'],   // 2026-10-26 리뷰 보상 요구
         keywordsKo: ['최악', '실망', '별점'],
         template: t([
           'Hi {name},',
@@ -177,7 +184,7 @@
       {
         code: 'C9', name: 'B2B·대량 구매', mode: '🔵 영업 전달', owner: '해외영업 {확인 필요}', dueHours: 48, tag: '—', ownerRequired: false,
         keywords: ['wholesale', 'bulk', 'distributor', 'distribution', 'B2B', 'MOQ', 'retail partner', 'reseller', 'carry your'],
-        keywordsKo: ['도매', '대량', '유통', '입점'],
+        keywordsKo: ['도매', '대량', '유통사', '유통업체', '유통 계약', '유통 채널', '입점'],   // 2026-10-26 '유통' 단독은 '유통기한'과 겹침
         template: t([
           'Hi {name},',
           '',
