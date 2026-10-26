@@ -201,7 +201,8 @@
     upload: 'M12 16V4 m-5 5 5-5 5 5 M4 16v5h16v-5',
     link: 'M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1 M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1',
     user: 'M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10 M3 22a9 9 0 0 1 18 0',
-    x: 'M6 6l12 12 M18 6 6 18'
+    x: 'M6 6l12 12 M18 6 6 18',
+    translate: 'M4 6h9 M8.5 4v2c0 4-2 7-4.5 8.5 M6 9.5c1.3 2.2 3.3 3.8 5.5 4.5 M13 20l4-9 4 9 M14.5 17h5'
   };
 
   function esc(s) {
@@ -270,6 +271,21 @@
       return o.href
         ? `<a class="${cls}" href="${esc(o.href)}" download${attrs}>${inner}</a>`
         : `<button type="button" class="${cls}"${attrs}${o.disabled ? ' disabled' : ''}>${inner}</button>`;
+    },
+    /** AI 번역 버튼 (모든 탭 같은 모양: 네모 아이콘 버튼 하나, 글자는 툴팁으로)
+        o = { act(기본 'translate' · false면 없음), title(기본 '한국어로 보기'), on(번역이 펼쳐진 채 그림), attrs, cls, disabled } · 번역을 펼치면 ui.trOn(btn, true) → 툴팁 '번역 닫기' */
+    trBtn(o) {
+      o = o || {};
+      const t = o.title || '한국어로 보기', now = o.on ? '번역 닫기' : t;
+      return `<button type="button" class="tr-btn${o.cls ? ' ' + o.cls : ''}"${o.act === false ? '' : ` data-act="${esc(o.act || 'translate')}"`} data-tr-title="${esc(t)}" aria-pressed="${!!o.on}" aria-label="${esc(now)}" title="${esc(now)}"` +
+        `${o.attrs ? ' ' + o.attrs : ''}${o.disabled ? ' disabled' : ''}>${icon('translate')}</button>`;
+    },
+    trOn(btn, on) {
+      if (!btn) return;
+      const t = on ? '번역 닫기' : btn.dataset.trTitle || '한국어로 보기';
+      btn.setAttribute('aria-pressed', String(!!on));
+      btn.setAttribute('aria-label', t);
+      btn.title = t;
     },
     /** 파일 버튼 줄: 카드 머리 오른쪽 · 순서는 업로드 → 다운로드 → 보고서 만들기 */
     fileActions: (html) => `<div class="file-actions">${html}</div>`,

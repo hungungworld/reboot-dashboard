@@ -165,6 +165,14 @@ p { margin: 0; line-height: 1.65; }
 .top-actions .icon-btn .icon { width: 16px; height: 16px; }
 .top-actions .icon-btn:hover { background: var(--nav-hover); }
 .top-actions .icon-btn.is-on { background: var(--lime-soft); border-color: var(--lime-soft-line); }
+/* AI 번역 버튼 (ui.trBtn): 모든 탭 같은 네모 아이콘 버튼 · 누르면(번역 펼침) 연두 */
+.tr-btn { display: inline-grid; place-items: center; flex: none; width: 30px; height: 30px; padding: 0; border: 1px solid var(--line-2); border-radius: 8px;
+  background: var(--surface); color: var(--muted); cursor: pointer; font: inherit; vertical-align: middle; }
+.tr-btn .icon { width: 15px; height: 15px; }
+.tr-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--muted-2); }
+.tr-btn[aria-pressed="true"] { background: var(--lime-soft); border-color: var(--lime-soft-line); color: var(--ink); }
+.tr-btn:disabled { opacity: .4; cursor: not-allowed; }
+.tr-btn.is-busy { opacity: .6; cursor: progress; }
 .icon-btn .dot { position: absolute; right: 6px; top: 5px; width: 6px; height: 6px; background: var(--lime-dot); border: 1px solid var(--surface); border-radius: 50%; }
 .profile-wrap { position: relative; }
 .profile { display: flex; align-items: center; gap: 10px; text-align: left; padding: 0; border-radius: 50%; }

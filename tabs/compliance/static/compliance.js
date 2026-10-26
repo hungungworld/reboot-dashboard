@@ -443,7 +443,7 @@
   // 번역 블록: 버튼을 누르면 data-tr-text의 영어 원문을 번역해 바로 아래에 보여 줌 (render의 위임 처리)
   function trBlock(text, label) {
     return `<div class="cmp-trblock" data-tr-text="${esc(text)}">
-  <button type="button" class="cmp-btn cmp-btn-sm cmp-btn-tr" data-act="translate" data-toggle="1" aria-pressed="false">${icon('translate')}<span>${esc(label || '한글로 번역')}</span></button>
+  ${REBOOT.ui.trBtn({ title: label })}
   <div data-tr-out aria-live="polite"></div></div>`;
   }
 
@@ -640,11 +640,9 @@
       if (tr && !tr.disabled) {
         const block = tr.closest('[data-tr-text]');
         const out = block.querySelector('[data-tr-out]');
-        if (tr.dataset.toggle) {   // 점검 기록의 번역 아이콘은 다시 누르면 접힘
-          const open = tr.getAttribute('aria-pressed') === 'true';
-          tr.setAttribute('aria-pressed', String(!open));
-          if (open) { out.innerHTML = ''; return; }
-        }
+        const open = tr.getAttribute('aria-pressed') === 'true';   // 번역 버튼은 다시 누르면 접힘
+        REBOOT.ui.trOn(tr, !open);
+        if (open) { out.innerHTML = ''; return; }
         const row = tr.closest('.cmp-hrow');   // 점검 기록 표: 번역은 펼친 칸 안에 나오니 줄을 펼침
         if (row) setHistOpen(row, true);
         runTranslate(block);
@@ -1870,7 +1868,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
   <span class="cmp-hrow-hits">${hitN ? `${hitN}개 · ${r.codes.map(esc).join(' ')}` : '없음'}</span>
   <span class="cmp-hrow-time" title="${esc(fmt(ts))}${item.rulesVersion ? ` · 규칙 ${esc(item.rulesVersion)}` : ''}${item.by ? ` · 점검 ${esc(item.by)}` : ''}${item.batch ? ' · 일괄 심의' : ''}">${histTime(ts)}${item.by || item.batch ? `<small class="cmp-muted"> · ${[item.batch ? '일괄' : '', esc(item.by || '')].filter(Boolean).join(' · ')}</small>` : ''}</span>
   <span class="cmp-hrow-acts">
-    ${ko ? '' : `<button type="button" class="cmp-icon-btn" data-act="translate" data-toggle="1" aria-pressed="false" aria-label="한글로 보기" title="한글로 보기">${icon('translate')}</button>`}
+    ${ko ? '' : REBOOT.ui.trBtn()}
     <button type="button" class="cmp-icon-btn" data-act="hist-copy" aria-label="문구 복사" title="${block ? '사용 불가 문구는 복사할 수 없어요' : '문구 복사'}"${block ? ' disabled' : ''}>${icon('copy')}</button>
     <button type="button" class="cmp-icon-btn" data-act="hist-recheck" aria-label="문구 점검에서 다시 보기" title="문구 점검에서 다시 보기">${icon('redo')}</button>
   </span>
@@ -2655,7 +2653,7 @@ ${cands.length ? `
   <tbody>${results.map((x, i) => `<tr><td class="cmp-nowrap">${esc(x.date)}</td><td>${esc(x.agencies.join(', '))}</td><td>${esc(x.type)}</td>
     <td>${link(x.url, x.title)}<span data-ko-id="fr-${i}" data-ko-field="title"></span>
       ${x.abstract ? `<br><span class="cmp-muted">${esc(x.abstract.slice(0, 220))}${x.abstract.length > 220 ? '…' : ''}</span><span data-ko-id="fr-${i}" data-ko-field="summary"></span>` : ''}
-      ${trBlock(x.abstract ? `${x.title}\n${x.abstract}` : x.title, '제목·요약 번역')}</td></tr>`).join('')}</tbody>
+      ${trBlock(x.abstract ? `${x.title}\n${x.abstract}` : x.title, '제목·요약 한국어로 보기')}</td></tr>`).join('')}</tbody>
 </table></div>` : '');
         fillKo(out, results.map((x, i) => ({ id: `fr-${i}`, source: 'Federal Register', title: x.title, summary: x.abstract || '' })));
       } catch (e) { fail(out, e); }
