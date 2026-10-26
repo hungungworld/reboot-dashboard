@@ -907,10 +907,12 @@
   }
 
   /* ───────── 이번 주 To-Do 버튼 (모든 화면 오른쪽 아래) ─────────
-     버튼 → 오른쪽 사이드 패널: 할 일 확인 · 체크만 (추가 · 삭제 · 다시 만들기는 데일리 브리핑에서)
-     홈 화면이 열려 있으면 브리핑의 To-Do 카드와 같은 목록을 함께 고침 */
+     버튼 → 오른쪽 사이드 패널: 두 묶음을 각각 접고 펼침 (펼침 상태는 dockOpen에 기억)
+     - 이번 주 할 일: 확인 · 체크 · 직접 추가 (삭제 · 다시 만들기는 데일리 브리핑에서)
+     - 저장한 뉴스: 기사 주소 · 제목으로 저장 · 보관 해제 (홈 브리핑 '보관함'과 같은 목록 /api/home/news/saved)
+     홈 화면이 열려 있으면 브리핑의 To-Do 카드 · 보관 표시를 함께 고침 */
   const dock = (() => {
-    const D = { el: null, todos: null, signals: null, open: false, loading: false };
+    const D = { el: null, todos: null, signals: null, saved: null, open: false, loading: false };
     const q = name => D.el && D.el.querySelector(`[data-dock="${name}"]`);
 
     function itemHtml(t) {
@@ -923,6 +925,13 @@
       return `<a class="home-dock-item home-dock-signal ${x.grade === '긴급' ? 'urgent' : 'chance'}" href="${esc(x.href)}">
         <span class="home-grade">${esc(x.grade)}</span><span class="grow"><span class="home-dock-title">${esc(x.title)}</span><span class="home-dock-reason">${esc(x.src)}에서 근거 보기</span></span></a>`;
     }
+    function newsHtml(x) {
+      const title = x.titleKo || x.title;
+      return `<div class="home-dock-item home-dock-news" data-sid="${esc(x.id)}">
+        <span class="grow">${isUrl(x.url) ? `<a class="home-dock-title" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(title)}</a>` : `<span class="home-dock-title">${esc(title)}</span>`}
+          <span class="home-dock-reason">${esc([x.domain, x.savedBy, x.savedAt ? fmt.date(x.savedAt) : ''].filter(Boolean).join(' · '))}</span></span>
+        <button type="button" class="home-dock-close" data-dock-unsave aria-label="보관 해제: ${esc(title)}">${icon('x')}</button></div>`;
+    }
     function paint() {
       if (!D.el) return;
       const t = D.todos;
@@ -934,18 +943,26 @@
       q('left').textContent = open ? `${open}개 남음` : '';
       q('meta').textContent = t ? `${md(t.week.start)} — ${md(t.week.end)}` : '';
       const list = q('list');
-      if (!t) { list.innerHTML = D.loading ? '<div class="skeleton" style="height:120px"></div>' : ''; return; }
-      list.innerHTML = !t.generated
-        ? ui.empty('이번 주 할 일이 아직 없어요. 데일리 브리핑을 열면 자동으로 만들어져요.', 'check')
-        : t.items.length || sig.length ? sig.map(signalHtml).join('') + t.items.map(itemHtml).join('') : ui.empty('이번 주 할 일이 없어요.', 'check');
+      if (!t) list.innerHTML = D.loading ? '<div class="skeleton" style="height:120px"></div>' : '';
+      else {
+        list.innerHTML = !t.generated && !t.items.length
+          ? ui.empty('이번 주 할 일이 아직 없어요. 아래에서 직접 추가하거나 데일리 브리핑을 열면 자동으로 만들어져요.', 'check')
+          : t.items.length || sig.length ? sig.map(signalHtml).join('') + t.items.map(itemHtml).join('') : ui.empty('이번 주 할 일이 없어요.', 'check');
+      }
+      const sv = D.saved;
+      q('news-n').textContent = sv ? `${sv.length}건` : '';
+      q('news').innerHTML = !sv ? (D.loading ? '<div class="skeleton" style="height:60px"></div>' : '')
+        : sv.length ? sv.map(newsHtml).join('') : '<p class="small muted">저장한 뉴스가 없어요. 기사 주소와 제목을 넣어 저장하세요.</p>';
     }
     async function load() {
       D.loading = true;
       paint();
       try {
-        const [t, sig] = await Promise.all([REBOOT.api('/api/home/todos'), safe(() => REBOOT.use('insights').weeklySignals())]);
+        const [t, sig, sv] = await Promise.all([REBOOT.api('/api/home/todos'), safe(() => REBOOT.use('insights').weeklySignals()),
+          safe(() => REBOOT.api('/api/home/news/saved'))]);
         D.todos = t;
         D.signals = sig;
+        D.saved = sv ? sv.items || [] : [];
       }
       catch (e) { const list = q('list'); if (list) list.innerHTML = `<p class="note error">할 일을 불러오지 못했어요. ${esc(e.message)}</p>`; return; }
       finally { D.loading = false; }
@@ -970,8 +987,60 @@
         if (S.root && S.todos) paintTodos(); else paint();
       } catch (e) { box.checked = !done; toast(`완료 표시를 바꾸지 못했어요: ${e.message}`, 'error'); }
     }
+    async function addTodo(form) {
+      const title = form.elements.title.value.trim();
+      if (!title) { toast('할 일을 입력하세요.', 'error'); form.elements.title.focus(); return; }
+      const btn = form.querySelector('button[type="submit"]');
+      busy(btn, true);
+      try {
+        const t = await REBOOT.api('/api/home/todos', { title, reason: form.elements.reason.value.trim() });
+        // 홈 화면이 열려 있으면 같은 목록(S.todos)에도 — 완료한 항목 앞에 넣음
+        [D.todos, S.todos].filter((x, i, a) => x && a.indexOf(x) === i).forEach(w => {
+          const at = w.items.findIndex(i => i.done);
+          w.items.splice(at < 0 ? w.items.length : at, 0, Object.assign({}, t));
+        });
+        form.reset();
+        toast('할 일을 추가했어요.');
+        if (S.root && S.todos) paintTodos(); else paint();
+      } catch (e) { toast(`할 일을 추가하지 못했어요: ${e.message}`, 'error'); }
+      busy(btn, false);
+    }
+    // 홈 브리핑의 보관 표시도 같이 (홈이 열려 있을 때만)
+    function syncHome() {
+      if (S.root && S.saved) { S.saved = D.saved.slice(); paintNews(); }
+    }
+    async function saveNews(form) {
+      const url = form.elements.url.value.trim(), title = form.elements.title.value.trim();
+      if (!isUrl(url)) { toast('기사 주소(http/https)를 넣으세요.', 'error'); form.elements.url.focus(); return; }
+      if (!title) { toast('기사 제목을 넣으세요.', 'error'); form.elements.title.focus(); return; }
+      let domain = '';
+      try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { domain = ''; }
+      const btn = form.querySelector('button[type="submit"]');
+      busy(btn, true);
+      try {
+        const s = await REBOOT.api('/api/home/news/saved', { url, title, domain });
+        D.saved = [s].concat((D.saved || []).filter(x => x.url !== s.url));
+        form.reset();
+        toast('뉴스를 저장했어요.');
+        paint();
+        syncHome();
+      } catch (e) { toast(`뉴스를 저장하지 못했어요: ${e.message}`, 'error'); }
+      busy(btn, false);
+    }
+    async function unsave(btn) {
+      const id = btn.closest('[data-sid]').dataset.sid;
+      busy(btn, true);
+      try {
+        await REBOOT.api(`/api/home/news/saved/${encodeURIComponent(id)}`, undefined, { method: 'DELETE' });
+        D.saved = D.saved.filter(x => String(x.id) !== id);
+        toast('보관을 해제했어요.');
+        paint();
+        syncHome();
+      } catch (e) { busy(btn, false); toast(`보관을 해제하지 못했어요: ${e.message}`, 'error'); }
+    }
     function mount() {
       if (D.el || !doc.body || !REBOOT.user || !REBOOT.user()) return;
+      const secOpen = store.get('dockOpen', { todo: true, news: false }) || {};
       D.el = doc.createElement('div');
       D.el.className = 'home-dock';
       D.el.innerHTML = `
@@ -979,18 +1048,51 @@
           ${icon('check')}<span class="home-fab-count" data-dock="count" hidden></span></button>
         <div class="home-dock-scrim" data-dock="scrim" hidden></div>
         <aside class="home-dock-panel" id="home-dock-panel" data-dock="panel" role="dialog" aria-modal="true" aria-labelledby="home-dock-title" hidden>
-          <div class="home-dock-head"><h2 id="home-dock-title">이번 주 할 일<span class="head-cap" data-dock="left"></span></h2>
+          <div class="home-dock-head"><h2 id="home-dock-title">이번 주</h2>
             <button type="button" class="home-dock-close" data-dock="close" aria-label="닫기">${icon('x')}</button></div>
-          <p class="panel-note" data-dock="meta"></p>
-          <div class="home-dock-list" data-dock="list"></div>
-          <a class="btn small home-dock-go" href="/dashboard#briefing">${icon('chart')} 데일리 브리핑에서 보기 · 추가</a>
+          <div class="home-dock-body">
+            <details class="home-dock-sec" data-sec="todo"${secOpen.todo !== false ? ' open' : ''}>
+              <summary>이번 주 할 일<span class="head-cap" data-dock="left"></span></summary>
+              <p class="panel-note" data-dock="meta"></p>
+              <div class="home-dock-list" data-dock="list"></div>
+              <form class="home-dock-form" data-dock="todo-form">
+                <input class="input" name="title" maxlength="200" placeholder="할 일 (예: 핼러윈 릴스 2편 게시)" aria-label="할 일">
+                <input class="input" name="reason" maxlength="500" placeholder="근거 (선택)" aria-label="근거">
+                <button type="submit" class="btn small lime">${icon('plus')} 할 일 추가</button>
+              </form>
+            </details>
+            <details class="home-dock-sec" data-sec="news"${secOpen.news ? ' open' : ''}>
+              <summary>저장한 뉴스<span class="head-cap" data-dock="news-n"></span></summary>
+              <form class="home-dock-form" data-dock="news-form">
+                <input class="input" name="url" type="url" maxlength="1000" placeholder="기사 주소 (https://…)" aria-label="기사 주소">
+                <input class="input" name="title" maxlength="500" placeholder="기사 제목" aria-label="기사 제목">
+                <button type="submit" class="btn small lime">${icon('plus')} 뉴스 저장</button>
+              </form>
+              <div class="home-dock-list" data-dock="news"></div>
+            </details>
+          </div>
+          <a class="btn small home-dock-go" href="/dashboard#briefing">${icon('chart')} 데일리 브리핑에서 보기</a>
         </aside>`;
       doc.body.appendChild(D.el);
       D.el.addEventListener('click', e => {
-        if (e.target.closest('[data-dock="fab"]')) setOpen(!D.open);
+        const un = e.target.closest('[data-dock-unsave]');
+        if (un) unsave(un);
+        else if (e.target.closest('[data-dock="fab"]')) setOpen(!D.open);
         else if (e.target.closest('[data-dock="close"], [data-dock="scrim"], .home-dock-go')) setOpen(false);
       });
       D.el.addEventListener('change', e => { if (e.target.matches('[data-dock-toggle]')) toggle(e.target); });
+      D.el.addEventListener('submit', e => {
+        e.preventDefault();
+        if (e.target.dataset.dock === 'todo-form') addTodo(e.target);
+        else if (e.target.dataset.dock === 'news-form') saveNews(e.target);
+      });
+      // 접고 펼친 상태 기억 (toggle 이벤트는 거품이 안 올라와서 capture로 받음)
+      D.el.addEventListener('toggle', e => {
+        if (!e.target.matches || !e.target.matches('.home-dock-sec')) return;
+        const o = store.get('dockOpen', { todo: true, news: false }) || {};
+        o[e.target.dataset.sec] = e.target.open;
+        store.set('dockOpen', o);
+      }, true);
       doc.addEventListener('keydown', e => { if (e.key === 'Escape' && D.open) setOpen(false); });
       const b = store.get('todoBadge', null);
       if (b && b.week === weekStartOf(REBOOT.today())) { q('count').textContent = b.open > 99 ? '99+' : String(b.open); q('count').hidden = b.open <= 0; }
