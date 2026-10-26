@@ -278,8 +278,8 @@ def test_gras_terms_match_ingredient_table():
     assert ids and not set(refresh.GRAS_TERMS) - ids
 
 
-def test_review_request_slack_link_and_reply(app, auth_client, monkeypatch):
-    """문구 검토 요청 (2026-10-25): 팀별 1회용 링크 · Slack 알림 · 로그인 없이 회신 · 상태가 목록에 보임 · 토큰은 저장 안 함."""
+def test_review_request_link_and_reply(app, auth_client, monkeypatch):
+    """문구 검토 요청 (2026-10-25): 팀별 1회용 링크 · 로그인 없이 회신 · 상태가 목록에 보임 · 토큰은 저장 안 함 · 회신은 Slack(선택)."""
     from tabs.compliance import review_requests as rr
     sent = []
     monkeypatch.setattr(rr, "_slack", lambda text: sent.append(text) or "")
@@ -288,9 +288,9 @@ def test_review_request_slack_link_and_reply(app, auth_client, monkeypatch):
         "product": "jelly", "aiVerdict": "PASS", "teams": ["legal", "quality", "nope"], "memo": "이번 주 인스타 게시용"})
     assert res.status_code == 200, res.get_json()
     out = res.get_json()
-    assert set(out["links"]) == {"legal", "quality"} and out["slack"]["ok"] is True
+    assert set(out["links"]) == {"legal", "quality"} and out["request"]["no"].startswith("CR-")
     assert out["request"]["ruleVerdict"] == "PASS" and "tokenHash" not in json.dumps(out["request"])
-    assert "법무팀 확인하러 가기" in sent[0] and out["links"]["legal"] in sent[0]
+    assert not sent   # 요청 알림은 Slack으로 안 감 (2026-10-26 · 엑셀 메일로)
     token = out["links"]["legal"].rsplit("/", 1)[1]
     raw = (Path(app.config["DATA_DIR"]) / "compliance" / "review-requests.json").read_text(encoding="utf-8")
     assert token not in raw   # 링크 토큰은 지문만 저장
@@ -304,25 +304,112 @@ def test_review_request_slack_link_and_reply(app, auth_client, monkeypatch):
     assert ok.status_code == 200 and "회신을 보냈습니다" in ok.get_data(as_text=True)
     assert anon.get("/review/not-a-real-token").status_code == 404
     assert anon.get("/api/compliance/review-requests").status_code == 401   # 목록은 로그인 필요
+    assert anon.get(f"/api/compliance/review-requests/{out['request']['id']}.xlsx").status_code == 401
     items = auth_client.get("/api/compliance/review-requests").get_json()["items"]
     teams = items[0]["teams"]
     assert teams["legal"]["status"] == "승인" and teams["legal"]["by"] == "김법무" and teams["quality"]["status"] == "대기"
     assert "*[REBOOT 문구 검토 회신]* 법무팀 *승인*" in sent[-1]
-    assert items[0]["ruleLegal"] == "" and "법무 확인" not in sent[0]   # PASS 문구는 법적 신호 없음
-
-    # 법적 신호가 Slack 알림에 같이 감 (2026-10-25): 근거가 있으면 쓸 수 있는 표현 → 🟡 법무 확인
-    res = auth_client.post("/api/compliance/review-requests", json={
-        "text": "Clinically proven formula.", "channel": "b2c", "product": "jelly", "teams": ["legal"]})
-    assert res.status_code == 200 and res.get_json()["request"]["ruleLegal"] == "yellow"
-    assert "🟡 법무 확인" in sent[-1]
-
-
-def test_review_request_without_slack_still_gives_links(auth_client, monkeypatch):
-    """Slack 웹훅이 없어도 요청은 저장되고 링크를 돌려줌 (직접 전달) · 팀을 안 고르면 거절."""
-    from tabs.compliance import review_requests as rr
+    assert items[0]["ruleLegal"] == ""   # PASS 문구는 법적 신호 없음
+    # 웹훅이 없으면 회신 알림은 조용히 건너뜀
     monkeypatch.setattr(rr, "env", lambda k: "")
-    res = auth_client.post("/api/compliance/review-requests", json={"text": "Restart Your Day.", "teams": ["regulatory"]})
+    assert rr._slack("x") == ""
+
+
+def test_review_request_xlsx_lists_hits(auth_client):
+    """엑셀 요청서 (2026-10-26): 요청서 · 걸린 표현 · 팀 회신 3장 · 걸린 규칙은 서버 재검사 기준 · 화면 설명은 걸린 규칙 것만 · 링크는 안 들어감."""
+    from openpyxl import load_workbook
+    res = auth_client.post("/api/compliance/review-requests", json={
+        "text": "Clinically proven formula.", "channel": "b2c", "product": "jelly", "teams": ["legal", "regulatory"],
+        "details": {"R5": {"say": "시험 결과를 말하려면 근거가 있어야 해요", "todo": ["광고에서는 빼기"], "law": ["FTC 16 CFR 255"]},
+                    "R1": {"say": "지어낸 설명"}}})
+    assert res.status_code == 200, res.get_json()
     out = res.get_json()
-    assert res.status_code == 200 and out["slack"]["ok"] is False and "SLACK_WEBHOOK_URL" in out["slack"]["error"]
-    assert list(out["links"]) == ["regulatory"]
+    assert out["request"]["ruleLegal"] == "yellow"
+    x = auth_client.get(f"/api/compliance/review-requests/{out['request']['id']}.xlsx")
+    assert x.status_code == 200 and "attachment" in x.headers["Content-Disposition"]
+    wb = load_workbook(io.BytesIO(x.data))
+    assert wb.sheetnames == ["요청서", "걸린 표현", "팀 회신"]
+    cells = [str(c.value) for ws in wb for row in ws.iter_rows() for c in row if c.value is not None]
+    joined = "\n".join(cells)
+    assert "Clinically proven formula." in joined and "법무 확인" in joined
+    assert "시험 결과를 말하려면" in joined and "FTC 16 CFR 255" in joined
+    assert "지어낸 설명" not in joined   # 서버가 안 잡은 규칙(R1) 설명은 버림
+    assert not any(u.rsplit("/", 1)[1] in joined for u in out["links"].values())
+    assert [wb["팀 회신"].cell(row=r, column=1).value for r in (5, 6)] == ["법무팀", "인허가팀"]
+    assert auth_client.get("/api/compliance/review-requests/nope.xlsx").status_code == 404
+
+
+def test_review_request_mail_attaches_xlsx(auth_client, monkeypatch):
+    """메일 보내기: 등록된 담당자에게만 · 엑셀 첨부 · 본문 끝에 팀별 회신 링크 · 남의 링크는 거절 · 팀을 안 고르면 요청 거절."""
+    import base64
+    import email
+    from tabs.cs import contacts, gmail
+    monkeypatch.setattr(contacts, "load", lambda: [{"role": "법무 담당", "name": "김법무", "email": "legal@example.com"}])
+    sent = []
+
+    class Svc:
+        def users(self):
+            return self
+
+        def messages(self):
+            return self
+
+        def send(self, userId, body):
+            sent.append(body["raw"])
+            return SimpleNamespace(execute=lambda: {"id": "m1"})
+    monkeypatch.setattr(gmail, "service", lambda interactive=False: Svc())
+    setup = auth_client.get("/api/compliance/review-requests/mail-setup").get_json()
+    assert setup["contacts"][0]["team"] == "legal"
+    out = auth_client.post("/api/compliance/review-requests", json={"text": "Restart Your Day.", "teams": ["legal"]}).get_json()
+    url = f"/api/compliance/review-requests/{out['request']['id']}/mail"
+    body = {"to": ["legal@example.com"], "subject": "[문구 검토 요청] 테스트", "body": "검토 부탁드립니다.", "links": out["links"]}
+    assert auth_client.post(url, json=body | {"to": ["x@example.com"]}).status_code == 400
+    assert auth_client.post(url, json=body | {"links": {"legal": "http://x/review/fake"}}).status_code == 400
+    res = auth_client.post(url, json=body)
+    assert res.status_code == 200, res.get_json()
+    msg = email.message_from_bytes(base64.urlsafe_b64decode(sent[0]))
+    parts = list(msg.walk())
+    text = next(p for p in parts if p.get_content_type() == "text/plain").get_payload(decode=True).decode("utf-8")
+    assert out["links"]["legal"] in text and "검토 부탁드립니다." in text
+    att = next(p for p in parts if p.get_filename())
+    assert att.get_filename().endswith(".xlsx") and att.get_payload(decode=True)[:2] == b"PK"
+    items = auth_client.get("/api/compliance/review-requests").get_json()["items"]
+    assert items[0]["mail"]["to"] == ["legal@example.com"]
     assert auth_client.post("/api/compliance/review-requests", json={"text": "Hi", "teams": []}).status_code == 400
+
+def test_review_request_preview_edit_and_import_replies(auth_client):
+    """보내기 전 미리 받기(저장 안 함) → 고쳐서 첨부(요청번호가 들어감) → 팀이 [팀 회신]을 채워 돌려준 엑셀을 올리면 상태 반영."""
+    import base64
+    from openpyxl import load_workbook
+    body = {"text": "Clinically proven formula.", "channel": "b2c", "product": "jelly", "teams": ["legal", "quality"]}
+    pv = auth_client.post("/api/compliance/review-requests/preview", json=body)
+    assert pv.status_code == 200 and pv.data[:2] == b"PK"
+    assert auth_client.get("/api/compliance/review-requests").get_json()["items"] == []   # 미리보기는 저장 안 함
+    wb = load_workbook(io.BytesIO(pv.data))
+    assert wb["요청서"]["B4"].value == "(보내면 붙음)"
+    wb["걸린 표현"]["G5"] = "마케터가 덧붙인 설명"
+    buf = io.BytesIO()
+    wb.save(buf)
+    assert auth_client.post("/api/compliance/review-requests", json=body | {"attachment": "!!"}).status_code == 400
+    assert auth_client.post("/api/compliance/review-requests",
+                            json=body | {"attachment": base64.b64encode(b"not xlsx").decode()}).status_code == 400
+    out = auth_client.post("/api/compliance/review-requests", json=body | {"attachment": base64.b64encode(buf.getvalue()).decode()}).get_json()
+    x = auth_client.get(f"/api/compliance/review-requests/{out['request']['id']}.xlsx")
+    sent = load_workbook(io.BytesIO(x.data))
+    assert sent["요청서"]["B4"].value == out["request"]["no"] and sent["걸린 표현"]["G5"].value == "마케터가 덧붙인 설명"
+
+    # 팀이 엑셀로 회신
+    ws = sent["팀 회신"]
+    ws["B5"], ws["D5"] = "승인", "김법무"
+    ws["B6"] = "반려"   # 이유 없음 → 건너뜀
+    buf = io.BytesIO()
+    sent.save(buf)
+    res = auth_client.post("/api/compliance/review-requests/import", data={"file": (io.BytesIO(buf.getvalue()), "reply.xlsx")},
+                           content_type="multipart/form-data")
+    assert res.status_code == 200, res.get_json()
+    got = res.get_json()
+    assert got["updated"] == ["legal"] and got["skipped"] and "의견" in got["skipped"][0]
+    assert got["request"]["teams"]["legal"]["status"] == "승인" and got["request"]["teams"]["quality"]["status"] == "대기"
+    bad = auth_client.post("/api/compliance/review-requests/import", data={"file": (io.BytesIO(b"hello"), "a.xlsx")},
+                           content_type="multipart/form-data")
+    assert bad.status_code == 400

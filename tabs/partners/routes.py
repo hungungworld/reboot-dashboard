@@ -30,7 +30,9 @@
   POST   /api/partners/history/<id>/reply-summary   회신 AI 요약 (한국어: 핵심·요청사항·분위기·다음 액션)
   POST   /api/partners/history/<id>/reply-draft     AI 영문 답장 초안 {points}
 판매 실적 (3-5)
-  GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 더미 데이터
+  GET    /api/partners/sales                  ?start=YYYY-MM-DD&end=YYYY-MM-DD — 올린 시연 사이트 CSV가 있으면 그 집계, 없으면 더미
+  POST   /api/partners/sales/upload           시연 사이트 관리자 CSV (multipart file — Order details · Creator performance)
+  DELETE /api/partners/sales/upload           올린 CSV 지우기 → 더미로 되돌림
 유튜브 크리에이터 추천 (youtube.py · 영미권 + 미국 타겟 추정 · 소개란 공개 이메일만 · 30일 안에 갱신, 못 하면 삭제)
   GET    /api/partners/youtube                목록 (?refresh=0이면 오래된 값 갱신 안 함)
   POST   /api/partners/youtube/search         {keywords:[…]} 추천 받기 (YouTube Data API)
@@ -907,12 +909,75 @@ def _date_arg(name):
         raise ApiError("날짜 형식이 올바르지 않아요 (YYYY-MM-DD).")
 
 
+def _shop_dir():
+    return Path(current_app.config["DATA_DIR"]) / "uploads" / "partners" / "shop"
+
+
+def _shop_file(kind):
+    return _shop_dir() / f"{kind}.csv"
+
+
 @bp.get("/sales")
 def sales_report():
+    orders = _shop_file("orders")
+    if orders.exists():
+        creators = _shop_file("creators")
+        try:
+            _, order_rows = sales.read_csv(orders.read_bytes())
+            creator_rows = sales.read_csv(creators.read_bytes())[1] if creators.exists() else []
+            at = datetime.fromtimestamp(orders.stat().st_mtime, timezone.utc).replace(tzinfo=None)
+            return jsonify(sales.shop_report(order_rows, creator_rows, _date_arg("start"), _date_arg("end"), iso(at)))
+        except sales.ShopCsvError as e:
+            raise ApiError(str(e))
     _sync_bundled()
     rows = PartnerContact.query.filter_by(ptype=INFLUENCER).order_by(PartnerContact.sort).all()
     names = [c.name for c in rows if not c.is_example]
     return jsonify(sales.report(names, catalog._today(), _date_arg("start"), _date_arg("end")))
+
+
+@bp.post("/sales/upload")
+def sales_upload():
+    """시연 사이트 관리자 CSV (주문 · 크리에이터) — 종류는 머리글로 판단, 같은 종류는 새 파일로 바꿈."""
+    files = [f for f in request.files.getlist("file") if f and f.filename][:4]
+    if not files:
+        raise ApiError("올릴 CSV 파일을 고르세요.")
+    parsed = {}
+    for f in files:
+        raw = f.read(sales.SHOP_MAX_BYTES + 1)
+        if len(raw) > sales.SHOP_MAX_BYTES:
+            raise ApiError(f"{f.filename}: CSV는 5MB까지 올릴 수 있어요.")
+        header, rows = sales.read_csv(raw)
+        kind = sales.csv_kind(header)
+        if kind is None:
+            raise ApiError(f"{f.filename}: 시연 사이트의 Order details · Creator performance CSV가 아니에요.")
+        h, r = parsed.get(kind, ([], []))   # 같은 종류 여러 개 (Instagram · TikTok order lines) → 합침
+        parsed[kind] = (h + [c for c in header if c not in h], r + rows)
+    ready = {}
+    for kind, (header, rows) in parsed.items():
+        out = io.StringIO()
+        w = csv.DictWriter(out, fieldnames=header, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+        ready[kind] = out.getvalue().encode("utf-8")
+    if "orders" not in ready and not _shop_file("orders").exists():
+        raise ApiError("주문 CSV(Order details)를 같이 올려 주세요. 매출은 주문 CSV로 계산해요.")
+    if "orders" in ready:
+        try:
+            sales.shop_report(sales.read_csv(ready["orders"])[1], [])
+        except sales.ShopCsvError as e:
+            raise ApiError(str(e))
+    _shop_dir().mkdir(parents=True, exist_ok=True)
+    for kind, raw in ready.items():
+        _shop_file(kind).write_bytes(raw)
+    worklog.add("partners", "수집", "판매 실적 CSV 업로드 (시연 사이트)", detail={"files": sorted(ready)})
+    return jsonify(ok=True, saved=sorted(ready))
+
+
+@bp.delete("/sales/upload")
+def sales_upload_clear():
+    for kind in ("orders", "creators"):
+        _shop_file(kind).unlink(missing_ok=True)
+    return jsonify(ok=True)
 
 
 # ───────── 유튜브 크리에이터 추천 (youtube.py) ─────────

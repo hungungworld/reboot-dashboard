@@ -2,7 +2,7 @@
    화면 2개 (왼쪽 메뉴): 데일리 브리핑 · 콘텐츠 캘린더 (시작하기는 2026-10-24 삭제)
    콘텐츠 캘린더 맨 아래: 다음 급등 예상 (접기 · 인사이트 검색 수요 탭에서 2026-10-25 옮김)
    모든 화면 오른쪽 아래: 이번 주 To-Do 버튼 → 사이드 패널 (home.js가 모든 페이지에서 불리므로 여기서 붙임)
-   데일리 브리핑: 히어로(긴급 · 기회 · 다음 시즌) → 왼쪽: 이번 주 할 일 · 업계 뉴스 / 오른쪽: 다가오는 시즌 · 한눈에 보기 · 최근 활동
+   데일리 브리핑: 히어로(긴급 · 기회 · 다음 시즌) → 4칸: 작은 달력 · 다가오는 시즌 · 한눈에 보기 · 최근 활동 → 2단: 업계 뉴스 · 이번 주 할 일
    (2026-10-25 다시 배치: 시즌 카드 3 · KPI 4 · 성과 차트를 오른쪽 한 줄 요약으로 — 성과 차트는 성과분석 탭에)
    - 뉴스: 저장된 결과만 읽음 (구글 뉴스는 '지금 수집' 버튼·하루 1회 작업만 부름) · 규제 기사는 컴플라이언스 바로가기
    - 이번 주 할 일: 인사이트 긴급 · 기회(REBOOT.use('insights').weeklySignals, 읽기 전용) → 홈 할 일
@@ -821,10 +821,25 @@
             <div><strong data-ref="hero-season">—</strong><small>다음 주요 시즌</small></div>
           </div>
         </section>
-        <div class="home-layout section-gap">
-          <div class="stack">
-            <div class="home-todo-split">
-            <section class="card home-mini-cal" data-ref="mini-cal" aria-label="콘텐츠 캘린더 (작게)"></section>
+        <div class="home-top4 section-gap">
+          <section class="card home-mini-cal" data-ref="mini-cal" aria-label="콘텐츠 캘린더 (작게)"></section>
+          <section class="card"><div class="card-head"><h2>다가오는 시즌</h2><button type="button" class="link small" data-go-view="calendar">캘린더 ${icon('arrow')}</button></div>
+            <div class="home-seasons home-box-body" data-ref="seasons"></div></section>
+          <section class="card"><div class="card-head"><h2>한눈에 보기</h2></div>
+            <div class="home-glance home-box-body" data-ref="glance"><div class="skeleton" style="height:96px"></div></div></section>
+          <section class="card"><div class="card-head"><h2>최근 워크스페이스 활동</h2></div><ul class="activity home-box-body" data-ref="activity"><li>불러오는 중…</li></ul></section>
+        </div>
+        <div class="home-main2 section-gap">
+            <section class="card home-brief" aria-label="미국 시장 브리핑">
+              <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="head-cap" data-ref="news-sub"></span></div>
+                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button></div>
+              <div class="home-brief-tabs" data-ref="news-tabs"></div>
+              <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
+              <div data-ref="news-errors"></div>
+              <div class="home-brief-foot"><span class="home-brief-saved" data-ref="news-saved"></span><span class="flex home-news-badges" data-ref="news-badges"></span>
+                <details class="home-brief-info"><summary>수집 정보 · 검색어 점검</summary>
+                  <p class="panel-note" data-ref="news-meta"></p><p class="panel-note" data-ref="news-note"></p><div data-ref="news-stats"></div></details></div>
+            </section>
             <section class="card">
               <div class="card-head home-todo-head"><h2>이번 주 할 일<span class="head-cap" data-ref="todo-count"></span></h2>
                 <div class="flex"><button type="button" class="btn small ghost" data-act="todo-regen" title="완료 안 한 자동 항목을 새로 만들기">${icon('refresh')} 다시 만들기</button>
@@ -837,25 +852,6 @@
               </form>
               <div data-ref="todos"><div class="skeleton" style="height:120px"></div></div>
             </section>
-            </div>
-            <section class="card home-brief" aria-label="미국 시장 브리핑">
-              <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="head-cap" data-ref="news-sub"></span></div>
-                <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button></div>
-              <div class="home-brief-tabs" data-ref="news-tabs"></div>
-              <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
-              <div data-ref="news-errors"></div>
-              <div class="home-brief-foot"><span class="home-brief-saved" data-ref="news-saved"></span><span class="flex home-news-badges" data-ref="news-badges"></span>
-                <details class="home-brief-info"><summary>수집 정보 · 검색어 점검</summary>
-                  <p class="panel-note" data-ref="news-meta"></p><p class="panel-note" data-ref="news-note"></p><div data-ref="news-stats"></div></details></div>
-            </section>
-          </div>
-          <aside class="stack">
-            <section class="card"><div class="card-head"><h2>다가오는 시즌</h2><button type="button" class="link small" data-go-view="calendar">캘린더 ${icon('arrow')}</button></div>
-              <div class="home-seasons" data-ref="seasons"></div></section>
-            <section class="card"><div class="card-head"><h2>한눈에 보기</h2></div>
-              <div class="home-glance" data-ref="glance"><div class="skeleton" style="height:96px"></div></div></section>
-            <section class="card"><div class="card-head"><h2>최근 워크스페이스 활동</h2></div><ul class="activity" data-ref="activity"><li>불러오는 중…</li></ul></section>
-          </aside>
         </div>
       </div>
 
