@@ -693,14 +693,24 @@
     }
     // AI 2차 판정이 BLOCK인데 규칙은 통과시킨 경우 → 복사 전에 한 번 더 확인 (GPT 검토 ⑨)
     const aiVerdict = r && j.ai && j.ai.key === journeyKey(j) && j.ai.result ? j.ai.result.verdict : '';
-    const needConfirm = canCopy && aiVerdict === 'BLOCK';
-    if (needConfirm) {
+    // 검토 요청에 '반려' 회신이 있으면 복사 전에 한 번 더 확인 (2026-10-26 최종 검토 · 회신이 결과에 반영되지 않던 문제)
+    const rejected = !!r && REVIEW_REQS.some(q => q.text === text && Object.values(q.teams || {}).some(t => t && t.status === '반려'));
+    const needConfirm = canCopy && (aiVerdict === 'BLOCK' || rejected);
+    let confirmMsg = '';
+    if (needConfirm && rejected) {
+      tone = 'BLOCK';
+      title = '검토 요청에서 반려됐어요';
+      sub = `규칙 판정은 ${LABEL[r.verdict]} · 아래 회신 이유를 확인하고 고치는 걸 권해요`;
+      big = '확인 후 쓰세요';
+      confirmMsg = '이 문구는 검토 요청에서 반려됐습니다.\n회신 이유를 확인했고, 그래도 복사할까요?';
+    } else if (needConfirm) {
       tone = 'BLOCK';
       title = 'AI가 사용 불가로 봤어요';
       sub = `규칙 판정은 ${LABEL[r.verdict]} · 아래 AI 이유를 확인하고 고치는 걸 권해요`;
       big = '확인 후 쓰세요';
+      confirmMsg = 'AI 2차 심의가 이 문구를 사용 불가로 봤습니다.\n규칙에는 걸리지 않았지만 AI가 위험하다고 본 이유를 확인했고, 그래도 복사할까요?';
     }
-    return { r, canCopy, needConfirm, tone, title, sub, big };
+    return { r, canCopy, needConfirm, confirmMsg, aiVerdict, rejected, tone, title, sub, big };
   }
 
   function singleHTML() {
@@ -798,11 +808,20 @@ ${preview}${primary}${copy}
   }
 
   /** 한 문구 결과: 고칠 곳 목록 (줄마다 점 · 이름 · 걸린 표현 · 대신 쓸 방향 → 누르면 근거·조문이 있는 자세히 창) */
+  // Balance 제품에 'Zero Sugar'를 쓰면 법적 조건 한 줄 (21 CFR 101.60(c)(1) · 2026-10-26 최종 검토) — 안전 안내라 화면에 남김
+  function zeroSugarNote(text, r) {
+    const p = (DATA.products || []).find(x => x.id === r.product);
+    if (!p || !p.zeroSugar || !/zero[\s-]*sugar|sugar[\s-]*free|제로\s*슈[가거]|무설탕/i.test(text)) return '';
+    const hasDisclaimer = /not\s+a\s+(?:low|reduced)[\s-]*calorie\s+food|not\s+for\s+weight\s+control/i.test(text);
+    return `<p class="cmp-note">${hasDisclaimer ? '' : "<b>'Not a low calorie food'를 함께 적어야 해요</b> (Balance 열량 40 kcal · 저칼로리 아님) · "}Zero Sugar를 쓸 때마다 · 당 원료(감미료 배합) 조건은 출시 전 확인 · 표기는 'Zero Sugar'로 통일</p>`;
+  }
+
   function resultHTML(text, r) {
     return `
 <div class="cmp-result">
   ${variantNote(r)}
   ${uncheckedHTML(r)}
+  ${zeroSugarNote(text, r)}
   ${r.verdict === 'PASS' ? passBoxHTML(text, r) : ''}
   ${r.findings.length ? `<p class="cmp-hits-label">고칠 곳 ${r.findings.length}</p>
   <ul class="cmp-hits">${r.findings.map(f => `
@@ -1114,7 +1133,11 @@ ${preview}${primary}${copy}
     }
     const rqBtn = p.querySelector('.cmp-side-acts [data-act="rq-open"]');
     rqBtn.disabled = !s.r;
-    rqBtn.title = s.r ? 'Slack으로 법무·인허가·품질팀에 이 문구 검토를 요청하고, 팀마다 회신 링크를 만듭니다' : '먼저 문구를 입력하세요';
+    rqBtn.title = !s.r ? '먼저 문구를 입력하세요'
+      : s.r.legal === 'red' ? '법 위반(🔴) 표현은 법무 검토로도 풀리지 않습니다 — 표현을 바꾼 뒤 요청하세요'
+      : 'Slack으로 법무·인허가·품질팀에 이 문구 검토를 요청하고, 팀마다 회신 링크를 만듭니다';
+    // 🟡 법무 확인이거나, 규칙은 통과했지만 AI가 사용 불가로 본 경우 검토 요청을 눈에 띄게 (2026-10-26 최종 검토)
+    rqBtn.classList.toggle('cmp-primary', !!s.r && s.r.legal !== 'red' && (s.r.legal === 'yellow' || s.aiVerdict === 'BLOCK'));
     paintReviews(p, j);
     const aiBtn = p.querySelector('.cmp-side-acts [data-act="ai"]');
     serverHealth().then(h => {
@@ -1191,7 +1214,7 @@ ${preview}${primary}${copy}
 </details>`;
   }
 
-  /* ── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 1회용 링크로 회신 받음 (서버: review_requests.py) ── */
+  /* ── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 팀별 링크(14일 · 다시 회신하면 덮어씀)로 회신 받음 (서버: review_requests.py) ── */
   const RQ_TEAMS = [['legal', '법무팀'], ['regulatory', '인허가팀'], ['quality', '품질팀']];
   const RQ_ICON = { '대기': '⏳', '승인': '✅', '수정 필요': '✏️', '반려': '⛔' };
   let REVIEW_REQS = [];
@@ -1202,8 +1225,8 @@ ${preview}${primary}${copy}
       if (!res.ok) return;
       REVIEW_REQS = (await res.json()).items || [];
     } catch (e) { return; }
-    const p = root.querySelector('[data-sub="single"]');
-    if (p) paintReviews(p, loadJourney());
+    // 회신('반려')이 복사 확인·안내에 바로 반영되게 단건 화면 전체를 다시 그림 (2026-10-26)
+    if (root.querySelector('[data-sub="single"]')) paintSingle(root);
   }
 
   /** 지금 문구로 보낸 검토 요청의 팀별 회신 (없으면 아무것도 안 보임) */
@@ -1336,7 +1359,7 @@ ${preview}${primary}${copy}
         // BLOCK 문구는 복사 버튼이 나오지 않지만, 혹시 상태가 바뀌었으면 한 번 더 막음
         const s = journeyState(j);
         if (!s.canCopy) return toast('사용 불가 문구는 복사할 수 없습니다. 표현을 바꾼 뒤 다시 심의하세요.');
-        if (s.needConfirm && !global.confirm('AI 2차 심의가 이 문구를 사용 불가로 봤습니다.\n규칙에는 걸리지 않았지만 AI가 위험하다고 본 이유를 확인했고, 그래도 복사할까요?')) return;
+        if (s.needConfirm && !global.confirm(s.confirmMsg)) return;
         copyText(j.text.trim()).then(ok => toast(ok
           ? (s.r.verdict === 'PASS' ? '문구를 복사했습니다. PASS는 법적 승인이 아니니 최종 확인은 직접 해 주세요.' : `문구를 복사했습니다. ${s.r.verdict} 판정 이유를 확인하고 쓰세요.`)
           : '복사하지 못했습니다. 문구 칸에서 직접 복사하세요.'));

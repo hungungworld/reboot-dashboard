@@ -1,7 +1,7 @@
 /* 컴플라이언스 판정 엔진 확인 (인터넷·브라우저 없이) — GitHub 자동 테스트가 `node tabs/compliance/tests/engine.test.js`로 실행.
    규칙(data.js)을 고친 뒤 아래 중 하나라도 어긋나면 실패합니다.
    ① FDA 경고장 원문 87개 중 PASS 0개 (놓친 표현 없음)   ② 안전 문구는 모두 PASS (오탐 없음)
-   ③ 자체 점검 예문 · 일괄 심의 더미 20개는 예상 판정대로   ④ 표현 매핑의 영어 대안은 PASS
+   ③ 자체 점검 예문 · 일괄 심의 더미 30개는 예상 판정대로   ④ 표현 매핑의 영어 대안은 PASS
    ⑤ CS 답변 템플릿 C1~C10은 BLOCK 없음   ⑥ '전체 채널·전체 제품'은 가장 엄격한 판정 */
 'use strict';
 const assert = require('assert');
@@ -144,7 +144,22 @@ check('법적 신호 (2026-10-25): 규칙마다 신호 · 법으로 막히는 �
   assert.strictEqual(legal('Drink all night. Clinically proven.'), 'yellow');       // 여러 규칙 → 가장 높은 신호
   assert.strictEqual(legal('Lime, lemon and cherry jellies.'), '');                 // PASS는 신호 없음
   const r = api.review('Drink all night. Prevents hangovers.');
-  assert.deepStrictEqual(r.findings.map(f => [f.code, f.legal]), [['R1', 'red'], ['R2', 'red'], ['R6', 'green']]);
+  assert.deepStrictEqual(r.findings.map(f => [f.code, f.legal]), [['R1', 'red'], ['R2', 'yellow'], ['R6', 'green']]);   // R2 단순 언급은 팀 기준 🟡 (2026-10-26)
+  assert.strictEqual(legal('Hangover? Not today.'), 'yellow');                     // 주장 없는 언급 = 팀 기준 (판정은 BLOCK 유지)
+  assert.strictEqual(verdict('Hangover? Not today.'), 'BLOCK');
+  assert.strictEqual(legal('Reduces alcohol flush.'), 'red');                       // 홍조를 줄인다 = 증상 완화 주장 (R1)
+  assert.strictEqual(legal('No added sugar.'), 'yellow');                           // R11 조건부 허용 · 팀 BLOCK
+  assert.strictEqual(verdict('No added sugar.'), 'BLOCK');
+});
+
+check('열량 강조 R16 (2026-10-26 · Balance 40 kcal 전제: 음료는 저칼로리 아님)', () => {
+  ['Low calorie lime drink.', 'A low-cal treat.', 'Light on calories, big on flavor.', 'Guilt-free sipping.', 'Only 40 calories per bottle.', 'Low sugar jelly.', '저칼로리 젤리']
+    .forEach(t => assert.strictEqual(verdict(t, { product: 'drink-ls' }), 'BLOCK', t));
+  assert.strictEqual(api.review('Low calorie lime drink.', { product: 'drink-ls' }).legal, 'red');
+  // 'Zero Sugar'와 함께 적는 의무 표시는 걸리지 않음
+  assert.strictEqual(verdict('Zero Sugar. Not a low calorie food.', { product: 'drink-ls' }), 'PASS');
+  assert.strictEqual(verdict('Light, fresh-tasting jelly'), 'PASS');
+  assert.strictEqual(verdict('Lightly flavored, never carbonated.'), 'PASS');
 });
 
 check('처음 보는 문장 시험: GPT가 찾은 문장은 모두 맞고, 새 문장 점수는 떨어지지 않음', () => {

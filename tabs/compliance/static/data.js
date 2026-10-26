@@ -6,7 +6,7 @@
   const NS = global.REBOOT_DATA = global.REBOOT_DATA || {};
 
   NS.compliance = {
-    version: '2026-10-24',   // 규칙 버전 — 규칙을 바꾸면 날짜를 바꿈 (점검 기록에 같이 저장)
+    version: '2026-10-26',   // 규칙 버전 — 규칙을 바꾸면 날짜를 바꿈 (점검 기록에 같이 저장)
 
     // 단건·일괄 심의에서 고르는 채널 (2026-10-24): CS 답변은 CS 파트가 'cs'로 자동 재점검하고, 아마존은 B2C와 판정이 같아 합침.
     // amazon·cs 키는 그대로 둠 (콘텐츠 파트가 'amazon', CS 파트가 'cs'로 부름 · 옛 점검 기록 이름 표시)
@@ -44,10 +44,15 @@
           // 2026-10-25 원료 문구: '술 마신 뒤 도와준다' · 'after-party care' = 음주 뒤 상태를 고친다는 암시
           "\\b(?:help|helps|helping|support|supports|aid|aids|care|ease|eases)\\b[^.!?]{0,30}\\b(?:after|following)\\s+(?:drinking|a\\s+night\\s+out|a\\s+big\\s+night|alcohol|a\\s+party|partying)\\b",
           "\\bafter[\\s-]*(?:party|drinking)\\s+care\\b",
+          // 2026-10-26 최종 검토: 홍조를 줄인다·막는다 = 증상 완화 주장 (R4 단순 언급과 나눔) · 알코올의 영향에서 몸을 지킨다 · 음주 뒤 두통이 없다
+          "\\b(?:eliminat|reduc|stop|prevent|block|fight|beat|minimi[sz]|less(?:en)?|no\\s+more)\\w*\\s+(?:the\\s+|your\\s+)?(?:asian\\s+|alcohol\\s+|drinking\\s+|face\\s+)?(?:flush\\w*|glow|redness|red\\s+face)\\b",
+          "\\bprotects?\\s+(?:you|your\\s+body|the\\s+body)\\s+(?:from|against)\\b[^.!?]{0,30}\\balcohol\\b",
+          "\\bno\\s+more\\s+(?:headaches?|nausea|hangovers?)\\b",
           "(?:음주|술자리|술\\s*마신)\\s*(?:후|뒤|다음)[^.!?]{0,15}(?:케어|관리|도움|챙겨)"
         ],
         // 질병 예방이 아닌 '보관·안전' 문맥의 prevent는 R1에서 뺌 (GPT 검토 ⑧)
-        allow: ["\\bprevent(?:s|ed|ing)?\\s+(?:spoilage|melting|leaks?|leaking|freezing|sticking|clumping|damage|mold|contamination|choking)\\b"],
+        allow: ["\\bprevent(?:s|ed|ing)?\\s+(?:spoilage|melting|leaks?|leaking|freezing|sticking|clumping|damage|mold|contamination|choking)\\b",
+          "\\bprevent(?:s|ed|ing)?\\s+(?:the\\s+)?(?:jell(?:y|ies)|gumm(?:y|ies)|bottles?|caps?|pouch(?:es)?)\\s+from\\s+(?:sticking|melting|leaking|freezing|clumping|breaking)\\b"],   // 2026-10-26
         reason: '질병을 예방·치료·완화한다는 표현은 일반식품을 미승인 의약품처럼 보이게 함 (2020 숙취 제품 경고장). 알코올 금단·취기·음주의 해로운 영향을 줄인다는 말, 메스꺼움·두통·혈중 알코올을 없앤다는 말도 같음. detox·relief는 문맥 검토',
         alt: '섭취 시점·맛·포맷 등 사실 묘사',
         law: [
@@ -57,7 +62,8 @@
       },
       {
         code: 'R2', name: "'hangover' 직접 언급", verdict: 'BLOCK', basis: ['official', 'internal'],
-        legal: 'red', legalNote: "숙취 제품 광고에 'hangover'를 쓰면 숙취 예방·완화 용도로 읽힘 (2020 경고장 · 21 CFR 201.128 의도된 용도) → 법무 검토로도 풀기 어려움",
+        // 2026-10-26 최종 검토: 경고장은 숙취 예방·완화 '주장'을 문제 삼음 · 단어만 막는 것은 팀 기준 → 신호 🟡 (판정 BLOCK은 팀 결정으로 유지)
+        legal: 'yellow', legalNote: "단어만 써도 숙취 예방·완화 용도로 읽힐 위험이 큼 (21 CFR 201.128 의도된 용도) · 법이 단어 자체를 금지하지는 않음 → 팀이 더 엄격하게 막음 · 예방·완화 주장이 함께 있으면 R1이 🔴",
         terms: ['hangover', 'hang-over', 'morning after', 'hungover'],
         ko: ['숙취'],
         reason: "FDA 경고장은 숙취 예방·완화 주장을 의약품 표현으로 봄. 단순 언급까지 막는 것은 팀 기준. 'the morning after'는 미국에서 숙취를 뜻하는 관용 표현(피임약 'morning-after pill'도 연상)이라 같이 막음",
@@ -82,8 +88,9 @@
       },
       {
         code: 'R4', name: '알코올 홍조·ALDH2', verdict: 'BLOCK', basis: ['official', 'platform', 'internal'],
-        legal: 'red', legalNote: '홍조·ALDH2를 줄인다는 주장 = 체질·질환 완화(의약품 표현) · 인종 체질 암시는 Meta 정책 위반',
-        terms: ['asian glow', 'alcohol flush', 'drinking flush', 'face flush', 'flush reaction', 'flushing', 'ALDH2', 'red face'],
+        // 2026-10-26 최종 검토: 언급 자체를 금지하는 FDA·FTC 조항은 없음 → 단순 언급 🟡 · '줄인다·막는다' 주장은 R1 패턴이 🔴로 잡음
+        legal: 'yellow', legalNote: "언급 자체를 금지하는 법 조항은 없음 → 팀 기준으로 막음 · '홍조를 줄인다·막는다'는 증상 완화 주장이라 R1(🔴) · 보는 사람의 인종·체질을 짚으면 Meta 정책 위반",
+        terms: ['asian glow', 'asian flush', 'alcohol flush', 'drinking flush', 'face flush', 'flush reaction', 'flushing', 'ALDH2', 'red face'],
         ko: ['홍조', '얼굴 빨개'],
         patterns: ["\\b(?:alcohol|drinking)\\W{1,3}flush"],   // 'Alcohol "Flush"'처럼 따옴표가 끼어도 (2026-10-25)
         reason: '홍조·ALDH2 결핍을 줄이거나 고친다는 주장은 체질·질환을 완화한다는 의약품 표현. 단순 언급까지 막는 것은 팀 기준',
@@ -232,12 +239,13 @@
       // R11·R12: 당류 표시 규칙. 2026-10-23에는 제품 사실이 정해지지 않아 꺼 두었다가(off),
       // 2026-10-25 브랜드 가이드 v1.1(Balance만 'Zero Sugar' · 조건부 · '저당'과 섞지 않음)이 나와 다시 켬 (담당 결정)
       {
-        code: 'R11', name: "가이드에 없는 당 표시 ('low sugar'·저당·reduced sugar)", verdict: 'BLOCK', basis: ['official', 'internal'],
-        legal: 'red', legalNote: "'low sugar'는 FDA 정의가 없는 표시이고 reduced·no added sugar는 비교·조건이 필요 (21 CFR 101.60(c)) · 가이드상 쓰지 않는 표현",
-        terms: ['low sugar', 'low in sugar', 'lite sugar', 'light in sugar', 'reduced sugar', 'less sugar', 'lower sugar', 'sugar-reduced',
-          'no added sugar', 'no sugar added', 'without added sugar'],
-        ko: ['저당', '당이 낮은', '당 함량이 낮은', '당류 저감', '당을 줄인', '당 줄인', '설탕 무첨가', '무가당'],
-        reason: "미국 FDA는 'low sugar'를 정의하지 않아 쓸 수 없고, reduced·less sugar는 기준 제품보다 25% 이상 적다는 비교·수치가, no added sugar는 별도 조건이 필요함 (21 CFR 101.60(c)). 브랜드 가이드 v1.1은 Balance에 'Zero Sugar'만 쓰고 '저당'과 섞어 쓰지 않음 → 이 표현들은 사용 불가",
+        // 2026-10-26 최종 검토: reduced·no added sugar는 조건을 지키면 법적으로 쓸 수 있음 → 신호 🟡 · 판정 BLOCK은 브랜드 가이드(팀) 결정
+        // 정의가 없는 'low sugar'·저당은 R16(🔴)으로 옮김
+        code: 'R11', name: "조건부 당 표시 (reduced·no added sugar)", verdict: 'BLOCK', basis: ['official', 'internal'],
+        legal: 'yellow', legalNote: "reduced·less sugar는 기준 제품보다 25% 이상 적고 비교 대상을 표시하면, no added sugar는 5가지 조건을 지키면 쓸 수 있음 (21 CFR 101.60(c)(2)·(c)(5)) → 법은 조건부 · 브랜드 가이드가 쓰지 않기로 해서 팀이 막음",
+        terms: ['reduced sugar', 'less sugar', 'lower sugar', 'sugar-reduced', 'no added sugar', 'no sugar added', 'without added sugar'],
+        ko: ['당류 저감', '당을 줄인', '당 줄인', '설탕 무첨가', '무가당'],
+        reason: "reduced·less sugar는 기준 제품보다 25% 이상 적다는 비교·수치가, no added sugar는 별도 조건이 필요함 (21 CFR 101.60(c)). 법적으로는 조건을 지키면 쓸 수 있지만 브랜드 가이드 v1.1은 Balance에 'Zero Sugar'만 쓰기로 함 → 팀 기준으로 사용 불가",
         alt: 'Balance 제품이면 "Zero Sugar"만 (조건부 · R12) · Original은 당 표현 없이 맛·포장 사실',
         law: [
           { agency: 'FDA', cite: '21 CFR 101.60(c)', note: "'low sugar'는 정의된 표시가 아님 · reduced/less sugar 25% 이상 저감 + 비교 대상 표시 · no added sugar 조건" },
@@ -250,7 +258,7 @@
         terms: ['zero sugar', 'sugar free', 'no sugar', 'sugarless'],
         ko: ['제로 슈거', '제로슈거', '제로 슈가', '제로슈가', '무설탕'],
         allow: ["\\bno\\s+sugar\\s+alcohols?\\b"],   // '당알코올 없음'은 당 함량 주장이 아님
-        reason: "'Zero Sugar'(= sugar free)는 1회 제공량당 당류 0.5 g 미만이어야 하고, 저칼로리가 아니면 'Not a low calorie food' 같은 문구를 함께 표시해야 함 (21 CFR 101.60(c)(1)). Balance 두 제품만 · 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 → Balance는 사용 가능(PASS · 칼로리 값이 미정이라 저칼로리가 확인되기 전까지 'Not a low calorie food' 함께 표시), Original·브랜드 전체에는 사용 불가, 제품을 모르면 확인(COND). 표기는 'Zero Sugar'로 통일",
+        reason: "'Zero Sugar'(= sugar free)는 1회 제공량당 당류 0.5 g 미만이어야 하고, 저칼로리가 아니면 'Not a low calorie food' 같은 문구를 함께 표시해야 함 (21 CFR 101.60(c)(1)). Balance 두 제품만 · 당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 → Balance는 사용 가능(PASS · 열량 40 kcal 측정 전제(2026-10-26): 음료는 저칼로리가 아니고 젤리는 판단 불가 → 'Zero Sugar'를 쓸 때마다 'Not a low calorie food' 함께 표시 · 당 원료 조건(감미료 배합)은 출시 전 확인), Original·브랜드 전체에는 사용 불가, 제품을 모르면 확인(COND). 표기는 'Zero Sugar'로 통일",
         alt: 'Balance 제품 문구에서만 "Zero Sugar" (출시 전 영양성분 시험으로 당 0.5 g 미만 확인) · 수치(당 0 g·칼로리)는 쓰지 않음',
         byProduct: { jelly: 'BLOCK', drink: 'BLOCK', 'jelly-ls': 'PASS', 'drink-ls': 'PASS' },   // 2026-10-25 담당 결정: Balance는 PASS
         law: [
@@ -310,6 +318,30 @@
           { agency: '팀', cite: '브랜드 가이드 v1.1 (2026-10) · 13장 모든 채널에서 지킬 기준', note: '참고 이미지 영양 수치 사용 금지 · 미정 정보(입수·함량·영양·효능)를 채우지 않음 · 리볼버 모양 제외 · 행사 공식 참여처럼 표현하지 않음' },
           { agency: 'FTC', cite: 'FTC Act §5 (15 U.S.C. 45)', note: '행사 공식 후원·제휴처럼 보이게 하거나 사실과 다른 특허 주장은 기만 광고' },
           { agency: 'FDA', cite: '21 CFR 101.9 · 101.13', note: '열량·당류 등 수치는 확정 영양성분표와 같아야 하고, 광고에 쓰면 영양소 함량 표시 규칙 대상' }
+        ]
+      },
+      {
+        // 2026-10-26 최종 검토: Balance 열량 40 kcal/1회 제공량 측정값 전제 → 음료는 360 mL 기준 약 144 kcal라 저칼로리 아님 · 젤리는 1회 제공량 무게 미정
+        // 정의가 없거나(low sugar) 조건을 채우지 못한(low calorie·light) 영양 강조와 '적다'는 암시(only 40 calories·guilt-free)를 막음
+        code: 'R16', name: "정의 없거나 조건을 못 채운 영양 강조 (low sugar·low calorie·light)", verdict: 'BLOCK', basis: ['official', 'internal'],
+        legal: 'red', legalNote: "'low sugar'는 FDA가 정의하지 않아 쓸 수 없음 · 'low calorie'는 1회 섭취 기준량당 40 kcal 이하여야 하는데 음료는 360 mL 기준 약 144 kcal · 'light'는 기준 제품 비교 필요 · 'only N calories'는 저칼로리 암시 → 근거가 없으면 거짓 표시",
+        terms: ['low sugar', 'low in sugar', 'lite sugar', 'light in sugar', 'low calorie', 'low calories', 'low-cal', 'low in calories',
+          'reduced calorie', 'fewer calories', 'lower calorie', 'calorie-free', 'zero calorie', 'zero calories', 'no calories', 'guilt-free', 'diet jelly', 'diet drink'],
+        ko: ['저당', '당이 낮은', '당 함량이 낮은', '저칼로리', '칼로리가 낮은', '칼로리 걱정', '제로 칼로리', '제로칼로리', '무칼로리'],
+        patterns: [
+          "\\blight(?:er)?\\s+(?:in|on)\\s+(?:calories|cals?)\\b",
+          "\\blo-cals?\\b",   // 'lo-cal'을 단어로 넣으면 'local'까지 걸려서 패턴으로
+          "\\b(?:only|just|under|less\\s+than|as\\s+few\\s+as)\\s+\\d+(?:\\.\\d+)?\\s*(?:kcal|calories|cals?)\\b"
+        ],
+        // 'Zero Sugar'와 함께 적어야 하는 표시는 걸리지 않게 (21 CFR 101.60(c)(1)(iii)(B))
+        allow: ["\\bnot\\s+a\\s+(?:low|reduced)[\\s-]*calorie\\s+food\\b"],
+        reason: "FDA는 'low sugar'를 정의하지 않았고(Food Labeling Guide 부록 A: 'Not Defined. May not be used.'), 'low calorie'는 1회 섭취 기준량(음료 360 mL)당 40 kcal 이하(기준량 30 g 이하 식품은 50 g당도 40 kcal 이하)일 때만 씀 (21 CFR 101.60(b)(2)). Balance 음료는 100 mL 병 40 kcal라 360 mL 기준 약 144 kcal → 저칼로리 아님. 젤리는 1회 제공량 무게 미정이라 판단 불가. 'light'는 기준 제품보다 열량 1/3 이상 적어야 함 (21 CFR 101.56). 'only 40 calories'·'guilt-free'는 '적다'를 암시하는 영양 강조 (21 CFR 101.13(b)(2))",
+        alt: "Balance면 'Zero Sugar. Not a low calorie food.' · 열량·당 숫자는 광고에 쓰지 않음 · 맛·포장 같은 사실",
+        law: [
+          { agency: 'FDA', cite: '21 CFR 101.60(b)(2) · 101.12(b)', note: "저칼로리 = 1회 섭취 기준량당 40 kcal 이하 (기준량 30 g 이하면 50 g당도) · 음료 기준량 360 mL" },
+          { agency: 'FDA', cite: 'FDA Food Labeling Guide 부록 A · FD&C §403(r)(1)(A)', note: "'low sugar'는 정의되지 않은 표시 → 쓸 수 없음" },
+          { agency: 'FDA', cite: '21 CFR 101.56 · 101.13(b)(2)', note: "'light'는 기준 제품 대비 조건 · '적다'를 암시하는 말도 영양 강조 표시" },
+          { agency: '팀', cite: '제품 사양서 2026-10-25 + Balance 40 kcal 측정 전제 (2026-10-26)', note: '음료는 저칼로리 아님 · 젤리는 1회 제공량 무게 미정' }
         ]
       }
     ],
@@ -499,7 +531,7 @@
       { text: '많이 마셔도 리부가 해결해 줄게!', expect: 'BLOCK' },
       { text: 'Drink as much as you want, Rebu has you covered!', expect: 'BLOCK' },
       // 브랜드 가이드 13장 사용 제한 (R15 · 사람이 사실 확인)
-      { text: 'Only 43 kcal and 10g sugar per bottle.', expect: 'REVIEW' },
+      { text: 'Only 43 kcal and 10g sugar per bottle.', expect: 'BLOCK' },   // 2026-10-26 'only N kcal' = 저칼로리 암시 (R16)
       { text: 'Our revolver-shaped jelly.', expect: 'REVIEW' },
       { text: 'Official partner of Coachella.', expect: 'REVIEW' },
       // 원료 표 (2026-10-25): 확정 원료가 '들어 있다'는 사실은 PASS · 강조·효과·미확정·금지 성분은 계속 걸림
@@ -956,19 +988,20 @@
   NS.compliance.plain = {
     rules: {
       R1: { say: '병을 고친다고 하면 못 써요', todo: ['먹는 때·맛·형태만 말하기', "'예방·치료·완화' · '두통·메스꺼움 해소' 빼기"] },
-      R2: { say: '숙취를 직접 말하면 못 써요', todo: ['After-Party · Reset · Refresh 같은 말로 바꾸기', "'the morning after'도 빼기", 'Recovery · Revive 같은 회복 단어 피하기'] },
+      R2: { say: '숙취를 직접 말하면 못 써요 (팀 기준)', todo: ['After-Party · Reset · Refresh 같은 말로 바꾸기', "'the morning after'도 빼기", 'Recovery · Revive 같은 회복 단어 피하기'] },
       R3: { say: "'간 보호' · '100% 안전'은 못 써요", todo: ["'라벨 확인 + 전문가 상담' 안내로 바꾸기"] },
-      R4: { say: '홍조 · ALDH2는 판매 문구에 못 써요', todo: ['홍조 · 체질 이야기 빼기'] },
+      R4: { say: '홍조 · ALDH2는 판매 문구에 못 써요 (팀 기준)', todo: ['홍조 · 체질 이야기 빼기'] },
       R5: { say: '효과를 장담하려면 근거가 있어야 해요', todo: ['용량 · 포장 · 맛 같은 사실로 바꾸기', '그대로 쓰려면 근거 자료로 검토 요청'] },
       R6: { say: '음주를 부추기는 말은 고쳐 주세요', todo: ['마시는 양 · 계속 마시기 이야기 빼기'] },
       R7: { say: '약처럼 보이는 이름은 고쳐 주세요', todo: ['jelly · drink 같은 식품 이름 쓰기', '애매하면 검토 요청'] },
       R8: { say: '몸의 기능을 말하려면 근거가 있어야 해요', todo: ['빼거나 영양 성분 사실만 쓰기', '영양 근거가 있으면 검토 요청'] },
       R9: { say: '시험 결과를 말하려면 근거가 있어야 해요', todo: ['광고 · SNS에서는 빼기', '바이어 자료에는 시험 보고서와 함께 검토 요청'] },
       R10: { say: '후기도 같은 기준으로 심의해요', todo: ['후기 문장도 걸리는 표현이 없는지 보기', '대가를 받았으면 #ad처럼 표시하기', '좋은 후기를 조건으로 보상하지 않기'] },
-      R11: { say: "'low sugar' · 저당은 못 써요", todo: ["Balance면 'Zero Sugar'만 쓰기", 'Original은 당 표현 없이 맛 · 포장만'] },
+      R11: { say: "'reduced · no added sugar'는 브랜드 가이드상 안 써요", todo: ["Balance면 'Zero Sugar'만 쓰기", 'Original은 당 표현 없이 맛 · 포장만'] },
       R12: { say: "'Zero Sugar'는 Balance에만 써요", todo: ['제품을 Balance로 고르기', "'Not a low calorie food'를 함께 표시하기", '당 · 칼로리 숫자는 쓰지 않기'] },
       R13: { say: '성분은 들어 있다는 사실만 써요', todo: ["'Contains Hovenia dulcis fruit extract.'처럼 쓰기", "'rich in · high in' 빼기", '함량을 내세우려면 함량 자료로 검토 요청'] },
       R14: { say: "'FDA 승인 · 인증'은 사실이 아니라 못 써요", todo: ['원산지 · 포장 · 성분 같은 사실로 바꾸기'] },
+      R16: { say: "'low sugar' · 'low calorie' · 'light'는 못 써요", todo: ["Balance면 'Zero Sugar. Not a low calorie food.'로", "'only 40 calories' 같은 숫자 강조 빼기", '맛 · 포장 같은 사실로 바꾸기'] },
       R15: { say: '확정되지 않은 정보는 확인하고 써요', todo: ['확정된 맛 · 모양 · 포장만 쓰기', '특허 · 인증 · 제휴는 증빙과 함께 검토 요청'] }
     },
     agencies: {

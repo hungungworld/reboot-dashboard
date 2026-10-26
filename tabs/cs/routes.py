@@ -1,6 +1,6 @@
 """고객 응대(CS) API (담당: 소준희). 예전 server/app.py와 같은 주소·입력·출력입니다.
 
-  GET  /api/cs/gmail/inquiries   GMAIL_QUERY에 맞는 문의 (최대 50건)
+  GET  /api/cs/gmail/inquiries   GMAIL_QUERY에 맞는 문의 (최대 100건)
   POST /api/cs/gmail/draft       {message_id, body} → Gmail 답장 초안 ([확인 필요]가 남으면 거절)
   POST /api/cs/gmail/preview     {message_id} → 보내기 전 받는 사람·제목 확인 (보내지 않음)
   GET/PUT /api/cs/contacts        담당자 연락처 (문의 전달용 · 서버 보관)
