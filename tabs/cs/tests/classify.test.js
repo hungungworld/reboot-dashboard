@@ -32,7 +32,17 @@ const cases = [
   ['먹고 나서 숨쉬기가 힘들었어요', 'C1'],
   ['젤리가 목에 걸렸어요', 'C1'],
   ['임신 중인데 먹어도 되나요?', 'C2'],
-  ["I'd like to send back my unopened box and get a refund.", 'C3']
+  ["I'd like to send back my unopened box and get a refund.", 'C3'],
+  // 2026-10-26 최종 검토: 성분 질문이 부작용 신고로, 효능·배송·리뷰 보상 질문이 '기타'로 가던 사례
+  ['알레르기 성분 있나요?', 'C6'],
+  ['I am allergic to soy. Is this safe?', 'C6'],
+  ['Does this cure hangovers?', 'C2'],
+  ['칼로리 몇이에요? 숙취에 좋아요?', 'C2'],
+  ['Why is my order late?', 'C5'],
+  ['Can I get a free gift for leaving a review?', 'C8'],
+  ['젤리 유통기한이 어디 적혀있나요?', 'C6'],
+  ['My package came with 8 jellies instead of 10.', 'C4'],
+  ['How many calories are in the Balance drink?', 'C6']
 ];
 
 let failed = 0;

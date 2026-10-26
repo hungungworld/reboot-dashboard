@@ -27,7 +27,7 @@
 | 구분 | 상태 |
 |---|---|
 | 코드 | `tabs/compliance/` · `tabs/cs/` (pre_main PR) · 예전 시연본·`parts/`·`dev/`는 쓰지 않음 |
-| 컴플라이언스 | 단건·일괄 심의(한국어 입력 → 영어 번역 · 전체 채널·제품) · 점검 기록 · 규칙 R1~R15(근거 조문 · R11·R12 끔) · 경고장 원문 87개 · 처음 보는 문장 시험 · 규제 모니터링 7개 출처(기관별·제품군별) · AI 2차 판정(페르소나 · few-shot) · AI 사용량·비용 |
+| 컴플라이언스 | 단건·일괄 심의(한국어 입력 → 영어 번역 · 전체 채널·제품) · 점검 기록 · 규칙 R1~R17(근거 조문 · R11·R12 끔) · 경고장 원문 87개 · 처음 보는 문장 시험 · 규제 모니터링 7개 출처(기관별·제품군별) · AI 2차 판정(페르소나 · few-shot) · AI 사용량·비용 |
 | CS | 문의함(Gmail처럼 목록 → 검토) · 답장 초안(템플릿 · AI) · 컴플라이언스 재검사(화면 + **서버**) · 최종 승인(서버 기록) · **보내기 탭(Gmail로 바로 보내기 · 한 번만)** · 담당자에게 전달 · 부작용 접수 · 고객 이력 · 답변 기본값 |
 | 확인 | `python -m pytest` (서버 · 인터넷·키 없이) · `node tabs/compliance/tests/engine.test.js` (판정 엔진) · GitHub 자동 테스트가 둘 다 실행 |
 | 남은 것 | 팀 결정: 환불·교환 정책 · 회신 기한 · 가격 · 제품 정보 통합 · 헛개 GRAS 근거 (13장) · 곤약은 해당 없음 (구미형 젤리 · 2026-10-25 담당 확인) |
@@ -120,7 +120,7 @@ RULE.md, AI_RULES.md, 내 파트 폴더의 README.md(tabs/compliance/docs/README
 
 | 기능 | 자료 방식 | 하는 일 | 상태 |
 |---|---|---|---|
-| 단건 심의 | 입력 + 규칙 (+AI 선택) | 카피 1개 → R1~R10 판정 → 걸린 표현·이유·대체 방향. AI는 FDA 사례 Few-shot 2차 판정 | 규칙 판정 시연본 완료 · AI는 서버 키 있을 때만 |
+| 단건 심의 | 입력 + 규칙 (+AI 선택) | 카피 1개 → R1~R17 판정 → 걸린 표현·이유·대체 방향. AI는 FDA 사례 Few-shot 2차 판정 | 규칙 판정 시연본 완료 · AI는 서버 키 있을 때만 |
 | 일괄 심의 | CSV 업로드 | `copy` 열 CSV → 결과 CSV (최대 500행) | 시연본 완료 |
 | 판정 근거 사례집 | 크롤링 → 데이터 | FDA 숙취 제품 경고장 7건 원문 인용 (후기 8개 포함) | **87개** (seed.json 원문 · 2026-10-24) |
 | 한국→미국 표현 매핑 | 수동 | 검토자·검토일 기록 | 현재 10쌍 · 20쌍으로 확장 예정 |
@@ -134,7 +134,7 @@ RULE.md, AI_RULES.md, 내 파트 폴더의 README.md(tabs/compliance/docs/README
 
 **전제** 미국 **일반식품** (건강기능식품 기준은 비교 옵션) · FDA는 2020년 숙취 제품 경고장에서 숙취 예방·치료·완화 표현을 미승인 의약품 표현으로 취급 · 일반식품도 **영양적 가치에 기반한 구조·기능 표현**은 FDA가 인정 → R8 일괄 수정은 법적 금지가 아니라 **팀의 보수적 기준** · 면책 별표(*)를 붙여도 판정은 그대로
 
-### 규칙 R1~R15
+### 규칙 R1~R17
 
 근거: ⚖️ 공식 근거(법령·FDA/FTC 문서) · 🏢 팀 내부 정책 · 🔍 문맥 검토 필요 — 초안 {확인 필요: 규제 담당 확인 후 확정}
 
@@ -150,11 +150,13 @@ RULE.md, AI_RULES.md, 내 파트 폴더의 README.md(tabs/compliance/docs/README
 | R8 | 구조·기능 클레임 | REVISE | 🏢 | supports liver health, 알코올 대사, 피로·회복·컨디션 리셋, gut health, 보충제용 면책문구 | 삭제 또는 영양 성분 사실만 (영양 근거가 있으면 규제 담당 검토 후 허용 결정) |
 | R9 | 인체적용시험 인용 | REVISE (B2B는 REVIEW) | ⚖️🏢 | clinically tested, 임상, 인체적용시험 | B2C에서는 삭제, B2B 자료에서만 |
 | R10 | 후기·리뷰 | REVIEW (좋은 후기를 조건으로 한 보상 BLOCK · 조건 없는 보상 REVISE) | ⚖️🏢 | testimonials, 5-star, 후기, 리뷰 쓰면 쿠폰 | 후기도 R1~R7로 심의, 대가 관계 표시 · '보상을 주지 않는다'는 부정문은 통과 |
-| R11 | 가이드에 없는 당 표시 | BLOCK | ⚖️🏢 | low sugar, reduced sugar, no added sugar, 저당 | Balance는 'Zero Sugar'만 · Original은 당 표현 없음 |
+| R11 | 조건부 당 표시 (reduced·no added sugar · 법은 조건부 🟡 · 브랜드 가이드상 팀 BLOCK · 2026-10-26) | BLOCK | ⚖️🏢 | low sugar, reduced sugar, no added sugar, 저당 | Balance는 'Zero Sugar'만 · Original은 당 표현 없음 |
 | R12 | 'Zero Sugar' 표시 | COND (Original·브랜드 전체 BLOCK) | ⚖️🏢 | zero sugar, sugar free, 무설탕 | Balance 문구에서만 'Zero Sugar' |
 | R13 | 성분 강조·숙취 연상 성분 | REVIEW | ⚖️🔍 | rich in hovenia, DHM, probiotic, 원료 표의 금지 성분(DHM·NAC·밀크시슬) | 성분은 사실로만 ('Contains …') · 함량 강조 표현 쓰지 않음 |
 | R14 | 정부 승인·인증 주장 | BLOCK | ⚖️ | FDA approved, approved by the FDA, FDA 인증 | 승인 대신 확인 가능한 사실 (원산지·포장·성분) |
 | R15 | 미확정 정보·공식 제휴 암시 | REVIEW | 🏢⚖️ | 43 kcal, 10g sugar, revolver, official partner, Coachella, patented, 특허, 원료 표의 후보 원료 | 확정된 사실만 (맛·모양·100 ml·낱개·3병 박스) · 브랜드 가이드 v1.1 13장 |
+| R16 | 정의 없거나 조건을 못 채운 영양 강조 (2026-10-26) | BLOCK | ⚖️🏢 | low sugar, 저당, low calorie, low-cal, light on calories, guilt-free, only 40 calories | 'low sugar'는 FDA 정의 없음 · 저칼로리는 기준량(음료 360 mL)당 40 kcal 이하 → Balance 음료 40 kcal/100 mL는 해당 없음 · 'Zero Sugar. Not a low calorie food.'는 PASS · 🔴 |
+| R17 | 제품 사실과 다른 표현 (2026-10-26) | BLOCK | ⚖️🏢 | mango flavor, jelly sticks, 10 sticks, 6 bottles per box, sparkling, 250 ml, 망고 맛, 스틱 젤리 | 사양서(10-25) 기준 맛 3가지 · 개별 포장 모양 젤리(봉지당 10개) · 비탄산 100 mL 병(낱개·3병 박스)과 다르면 거짓 표시 · non-carbonated·100ml·3 bottles는 PASS · 사양서가 바뀌면 규칙도 고침 · 🔴 |
 
 - **R1·R2** 질병 예방·치료 주장 = 의약품 표현 (2020 경고장). `detox`·`relief`는 문맥에 따라 다르고, 'hangover' 단순 언급까지 막는 것은 팀 기준
 - **R3·R5·R9** 효과·안전성·임상 주장은 FTC 실증 대상. `100% juice`처럼 효과 주장이 아닌 쓰임은 문맥 검토
@@ -262,7 +264,7 @@ RULE.md, AI_RULES.md, 내 파트 폴더의 README.md(tabs/compliance/docs/README
 |---|---|---|
 | 공개 | `compliance.review(text, { channel, category })` → `{ verdict, findings[], codes }` (기본 `b2c`/`FOOD`) | CS · 콘텐츠 (나원) · 파트너 가이드 (혁주·효선) |
 | 공개 | `compliance.bannedTerms()` → `[{ term, code, verdict, ko[] }]` | 인플루언서·파트너 가이드 |
-| 공개 | `compliance.rules()` → R1~R10 코드·이름·판정·근거 구분·이유·대체 방향 | 화면 안내 |
+| 공개 | `compliance.rules()` → R1~R17 코드·이름·판정·근거 구분·이유·대체 방향 | 화면 안내 |
 | 공개 | `cs.stats()` → `{ open, urgent, overdue, owner_required }` | 홈 To-Do (강현서) |
 | 공개 | `cs.classify(text)` → `'C1'`~`'C10'` | 분류 테스트 · 참고용 |
 | 공개 | `compliance.translate(text)` → 영→한 기기 안 번역 (Promise) | CS |
@@ -499,6 +501,8 @@ node tools/cross_check.js dashboard.html _incoming/fda_ad_console # 시연본과
 | 2026-10-25 | **음료 원료 검토** (`docs/drink-ingredients.md`) — 국내 헛개 음료 원재료를 미국 일반식품 기준으로 ✅ 바로 사용 · ⚠️ 조건부 · ❌ 안 씀으로 나눔. 원료 표에 '음료' 칸 추가 · 새 원료 8개(귤껍질·미배아발효추출물·DL-알라닌 후보 / 창출·황기·곤약·엽산·아티초크 금지). 젤리(구미형)는 담당이 자료를 다시 찾아 검토 예정 |
 | 2026-10-25 | **젤리(구미형) 원료 검토** (`docs/jelly-ingredients.md` · 참고: 미국 '술 마시기 전' 구미·스틱 젤리 = 건강기능식품) — 원료 표에 '젤리' 칸 · 아연·마그네슘 후보 추가 · 구미 기본 배합(펙틴·설탕/감미료·산미료·천연향·강황 색소·코코넛 오일)은 사용 가능. **규칙 보강**: 참고 제품 효능 문구 8개가 PASS였음 → R1 inflammation·염증·'reduces morning nausea'(철자 nausia 포함)·bloating, R4 'Alcohol "Flush"'(따옴표), R8 acetaldehyde·GABA·brain fog·pre-alcohol, R9 science-backed, R15 인증 표시(gluten-free·non-GMO·organic·lab tested·all natural) · R8 liver support·liver care (제품별 테스트 문구에서 발견) |
 | 2026-10-25 | **Balance Zero Sugar 근거: '가정' → '측정 확인'** (PM 확인) — 당류 0.5 g 미만, 1회 섭취 기준량·라벨 1회 제공량 둘 다 · 판정은 그대로(Balance PASS · Original·브랜드 전체 BLOCK) · 칼로리 미정이라 저칼로리 확인 전까지 'Not a low calorie food' 함께 표시 · R12 설명·팩트시트(`data/products.json`)·브랜드 키트·CS 메모 수정 · 시험 성적서 보관 |
+| 2026-10-26 | **최종 검토 P1 반영** — ① **R17 제품 사실 대조** 신설: 없는 맛(mango 등)·스틱·3병이 아닌 박스·100 mL가 아닌 용량·탄산 → BLOCK 🔴 ② 단어 변형 보강: R7 'loved/approved by pharmacists·doctors'·doctor-approved, R8 bounce back·human again·before your first drink, R9 backed by research·peer-reviewed, R15 FDA-registered·GRAS-approved·allergen-free·사양서 가격표에 없는 가격 ③ **일괄 심의 결과도 점검 기록에 저장**(묶음당 1번 · '일괄' 표시) · 기록에 **점검한 사람**(로그인 이름)·법적 신호 저장 · 보관 500 → 1,000건 ④ R2·R4 화면 근거를 'FDA 경고장 기준'·'Meta 정책·팀 기준'으로 정정 · 처음 보는 위험 문장 검출 76% → 94%(같은 57문장 재측정 · 새 문장으로 재평가 필요) |
+| 2026-10-26 | **최종 검토 반영** (`검토자료` 최종검토_2026-10-26 P0) — ① **R16 열량 강조** 신설: low sugar·저당(R11에서 옮김)·low calorie·light on calories·guilt-free·only N calories → BLOCK 🔴 · Balance 열량 40 kcal 전제(음료는 저칼로리 아님) · 'Not a low calorie food'는 예외 ② **신호 정정**: R2 hangover 단순 언급·R4 홍조 단순 언급·R11 reduced/no added sugar → 🟡 (법은 조건부·팀이 BLOCK) · '홍조를 줄인다'·'알코올의 영향에서 몸을 지킨다'·'no more headaches'는 R1 🔴 ③ 'Asian flush' · 포장 문맥 prevent 예외 ④ Balance 'Zero Sugar' 결과에 동반 문구 안내 한 줄 ⑤ 검토 요청 **반려 회신이면 복사 전 확인** · 규칙 PASS + AI BLOCK이면 검토 요청 강조 · 🔴 문구는 요청 버튼 안내 ⑥ CS 분류 키워드: '알레르기' 단독 → C6, 숙취·효능 → C2, 지연 → C5, 리뷰 보상 요구 → C8, 수량 부족 → C4, '유통' → '유통사'(유통기한과 분리) · 규칙 버전 2026-10-26 · 처음 보는 위험 문장 검출 64% → 76% (같은 57문장 재측정 · 새 문장 재평가 필요) |
 | 2026-10-25 | **법적 신호(🔴·🟡·🟢) 추가** — 판정(BLOCK 등)과 별도로 '법으로 막히는지 · 법무가 볼 회색지대인지 · 팀·플랫폼 기준인지'를 규칙마다 표시 (`data.js` `legal`·`legalNote` · 제품별 `legalByProduct` · `compensatedLegal`). 단건 결과·걸린 규칙 카드·자세히 창·규칙 표·일괄 심의(요약·표·CSV `legal` 열)·검토 요청 창에 표시 · 🟡이면 [검토 요청] 버튼 강조 + 자세히 창에 [법무 검토 요청] · 서버 판정(`server_review.review`)도 `legal`을 돌려주고 검토 요청 Slack 알림에 신호를 붙임 · 서버 = 브라우저 신호를 `goldenLegal`로 테스트 |
 | 2026-10-25 | **당류 규칙 R11·R12 다시 켬** (담당 결정 · 브랜드 가이드 v1.1) — 10-23에 꺼 두었던 이유(제품 사실 미정)가 해소됨. R11 low sugar·저당·reduced/less sugar·no added sugar BLOCK · R12 Zero Sugar: Balance COND / Original·브랜드 전체 BLOCK · 'no sugar alcohols' 제외 · 매핑 'Zero Sugar'는 COND로 기대값 변경 · AI 2차 판정 지시문도 같은 기준 · '알아두세요'·규칙 표 안내 수정. 같이 보강: R8 'wake up to a fresh, clear morning'·'fresh … morning tomorrow' (담당 시험 문장이 PASS였음) · 헛개 별칭 'oriental raisin tree' |
 | 2026-10-25 | **FDA GRAS 통지 자동 수집 (원료 근거)** — 규제 모니터링 출처 `fda-gras` 추가: FDA GRAS Notices 공개 데이터베이스 '데이터 내려받기'(키 없음 · 정상 접속 · 주 1회만 새로 받음 · `DATA_DIR/compliance/gras-cache.json`) → 원료 이름·별칭(예: 알룰로스=D-psicose)으로 찾아 원료별 통과/전체 건수 · GRN 링크. 원료 표에 **'FDA GRAS 통지' 칸** + 규정 조항(cfr) + 확인 불가 메모(헛개: 공개 통지 0건 · 알디콤 근거 문서 확인 불가 / L. fermentum: 통지 균주 LfQi6·CECT5716, 우리 균주 미확인). 배합용 '기본 원료'(status base: 알룰로스·스테비아·나한과·수용성 옥수수 섬유·펙틴·수크랄로스·스피루리나) 추가 · 심의 규칙과 무관. 한글 요약은 이 출처에 쓰지 않음(noKo · AI 비용 0). **통지 0건 = 사용 불가가 아님** (자체 GRAS는 공개되지 않음) |

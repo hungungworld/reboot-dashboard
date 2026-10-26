@@ -128,7 +128,8 @@
       templates: [
         { id: 'neon', label: 'Reboot 블랙 네온', hint: '검정 배경 + 네온 라임 · 후킹 문구형' },
         { id: 'clean', label: '클린 화이트', hint: '흰 배경 + 라임 형광펜 · 정보형' },
-        { id: 'photo', label: '제품 포토', hint: '사진을 꽉 채우고 흰 박스 · 사진 위주형' }
+        { id: 'photo', label: '제품 포토', hint: '사진을 꽉 채우고 흰 박스 · 사진 위주형' },
+        { id: 'block', label: '네온 블록', hint: '검정 · 네온 색 블록 교차 + 버스트 장식' }
       ],
       layouts: [{ id: 'cover', label: '표지' }, { id: 'list', label: '목록' }, { id: 'quote', label: '인용' },
         { id: 'stat', label: '숫자' }, { id: 'outro', label: '마무리' }],
