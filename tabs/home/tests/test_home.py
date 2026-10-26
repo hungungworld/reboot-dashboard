@@ -676,3 +676,35 @@ def test_home_page_loads_part_files(auth_client):
     assert html.index("/parts/performance/metrics.js") < html.index("/parts/performance/performance.js")
     for f in ("home/home.js", "home/home.css", "performance/metrics.js", "performance/performance.js", "performance/performance.css"):
         assert auth_client.get(f"/parts/{f}").status_code == 200, f
+
+
+# ───────── 노란 체크 패널 · 인사이트 자료 ─────────
+
+def test_dock_items_save_dedupe_and_download(auth_client):
+    """담기 · 같은 자료는 덮어씀 · 위험한 주소는 버림 · 메모 · 파일 3종 · 삭제."""
+    assert auth_client.get("/api/home/dock/items").get_json()["items"] == []
+    assert auth_client.post("/api/home/dock/items", json={"kind": "action", "title": "x"}).status_code == 400   # 구분 키 없음
+    body = {"kind": "action", "sourceKey": "action:price_cut", "title": "경쟁 제품 가격 인하", "text": "Flyby $30 → $24",
+            "href": "/dashboard/insights#market/changes", "url": "javascript:alert(1)", "data": {"grade": "긴급"}}
+    r = auth_client.post("/api/home/dock/items", json=body)
+    assert r.status_code == 201
+    item = r.get_json()
+    assert item["url"] == "" and item["href"] == "/dashboard/insights#market/changes" and item["data"] == {"grade": "긴급"}
+    assert auth_client.post("/api/home/dock/items", json=dict(body, title="고친 제목", href="https://evil.example")).status_code == 200
+    auth_client.post("/api/home/dock/items", json={"kind": "weird", "sourceKey": "k2", "title": "기타 자료"})
+    items = auth_client.get("/api/home/dock/items").get_json()["items"]
+    assert len(items) == 2 and items[0]["kind"] == "other"
+    same = next(x for x in items if x["sourceKey"] == "action:price_cut")
+    assert same["title"] == "고친 제목" and same["href"] == ""
+    assert [x["kind"] for x in auth_client.get("/api/home/dock/items?kind=action").get_json()["items"]] == ["action"]
+    assert auth_client.patch(f"/api/home/dock/items/{same['id']}", json={"memo": "릴스 소재로"}).get_json()["memo"] == "릴스 소재로"
+
+    md = auth_client.get("/api/home/dock/items.md")
+    assert "attachment" in md.headers["Content-Disposition"] and "## [이번 주 액션] 고친 제목" in md.get_data(as_text=True)
+    csv_text = auth_client.get("/api/home/dock/items.csv").get_data(as_text=True)
+    assert csv_text.startswith("﻿종류") and "릴스 소재로" in csv_text
+    assert len(auth_client.get("/api/home/dock/items.json").get_json()) == 2
+
+    assert auth_client.delete(f"/api/home/dock/items/{same['id']}").status_code == 200
+    assert auth_client.delete(f"/api/home/dock/items/{same['id']}").status_code == 404
+    assert len(auth_client.get("/api/home/dock/items").get_json()["items"]) == 1

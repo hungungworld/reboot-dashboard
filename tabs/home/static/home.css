@@ -172,6 +172,17 @@
 .home-dock-news a.home-dock-title { text-decoration: none; }
 .home-dock-news a.home-dock-title:hover { text-decoration: underline; }
 .home-dock-sec[data-sec="news"] .home-dock-list { margin-top: 8px; }
+/* 인사이트 자료: 끌어다 놓기 · 담은 자료 */
+.home-dock-drop { padding: 12px; border: 1.5px dashed var(--line); border-radius: var(--radius-sm); font-size: 11px; color: var(--muted); line-height: 1.6; text-align: center; }
+.home-dock-panel.drop-on .home-dock-drop { border-color: var(--lime-line); background: var(--soft-2); color: var(--ink); }
+.home-dock-panel.drop-on { box-shadow: inset 0 0 0 2px var(--lime-line), var(--shadow); }
+.home-dock-sec[data-sec="insight"] .home-dock-list { margin-top: 8px; }
+.home-dock-note { cursor: default; }
+.home-dock-kind { display: inline-block; margin-bottom: 3px; padding: 1px 6px; border-radius: 999px; background: var(--soft); font-size: 10px; color: var(--muted); }
+.home-dock-note-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; color: var(--ink); margin-top: 3px; line-height: 1.5; }
+.home-dock-note .home-dock-reason a { color: inherit; }
+.home-dock-tools { margin-top: 8px; }
+body.home-dock-dragging .home-fab { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(208, 230, 60, .45), var(--shadow); }
 .home-dock-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: var(--radius-sm); cursor: pointer; }
 .home-dock-item:hover { background: var(--soft-2); }
 .home-dock-item input { margin-top: 3px; }

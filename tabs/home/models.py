@@ -82,6 +82,31 @@ class HomeNewsSaved(db.Model):
                 "date": iso(self.published_at), "savedBy": self.saved_by, "savedAt": iso(self.saved_at)}
 
 
+class HomeDockItem(db.Model):
+    """노란 체크 패널 '인사이트 자료' 한 줄 — 인사이트 탭에서 끌어다 놓거나 [패널에 담기]로 저장. 팀 공용.
+    화면에 보인 내용을 그대로 복사해 둠 (원래 자료가 바뀌거나 지워져도 남음). 콘텐츠 제작에서 참고용으로 읽을 예정."""
+    __tablename__ = "home_dock_items"
+    __table_args__ = (db.UniqueConstraint("kind", "source_key", name="uq_home_dock_kind_key"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    kind = db.Column(db.String(20), nullable=False)                    # DOCK_KINDS 중 하나
+    source_tab = db.Column(db.String(40), nullable=False, default="insights")
+    source_key = db.Column(db.String(200), nullable=False)             # 같은 자료를 두 번 담지 않게
+    title = db.Column(db.String(300), nullable=False)
+    text = db.Column(db.Text, nullable=False, default="")             # 사람이 읽는 요약
+    data = db.Column(db.Text, nullable=False, default="{}")           # 원본 필드 (JSON)
+    href = db.Column(db.String(300), nullable=False, default="")      # 근거 화면 (/dashboard/insights#…)
+    url = db.Column(db.String(1000), nullable=False, default="")      # 외부 링크 (판매처 · 기사 등)
+    memo = db.Column(db.String(500), nullable=False, default="")
+    saved_by = db.Column(db.String(100), nullable=False, default="")
+    saved_at = db.Column(db.DateTime, nullable=False, default=utcnow, index=True)
+
+    def to_dict(self):
+        return {"id": self.id, "kind": self.kind, "sourceTab": self.source_tab, "sourceKey": self.source_key, "title": self.title,
+                "text": self.text, "data": _loads(self.data, {}), "href": self.href, "url": self.url, "memo": self.memo,
+                "savedBy": self.saved_by, "savedAt": iso(self.saved_at)}
+
+
 class HomeTodo(db.Model):
     """이번 주 To-Do 한 줄. origin: ai · rule(키 없을 때 규칙) · manual(직접 추가)."""
     __tablename__ = "home_todos"

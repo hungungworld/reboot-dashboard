@@ -903,12 +903,17 @@
   }
 
   /* ───────── 이번 주 To-Do 버튼 (모든 화면 오른쪽 아래) ─────────
-     버튼 → 오른쪽 사이드 패널: 두 묶음을 각각 접고 펼침 (펼침 상태는 dockOpen에 기억)
+     버튼 → 오른쪽 사이드 패널: 세 묶음을 각각 접고 펼침 (펼침 상태는 dockOpen에 기억)
      - 이번 주 할 일: 확인 · 체크 · 직접 추가 (삭제 · 다시 만들기는 데일리 브리핑에서)
      - 저장한 뉴스: 기사 주소 · 제목으로 저장 · 보관 해제 (홈 브리핑 '보관함'과 같은 목록 /api/home/news/saved)
+     - 인사이트 자료: 인사이트 탭 자료를 노란 버튼 · 이 묶음으로 끌어다 놓거나 [패널에 담기] → /api/home/dock/items
+       끌 때 넘기는 값: dataTransfer 'application/x-reboot-insight' = {kind, sourceKey, title, text, data, href, url} (DOCK_MIME)
+       다른 탭은 REBOOT.use('home').dockAdd(payload) · dockItems(kind) 로 씀 (콘텐츠 제작에서 참고용으로 읽을 예정)
      홈 화면이 열려 있으면 브리핑의 To-Do 카드 · 보관 표시를 함께 고침 */
+  const DOCK_MIME = 'application/x-reboot-insight';
   const dock = (() => {
-    const D = { el: null, todos: null, signals: null, saved: null, open: false, loading: false };
+    const D = { el: null, todos: null, signals: null, saved: null, notes: null, kinds: {}, open: false, loading: false };
+    const hasDockData = e => !!(e.dataTransfer && Array.from(e.dataTransfer.types || []).includes(DOCK_MIME));
     const q = name => D.el && D.el.querySelector(`[data-dock="${name}"]`);
 
     function itemHtml(t) {
@@ -927,6 +932,13 @@
         <span class="grow">${isUrl(x.url) ? `<a class="home-dock-title" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(title)}</a>` : `<span class="home-dock-title">${esc(title)}</span>`}
           <span class="home-dock-reason">${esc([x.domain, x.savedBy, x.savedAt ? fmt.date(x.savedAt) : ''].filter(Boolean).join(' · '))}</span></span>
         <button type="button" class="home-dock-close" data-dock-unsave aria-label="보관 해제: ${esc(title)}">${icon('x')}</button></div>`;
+    }
+    function noteHtml(x) {
+      return `<div class="home-dock-item home-dock-note" data-nid="${esc(x.id)}">
+        <span class="grow"><span class="home-dock-kind">${esc(D.kinds[x.kind] || x.kind)}</span><span class="home-dock-title">${esc(x.title)}</span>
+          ${x.text ? `<span class="home-dock-note-text">${esc(x.text)}</span>` : ''}
+          <span class="home-dock-reason">${x.href ? `<a href="${esc(x.href)}">근거 보기</a> · ` : ''}${isUrl(x.url) ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">링크</a> · ` : ''}${esc([x.savedBy, x.savedAt ? fmt.date(x.savedAt) : ''].filter(Boolean).join(' · '))}</span></span>
+        <button type="button" class="home-dock-close" data-dock-unnote aria-label="삭제: ${esc(x.title)}">${icon('x')}</button></div>`;
     }
     function paint() {
       if (!D.el) return;
@@ -949,16 +961,22 @@
       q('news-n').textContent = sv ? `${sv.length}건` : '';
       q('news').innerHTML = !sv ? (D.loading ? '<div class="skeleton" style="height:60px"></div>' : '')
         : sv.length ? sv.map(newsHtml).join('') : '<p class="small muted">저장한 뉴스가 없어요. 기사 주소와 제목을 넣어 저장하세요.</p>';
+      const nt = D.notes;
+      q('notes-n').textContent = nt ? `${nt.length}건` : '';
+      q('notes').innerHTML = !nt ? (D.loading ? '<div class="skeleton" style="height:60px"></div>' : '')
+        : nt.length ? nt.map(noteHtml).join('') : '';
     }
     async function load() {
       D.loading = true;
       paint();
       try {
-        const [t, sig, sv] = await Promise.all([REBOOT.api('/api/home/todos'), safe(() => REBOOT.use('insights').weeklySignals()),
-          safe(() => REBOOT.api('/api/home/news/saved'))]);
+        const [t, sig, sv, nt] = await Promise.all([REBOOT.api('/api/home/todos'), safe(() => REBOOT.use('insights').weeklySignals()),
+          safe(() => REBOOT.api('/api/home/news/saved')), safe(() => REBOOT.api('/api/home/dock/items'))]);
         D.todos = t;
         D.signals = sig;
         D.saved = sv ? sv.items || [] : [];
+        D.notes = nt ? nt.items || [] : [];
+        if (nt) D.kinds = nt.kinds || {};
       }
       catch (e) { const list = q('list'); if (list) list.innerHTML = `<p class="note error">할 일을 불러오지 못했어요. ${esc(e.message)}</p>`; return; }
       finally { D.loading = false; }
@@ -1034,9 +1052,59 @@
         syncHome();
       } catch (e) { busy(btn, false); toast(`보관을 해제하지 못했어요: ${e.message}`, 'error'); }
     }
+    // 인사이트 자료 담기 (끌어다 놓기 · [패널에 담기] · 다른 탭 dockAdd 공통) → 저장한 한 줄
+    async function addNote(p) {
+      if (!p || !p.title || !p.sourceKey) { toast('담을 수 없는 자료예요.', 'error'); return null; }
+      try {
+        const r = await REBOOT.api('/api/home/dock/items', p);
+        D.notes = [r].concat((D.notes || []).filter(x => x.id !== r.id));
+        if (!D.kinds[r.kind]) { const k = await safe(() => REBOOT.api('/api/home/dock/items?kind=_')); if (k) D.kinds = k.kinds || {}; }
+        toast(`'${r.title}'을(를) 인사이트 자료에 담았어요.`);
+        paint();
+        return r;
+      } catch (e) { toast(`인사이트 자료를 담지 못했어요: ${e.message}`, 'error'); return null; }
+    }
+    async function removeNote(btn) {
+      const id = btn.closest('[data-nid]').dataset.nid;
+      busy(btn, true);
+      try {
+        await REBOOT.api(`/api/home/dock/items/${encodeURIComponent(id)}`, undefined, { method: 'DELETE' });
+        D.notes = D.notes.filter(x => String(x.id) !== id);
+        toast('인사이트 자료에서 뺐어요.');
+        paint();
+      } catch (e) { busy(btn, false); toast(`삭제하지 못했어요: ${e.message}`, 'error'); }
+    }
+    // 끌어다 놓기: 끌기 시작하면 노란 버튼을 강조 → 버튼 위로 오면 패널 · 인사이트 자료 묶음을 열고 → 패널 안에 놓으면 담기
+    function openNotes() {
+      const sec = D.el.querySelector('.home-dock-sec[data-sec="insight"]');
+      if (sec) sec.open = true;
+      if (!D.open) setOpen(true);
+    }
+    function bindDrop() {
+      doc.addEventListener('dragstart', e => { if (hasDockData(e)) doc.body.classList.add('home-dock-dragging'); });
+      doc.addEventListener('dragend', () => { doc.body.classList.remove('home-dock-dragging'); D.el.querySelector('.home-dock-panel').classList.remove('drop-on'); });
+      const fab = q('fab'), panel = q('panel');
+      ['dragenter', 'dragover'].forEach(ev => {
+        fab.addEventListener(ev, e => { if (!hasDockData(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; openNotes(); });
+        panel.addEventListener(ev, e => { if (!hasDockData(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; panel.classList.add('drop-on'); });
+      });
+      panel.addEventListener('dragleave', e => { if (!panel.contains(e.relatedTarget)) panel.classList.remove('drop-on'); });
+      const drop = e => {
+        if (!hasDockData(e)) return;
+        e.preventDefault();
+        panel.classList.remove('drop-on');
+        doc.body.classList.remove('home-dock-dragging');
+        let p = null;
+        try { p = JSON.parse(e.dataTransfer.getData(DOCK_MIME)); } catch (err) { p = null; }
+        openNotes();
+        addNote(p);
+      };
+      fab.addEventListener('drop', drop);
+      panel.addEventListener('drop', drop);
+    }
     function mount() {
       if (D.el || !doc.body || !REBOOT.user || !REBOOT.user()) return;
-      const secOpen = store.get('dockOpen', { todo: true, news: false }) || {};
+      const secOpen = store.get('dockOpen', { todo: true, news: false, insight: false }) || {};
       D.el = doc.createElement('div');
       D.el.className = 'home-dock';
       D.el.innerHTML = `
@@ -1066,13 +1134,23 @@
               </form>
               <div class="home-dock-list" data-dock="news"></div>
             </details>
+            <details class="home-dock-sec" data-sec="insight"${secOpen.insight ? ' open' : ''}>
+              <summary>인사이트 자료<span class="head-cap" data-dock="notes-n"></span></summary>
+              <div class="home-dock-drop">인사이트 탭의 자료를 이 패널이나 노란 버튼으로 끌어다 놓으면 담겨요. 끌기 어려우면 자료 옆 [패널에 담기]를 누르세요.</div>
+              <div class="home-dock-list" data-dock="notes"></div>
+              <div class="home-dock-tools">${ui.fileMenu('download', { label: '파일로 받기', items: [
+                { label: 'Markdown (.md)', href: '/api/home/dock/items.md' }, { label: 'CSV (엑셀)', href: '/api/home/dock/items.csv' },
+                { label: 'JSON', href: '/api/home/dock/items.json' }] })}</div>
+            </details>
           </div>
           <a class="btn small home-dock-go" href="/dashboard#briefing">${icon('chart')} 데일리 브리핑에서 보기</a>
         </aside>`;
       doc.body.appendChild(D.el);
       D.el.addEventListener('click', e => {
         const un = e.target.closest('[data-dock-unsave]');
+        const unn = e.target.closest('[data-dock-unnote]');
         if (un) unsave(un);
+        else if (unn) removeNote(unn);
         else if (e.target.closest('[data-dock="fab"]')) setOpen(!D.open);
         else if (e.target.closest('[data-dock="close"], [data-dock="scrim"], .home-dock-go')) setOpen(false);
       });
@@ -1085,11 +1163,12 @@
       // 접고 펼친 상태 기억 (toggle 이벤트는 거품이 안 올라와서 capture로 받음)
       D.el.addEventListener('toggle', e => {
         if (!e.target.matches || !e.target.matches('.home-dock-sec')) return;
-        const o = store.get('dockOpen', { todo: true, news: false }) || {};
+        const o = store.get('dockOpen', { todo: true, news: false, insight: false }) || {};
         o[e.target.dataset.sec] = e.target.open;
         store.set('dockOpen', o);
       }, true);
       doc.addEventListener('keydown', e => { if (e.key === 'Escape' && D.open) setOpen(false); });
+      bindDrop();
       const b = store.get('todoBadge', null);
       if (b && b.week === weekStartOf(REBOOT.today())) { q('count').textContent = b.open > 99 ? '99+' : String(b.open); q('count').hidden = b.open <= 0; }
     }
@@ -1097,7 +1176,14 @@
       if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', mount);
       else mount();
     }
-    return { sync(t, sig) { D.todos = t; if (sig) D.signals = sig; paint(); } };
+    return {
+      sync(t, sig) { D.todos = t; if (sig) D.signals = sig; paint(); },
+      add: addNote,
+      async items(kind) {
+        const r = await REBOOT.api('/api/home/dock/items' + (kind ? `?kind=${encodeURIComponent(kind)}` : ''));
+        return r.items || [];
+      }
+    };
   })();
 
   REBOOT.register({
@@ -1108,5 +1194,6 @@
       return { label: '이번 주 할 일', value: b && b.week === week ? b.open : 0 };
     }
   });
-  REBOOT.expose('home', { seasons: () => REBOOT.data.seasons() });
+  // dockAdd(payload) → 담은 한 줄(실패하면 null) · dockItems(kind?) → Promise<[{kind, title, text, data, href, url, memo, …}]> · DOCK_MIME = 끌 때 쓰는 형식
+  REBOOT.expose('home', { seasons: () => REBOOT.data.seasons(), dockAdd: p => dock.add(p), dockItems: kind => dock.items(kind), DOCK_MIME });
 })(typeof window !== 'undefined' ? window : globalThis);
