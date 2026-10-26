@@ -407,6 +407,7 @@
       case 'brief-make': makeBrief(b); break;
       case 'brief-save': saveBrief(b, false); break;
       case 'brief-approve': saveBrief(b, true); break;
+      case 'promo-make': makePromo(b); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'aud-q': openAudQuestion(Number(d.i)); break;
       case 'weee-raw': openWeeeRaw(); break;
@@ -1036,7 +1037,7 @@
       edit: () => editHtml(D.shelf), reviews: () => reviewsHtml(D.reviews), audience: () => audienceHtml(D.audience),
       accuracy: () => accuracyHtml(D.accuracy)
     }[sub]();
-    if (sub === 'price') { fitSwarm(); initSwarm(); initPantryFlow(); }
+    if (sub === 'price') { fitSwarm(); initSwarm(); initPantryFlow(); drawPromo(); }
     if (sub === 'brands') focusBrand();
     if (sub === 'changes' && S.focusChg) {
       S.focusChg = false;
@@ -2030,7 +2031,51 @@
   function priceView(sh) {
     const priced = sh.items.filter(knownPs);
     const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에<span class="head-cap">점 1개 = 제품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
-    return pantryHtml(sh) + overview;
+    const promoCard = `<section class="card mt-24 ins-promo"><div class="card-head"><h2>시즌별 프로모션 제안</h2>${badge('AI 제안', 'purple')}</div>
+      <div data-ref="promo">${skel}</div></section>`;
+    return pantryHtml(sh) + overview + promoCard;
+  }
+
+  /* ───────── 시즌별 프로모션 제안 ('1회분 단가 한눈에' 아래 · 서버 promo.py) ─────────
+     단가 요약 · 다가오는 시즌은 서버가 셈 → AI는 시즌마다 아이디어 · 가격 전략 · 채널 문장만 */
+  async function loadPromo() {
+    try { S.promo = await api('/api/insights/promo'); } catch (e) { S.promo = { error: e.message }; }
+    drawPromo();
+  }
+
+  function drawPromo() {
+    const el = $(S.root, '[data-ref="promo"]');
+    if (!el) return;
+    const p = S.promo;
+    if (!p) { loadPromo(); return; }
+    if (p.error) { el.innerHTML = `<div class="note error">불러오지 못했어요. ${esc(p.error)}</div>`; return; }
+    const make = (label) => `<button type="button" class="btn small dark" data-act="promo-make"${p.aiReady ? '' : ' disabled'}>${icon('spark')}${label}</button>`;
+    const sm = p.summary;
+    if (!sm) {
+      el.innerHTML = `<p class="small muted">위 1회분 단가와 다가오는 시즌(설정 › 시즌)을 보고 AI가 시즌마다 프로모션 아이디어 · 가격 전략 · 먼저 할 채널을 정리해요.</p>
+        ${p.aiReady ? '' : '<div class="note warn mt-8">OpenAI 키가 없어 만들 수 없어요 (설정 › 연결).</div>'}<div class="flex wrap mt-8">${make('AI로 제안 받기')}</div>`;
+      return;
+    }
+    const pr = sm.prices || {};
+    const rows = sm.items.map(x => `<li class="ins-promo-row">
+        <div class="ins-promo-when"><b>${esc(x.season)}</b><span class="small muted">${esc(x.start)}</span>${x.dday > 0 ? badge('D-' + x.dday, x.dday <= 30 ? 'orange' : '') : badge('진행 중', 'lime')}</div>
+        <div class="ins-promo-body"><p>${esc(x.idea)}</p>
+          <p class="small"><span class="field-label">가격</span>${esc(x.price)}</p>
+          <p class="small"><span class="field-label">채널</span>${esc(x.channel)}</p></div></li>`).join('');
+    el.innerHTML = `<ul class="ins-promo-list">${rows}</ul>
+      <p class="panel-note mt-8">기준: 1회분 단가 최저 ${esc(money(pr.min))} · 보통 ${esc(money(pr.median))} · 최고 ${esc(money(pr.max))}${pr.own ? ` · 알디콤 ${esc(money(pr.own.perServing))}` : ''} (제품 ${esc(pr.products)}개)
+        · ${esc(fmt.date(sm.createdAt))} ${esc(sm.createdBy || '')}</p>
+      <div class="flex wrap mt-8">${make('다시 만들기')}</div>`;
+  }
+
+  async function makePromo(btn) {
+    ui.busy(btn, true);
+    try {
+      S.promo = await api('/api/insights/promo', {});
+      toast('시즌별 프로모션 제안을 만들었어요.');
+    } catch (e) { toast('만들지 못했어요: ' + e.message, 'error'); }
+    ui.busy(btn, false);
+    drawPromo();
   }
 
   function brandsView(cp) {

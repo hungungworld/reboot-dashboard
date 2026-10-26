@@ -137,7 +137,7 @@ def make_draft(month, questions, user):
                  avoid=[clean(a, 80) for a in (w.get("avoid") or []) if clean(a, 80)][:3],
                  carried=bool(p), by="지난 승인" if p else "AI" if t["id"] in written else "")
         t["check"] = check(t)
-        t["use"] = bool(t["angle"] and t["say"]) and not _blocked(t)   # 통과한 주제는 미리 체크
+        t["use"] = False   # 처음엔 모두 체크 해제 → 사람이 공개할 주제를 직접 고름
         t.pop("count")
     draft = {"month": month, "status": "draft", "themes": themes, "dropped": dropped,
              "excluded": [{"theme": a, "what": b, "reason": c} for a, b, c in EXCLUDED],

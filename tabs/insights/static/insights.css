@@ -869,3 +869,11 @@
 .part-insights button.ins-todo[aria-pressed="true"] { background: var(--orange); color: #fff; }
 /* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
 .part-insights .linetabs { overflow-y: hidden; }
+
+/* 시즌별 프로모션 제안 (가격 위치 · '1회분 단가 한눈에' 아래) */
+.part-insights .ins-promo-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.part-insights .ins-promo-row { display: grid; grid-template-columns: 180px 1fr; gap: 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; }
+.part-insights .ins-promo-when { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.part-insights .ins-promo-body { display: grid; gap: 4px; }
+.part-insights .ins-promo-body .field-label { display: inline-block; margin: 0 8px 0 0; }
+@media (max-width: 720px) { .part-insights .ins-promo-row { grid-template-columns: 1fr; } }
