@@ -345,8 +345,9 @@
 .part-cs .cs-row-time { color: var(--cs-muted); }
 .part-cs .cs-mailrow.is-unread { background: var(--cs-card); }
 .part-cs .cs-mailrow.is-unread .cs-item-name, .part-cs .cs-mailrow.is-unread .cs-row-subject, .part-cs .cs-mailrow.is-unread .cs-row-time { font-weight: 750; color: var(--cs-ink); }
-.part-cs .cs-mailrow.is-new { box-shadow: inset 4px 0 0 var(--cs-accent); }
-.part-cs .cs-mailrow.is-late { box-shadow: inset 4px 0 0 var(--cs-red); }   /* 기한 초과 (새 메일 강조보다 우선) */
+.part-cs .cs-mailrow.is-new { box-shadow: inset 3px 0 0 var(--cs-accent); }
+/* 기한 초과 (새 메일 강조보다 우선): 연한 장밋빛 띠 — '기한 초과' 글자가 빨강이라 띠는 보조 표시만 */
+.part-cs .cs-mailrow.is-late { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--cs-red) 38%, transparent); }
 .part-cs .cs-backbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--cs-rule); }
 .part-cs .cs-backbar .cs-btn:first-child { margin-right: auto; }
 @media (max-width: 720px) {
@@ -402,7 +403,10 @@
 /* 목록 옆에 열린 문의: 목록이 오른쪽 답장 작성기 높이만큼 내려오고, 그래도 많으면 목록 안에서 세로 스크롤 (가로 스크롤 없음) */
 .part-cs .cs-inbox[data-view="detail"] .cs-listcol { display: flex; flex-direction: column; gap: 14px; }
 .part-cs .cs-inbox[data-view="detail"] .cs-list { flex: 1 1 0; min-height: 320px; max-height: none; overflow-x: hidden; overflow-y: auto; align-content: start; }
-.part-cs .cs-mailrow.is-selected { background: var(--cs-accent-soft); border-color: var(--cs-accent-line); }
+/* 선택한 줄: 연두 바탕 대신 흰 카드 + 연두 테두리 (위 .cs-item.is-selected와 같은 모양) */
+.part-cs .cs-mailrow.is-selected { background: var(--cs-card); border-color: var(--cs-accent-line); box-shadow: 0 0 0 1px var(--cs-accent-line), 0 3px 8px rgba(37, 59, 0, .05); }
+.part-cs .cs-mailrow.is-selected.is-new { box-shadow: inset 3px 0 0 var(--cs-accent), 0 0 0 1px var(--cs-accent-line), 0 3px 8px rgba(37, 59, 0, .05); }
+.part-cs .cs-mailrow.is-selected.is-late { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--cs-red) 38%, transparent), 0 0 0 1px var(--cs-accent-line), 0 3px 8px rgba(37, 59, 0, .05); }
 .part-cs .cs-list-empty { padding: 24px 6px; }
 /* 목록 줄의 두 검토 표시 (문구 · CS) */
 .part-cs .cs-gates-mini { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: var(--cs-faint); margin-left: auto; letter-spacing: 0; }
