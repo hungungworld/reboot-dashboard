@@ -80,7 +80,7 @@
 .part-settings .set-conn td { vertical-align: middle; }
 .part-settings .set-conn th, .part-settings .set-conn td { padding-left: 11px; padding-right: 11px; }
 .part-settings .set-conn .set-row-actions { flex-direction: column; align-items: stretch; flex-wrap: nowrap; }
-.part-settings .set-conn .set-row-actions .btn { justify-content: center; white-space: nowrap; }
+.part-settings .set-conn .set-row-actions .btn { justify-content: flex-start; white-space: nowrap; }
 .part-settings .set-used { font-size: 11px; }
 .part-settings .set-value { word-break: break-all; }
 .part-settings .set-code { background: var(--soft); border-radius: var(--radius-sm); padding: 12px; font-size: 11px; line-height: 1.7; overflow-x: auto;

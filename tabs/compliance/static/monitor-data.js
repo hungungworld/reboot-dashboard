@@ -1,7 +1,7 @@
 /* 규제 모니터링 결과 — tabs/compliance/refresh.py가 덮어쓰는 파일입니다 (사람이 고치지 않음).
    HTML은 <script src>로 읽기만 합니다. 키·개인정보는 넣지 않습니다.
    형식: window.REBOOT_MONITOR = { generatedAt, sources: [{ id, label, items: [{ id, date, title, firm, url, summary, quotes? }] }] }
-   항목의 id는 바뀌지 않아야 합니다 (🆕·🔄 표시 기준). */
+   항목의 id는 바뀌지 않아야 합니다 ('새'·'갱신' 표시 기준). */
 (function (global) {
   'use strict';
   global.REBOOT_MONITOR = {

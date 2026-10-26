@@ -574,7 +574,7 @@
       <section class="card perf-info" data-ref="info" aria-label="기본 정보"></section>
       <div class="kpis six" data-ref="kpis"></div>
       <section class="card">
-        <div class="card-head"><h2><button type="button" class="perf-fold" data-act="fold-table" aria-expanded="${S.tableOpen !== false}" aria-controls="perf-table-body">채널별 성과</button> <span class="muted small" data-ref="unit"></span></h2>
+        <div class="card-head"><h2><button type="button" class="perf-fold" data-act="fold-table" aria-expanded="${S.tableOpen !== false}" aria-controls="perf-table-body">채널별 성과</button><span class="head-cap" data-ref="unit"></span></h2>
           <div class="perf-table-tools">
             <div class="seg" role="group" aria-label="통화">
               <button type="button" data-cur="KRW" class="${S.currency === 'KRW' ? 'selected' : ''}" aria-pressed="${S.currency === 'KRW'}">원화</button>
@@ -588,9 +588,9 @@
         <p class="panel-note mt-8">행을 누르면 아래 일별 추이에 그 채널의 매출(실선)·광고비(점선)가 나와요. 여러 채널을 고를 수 있고, 다시 누르면 해제돼요. 달러를 고르면 핵심 지표·차트·AI 문장도 달러로 보여요 (보고서·인쇄는 원화).</p></div>
       </section>
       <div class="grid-2">
-        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출</h2><span class="small muted" data-ref="bar-unit">단위: 원 (만 원 표시)</span></div>
+        <section class="card"><div class="card-head"><h2>채널별 광고비 대비 매출<span class="head-cap" data-ref="bar-unit">단위: 원 (만 원 표시)</span></h2></div>
           <div class="perf-chart"><canvas data-ref="bar" role="img" aria-label="채널별 광고비와 매출 막대 차트 (숫자는 위 표에 있음)"></canvas></div></section>
-        <section class="card"><div class="card-head"><h2>일별 매출 추이</h2><span class="small muted" data-ref="line-note"></span></div>
+        <section class="card"><div class="card-head"><h2>일별 매출 추이<span class="head-cap" data-ref="line-note"></span></h2></div>
           <div class="perf-chart"><canvas data-ref="line" role="img" aria-label="일별 매출 추이 선 차트 (범례를 누르면 선을 숨기거나 보임)"></canvas></div></section>
       </div>
       <div class="grid-2" data-ref="review"></div>
@@ -955,7 +955,7 @@
   }
 
   REBOOT.register({
-    id: 'performance', label: '성과분석', order: 70,
+    id: 'performance', label: '성과 분석', order: 70,
     title: '숫자에서 찾는, 다음 성장의 힌트.',
     subtitle: '채널별 성과를 비교하고, 다음 캠페인을 위한 인사이트를 발견하세요.',
     render

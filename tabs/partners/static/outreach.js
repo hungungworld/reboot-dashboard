@@ -273,9 +273,9 @@
       <div class="flex wrap mt-16">
         ${empty ? '<button type="button" class="btn soft" data-act="example">예시 데이터로 둘러보기</button>' : ''}
         ${ui.fileActions(
-          ui.fileBtn('upload', { label: '업체 목록 업로드', type: 'CSV · XLSX', act: 'csv-open' }) +
-          ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv' }) +
-          ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx' }))}
+          ui.fileBtn('upload', { label: '업체 목록 업로드', type: 'CSV · XLSX', act: 'csv-open', cls: 'ptn-btn-full' }) +
+          ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv', cls: 'ptn-btn-full' }) +
+          ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx', cls: 'ptn-btn-full' }))}
       </div>
       <p class="panel-note mt-8">공개된 업체 연락처만 올려요. 예시 데이터는 지어낸 업체(example.com)이고 화면에 '예시' 배지로 표시되며, 판매 실적에는 쓰이지 않아요.</p>
     </details>`;
@@ -1242,7 +1242,7 @@
         ${x.email ? '' : badge('이메일 없음', 'orange')}${x.example ? badge('예시', 'orange') : ''}</button></li>`;
     el.innerHTML = `<input class="input" type="search" data-ref="pick-q" placeholder="${esc(d.type)} ${opts.length}곳에서 이름·이메일 검색" aria-label="받는 파트너 검색" autocomplete="off">
       <ul class="ptn-v2-picklist">
-        <li data-search=""><button type="button" data-pick="" class="ptn-v2-pick-manual">✏️ 직접 입력 <small>목록에 없는 업체</small></button></li>
+        <li data-search=""><button type="button" data-pick="" class="ptn-v2-pick-manual">직접 입력 <small>목록에 없는 업체</small></button></li>
         ${opts.map(row).join('')}
         <li class="small muted ptn-v2-pick-none" hidden>찾는 업체가 없어요. 직접 입력을 고르세요.</li>
       </ul>`;
@@ -1753,7 +1753,7 @@
         </section>
 
         <section class="card">
-          <div class="card-head"><h2>협업 가이드 <span class="tiny muted">같은 조건으로 만드는</span></h2><span data-ref="g-badge">${g.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
+          <div class="card-head"><h2>협업 가이드<span class="head-cap">같은 조건으로 만드는</span></h2><span data-ref="g-badge">${g.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
           <div class="linetabs" role="group" aria-label="보기">
             <button type="button" data-gview="preview" aria-pressed="${g.view !== 'edit'}">문서 미리보기</button>
             <button type="button" data-gview="edit" aria-pressed="${g.view === 'edit'}">원문 편집</button>
@@ -1773,8 +1773,8 @@
           <div class="flex wrap mt-16 ptn-out-gactions">
             <button type="button" class="btn lime" data-act="g-attach">이메일에 첨부하기</button>
             ${ui.fileActions(
-              ui.fileBtn('download', { label: '가이드 다운로드', type: 'Word', act: 'g-docx' }) +
-              ui.fileBtn('download', { label: '가이드 다운로드', type: 'MD', act: 'g-md' }))}
+              ui.fileBtn('download', { label: '가이드 다운로드', type: 'Word', act: 'g-docx', cls: 'ptn-btn-full' }) +
+              ui.fileBtn('download', { label: '가이드 다운로드', type: 'MD', act: 'g-md', cls: 'ptn-btn-full' }))}
           </div>
           <div data-ref="g-attached">${g.attached ? attachedNote(g.attached) : ''}</div>
           <p class="panel-note mt-8">첨부하면 REBOOT_${esc(g.type)}_협업가이드_날짜.docx로 첨부파일 보관함에 저장되고, 메일 작성 탭에서 체크된 상태로 함께 보내져요. 다운로드는 보관함에 저장하지 않아요.</p>

@@ -7,10 +7,10 @@
 .part-insights { text-wrap-style: pretty; }
 .part-insights :is(h1, h2, h3, h4, summary, th, label, .badge, .kpi-label, .panel-note) { text-wrap-style: balance; }
 /* 문장 · 반점 한 조각(insights.js phrase) — 한 줄에 들어가면 통째로 다음 줄로, 길면 조각 안에서 줄 길이를 고르게 */
-.part-insights .ins-ph { display: inline-block; max-width: 100%; text-wrap-style: balance; }
-.part-insights .ins-skel { height: 220px; }
+.part-insights .ins-ph { display: inline-block; max-width: 100%; text-wrap-style: balance; }.part-insights .ins-skel { height: 220px; }
 .part-insights .ins-skel-sm { height: 90px; }
 .part-insights .ins-h3 { font-size: 13px; margin: 20px 0 10px; display: flex; align-items: baseline; gap: 8px; }
+.part-insights .ins-h3 > .head-cap { margin-left: 0; }   /* flex gap 8px이 간격 */
 .part-insights .ins-ul { margin: 6px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.75; color: var(--text); }
 .part-insights .ins-ul li + li { margin-top: 4px; }
 .part-insights .ins-sub { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); font-weight: 400; line-height: 1.5; }
@@ -248,7 +248,7 @@
 @media (max-width: 640px) {
   .part-insights .ins-ptabs button { padding: 12px 10px 14px; }
 }
-.part-insights .ins-q h2 { font-size: 18px; margin-top: 6px; letter-spacing: -.5px; }
+.part-insights .ins-q h2 { font-size: 15px; margin-top: 6px; letter-spacing: -.5px; }
 .part-insights .ins-oneline { margin-top: 10px; font-size: 13px; color: var(--ink-2); }
 /* 단가 박스 안 구간별 상품 (구간마다 2개 + 더 보기) */
 .part-insights .ins-bk-top { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); gap: 12px; flex-wrap: wrap; }
@@ -286,7 +286,6 @@
 .part-insights .ins-band-bar .mid { background: var(--muted-2); }
 .part-insights .ins-band-bar .high { background: var(--ink-2); }
 /* 1회분 단가 벌떼 차트 — $12까지 한 화면, 그 위는 가로 스크롤 */
-.part-insights .ins-sw-sub { margin-left: 8px; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
 .part-insights .ins-sw-wrap { position: relative; margin-top: 18px; }
 .part-insights .ins-sw-scroll { overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
   scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
@@ -434,6 +433,8 @@
 .part-insights .ins-1l { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
 .part-insights .ins-1l > * { flex: none; }
 .part-insights .ins-field .ins-1l { display: block; }
+/* 알디콤 이름: 배지 대신 초록 테두리 */
+.part-insights .ins-own-name { display: inline-block; padding: 1px 7px; border: 1px solid var(--green); border-radius: 6px; line-height: 1.4; }
 .part-insights .ins-1l .ins-chans { display: flex; gap: 4px; flex-wrap: nowrap; }
 .part-insights .ins-th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .part-insights .ins-th-sort i { font-style: normal; font-size: 9px; color: var(--muted-2); display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; border-radius: 4px; }
@@ -582,9 +583,9 @@
   display: flex; align-items: center; justify-content: center; border-radius: 22px; background: var(--soft); border: 1px solid var(--line); will-change: transform; }
 .part-insights .ins-pf-tile .ins-pc-ico { width: 64px; height: 64px; stroke: var(--ink-2); stroke-width: 1.2; }
 .part-insights .ins-pf-tile .ins-pc-ico .dot { fill: var(--ink-2); }
-/* 제형 색 (2026-10-26): 진열대 타일 · 단가 차트 점이 같은 색 — 눈이 편하게 회색에 가까운 옅은 색만, 알디콤은 라임, 빨강 · 주황은 품절 · 가격 변동에만 */
-.part-insights { --f-liquid-bg: #eff2f7; --f-liquid: #7d8fae; --f-powder-bg: #f4f1ec; --f-powder: #a08f74; --f-stick-bg: #f1f0f5; --f-stick: #9289aa;
-  --f-gummy-bg: #f5f0f2; --f-gummy: #a98f9c; --f-pellet-bg: #eff3f0; --f-pellet: #7f9a8a; --f-tablet-bg: #eef3f3; --f-tablet: #7c9a9f; }
+/* 제형 색 (2026-10-26): 진열대 타일 · 단가 차트 점이 같은 색 — SAP Horizon 강조색 계열을 옅게(바탕은 아주 연하게), 알디콤은 라임, 빨강 · 주황은 품절 · 가격 변동에만 */
+.part-insights { --f-liquid-bg: #edf6fd; --f-liquid: #5b85c2; --f-powder-bg: #f1f3f5; --f-powder: #6f8396; --f-stick-bg: #f2effe; --f-stick: #7f70d6;
+  --f-gummy-bg: #fdf0f5; --f-gummy: #b8648f; --f-pellet-bg: #f3f8e9; --f-pellet: #4f8a61; --f-tablet-bg: #e9f8f5; --f-tablet: #2f8590; }
 :root[data-theme="dark"] .part-insights { --f-liquid-bg: #24272d; --f-liquid: #8e9cb6; --f-powder-bg: #29261f; --f-powder: #ab9d86; --f-stick-bg: #26252c; --f-stick: #9f98b4;
   --f-gummy-bg: #2a2528; --f-gummy: #b19ca6; --f-pellet-bg: #232825; --f-pellet: #8fa699; --f-tablet-bg: #222829; --f-tablet: #8ca6aa; }
 @media (prefers-color-scheme: dark) {

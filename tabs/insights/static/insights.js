@@ -1,7 +1,7 @@
 /* 시장 · 고객 인사이트 (담당: 이현경) — tabs/insights/docs/README.md '3번째 대시보드'.
-   왼쪽 메뉴 (마케터의 한 주 순서): 이번 주 · 시장 · 고객 · 이번 달 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
+   왼쪽 메뉴 (2026-10-26 묶음): TO DO = 이번 주 · 이번 달 / 데이터 = 시장 · 고객 · 데이터 관리 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
    - 시장: 변화 · 가격 위치 · 브랜드 비교 / 고객: 구매자 리뷰 · 유튜브 댓글
-   - 메뉴 밖: 데이터 관리(마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증, 머리글 버튼)
+   - 데이터 관리: 마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증 (예전엔 머리글 버튼으로만 열렸음)
    - 보관한 기사는 2026-10-26 홈 › 미국 시장 브리핑 보관함 창으로 옮김 (옛 주소는 홈으로 넘김)
    - 검색 수요 탭은 2026-10-25 삭제 → '다음 급등 예상'은 홈 › 콘텐츠 캘린더 맨 아래로 옮김
    - 판단은 규칙(서버 rules.py), AI는 문장 · 분류 · 요약만 (AI 배지 · 참고용)
@@ -19,14 +19,15 @@
   const api = REBOOT.api;
   const store = REBOOT.store('insights');   // 저장 키: reboot:insights:summary (메뉴 숫자용)
 
-  const TABS = [['weekly', '이번 주'], ['market', '시장'], ['customers', '고객'], ['monthly', '이번 달']];
-  // 화면 안 탭. manage(데이터 관리)는 왼쪽 메뉴에 없고 머리글 버튼으로만 열림
+  // [id, 이름, 왼쪽 메뉴 묶음, 흐린 글씨] — 묶음 이름표는 core.js가 data-group으로 그림
+  const TABS = [['weekly', '이번 주', 'TO DO'], ['monthly', '이번 달', 'TO DO'],
+    ['market', '시장', '데이터'], ['customers', '고객', '데이터'], ['manage', '데이터 관리', '데이터', true]];
+  // 화면 안 탭
   const SUBS = {
     market: [['changes', '변화'], ['price', '가격 위치'], ['brands', '브랜드 비교']],
     customers: [['reviews', '구매자 리뷰'], ['audience', '유튜브 댓글']],
     manage: [['edit', '진열대 수집 · 고치기'], ['accuracy', 'AI 정확도 검증']]
   };
-  const HIDDEN = ['manage'];
   // 화면 안 탭 → 읽어야 할 데이터 (/api/insights/data/<이름>)
   const NEEDS = { changes: ['shelf', 'competitors'], price: ['shelf', 'competitors'], brands: ['shelf', 'competitors'], edit: ['shelf'],
     reviews: ['reviews'], audience: ['audience'], accuracy: ['accuracy'] };
@@ -199,9 +200,9 @@
     root.innerHTML = `
       <div class="kpis" data-ref="kpis">${'<div class="kpi"><div class="skeleton ins-skel-sm"></div></div>'.repeat(4)}</div>
       <div class="ins-run" data-ref="run" hidden></div>
-      <div class="tabs" role="tablist" aria-label="인사이트 보기">${TABS.map(([id, l]) =>
-        `<button type="button" role="tab" data-tab="${id}" aria-selected="false">${esc(l)}</button>`).join('')}</div>
-      ${TABS.map(t => t[0]).concat(HIDDEN).map(id => `<div class="ins-panel" data-panel="${id}" role="tabpanel" hidden></div>`).join('')}`;
+      <div class="tabs" role="tablist" aria-label="인사이트 보기">${TABS.map(([id, l, g, quiet]) =>
+        `<button type="button" role="tab" data-tab="${id}" data-group="${esc(g)}"${quiet ? ' data-quiet' : ''} aria-selected="false">${esc(l)}</button>`).join('')}</div>
+      ${TABS.map(([id]) => `<div class="ins-panel" data-panel="${id}" role="tabpanel" hidden></div>`).join('')}`;
     const actions = REBOOT.page.actions();
     if (actions) {
       actions.addEventListener('click', e => {
@@ -209,7 +210,6 @@
         if (!b) return;
         if (b.dataset.act === 'ins-update') openUpdate('weekly');
         if (b.dataset.act === 'ins-monthly-run') openUpdate('monthly');
-        if (b.dataset.act === 'ins-manage') { show('manage'); toTop(); }
       });
     }
     root.addEventListener('click', onClick);
@@ -247,7 +247,7 @@
     if (NEWS_HASH.includes(h)) { global.location.replace('/dashboard#briefing'); return { tab: '', sub: '' }; }
     if (OLD_HASH[h]) { h = OLD_HASH[h]; setHash(h); }
     const [tab, sub] = h.split('/');
-    const ok = TABS.some(t => t[0] === tab) || HIDDEN.includes(tab);
+    const ok = TABS.some(t => t[0] === tab);
     return { tab: ok ? tab : '', sub: ok && SUBS[tab] && SUBS[tab].some(x => x[0] === sub) ? sub : '' };
   }
 
@@ -316,7 +316,7 @@
       : S.tab === 'monthly' ? `<button type="button" class="btn" data-act="ins-monthly-run">${icon('spark')}월간 분석 실행</button>` +
         dl('/api/insights/report/monthly.docx' + (month ? `?month=${encodeURIComponent(month)}` : ''), '월간 리포트 다운로드', 'Word') +
         dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX')
-        : dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX') + (S.tab === 'manage' ? '' : `<button type="button" class="btn" data-act="ins-manage">${icon('settings')}데이터 관리</button>`);
+        : dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX');
     box.innerHTML = `${extra}<button type="button" class="btn lime" data-act="ins-update">${icon('refresh')}최신 데이터 받기</button>`;
   }
 
@@ -593,14 +593,14 @@
     if (!w) { el.innerHTML = `<div class="stack">${skel}${skel}</div>`; return; }
     const acts = w.actions;
     const s = w.shelf;
-    // 긴급 · 기회는 한 줄 목록(누르면 펼침, 처음엔 맨 위 한 줄만), 참고는 맨 아래 접기 · 위 칸으로 등급 고르기
+    // 긴급 · 기회는 한 줄 목록(누르면 펼침, 처음엔 모두 접힘), 참고는 맨 아래 접기 · 위 칸으로 등급 고르기
     const rows = actionRows(acts);
     const main = rows.filter(r => r.grade !== '참고'), refs = rows.filter(r => r.grade === '참고');
     const f = S.actF || 'all';
-    const openKey = S.actOpen === undefined ? (main[0] && main[0].key) : S.actOpen;
+    const openKey = S.actOpen === undefined ? null : S.actOpen;   // 처음엔 모두 접힘
     const seg = main.length ? `<div class="ins-aw-seg" role="group" aria-label="등급 고르기">${[['all', '전체', main.length], ['긴급', '긴급', rowCount(main, '긴급')], ['기회', '기회', rowCount(main, '기회')]]
       .map(([k, l, n]) => `<button type="button" data-act="act-f" data-f="${k}" aria-pressed="${f === k}"${f === k ? ' class="on"' : ''}>${l}<b>${n}</b></button>`).join('')}</div>` : '';
-    const head = `<div class="card-head"><h2>이번 주 액션 <span class="muted small">${esc(w.weekLabel)}</span></h2>
+    const head = `<div class="card-head"><h2>이번 주 액션<span class="head-cap">${esc(w.weekLabel)}</span></h2>
       <div class="flex">${w.aiUsed ? badge('AI 문장', 'purple') : ''}${seg}</div></div>`;
     let list;
     const shown = main.filter(r => f === 'all' || r.grade === f);
@@ -2034,7 +2034,7 @@
 
   function priceView(sh) {
     const priced = sh.items.filter(knownPs);
-    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에 <span class="ins-sw-sub">점 1개 = 제품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
+    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에<span class="head-cap">점 1개 = 제품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     return pantryHtml(sh) + overview;
   }
 
@@ -2123,11 +2123,12 @@
 
   function brandRow(r) {
     const open = !!S.mk.open[r.brand] && r.items.length > 0;
-    const flags = r.own ? badge('알디콤', 'green') : [r.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', r.isNew ? badge('새', 'blue') : '',
+    const flags = r.own ? '' : [r.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', r.isNew ? badge('새', 'blue') : '',
       r.unlisted ? badge('분석 전') : ''].join('');
     const tog = r.items.length ? `<button type="button" class="ins-tg" data-act="mk-toggle" data-brand="${esc(r.brand)}" aria-expanded="${open}" aria-label="${esc(r.brand)} 제품 ${open ? '접기' : '펼치기'}">${open ? '▾' : '▸'}</button>`
       : '<span class="ins-tg none" aria-hidden="true"></span>';
-    const name = r.id != null ? `<button type="button" class="ins-bn" data-act="comp-detail" data-id="${esc(r.id)}" title="${esc(r.brand)} · 브랜드 카드 열기">${esc(r.brand)}</button>` : `<b class="ins-bn-t" title="${esc(r.brand)}">${esc(r.brand)}</b>`;
+    const ownCls = r.own ? ' ins-own-name' : '';
+    const name = r.id != null ? `<button type="button" class="ins-bn${ownCls}" data-act="comp-detail" data-id="${esc(r.id)}" title="${esc(r.brand)} · 브랜드 카드 열기">${esc(r.brand)}</button>` : `<b class="ins-bn-t${ownCls}" title="${esc(r.brand)}">${esc(r.brand)}</b>`;
     const forms = r.forms.length ? esc(r.forms.map(g => FORM_KO[g.f] || '기타').join(' · ')) : '<span class="muted">—</span>';
     const add = r.unlisted ? '<div class="ins-br-add"><button type="button" class="ins-link small" data-act="comp-discover" title="진열대에 새로 보인 브랜드를 경쟁 브랜드로 넣어요">경쟁 브랜드로 넣기</button></div>' : '';
     // 1회분은 가장 싼 값 하나 (제형별 값은 ▸ 펼침에) · 제형이 여럿이면 어느 제형인지 아래에 작게
@@ -2235,13 +2236,13 @@
     return `<span class="muted">${why}</span>${c.id != null ? ` · <button type="button" class="ins-link" data-act="comp-research" data-id="${esc(c.id)}">${icon('spark')}지금 분석</button>` : ''}`;
   }
   function compRow(c) {
-    const flags = c.own ? badge('알디콤', 'green') : [c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', c.isNew ? badge('새', 'blue') : ''].join('');
+    const flags = c.own ? '' : [c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', c.isNew ? badge('새', 'blue') : ''].join('');
     const forms = (c.forms || []).map(f => esc(f.label.split(' (')[0])).join(', ') || '—';
     const fb = c.feedback || {};
     const fbt = [fb.praise ? `<span class="ins-fb pos">+ ${esc(fb.praise.topic)}</span>` : '', fb.complaint ? `<span class="ins-fb neg">− ${esc(fb.complaint.topic)}</span>` : ''].join('') || '<span class="muted">—</span>';
     const one = (html, title) => `<div class="ins-1l"${title ? ` title="${esc(title)}"` : ''}>${html}</div>`;
     return `<tr class="${c.own ? 'ins-own-row' : ''}" data-act="comp-detail" data-id="${c.own ? 'own' : esc(c.id == null ? 'b:' + c.brand : c.id)}" tabindex="0">
-      <td>${one(`<strong>${esc(c.brand)}</strong>${flags}`, `${c.brand} · ${c.tierLabel}`)}</td>
+      <td>${one(`<strong${c.own ? ' class="ins-own-name"' : ''}>${esc(c.brand)}</strong>${flags}`, `${c.brand} · ${c.tierLabel}`)}</td>
       <td>${one(`<span class="ins-chans">${chanChips(c)}</span>`)}</td>
       <td class="num nowrap">${esc(compPop(c))}</td>
       <td class="num nowrap">${c.perServing != null ? esc(money(c.perServing)) : '—'}</td>
@@ -2347,8 +2348,8 @@
         <div class="ins-bc-item"><span class="field-label">칭찬 ${fb.praise ? `· ${esc(fb.praise.topic)} ${fb.praise.count}건` : ''}</span><div>${fb.praise ? esc(fb.praise.example) : '<span class="ins-none">칭찬 리뷰 없음</span>'}</div></div>
         <div class="ins-bc-item"><span class="field-label">불만 ${fb.complaint ? `· ${esc(fb.complaint.topic)} ${fb.complaint.count}건` : ''}</span><div>${fb.complaint ? esc(fb.complaint.example) : '<span class="ins-none">불만 리뷰 없음</span>'}</div></div></div>
         <p class="small muted">주제별: ${topics || '—'} (리뷰 ${fmt.num(fb.reviews)}개 기준)</p>` : '<p class="small muted">아직 모은 구매자 리뷰가 없어요.</p>'}
-      ${prods ? `<h3 class="ins-h3">진열대 제품</h3><ul class="ins-ul">${prods}</ul>` : ''}
-      ${c.own ? '' : `<h3 class="ins-h3">근거 자료</h3>${srcs.length ? `<ul class="ins-ul">${srcs.map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('')}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}
+      ${prods ? `<details class="ins-fold mt-16"><summary>진열대 제품 ${(c.products || []).length}개</summary><ul class="ins-ul">${prods}</ul></details>` : ''}
+      ${c.own ? '' : `<details class="ins-fold mt-16"><summary>근거 자료 ${srcs.length ? srcs.length + '개' : ''}</summary>${srcs.length ? `<ul class="ins-ul">${srcs.map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('')}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}</details>
       <label class="field-label mt-8" for="comp-site">브랜드 홈페이지 (자동으로 찾고, 틀리면 고치세요)</label>
       <div class="flex"><input id="comp-site" class="grow" data-ref="site" value="${esc(c.website || '')}" placeholder="https://"><button type="button" class="btn small" data-ref="site-save">저장</button></div>
       <h3 class="ins-h3">분석 기록</h3>${hist ? `<ul class="ins-ul">${hist}</ul>` : '<p class="small muted">아직 기록이 없어요.</p>'}
@@ -2563,7 +2564,7 @@
     const st = (S.data.reviews.csStatus.find(([k]) => k === r.cs) || [])[1];
     return `<tr class="${r.cs === 'todo' ? 'ins-rv-todo-row' : ''}" data-act="rv-open" data-id="${esc(r.id)}" tabindex="0">
       <td class="nowrap small">${esc(r.date || '—')}</td><td class="nowrap">${esc(r.sourceLabel || r.source)}</td>
-      ${own ? `<td class="nowrap"><span class="ins-tag">${esc(hashTag(r.line))}</span></td>` : `<td><div class="ins-1l"><strong>${esc(r.brand || '—')}</strong>${r.own ? badge('알디콤', 'green') : ''}</div></td>`}
+      ${own ? `<td class="nowrap"><span class="ins-tag">${esc(hashTag(r.line))}</span></td>` : `<td><div class="ins-1l"><strong${r.own ? ' class="ins-own-name"' : ''}>${esc(r.brand || '—')}</strong></div></td>`}
       <td class="nowrap">${stars(r.rating)}</td><td class="nowrap">${sentBadge(r.sentiment)}</td>
       <td><div class="ins-1l">${r.topics.map(t => `<span class="ins-tag">${esc(hashTag(t))}</span>`).join(' ') || '<span class="muted">—</span>'}</div></td>
       <td><div class="ins-1l" title="${esc(clip(pre, 300))}">${r.slackBy ? `<span class="ins-sl" title="${esc(`${r.slackBy} · ${fmt.datetime(r.slackAt)} 슬랙 공유`)}">${icon('chat')}공유</span>` : ''}${esc(pre)}</div></td>
@@ -2706,7 +2707,7 @@
       return `<td class="nowrap">${c.pos ? `<button type="button" class="ins-cell pos" data-act="rv" data-brand="${esc(b.brand)}" data-own="${b.own ? 1 : ''}" data-topic="${esc(t)}" data-s="+">+${c.pos}</button>` : ''}` +
         `${c.neg ? `<button type="button" class="ins-cell neg" data-act="rv" data-brand="${esc(b.brand)}" data-own="${b.own ? 1 : ''}" data-topic="${esc(t)}" data-s="-">−${c.neg}</button>` : ''}</td>`;
     };
-    const tr = b => `<tr class="${b.own ? 'ins-own-row' : ''}"><td><div class="ins-1l" title="${esc(b.brand)}">${b.own ? badge('알디콤', 'green') + ' ' : ''}${b.watched ? '<span class="ins-star">★</span> ' : ''}${esc(b.brand)}</div></td>
+    const tr = b => `<tr class="${b.own ? 'ins-own-row' : ''}"><td><div class="ins-1l" title="${esc(b.brand)}">${b.watched ? '<span class="ins-star">★</span> ' : ''}${b.own ? `<span class="ins-own-name">${esc(b.brand)}</span>` : esc(b.brand)}</div></td>
       <td class="num">${esc(b.total)}</td><td class="num">${b.avgRating == null ? '—' : esc(b.avgRating)}</td>${d.topics.map(t => cell(b, t)).join('')}</tr>`;
     return `<p class="small muted mb-8">브랜드 ${d.table.length}개</p><div class="table-wrap ins-rvm-scroll"><table class="data-table ins-table ins-fixed ins-matrix"${fc.attr}>${fc.group}<thead><tr>${head}</tr></thead><tbody>${rows.map(tr).join('')}</tbody></table></div>`;
   }
@@ -2717,7 +2718,7 @@
 
   function compareHtml(d) {
     // 브랜드 × 주제 · 아마존 리뷰 요약: 제목 줄을 눌러 접기 · 펴기 (처음엔 펼침, 접은 상태는 화면에 남김)
-    return `<details class="ins-fold ins-fold-h card mt-24" data-fold="rv-matrix"${S.open['rv-matrix'] !== false ? ' open' : ''}><summary><h2>브랜드 × 주제</h2><span class="small muted">+칭찬 / −불만을 누르면 리뷰 목록에서 그 리뷰만 보여요 · 머리글을 누르면 정렬</span></summary>
+    return `<details class="ins-fold ins-fold-h card mt-24" data-fold="rv-matrix"${S.open['rv-matrix'] !== false ? ' open' : ''}><summary><h2>브랜드 × 주제<span class="head-cap">+칭찬 / −불만을 누르면 리뷰 목록에서 그 리뷰만 보여요 · 머리글을 누르면 정렬</span></h2></summary>
         <div class="ins-fold-body"><div data-ref="rvm-body">${rvmTable(d)}</div>
         <p class="panel-note mt-8">Amazon은 대표 리뷰만 모아요. 주제 · 칭찬/불만은 단어와 별점(4~5 칭찬 · 1~2 불만 · 3점은 빼요)으로 나누고, OpenAI 키가 있으면 AI가 다시 나눠요. 주제 칸 정렬은 칭찬 + 불만 수 기준이에요.</p></div></details>
       <details class="ins-fold ins-fold-h card mt-24" data-fold="rv-sum"${S.open['rv-sum'] !== false ? ' open' : ''}><summary><h2>아마존 리뷰 요약</h2>${badge(`${d.summaries.length}개`)}${badge('원문')}</summary>
@@ -2884,7 +2885,7 @@
     let table = '';
     if (s) {
       const keys = d.methods.map(m => m[0]).filter(k => s.methods[k]);
-      table = `<section class="card"><div class="card-head"><h2>채점 결과</h2><span class="small muted">${esc(fmt.datetime(s.at))}${s.model ? ` · ${esc(s.model)}` : ''}</span></div>
+      table = `<section class="card"><div class="card-head"><h2>채점 결과<span class="head-cap">${esc(fmt.datetime(s.at))}${s.model ? ` · ${esc(s.model)}` : ''}</span></h2></div>
         <div class="table-wrap"><table class="data-table"><thead><tr><th>방식</th>${d.fields.map(f => `<th>${esc(f[1])}</th>`).join('')}<th>틀린 댓글</th></tr></thead>
         <tbody>${keys.map(k => { const m = s.methods[k]; return `<tr${k === s.winner ? ' class="selected"' : ''}><td><b>${esc(name[k])}</b>${k === s.winner && keys.length > 1 ? ` ${badge('가장 높음', 'lime')}` : ''}</td>
           ${d.fields.map(f => `<td>${esc(m[f[0]])}%</td>`).join('')}<td>${esc(m.wrong.length)}건</td></tr>`; }).join('')}</tbody></table></div>
@@ -2924,8 +2925,8 @@
     const missing = plan.items.some(i => i.missing.length);
     const body = `<div class="part-insights ins-modal">
       <p>항목을 골라 시작하세요. 수집은 서버가 뒤에서 하고, 이 화면에서 진행 상황을 볼 수 있어요. 같은 주에 다시 모으면 그 주 결과를 새로 바꿔요.</p>
-      <h3 class="ins-h3">이번 주 데이터 <span class="small muted">${esc(plan.week)}</span></h3>${weekly.map(row).join('')}
-      <h3 class="ins-h3">월간 분석 <span class="small muted">${esc(plan.reviewMonth)} 기준 (1~7일에는 지난달)</span></h3>${monthly.map(row).join('')}
+      <h3 class="ins-h3">이번 주 데이터<span class="head-cap">${esc(plan.week)}</span></h3>${weekly.map(row).join('')}
+      <h3 class="ins-h3">월간 분석<span class="head-cap">${esc(plan.reviewMonth)} 기준 (1~7일에는 지난달)</span></h3>${monthly.map(row).join('')}
       <div class="note lime mt-16" data-ref="total"></div>
       <div class="ins-usage mt-8">
         <span>이 대시보드가 쓴 양</span>
@@ -3028,7 +3029,7 @@
   }
 
   REBOOT.register({
-    id: 'insights', label: '시장 · 고객 인사이트', order: 20,
+    id: 'insights', label: '인사이트', order: 20,
     render,
     summary: () => {
       const s = store.get('summary', null);

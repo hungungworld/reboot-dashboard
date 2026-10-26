@@ -130,6 +130,29 @@
 
   /* ───────── 시즌 (브리핑 히어로 · 시즌 카드 · 콘텐츠 캘린더) ───────── */
   const seasonKey = s => (s.ongoing ? -1 : s.dday);
+  // 시즌 이모지 (2026-10-26): 이름에 든 낱말로 찾음, 없으면 구분(holiday · sports · occasion)별 기본 1개
+  const SEASON_EMOJI = [
+    [/halloween/i, ['🎃', '👻', '🍬']], [/thanksgiving/i, ['🦃', '🥧', '🍂']], [/christmas/i, ['🎄', '🎅', '🎁']],
+    [/new year/i, ['🎆', '🥂', '🎉']], [/mardi gras/i, ['🎭', '📿', '🎺']], [/super bowl/i, ['🏈', '🍗', '🍺']],
+    [/patrick/i, ['🍀', '🍺', '🌈']], [/cinco de mayo/i, ['🌮', '🪅', '🌶️']], [/memorial/i, ['🇺🇸', '🎖️', '🌭']],
+    [/independence|fourth of july|july 4/i, ['🎆', '🇺🇸', '🍔']], [/labor day/i, ['🌭', '☀️', '🛠️']],
+    [/valentine/i, ['💘', '🍫', '🌹']], [/easter/i, ['🐣', '🥚', '🌷']], [/spring break/i, ['🏖️', '🍹', '🌴']],
+    [/march madness/i, ['🏀', '🍕', '🍺']], [/derby/i, ['🏇', '🌹', '🥃']], [/mother/i, ['💐', '💝', '🥞']],
+    [/father/i, ['👔', '🍖', '🍺']], [/graduation/i, ['🎓', '🎉', '🥂']], [/black friday|cyber monday/i, ['🛍️', '🏷️', '💳']],
+    [/oktoberfest/i, ['🍺', '🥨', '🎪']], [/world cup|soccer/i, ['⚽', '🏟️', '🍺']], [/pride/i, ['🏳️‍🌈', '🎉', '🥂']],
+  ];
+  const CAT_EMOJI = { holiday: '📅', sports: '🏆', occasion: '🎉' };
+  function seasonEmoji(name, category) {
+    const hit = SEASON_EMOJI.find(([re]) => re.test(String(name || '')));
+    if (hit) return hit[1];
+    const s = category ? null : seasons().find(x => x.name === name);
+    return [CAT_EMOJI[category || (s && s.category)] || '📅'];
+  }
+  // 캘린더 띠 색 — 시즌 이름으로 6색 중 하나 (같은 시즌은 늘 같은 색)
+  const EV_COLORS = ['ev-green', 'ev-pink', 'ev-orange', 'ev-purple', 'ev-cyan', 'ev-blue'];
+  const seasonColor = name => EV_COLORS[[...String(name || '')].reduce((h, c) => (h * 31 + c.codePointAt(0)) >>> 0, 7) % EV_COLORS.length];
+  const emojiOne = s => `<span class="home-emoji" aria-hidden="true">${seasonEmoji(s.name, s.category)[0]}</span>`;
+  const emojiAll = s => `<span class="home-emoji" aria-hidden="true">${seasonEmoji(s.name, s.category).join('')}</span>`;
   function upcomingSeasons() {
     return seasons().filter(s => s.ongoing || s.dday >= 0).sort((a, b) => seasonKey(a) - seasonKey(b));
   }
@@ -168,7 +191,7 @@
       const status = s.ongoing ? badge('진행 중', 'green') : s.inLead ? badge('준비 기간', 'green') : '';
       const tip = s.notes || (s.ongoing ? '게시 일정과 재고를 확인하세요.' : `준비 시작 ${md(addDays(s.start, -s.leadDays))} · 준비 기간 ${s.leadDays}일`);
       return `<button type="button" class="home-season-row${s.inLead || s.ongoing ? ' on' : ''}" data-go-view="calendar" title="${esc(tip)}">
-        <b>${s.ongoing ? 'NOW' : esc(fmt.dday(s.start))}</b><span class="grow">${esc(s.name)}<small>${esc(s.start.replace(/-/g, '.'))} (${WEEKDAY[dow(s.start)]})</small></span>${status}</button>`;
+        <b>${s.ongoing ? 'NOW' : esc(fmt.dday(s.start))}</b><span class="grow">${emojiAll(s)} ${esc(s.name)}<small>${esc(s.start.replace(/-/g, '.'))} (${WEEKDAY[dow(s.start)]})</small></span>${status}</button>`;
     }).join('');
   }
 
@@ -181,14 +204,31 @@
     const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
     const lead = dow(first);
     const cells = Math.ceil((lead + days) / 7) * 7;
-    const list = seasons();
+    const list = seasons().slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : a.name < b.name ? -1 : 1));
     const html = [];
+    let lanes = [];
     for (let i = 0; i < cells; i++) {
       const iso = addDays(first, i - lead);
-      const pills = list.filter(s => iso >= s.start && iso <= s.end)
-        .map(s => `<a class="event-pill" href="/dashboard/content" title="${esc(s.name)}${s.notes ? ` · ${esc(s.notes)}` : ''}">${esc(s.name)}</a>`)
-        .concat(list.filter(s => s.leadDays > 0 && addDays(s.start, -s.leadDays) === iso)
-          .map(s => `<span class="event-pill lead" title="${esc(s.name)} ${esc(fmt.dday(s.start))} · 준비 기간 ${esc(s.leadDays)}일 시작">${esc(s.name)} 준비 시작</span>`));
+      const wd = i % 7;
+      // 주마다 줄(lane)을 정해 여러 날 시즌이 같은 높이로 이어지게
+      if (wd === 0) {
+        const we = addDays(iso, 6);
+        lanes = [];
+        list.filter(s => s.start <= we && s.end >= iso).forEach(s => {
+          const free = lanes.findIndex(l => l.every(o => o.end < s.start || o.start > s.end));
+          if (free < 0) lanes.push([s]); else lanes[free].push(s);
+        });
+      }
+      const band = lanes.map(l => {
+        const s = l.find(o => iso >= o.start && iso <= o.end);
+        if (!s) return '<span class="home-ev-gap" aria-hidden="true"></span>';
+        const from = iso > s.start && wd > 0, to = iso < s.end && wd < 6;
+        const label = iso === s.start || wd === 0;
+        const cls = `event-pill ev ${seasonColor(s.name)}${from ? ' from' : ''}${to ? ' to' : ''}`;
+        return `<a class="${cls}" href="/dashboard/content" data-act="season-go" data-name="${esc(s.name)}" data-start="${esc(s.start)}" aria-label="${esc(s.name)}" title="${esc(seasonEmoji(s.name, s.category).join(''))} ${esc(s.name)}${s.notes ? ` · ${esc(s.notes)}` : ''} · 눌러서 콘텐츠 준비">${label ? `${emojiOne(s)} ${esc(s.name)}` : ''}</a>`;
+      });
+      const pills = band.concat(list.filter(s => s.leadDays > 0 && addDays(s.start, -s.leadDays) === iso)
+          .map(s => `<a class="event-pill ev lead ${seasonColor(s.name)}" href="/dashboard/content" data-act="season-go" data-name="${esc(s.name)}" data-start="${esc(s.start)}" title="${esc(s.name)} ${esc(fmt.dday(s.start))} · 준비 기간 ${esc(s.leadDays)}일 시작 · 눌러서 콘텐츠 준비">${emojiOne(s)} ${esc(s.name)} 준비 시작</a>`));
       html.push(`<div class="day${iso.slice(0, 7) === ym ? '' : ' dim'}${iso === today ? ' today' : ''}">
         <div class="between"><span>${+iso.slice(8, 10)}</span>${iso === today ? badge('오늘', 'green') : ''}</div>${pills.join('')}</div>`);
     }
@@ -200,7 +240,7 @@
           : `${fmt.dday(s.start)} · 준비 시작 ${md(lt)}`;
       return `<div class="schedule-item home-sched${s.inLead || s.ongoing ? ' is-lead' : ''}">
         <div class="date-box">${+s.start.slice(8, 10)}<small>${+s.start.slice(5, 7)}월 ${WEEKDAY[dow(s.start)]}</small></div>
-        <div><p>${esc(s.name)}${s.inLead ? badge('준비 중', 'lime') : s.ongoing ? badge('진행 중', 'green') : ''}</p><span>${esc(info)}</span></div></div>`;
+        <div><p>${emojiAll(s)} ${esc(s.name)}${s.inLead ? badge('준비 중', 'lime') : s.ongoing ? badge('진행 중', 'green') : ''}</p><span>${esc(info)}</span></div></div>`;
     };
     box.innerHTML = `
       <section class="card">
@@ -219,13 +259,55 @@
       <section class="card section-gap"><div class="card-head"><h2>다가오는 일정</h2>${badge(`시즌 ${upcoming.length}개`)}</div>
         <div class="home-sched-grid">${upcoming.length ? upcoming.map(item).join('') : '<p class="panel-note">다가오는 시즌이 없어요. 설정 › 수집 설정에서 추가하세요.</p>'}</div></section>`;
   }
-  function moveMonth(n) {
-    const cur = S.calMonth || REBOOT.today().slice(0, 7);
-    let y = +cur.slice(0, 4), m = +cur.slice(5, 7) + n;
+  // 캘린더 시즌을 누르면 안내 토스트 → 콘텐츠 제작 탭 (시즌은 주소 #season=이름|시작일로 넘김, 콘텐츠 탭이 추가 요청에 넣음)
+  function goContent(name, start) {
+    ui.toast(`${seasonEmoji(name)[0]} ${name} — 콘텐츠 준비하러 가요`);
+    setTimeout(() => { global.location.href = `/dashboard/content#season=${encodeURIComponent(name)}|${start}`; }, 600);
+  }
+  const shiftMonth = (ym, n) => {
+    let y = +ym.slice(0, 4), m = +ym.slice(5, 7) + n;
     if (m < 1) { m = 12; y -= 1; }
     if (m > 12) { m = 1; y += 1; }
-    S.calMonth = `${y}-${String(m).padStart(2, '0')}`;
+    return `${y}-${String(m).padStart(2, '0')}`;
+  };
+  function moveMonth(n) {
+    S.calMonth = shiftMonth(S.calMonth || REBOOT.today().slice(0, 7), n);
     paintCalendar();
+  }
+
+  // 작은 달력 (브리핑 · 이번 주 할 일 왼쪽) — 시즌 = 초록 점 · 준비 시작 = 회색 점, 날짜를 누르면 콘텐츠 캘린더
+  function paintMiniCalendar() {
+    const box = ref('mini-cal');
+    if (!box) return;
+    const today = REBOOT.today();
+    const ym = S.miniMonth || today.slice(0, 7);
+    const y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+    const first = `${ym}-01`;
+    const lead = dow(first);
+    const cells = Math.ceil((lead + new Date(Date.UTC(y, m, 0)).getUTCDate()) / 7) * 7;
+    const ws = weekStartOf(today), we = addDays(ws, 6);
+    const list = seasons();
+    const html = [];
+    for (let i = 0; i < cells; i++) {
+      const iso = addDays(first, i - lead);
+      const on = list.filter(s => iso >= s.start && iso <= s.end);
+      const starts = list.filter(s => s.leadDays > 0 && addDays(s.start, -s.leadDays) === iso);
+      const tip = on.map(s => s.name).concat(starts.map(s => `${s.name} 준비 시작`)).join(' · ');
+      const cls = ['home-mini-day', iso.slice(0, 7) === ym ? '' : 'dim', iso === today ? 'today' : '', iso >= ws && iso <= we ? 'week' : ''].filter(Boolean).join(' ');
+      html.push(`<button type="button" class="${cls}" data-go-view="calendar" data-month="${iso.slice(0, 7)}" title="${esc(tip || md(iso))}">
+        ${+iso.slice(8, 10)}<span class="home-mini-dots">${on.length ? '<i class="dot-season"></i>' : ''}${starts.length ? '<i class="dot-lead"></i>' : ''}</span></button>`);
+    }
+    const inMonth = list.filter(s => s.start.slice(0, 7) === ym || addDays(s.start, -s.leadDays).slice(0, 7) === ym)
+      .sort((a, b) => (a.start < b.start ? -1 : 1)).slice(0, 3);
+    box.innerHTML = `
+      <div class="card-head"><h2>${y}년 ${m}월</h2>
+        <div class="flex"><button type="button" class="icon-btn small" data-act="mini-prev" aria-label="이전 달">‹</button>
+          <button type="button" class="icon-btn small" data-act="mini-next" aria-label="다음 달">›</button></div></div>
+      <div class="home-mini-week" aria-hidden="true">${WEEKDAY.map(d => `<span>${d}</span>`).join('')}</div>
+      <div class="home-mini-grid" aria-label="${y}년 ${m}월 콘텐츠 캘린더">${html.join('')}</div>
+      <div class="home-mini-legend"><span><i class="dot-season"></i>시즌</span><span><i class="dot-lead"></i>준비 시작</span><span><i class="dot-week"></i>이번 주</span></div>
+      ${inMonth.length ? `<ul class="home-mini-list">${inMonth.map(s => `<li><b>${esc(md(s.start))}</b><span class="grow">${esc(s.name)}</span><small>${s.ongoing ? '진행 중' : esc(fmt.dday(s.start))}</small></li>`).join('')}</ul>` : ''}
+      <button type="button" class="link small home-mini-more" data-go-view="calendar" data-month="${ym}">콘텐츠 캘린더 ${icon('arrow')}</button>`;
   }
 
   /* 다음 급등 예상 (캘린더 맨 아래 · 접기) — 인사이트 검색 트렌드(/api/insights/data/trends)의 next */
@@ -241,7 +323,7 @@
       delete box.dataset.loaded;
       return;
     }
-    const next = ((d && d.next) || []).map(n => `<li><div class="between"><b>${esc(n.name)}</b><span class="flex">${n.opportunity ? badge('기회', 'green') : ''}<span class="small muted">${esc(fmt.dday(n.start))}</span></span></div>
+    const next = ((d && d.next) || []).map(n => `<li><div class="between"><b>${emojiAll(n)} ${esc(n.name)}</b><span class="flex">${n.opportunity ? badge('기회', 'green') : ''}<span class="small muted">${esc(fmt.dday(n.start))}</span></span></div>
       <small>${n.lift ? esc(`작년 같은 시기 '${n.lift.keyword}' 검색이 12개월 평균 대비 ${fmt.signed(n.lift.pct, 0, '%')} (${n.lift.date} 주)`) : '작년 같은 시기 데이터가 없어요.'}</small></li>`).join('');
     box.innerHTML = fold(next ? `<ul class="home-surge-list">${next}</ul>` : '<p class="panel-note">모니터링 중인 다가오는 시즌이 없어요.</p>');
   }
@@ -285,6 +367,7 @@
     if (el) { el.textContent = v.open > 99 ? '99+' : String(v.open); el.hidden = v.open <= 0; }
     dock.sync(t, S.signals);
   }
+  const TODO_MAX = 4;   // 이번 주 할 일 첫 화면 개수
   function todoHtml(t) {
     const tag = t.origin === 'ai' ? badge('AI', 'purple') : t.origin === 'rule' ? badge('규칙') : badge('직접', 'blue');
     const src = t.source && t.source !== 'home' && t.source !== 'manual'
@@ -311,8 +394,14 @@
     ref('todo-count').textContent = t.items.length || sig.length ? `${open + sig.length}개` : '';
     const how = !t.generated ? '아직 만들지 않음' : t.origin === 'ai' ? 'AI 할 일은 시즌·뉴스·현황 종합 (참고용)' : `규칙으로 생성${t.aiReady ? '' : ' (AI 연결 안 됨)'}`;
     ref('todo-meta').textContent = `${md(t.week.start)} — ${md(t.week.end)} · ${sig.length ? '긴급 → 기회 → 홈 할 일 · ' : ''}${how}`;
-    const sigBlock = sig.length ? `<div class="home-signals">${sig.map(signalHtml).join('')}</div>` : '';
-    list.innerHTML = t.items.length || sig.length ? sigBlock + t.items.map(todoHtml).join('') : ui.empty('이번 주 할 일이 없어요. + 로 추가하거나 다시 만들기를 누르세요.', 'check');
+    // 위에서 TODO_MAX개만 보이고 나머지는 접어 둠 (펼침 상태는 다시 그려도 유지)
+    const rows = sig.map(signalHtml).concat(t.items.map(todoHtml));
+    const rest = rows.slice(TODO_MAX);
+    const more = rest.length ? `<details class="home-todo-more" data-ref="todo-more"${S.todoMoreOpen ? ' open' : ''}>
+      <summary>나머지 ${rest.length}개</summary>${rest.join('')}</details>` : '';
+    list.innerHTML = rows.length ? rows.slice(0, TODO_MAX).join('') + more : ui.empty('이번 주 할 일이 없어요. + 로 추가하거나 다시 만들기를 누르세요.', 'check');
+    const fold = list.querySelector('[data-ref="todo-more"]');
+    if (fold) fold.addEventListener('toggle', () => { S.todoMoreOpen = fold.open; });
     saveBadge();
     paintHero();
   }
@@ -387,7 +476,7 @@
     busy(btn, false);
   }
 
-  /* ───────── 미국 시장 브리핑 (업계 뉴스 · 트렌드) ───────── */
+  /* ───────── 미국 시장 브리핑 (업계 뉴스 · 트렌드 · 시즌) ───────── */
   function newsBadges(n) {
     const out = [];
     if (n.running) out.push(badge('받는 중…', 'blue'));
@@ -431,7 +520,7 @@
         toast('보관을 해제했어요.');
       } else if (a) {
         const s = await REBOOT.api('/api/home/news/saved', { url, title: a.title, titleKo: a.titleKo || '', summaryKo: a.summaryKo || '',
-          whyKo: a.whyKo || '', kind: a.kind || 'flow', areaLabel: a.areaLabel || a.topic || a.groupLabel || '', domain: a.domain || '', date: a.date || '' });
+          whyKo: a.whyKo || '', kind: a.kind || 'flow', areaLabel: areaText(a), domain: a.domain || '', date: a.date || '' });
         S.saved = [s].concat(S.saved.filter(x => x.url !== url));
         toast('보관했어요. 브리핑 아래 보관함에서 볼 수 있어요.');
       }
@@ -440,7 +529,8 @@
   }
 
   // 보관함 창: 검색(띄어쓰기로 나눈 낱말이 모두 들어간 기사, 대소문자 무시) + 업계 뉴스 / 트렌드 고르기 + 보관 해제
-  const SAVED_KINDS = [['', '전체'], ['flow', '업계 뉴스'], ['trend', '트렌드']];
+  const SAVED_KINDS = [['', '전체'], ['flow', '업계 뉴스'], ['trend', '트렌드'], ['season', '시즌']];
+  const KIND_LABEL = { flow: '업계 뉴스', trend: '트렌드', season: '시즌' };
   const savedText = x => [x.titleKo, x.title, x.summaryKo, x.whyKo, x.domain, x.areaLabel, x.savedBy].join(' ').toLowerCase();
   function openSaved() {
     const f = { q: '', kind: '' };
@@ -465,8 +555,8 @@
       const li = x => `<li class="home-saved-item"><div class="home-saved-main">
           <b>${isUrl(x.url) ? `<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${mark(x.titleKo || x.title)}</a>` : mark(x.titleKo || x.title)}</b>
           ${x.summaryKo ? `<small>${mark(x.summaryKo)}</small>` : ''}
-          ${x.whyKo ? `<small class="home-saved-why"><b>${x.kind === 'trend' ? '적용점' : '마케터의 시선'}</b> ${mark(x.whyKo)}</small>` : ''}
-          <small>${[x.kind === 'trend' ? '트렌드' : '업계 뉴스', x.areaLabel, x.domain, x.date ? fmt.relative(x.date) : ''].filter(Boolean).map(mark).join(' · ')}</small>
+          ${x.whyKo ? `<small class="home-saved-why"><b>${x.kind === 'flow' ? '마케터의 시선' : '적용점'}</b> ${mark(x.whyKo)}</small>` : ''}
+          <small>${[KIND_LABEL[x.kind] || '업계 뉴스', x.areaLabel, x.domain, x.date ? fmt.relative(x.date) : ''].filter(Boolean).map(mark).join(' · ')}</small>
           ${x.titleKo && x.title ? `<small lang="en">${mark(x.title)}</small>` : ''}
           <small class="muted">${esc(x.savedBy || '')} · ${esc(fmt.datetime(x.savedAt))} 보관</small></div>
         <button type="button" class="btn small home-saved-unsave" data-unsave="${esc(x.id)}" title="보관 해제">${BOOKMARK} 보관됨</button></li>`;
@@ -536,16 +626,19 @@
     list.unshift(url);
     store.set('newsRead', list.slice(0, READ_MAX));
   }
-  const newsKind = () => (store.get('newsKind', 'flow') === 'trend' ? 'trend' : 'flow');
-  function kindTabs(k, flow, trend) {
+  const NEWS_KINDS = [['flow', '업계'], ['trend', '트렌드'], ['season', '시즌']];
+  const newsKind = () => { const k = store.get('newsKind', 'flow'); return NEWS_KINDS.some(([id]) => id === k) ? k : 'flow'; };
+  function kindTabs(k, counts) {
     const chip = (id, label, count) => `<button type="button" class="chip${k === id ? ' selected' : ''}" aria-pressed="${k === id}" data-act="news-kind" data-kind="${id}"${count ? '' : ' disabled'}>${label}<span class="n">${count}</span></button>`;
-    return `<div class="chips home-kind" role="group" aria-label="뉴스 종류">${chip('flow', '업계', flow)}${chip('trend', '트렌드', trend)}</div>`;
+    return `<div class="chips home-kind" role="group" aria-label="뉴스 종류">${NEWS_KINDS.map(([id, label]) => chip(id, label, counts[id] || 0)).join('')}</div>`;
   }
-  const viewLabel = a => (a.kind === 'trend' ? '적용점' : '마케터의 시선');
+  const viewLabel = a => (a.kind === 'trend' || a.kind === 'season' ? '적용점' : '마케터의 시선');
+  // 분야 표시: 시즌 기사는 '🎃 Halloween'처럼 시즌 이모지 + 이름
+  const areaText = a => (a.kind === 'season' ? `${seasonEmoji(a.season)[0]} ${a.season || '시즌'}` : a.areaLabel || a.topic || a.groupLabel || '');
   // 마우스를 올리면 보이는 설명: 요약 · 영어 원제목
   const tipText = a => [a.whyKo ? `${viewLabel(a)}: ${a.whyKo}` : '', a.summaryKo, a.titleKo && !a.fallback ? a.title : ''].filter(Boolean).join('\n');
   function leadHtml(a, read) {
-    const meta = ['오늘의 핵심', a.areaLabel || a.topic || a.groupLabel, a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ');
+    const meta = ['오늘의 핵심', areaText(a), a.domain, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ');
     return `<article class="home-lead${isUrl(a.url) ? ' home-news-card' : ''}${read ? ' read' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''} title="${esc(a.titleKo && !a.fallback ? a.title : '')}">
         <div class="home-lead-top"><span class="home-lead-meta">${meta}${a.surge ? ` · <b>보도 급증</b>` : ''}</span>${saveBtn(a)}</div>
         <p class="home-lead-title">${articleLink(a, a.titleKo || a.title)}</p>
@@ -555,7 +648,7 @@
       </article>`;
   }
   function rowHtml(a, i, read) {
-    const side = [a.areaLabel || a.topic || a.groupLabel, fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ');
+    const side = [areaText(a), fmt.relative(a.date)].filter(Boolean).map(esc).join(' · ');
     return `<article class="home-row${isUrl(a.url) ? ' home-news-card' : ''}${read ? ' read' : ''}"${isUrl(a.url) ? ` data-href="${esc(a.url)}"` : ''} title="${esc(tipText(a))}">
         <span class="home-row-no">${i}</span>
         <div class="home-row-main"><p class="home-row-title">${articleLink(a, a.titleKo || a.title)}${a.fallback ? ' ' + badge('요약 없음') : ''}</p>
@@ -571,9 +664,11 @@
     busy(ref('news-collect'), !!n.running);
     const read = readSet();
     const all = n.ai ? (n.ai.items || []) : (n.articles || []);
-    const flow = all.filter(a => a.kind !== 'trend'), trend = all.filter(a => a.kind === 'trend');
-    const k = !flow.length && trend.length ? 'trend' : !trend.length ? 'flow' : newsKind();
-    const list = k === 'trend' ? trend : flow;
+    const by = { flow: all.filter(a => a.kind !== 'trend' && a.kind !== 'season'), trend: all.filter(a => a.kind === 'trend'), season: all.filter(a => a.kind === 'season') };
+    const counts = { flow: by.flow.length, trend: by.trend.length, season: by.season.length };
+    const want = newsKind();
+    const k = counts[want] ? want : (NEWS_KINDS.find(([id]) => counts[id]) || ['flow'])[0];   // 고른 칸이 비면 기사가 있는 첫 칸
+    const list = by[k];
     const unread = n.lastSuccessAt ? all.filter(a => isUrl(a.url) && !read.has(a.url)).length : 0;
     const sub = n.running ? '받는 중…' : n.lastSuccessAt ? [`${shortStamp(n.lastSuccessAt)} 배송`, unread ? `새 소식 ${unread}` : ''].filter(Boolean).join(' · ') : '';
     ref('news-sub').textContent = sub;
@@ -593,7 +688,7 @@
         ${!n.ai ? (n.aiReady ? (n.aiStatus === 'error' ? `<p class="note warn mt-8">AI 요약을 만들지 못했어요: ${esc(n.aiError)} — 다음에 받을 때 다시 시도해요.</p>` : '')
           : '<p class="panel-note mt-8">지금은 최근 기사 제목만 보여 줘요(관련 없는 기사가 섞일 수 있어요). 설정 › 연결에 OpenAI 키를 넣으면 관련 기사만 골라 정리해요.</p>') : ''}`;
     }
-    ref('news-tabs').innerHTML = n.ai && all.length ? kindTabs(k, flow.length, trend.length) : '';
+    ref('news-tabs').innerHTML = n.ai && all.length ? kindTabs(k, counts) : '';
     const last = n.lastRun;
     const bits = [];
     if (n.issueNo) bits.push(`REBOOT 마켓 레터 제 ${fmt.num(n.issueNo)}호`);
@@ -680,6 +775,7 @@
   function paintBriefing() {
     paintHero();
     paintSeasons();
+    paintMiniCalendar();
     paintActivity();
     loadNews();
     const noop = () => {};
@@ -718,7 +814,7 @@
           <div><span class="eyebrow">YOUR DAILY START</span><h2 data-ref="hero-title">—</h2>
             <p>시장 신호 · 시즌 · 고객 응대를 모아 이번 주 우선순위를 정리했어요.</p>
             <div class="flex wrap" style="margin-top:19px"><a class="btn lime" href="/dashboard/content">${icon('spark')} 캠페인 준비하기</a>
-              <a class="btn small" href="/dashboard/insights">시장 인사이트 보기</a></div></div>
+              <a class="btn" href="/dashboard/insights">시장 인사이트 보기</a></div></div>
           <div class="hero-stat">
             <div><strong data-ref="hero-urgent">—</strong><small>긴급</small></div>
             <div><strong data-ref="hero-chance">—</strong><small>기회</small></div>
@@ -727,8 +823,10 @@
         </section>
         <div class="home-layout section-gap">
           <div class="stack">
+            <div class="home-todo-split">
+            <section class="card home-mini-cal" data-ref="mini-cal" aria-label="콘텐츠 캘린더 (작게)"></section>
             <section class="card">
-              <div class="card-head home-todo-head"><h2>이번 주 할 일 <span class="muted small" data-ref="todo-count"></span></h2>
+              <div class="card-head home-todo-head"><h2>이번 주 할 일<span class="head-cap" data-ref="todo-count"></span></h2>
                 <div class="flex"><button type="button" class="btn small ghost" data-act="todo-regen" title="완료 안 한 자동 항목을 새로 만들기">${icon('refresh')} 다시 만들기</button>
                 <button type="button" class="icon-btn" data-act="todo-add" aria-label="할 일 추가">${icon('plus')}</button></div></div>
               <p class="panel-note home-todo-meta" data-ref="todo-meta"></p>
@@ -739,8 +837,9 @@
               </form>
               <div data-ref="todos"><div class="skeleton" style="height:120px"></div></div>
             </section>
+            </div>
             <section class="card home-brief" aria-label="미국 시장 브리핑">
-              <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="home-brief-sub" data-ref="news-sub"></span></div>
+              <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="head-cap" data-ref="news-sub"></span></div>
                 <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button></div>
               <div class="home-brief-tabs" data-ref="news-tabs"></div>
               <div data-ref="news-body"><div class="skeleton" style="height:120px"></div></div>
@@ -765,6 +864,7 @@
     root.addEventListener('click', e => {
       const v = e.target.closest('a') ? null : e.target.closest('[data-view], [data-go-view]');
       if (v) {
+        if (v.dataset.month) S.calMonth = v.dataset.month;
         showView(v.dataset.view || v.dataset.goView);
         if (v.dataset.goView && global.scrollTo) global.scrollTo({ top: 0, behavior: 'smooth' });
         return;
@@ -780,7 +880,8 @@
       if (!b) return;
       const act = b.dataset.act;
       const row = b.closest('[data-id]');
-      if (act === 'todo-toggle') toggleTodo(row.dataset.id, b.checked, b);
+      if (act === 'season-go') { e.preventDefault(); goContent(b.dataset.name, b.dataset.start); }
+      else if (act === 'todo-toggle') toggleTodo(row.dataset.id, b.checked, b);
       else if (act === 'todo-del') deleteTodo(row.dataset.id);
       else if (act === 'todo-regen') regenerate(b);
       else if (act === 'todo-add') { const f = ref('todo-form'); f.hidden = !f.hidden; if (!f.hidden) f.querySelector('[name="title"]').focus(); }
@@ -793,6 +894,7 @@
       else if (act === 'cal-prev') moveMonth(-1);
       else if (act === 'cal-next') moveMonth(1);
       else if (act === 'cal-today') { S.calMonth = ''; paintCalendar(); }
+      else if (act === 'mini-prev' || act === 'mini-next') { S.miniMonth = shiftMonth(S.miniMonth || REBOOT.today().slice(0, 7), act === 'mini-prev' ? -1 : 1); paintMiniCalendar(); }
     });
     const actions = REBOOT.page.actions();
     if (actions) actions.addEventListener('click', e => {
@@ -877,7 +979,7 @@
           ${icon('check')}<span class="home-fab-count" data-dock="count" hidden></span></button>
         <div class="home-dock-scrim" data-dock="scrim" hidden></div>
         <aside class="home-dock-panel" id="home-dock-panel" data-dock="panel" role="dialog" aria-modal="true" aria-labelledby="home-dock-title" hidden>
-          <div class="home-dock-head"><h2 id="home-dock-title">이번 주 할 일 <span class="muted small" data-dock="left"></span></h2>
+          <div class="home-dock-head"><h2 id="home-dock-title">이번 주 할 일<span class="head-cap" data-dock="left"></span></h2>
             <button type="button" class="home-dock-close" data-dock="close" aria-label="닫기">${icon('x')}</button></div>
           <p class="panel-note" data-dock="meta"></p>
           <div class="home-dock-list" data-dock="list"></div>

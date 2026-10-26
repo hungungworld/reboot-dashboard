@@ -16,7 +16,7 @@ Flask 통합: 저장 위치는 DATA_DIR/parts_override/compliance/monitor-data.j
 - Federal Register: FTC 전체 + FDA 식품 관련 공고 (키 없음). FTC 보도자료 RSS는 봇 차단이라 대신 씀
 - Firecrawl (FIRECRAWL_API_KEY · 2026-10-26): 서버가 직접 못 읽던 곳을 Firecrawl이 화면을 그려 읽음 (주소 1개 = 약 1 크레딧)
   NAD 결정 요약(매일 · 식품·건강 결정의 따옴표 문구는 사례집 후보) · FTC 보도자료(매일 · 광고·후기·건강 관련만) ·
-  Prop 65 60일 통지(주 1회 · gummy·jelly·candy) · 올리브영 US 회원 정책(주 1회 · 갱신일이 바뀌면 🆕)
+  Prop 65 60일 통지(주 1회 · gummy·jelly·candy) · 올리브영 US 회원 정책(주 1회 · 갱신일이 바뀌면 '새' 표시)
 - 자동으로 못 읽는 곳: Prop 65 물질 목록(OEHHA) → 화면의 바로가기 버튼
 - FDA 경고장: warning_letters.py (Data Dashboard API · fda.gov XLSX · 사람이 올린 XLSX·본문). fda.gov는 자동 요청을
   봇 차단으로 막을 수 있어, 막히면 이유를 errors에 남기고 올려 둔 경고장은 그대로 보여 줌
@@ -49,7 +49,7 @@ FDA_FOOD_WORDS = re.compile(
 HEADER = """/* 규제 모니터링 결과 — tabs/compliance/refresh.py가 덮어쓰는 파일입니다 (사람이 고치지 않음).
    HTML은 <script src>로 읽기만 합니다. 키·개인정보는 넣지 않습니다.
    형식: window.REBOOT_MONITOR = { generatedAt, sources: [{ id, label, items: [{ id, date, title, firm, url, summary, quotes? }] }] }
-   항목의 id는 바뀌지 않아야 합니다 (🆕·🔄 표시 기준). */
+   항목의 id는 바뀌지 않아야 합니다 ('새'·'갱신' 표시 기준). */
 """
 
 
@@ -560,7 +560,7 @@ OY_POLICY_URL = "https://us.oliveyoung.com/terms/oy-members-policy"
 
 
 def oliveyoung_policy():
-    """올리브영 US 회원 정책 (후기 적립 · R10 참고). 갱신일이 id라 약관이 바뀌면 🆕로 보임."""
+    """올리브영 US 회원 정책 (후기 적립 · R10 참고). 갱신일이 id라 약관이 바뀌면 '새'로 보임."""
     md = _firecrawl_md(OY_POLICY_URL)
     m = re.search(r"Last Updated:\s*([A-Z][a-z]+ \d{1,2}, \d{4})", md)
     if not m:
@@ -575,7 +575,7 @@ def oliveyoung_policy():
 
 
 SOURCES = [
-    ("fda-warning-letters", "FDA 경고장 (식품 분야 전체 · 🍺 표시만 숙취·음주 관련)", fda_warning_letters),
+    ("fda-warning-letters", "FDA 경고장 (식품 분야 전체 · 숙취·음주 관련 표시)", fda_warning_letters),
     ("openfda-food-recalls", "openFDA 식품 리콜 (젤리·음료·헛개)", openfda_recalls),
     ("regulations-gov", "Regulations.gov FDA·FTC 규칙·규칙안", regulations_gov),
     ("courtlistener", "CourtListener 허위광고 판결 (참고)", courtlistener),

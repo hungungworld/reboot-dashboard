@@ -4,7 +4,7 @@
   POST   /api/home/news/collect      지금 수집 (뒤에서 실행, 바로 응답) → 화면이 /news/status로 끝났는지 확인
   GET    /api/home/news/status       수집 중인지 · 마지막 수집 결과
   GET    /api/home/news/saved        보관한 기사 (최신 보관 순) — 브리핑 보관함 창이 씀
-  POST   /api/home/news/saved        {url, title, titleKo, summaryKo, whyKo, kind, areaLabel, domain, date} 보관 (같은 URL이면 덮어씀)
+  POST   /api/home/news/saved        {url, title, titleKo, summaryKo, whyKo, kind(flow · trend · season), areaLabel, domain, date} 보관 (같은 URL이면 덮어씀)
   DELETE /api/home/news/saved/<id>   보관 해제
   GET    /api/home/todos             이번 주 To-Do (?week=YYYY-MM-DD 그 주 월요일)
   POST   /api/home/todos/generate    {auto, context} → AI(키 있을 때) 또는 규칙으로 생성
@@ -91,7 +91,7 @@ def saved_add():
         db.session.add(s)
     s.title, s.title_ko = title, title_ko
     s.summary_ko, s.why_ko = clip(data.get("summaryKo"), 600).strip(), clip(data.get("whyKo"), 600).strip()
-    s.kind = "trend" if data.get("kind") == "trend" else "flow"
+    s.kind = data.get("kind") if data.get("kind") in ("trend", "season") else "flow"
     s.area_label, s.domain = clip(data.get("areaLabel"), 60).strip(), clip(data.get("domain"), 200).strip()
     s.published_at = _date(data.get("date"))
     s.saved_by, s.saved_at = _who(), utcnow()

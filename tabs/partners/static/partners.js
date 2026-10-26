@@ -85,7 +85,7 @@
   }
 
   REBOOT.register({
-    id: 'partners', label: '인플루언서 · 파트너', icon: '', priority: 'P1', order: 60,
+    id: 'partners', label: '인플루언서', icon: '', priority: 'P1', order: 60,
     title: '다음 파트너를 만나보세요.',
     subtitle: '후보를 고르고, 함께할 일을 제안하세요.',
     render,
