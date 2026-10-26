@@ -7,6 +7,7 @@
   border-bottom: 1px solid var(--line-3); font-size: 12px; }
 .part-content .cnt-studio-bar .icon { color: var(--lime-deep); }
 .part-content .cnt-bar-title { min-width: 0; }
+.part-content .cnt-back { flex: none; margin-right: 6px; white-space: nowrap; }
 .part-content .cnt-bar-title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
 .part-content .cnt-bar-title .link .icon { color: var(--muted-2); width: 14px; height: 14px; }
 .part-content .cnt-bar-right { flex-wrap: wrap; justify-content: flex-end; }
