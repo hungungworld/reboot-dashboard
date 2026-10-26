@@ -1101,8 +1101,7 @@
             <details class="ptn-v2-tools">
               <summary>첨부파일 · 번역 · 문구 심의 도구 <span data-ref="att-sum"></span></summary>
               <div class="flex wrap mt-8">
-                <button type="button" class="btn soft small" data-act="to-ko"${s.openai ? '' : ' disabled'}>한국어로 보기</button>
-                <button type="button" class="btn soft small" data-act="to-en"${s.openai ? '' : ' disabled'}>영어로 변환</button>
+                ${ui.trBtn({ act: 'mail-tr', title: s.openai ? MAIL_TR_TITLE : 'AI 키가 없어 번역할 수 없어요 · 설정 › 연결', on: !!d.ko, disabled: !s.openai })}
                 <button type="button" class="btn soft small" data-act="review">문구 심의</button>
               </div>
               <label class="dropzone ptn-out-attdrop mt-8" data-drop="attach">${icon('upload')}
@@ -1204,6 +1203,28 @@
       <details class="ptn-out-quote mt-8" open><summary class="small">상대방 회신 · ${esc(r.from || '')} · ${esc(fmt.datetime(r.at))}</summary>
         <pre class="ptn-out-pre">${esc(r.body || '(본문 없음)')}</pre></details>
     </section>`;
+  }
+
+  // 번역 버튼 (ui.trBtn 하나로 양쪽 방향): 툴팁 문구
+  const MAIL_TR_TITLE = '번역 · 영어면 한국어로 보기, 한글이 있으면 영어로 바꾸기 (본문이 바뀌어요)';
+  const GUIDE_TR_TITLE = '번역 · 한국어면 영어로, 영어면 한국어로 바꾸기 (↶ 번역 전으로 되돌릴 수 있어요)';
+  const HANGUL = /[가-힣]/;
+  // 글자 중 한글이 20% 이상이면 한국어 문서로 봄 (영어 가이드 안의 한글 메모 몇 줄은 무시)
+  function mostlyKo(text) {
+    const ko = (String(text).match(/[가-힣]/g) || []).length;
+    const en = (String(text).match(/[A-Za-z]/g) || []).length;
+    return ko > 0 && ko / (ko + en / 3) >= 0.2;
+  }
+  // 한국어 번역 칸 그리기 · 닫기 (번역 버튼의 눌림 상태도 같이)
+  function paintKo(box, text) {
+    box.querySelector('[data-ref="ko"]').innerHTML = text ? koBox(text) : '';
+    ui.trOn(box.querySelector('[data-act="mail-tr"]'), !!text);
+  }
+  function closeKo(box) {
+    const d = getDraft();
+    d.ko = '';
+    saveDraft(d);
+    paintKo(box, '');
   }
 
   function koBox(text) {
@@ -1354,9 +1375,14 @@
       if (!b || b.disabled) return;
       const a = b.dataset.act;
       if (a === 'generate') generate(st, box, b);
-      else if (a === 'to-ko') toKo(box, b);
-      else if (a === 'to-en') toEn(st, box, b);
-      else if (a === 'ko-close') { const d = getDraft(); d.ko = ''; saveDraft(d); box.querySelector('[data-ref="ko"]').innerHTML = ''; }
+      else if (a === 'mail-tr') {   // 번역 버튼 하나: 펼친 번역은 닫고, 한글이 있으면 영어로 바꾸고, 영어면 한국어로 보기
+        const d = getDraft();
+        if (d.ko) closeKo(box);
+        else if (HANGUL.test(`${d.subject}
+${d.body}`)) toEn(st, box, b);
+        else toKo(box, b);
+      }
+      else if (a === 'ko-close') closeKo(box);
       else if (a === 'review') reviewMail(box);
       else if (a === 'send') doSend(st, box, b);
       else if (a === 'att-del') deleteAttachment(st, box, b.dataset.id);
@@ -1441,7 +1467,7 @@
         setField(box, 'body', dd.body);
         wordCount(box, dd.body);
         box.querySelector('[data-ref="ai-badge"]').innerHTML = badge('AI 초안 · 참고용', 'purple');
-        box.querySelector('[data-ref="ko"]').innerHTML = '';
+        paintKo(box, '');
         unconfirm(box);
         clearReview(box);
         updateSend(st, box);
@@ -1464,7 +1490,7 @@
       const dd = getDraft();
       dd.ko = out.text;
       saveDraft(dd);
-      if (box.isConnected) box.querySelector('[data-ref="ko"]').innerHTML = koBox(out.text);
+      if (box.isConnected) paintKo(box, out.text);
     } catch (e) {
       toast(`번역하지 못했어요: ${e.message}`, 'error');
     } finally {
@@ -1489,7 +1515,7 @@
         setField(box, 'body', dd.body);
         wordCount(box, dd.body);
         box.querySelector('[data-ref="ai-badge"]').innerHTML = badge('AI 번역 포함 · 참고용', 'purple');
-        box.querySelector('[data-ref="ko"]').innerHTML = '';
+        paintKo(box, '');
         unconfirm(box);
         clearReview(box);
         updateSend(st, box);
@@ -1753,8 +1779,7 @@
           </div>
           <div class="mt-16" data-ref="g-view"></div>
           <div class="flex wrap mt-16">
-            <button type="button" class="btn soft small" data-act="g-en"${s.openai ? '' : ' disabled'}>영어로 번역</button>
-            <button type="button" class="btn soft small" data-act="g-ko"${s.openai ? '' : ' disabled'}>한국어로 번역</button>
+            ${ui.trBtn({ act: 'g-tr', title: s.openai ? GUIDE_TR_TITLE : 'AI 키가 없어 번역할 수 없어요 · 설정 › 연결', disabled: !s.openai })}
             <button type="button" class="btn ghost small" data-act="g-undo"${g.prev ? '' : ' hidden'}>↶ 번역 전으로</button>
           </div>
           <details class="ptn-out-gcheck mt-16">
@@ -1925,7 +1950,7 @@
       if (!b || b.disabled) return;
       const a = b.dataset.act;
       if (a === 'g-generate') guideGenerate(st, box, b);
-      else if (a === 'g-en' || a === 'g-ko') guideTranslate(box, b, a === 'g-en' ? 'en' : 'ko');
+      else if (a === 'g-tr') guideTranslate(box, b, mostlyKo(getGuide().md) ? 'en' : 'ko');   // 한국어 가이드면 영어로, 영어면 한국어로
       else if (a === 'g-undo') {
         const g = getGuide();
         if (!g.prev) return;

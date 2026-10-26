@@ -504,7 +504,7 @@
      data-tr-text = 고정 원문, data-tr-from = 지금 입력 칸의 값을 번역 (예: 수정 중인 초안) */
   function trBlock(text, label, from) {
     return `<div class="cs-trblock" ${from ? `data-tr-from="${esc(from)}"` : `data-tr-text="${esc(text)}"`}>
-  <button type="button" class="cs-btn cs-btn-sm cs-btn-tr" data-act="translate">${esc(label || '한글로 번역')}</button>
+  ${REBOOT.ui.trBtn({ title: label })}
   <div data-tr-out aria-live="polite"></div></div>`;
   }
 
@@ -653,7 +653,12 @@
     loadContacts().then(() => { if (ui.view === 'detail' && ui.selected) renderDetail(ui); });
     root.addEventListener('click', e => {
       const tr = e.target.closest('[data-act="translate"]');
-      if (tr && !tr.disabled) runTranslate(root, tr.closest('.cs-trblock'));
+      if (tr && !tr.disabled) {   // 다시 누르면 번역을 접음
+        const open = tr.getAttribute('aria-pressed') === 'true';
+        REBOOT.ui.trOn(tr, !open);
+        if (open) tr.closest('.cs-trblock').querySelector('[data-tr-out]').innerHTML = '';
+        else runTranslate(root, tr.closest('.cs-trblock'));
+      }
       const sh = e.target.closest('[data-act^="share-"]');
       if (sh && !sh.disabled) { runShare(ui, sh); return; }
       if (e.target.closest('[data-act="list-more"]')) {
@@ -899,7 +904,7 @@
       <div class="cs-from"><span class="cs-avatar" aria-hidden="true">${initials(inq.name)}</span>
         <span><b>${esc(inq.name)}</b><small>${esc(inq.from)} → REBOOT Support · ${fmt(inq.receivedAt)}</small></span></div>
       <blockquote class="cs-body">${esc(inq.body)}</blockquote>
-      ${trBlock(`${inq.subject}\n${inq.body}`, '문의 한글 번역')}
+      ${trBlock(`${inq.subject}\n${inq.body}`, '문의 한국어로 보기')}
     </article>
     ${notes.map(n => `<article class="cs-msg cs-msg-note"><p class="cs-msg-head"><b>내부 메모</b> ${esc(n.by)} <span class="cs-muted">${fmt(n.at)}</span></p>
       <p class="cs-msg-text">${esc(n.text)}</p></article>`).join('')}
@@ -924,7 +929,7 @@
         </div>
         <div class="cs-cextra">
           <div data-el="ainotes" aria-live="polite">${inq.aiNotes && inq.aiNotes.length ? aiNotesHTML(inq) : ''}</div>
-          ${trBlock('', '초안 한글 번역 (보내기 전 뜻 확인)', 'draft')}
+          ${trBlock('', '초안 한국어로 보기 (보내기 전 뜻 확인)', 'draft')}
         </div>
       </div>
       <div class="cs-cpane cs-notepane" data-ctab-pane="note"${ui.ctab === 'note' ? '' : ' hidden'}>
@@ -1624,7 +1629,7 @@ ${todoPanelHTML(inq.draft)}
     <button type="button" class="cs-btn cs-btn-sm" data-act="thread-open" data-id="${esc(i.id)}">이 문의 열기</button></div>
     <p class="cs-mail-subject">${esc(i.subject)}</p><pre class="cs-mail-body">${esc(i.body)}</pre>
     ${trBlock(`${i.subject}
-${i.body}`, '받은 메일 한글 번역')}</div>
+${i.body}`, '받은 메일 한국어로 보기')}</div>
   ${reply}
 </li>`;
   }
@@ -1979,7 +1984,7 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
       <span class="cs-chip cs-chip-dim">${esc(x.t.mode)} · 기한 ${x.t.dueHours}시간</span></p>
     ${x.raw && x.raw.findings.length ? `<p class="cs-muted">${x.raw.findings.map(f => `${f.code} ${f.terms.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
     <pre class="cs-pre">${esc(x.t.template)}</pre>
-    ${trBlock(x.t.template, '템플릿 한글 번역')}
+    ${trBlock(x.t.template, '템플릿 한국어로 보기')}
   </div>`).join('')}
 </section>`;
     const showSet = () => {

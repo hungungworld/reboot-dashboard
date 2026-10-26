@@ -2625,7 +2625,7 @@
         <p class="ins-quote mt-8">${esc(x.title ? x.title + ' — ' : '')}${esc(x.text)}</p>
         <div class="ins-quote ins-ko" data-ko hidden></div>
         <div class="ins-cs-bar">${seg ? `<div class="seg" role="group" aria-label="대응 상태">${seg}</div>` : ''}
-          <button type="button" class="btn small" data-rv="ko">번역 보기</button>
+          ${ui.trBtn({ act: false, attrs: 'data-rv="ko"' })}
           ${d.slackReady ? `<button type="button" class="btn small${x.slackBy ? ' ins-slack-done' : ''}" data-rv="slack"${slack ? ' aria-pressed="true"' : ''}${x.slackBy ? ' title="누르면 다시 보낼 수 있어요"' : ''}>${x.slackBy
             ? `${icon('check')}슬랙 공유됨 · ${esc(x.slackBy)} ${esc(fmt.date(x.slackAt))}` : `${icon('chat')}슬랙으로 보내기`}</button>` : ''}
           ${x.csBy ? `<span class="small muted">${esc(x.csBy)} · ${esc(fmt.datetime(x.csAt))}</span>` : ''}
@@ -2758,7 +2758,7 @@
     const box = document.createElement('div');
     box.className = 'part-insights ins-modal';
     box.innerHTML = `<p class="small muted">ASIN ${esc(s.asin)}</p><p class="ins-quote mt-8">${esc(s.text)}</p>
-      <div class="ins-sum-act"><button type="button" class="btn small" data-sum="ko">번역 보기</button>
+      <div class="ins-sum-act">${ui.trBtn({ act: false, attrs: 'data-sum="ko"' })}
         ${extLink(`https://www.amazon.com/dp/${encodeURIComponent(s.asin)}#customerReviews`, '아마존에서 리뷰 보기')}</div>
       <div class="ins-sum-ko" data-ko hidden></div>`;
     box.addEventListener('click', e => {
@@ -2798,7 +2798,7 @@
   // url을 주면 그 주소로 번역 (아마존 리뷰 요약), 없으면 리뷰 번호로
   async function showKo(btn, id, box, url) {
     if (!box) return;
-    if (box.dataset.loaded) { box.hidden = !box.hidden; btn.textContent = box.hidden ? '번역 보기' : '번역 숨기기'; return; }
+    if (box.dataset.loaded) { box.hidden = !box.hidden; ui.trOn(btn, !box.hidden); return; }
     ui.busy(btn, true);
     try {
       const res = await api(url || `/api/insights/reviews/${encodeURIComponent(id)}/translate`, {});
@@ -2806,7 +2806,7 @@
       box.dataset.loaded = '1';
       box.hidden = false;
       ui.busy(btn, false);
-      btn.textContent = '번역 숨기기';
+      ui.trOn(btn, true);
     } catch (e) {
       ui.busy(btn, false);
       toast('번역하지 못했어요: ' + e.message, 'error');
