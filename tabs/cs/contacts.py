@@ -33,7 +33,7 @@ def load():
 
 def save(items, by=""):
     if not isinstance(items, list) or len(items) > MAX:
-        raise ContactError(f"담당자는 {MAX}명까지 등록할 수 있습니다.")
+        raise ContactError(f"담당자는 {MAX}명까지 등록할 수 있어요.")
     out, seen = [], set()
     for c in items:
         if not isinstance(c, dict):
@@ -44,7 +44,7 @@ def save(items, by=""):
         if not email and not role and not name:
             continue
         if not EMAIL.match(email):
-            raise ContactError(f"이메일 주소가 올바르지 않습니다: {email or '(빈칸)'}")
+            raise ContactError(f"이메일 주소가 올바르지 않아요: {email or '(빈칸)'}")
         if email.lower() in seen:
             continue
         seen.add(email.lower())

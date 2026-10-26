@@ -76,7 +76,7 @@ def fetch(key, today):
             continue  # 주말 · 공휴일 · 고시 전
         result = data[0].get("result") if isinstance(data[0], dict) else None
         if result != 1:
-            return _fallback("error", RESULT_REASON.get(result, "조회 실패"))
+            return _fallback("error", RESULT_REASON.get(result, "받기 실패"))
         usd = next((x for x in data if isinstance(x, dict) and str(x.get("cur_unit", "")).upper().startswith("USD")), None)
         if not usd:
             return _fallback("error", "USD 환율 없음")

@@ -159,7 +159,7 @@ def generate(kind, *, mode, sheet, decisions, settings, facts, labels, base=None
                               max_tokens=7000, timeout=85)
     items = sanitize(out, n)
     if not items:
-        raise AIError("AI가 초안을 돌려주지 않았습니다. 다시 요청하세요.")
+        raise AIError("AI가 초안을 돌려주지 않았어요. 다시 요청하세요.")
     merge_info = None
     if mode == "edit" and base is not None and targets:
         items[0], merge_info = apply_unit_merge(kind, base.body, items[0], targets)
@@ -201,5 +201,5 @@ def _rewrite(kind, system, drafts, sheet, facts, language):
                               max_tokens=7000, timeout=80)
     fixed = sanitize(out, len(drafts))
     if len(fixed) != len(drafts):
-        raise AIError("재작성 결과 개수가 맞지 않습니다.")
+        raise AIError("재작성 결과 개수가 맞지 않아요.")
     return fixed

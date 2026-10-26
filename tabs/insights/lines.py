@@ -56,7 +56,7 @@ def line_id(brand, form):
     return f"{brand}|{form}"
 
 
-FORM_SHORT = {"liquid": "음료", "powder": "분말", "stick": "스틱", "gummy": "젤리", "pellet": "환", "tablet": "캡슐 · 정제", "other": "기타"}
+FORM_SHORT = {"liquid": "액상", "powder": "분말", "stick": "스틱", "gummy": "젤리/구미", "pellet": "환", "tablet": "캡슐/정제", "other": "기타"}
 
 
 def line_label(brand, form):

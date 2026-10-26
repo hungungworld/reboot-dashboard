@@ -76,7 +76,7 @@ def test_gmail_send_requires_server_approval(auth_client, monkeypatch):
     approve = {"message_id": mid, "body": body, "approver": "소준희", "verdict": "PASS"}
     # 화면이 PASS라고 보내도 서버가 본문을 다시 점검 → BLOCK 표현이면 거절 (GPT 검토 ①)
     res = auth_client.post("/api/cs/approve", json=dict(approve, body="Our jelly prevents hangovers.", message_id="blk111aaa"))
-    assert res.status_code == 400 and "BLOCK" in res.get_json()["error"]
+    assert res.status_code == 400 and "사용 불가" in res.get_json()["error"]
     assert auth_client.post("/api/cs/approve", json=dict(approve, body="within [확인 필요: 기한].")).status_code == 400
     assert auth_client.post("/api/cs/approve", json=dict(approve, approver="")).status_code == 400
     res = auth_client.post("/api/cs/approve", json=approve)

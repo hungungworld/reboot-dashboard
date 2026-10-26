@@ -36,7 +36,7 @@ def _who():
 
 def _require_admin():
     if not current_user.is_admin:
-        raise ApiError("키 입력은 관리자만 할 수 있습니다. 관리자에게 요청하세요.", 403)
+        raise ApiError("키 입력은 관리자만 할 수 있어요. 관리자에게 요청하세요.", 403)
 
 
 # ───────── 수집 설정 ─────────
@@ -109,7 +109,7 @@ def connections_list():
 def _service_or_404(name):
     svc = envkeys.service(name)
     if svc is None:
-        raise ApiError("없는 연결 항목입니다.", 404)
+        raise ApiError("없는 연결 항목이에요.", 404)
     return svc
 
 
@@ -132,7 +132,7 @@ def connections_put(name):
     if name == "GMAIL_APP_PASSWORD":
         value = "".join(value.split())  # 앱 비밀번호는 'abcd efgh …'처럼 띄어 써도 됨
     if len(value) > 4000:
-        raise ApiError("값이 너무 깁니다 (4,000자 이하).")
+        raise ApiError("값이 너무 길어요 (4,000자 이하).")
     if svc.secret and value and any(c.isspace() for c in value):
         raise ApiError("키에 공백이나 줄바꿈이 들어 있어요. 다시 복사해 붙여 넣으세요.")
     if svc.group == "key" and value and len(value) < 8:
@@ -195,7 +195,7 @@ def worklog_xlsx():
     rows = [r.to_dict() | {"_at": r.at} for r in q.order_by(WorkLog.id.desc()).limit(5000).all()]
     tz = _tz()
     wb = xlsx.new_workbook()
-    head = ["일시", "구분", "파트", "작업", "상태", "승인", "작성자", "상세"]
+    head = ["일시", "구분", "탭", "작업", "상태", "승인", "작성자", "상세"]
     xlsx.add_sheet(wb, "전체", head, [[xlsx.local_text(r["_at"], tz), r["kind"], r["part"], r["action"], r["status"],
                                        r["approval"], r["user"], _detail_text(r["detail"])] for r in rows],
                    widths={8: 70})
@@ -205,7 +205,7 @@ def worklog_xlsx():
             def tokens(d):
                 t = d.get("tokens") if isinstance(d.get("tokens"), dict) else {}
                 return t.get("total")
-            xlsx.add_sheet(wb, kind, ["일시", "파트", "작업", "상태", "모델", "토큰(합계)", "프롬프트", "응답 요약", "작성자"],
+            xlsx.add_sheet(wb, kind, ["일시", "탭", "작업", "상태", "모델", "토큰(합계)", "프롬프트", "응답 요약", "작성자"],
                            [[xlsx.local_text(r["_at"], tz), r["part"], r["action"], r["status"], r["detail"].get("model", ""),
                              tokens(r["detail"]), str(r["detail"].get("prompt", ""))[:4000],
                              str(r["detail"].get("response", ""))[:2000], r["user"]] for r in sub],

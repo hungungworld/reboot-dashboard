@@ -44,7 +44,7 @@
 
   function emptySheet() {
     return { content_type: '', channels: [], brand_focus: false, product_ids: [], goal: '', extra_request: '', reference_text: '',
-      use_character: 'AI 판단', language: '영어', product_flavors: {} };
+      use_character: 'AI 판단', language: '영어', product_flavors: {}, ref_skip: [] };
   }
   // 제품별 맛 (시트 칩 순서 · 서버 assets.FLAVOR_ORDER와 같음). 처음엔 셋 다 켜짐, 하나씩 끌 수 있음
   const FLAVORS = [['cherry', '체리'], ['lime', '라임'], ['lemon', '레몬']];
@@ -109,6 +109,7 @@
       product_ids: s.product_ids.slice(), goal: s.goal || '', extra_request: s.extra_request || '' };
     if (usesCharacter(s.content_type)) out.use_character = s.use_character || 'AI 판단';
     if (s.product_ids.length) out.product_flavors = flavorMap(s);
+    if (s.product_ids.length && s.ref_skip.length) out.ref_skip = s.ref_skip.slice();
     if (SHEET_LANGUAGES.includes(s.language)) out.language = s.language;
     return out;
   }
@@ -117,6 +118,7 @@
     if (!typeOf(s.content_type)) s.content_type = '';
     s.channels = (s.channels || []).filter(id => DATA.channels.some(c => c.id === id)).slice(0, 1);
     if (!s.product_flavors || typeof s.product_flavors !== 'object') s.product_flavors = {};
+    if (!Array.isArray(s.ref_skip)) s.ref_skip = [];
     if (s.content_type && s.channels.length && (s.content_type === DATA.crm.type) !== (s.channels[0] === DATA.crm.channel)) s.channels = [];
     return s;
   }
@@ -267,7 +269,6 @@
       if (!api || typeof api.contentBrief !== 'function') return;
       const b = await Promise.resolve(api.contentBrief());
       S.brief = b && Array.isArray(b.themes) && b.themes.length ? b : null;
-      if (S.camp) renderQuick();
     } catch (e) { S.brief = null; }
   }
 
@@ -324,7 +325,7 @@
 
   function sheetStudioHtml() {
     const s = S.sheet;
-    return `<div class="cnt-studio-bar"><div class="flex">${icon('spark')}<strong>새 콘텐츠 만들기</strong></div>${badge('STEP 01 / 03')}</div>
+    return `<div class="cnt-studio-bar"><div class="flex">${icon('spark')}<strong>새 캠페인</strong></div>${badge('STEP 01 / 03')}</div>
       <div class="cnt-api" data-ref="api">${apiStatusHtml()}</div>
       <div class="cnt-studio-body">
         <div class="cnt-welcome"><div class="cnt-spark" aria-hidden="true">✳</div><h2>어떤 이야기를 만들어볼까요?</h2>
@@ -345,7 +346,7 @@
       <div class="flex wrap cnt-start-btns">${cardnews ? `
         <button type="button" class="btn lime" data-act="start" ${missing.length ? 'disabled' : ''}>${icon('doc')}카드뉴스 편집기 열기${icon('arrow')}</button>
       </div>` : `
-        <button type="button" class="btn" data-act="start-quick" ${missing.length || !textReady() ? 'disabled' : ''} title="${textReady() ? '질문 없이 지금 정보로 초안 3안을 바로 만들어요' : 'OpenAI 키가 필요해요'}">${icon('spark')}질문 없이 바로 3안</button>
+        <button type="button" class="btn" data-act="start-quick" ${missing.length || !textReady() ? 'disabled' : ''} title="${textReady() ? '질문 없이 지금 정보로 초안 3개를 바로 만들어요' : 'OpenAI 키가 필요해요'}">${icon('spark')}질문 없이 초안 3개</button>
         <button type="button" class="btn lime" data-act="start" ${missing.length ? 'disabled' : ''}>이 정보로 시작${icon('arrow')}</button>
       </div>`}`;
   }
@@ -393,6 +394,7 @@
   }
 
   // 이미지·영상 만들 때 참고로 넣을 제품 사진 미리보기 — 서버 assets.pick_refs와 같은 규칙 (제품 번갈아 · 최대 16장)
+  // 뺀 사진(ref_skip)은 제자리에 흐리게 두고, 쓰는 사진이 16장이 될 때까지 보여 줌
   function productRefs(s) {
     const all = (S.assets || []).filter(a => a.type === 'product' && a.ref);
     const lists = s.product_ids.map(id => {
@@ -402,14 +404,19 @@
     });
     const out = [];
     for (let i = 0; lists.some(l => i < l.length); i++) lists.forEach(l => { if (l[i]) out.push(l[i]); });
-    return out.slice(0, 16);  // 서버 assets.MAX_REFS
+    const skip = s.ref_skip || [];
+    let used = 0;
+    return out.filter(a => { if (used >= 16) return false; if (!skip.includes(a.id)) used++; return true; });  // 서버 assets.MAX_REFS
   }
   function refPreviewHtml(s) {
     if (!S.assets) return '<span class="panel-note">제품 사진을 불러오는 중…</span>';
     const refs = productRefs(s);
     if (!refs.length) return '<span class="panel-note">고른 제품의 참고 사진이 없어요.</span>';
-    return `<span class="panel-note">참고로 넣을 제품 사진 ${refs.length}장 · 이미지·영상을 만들 때 함께 보내요</span>
-      <div class="cnt-ref-thumbs">${refs.map(a => `<a href="${esc(a.url)}" target="_blank" rel="noopener" title="${esc(a.desc)}"><img src="${esc(a.url)}" alt="${esc(a.desc)}" loading="lazy"></a>`).join('')}</div>`;
+    const skip = s.ref_skip || [];
+    const used = refs.filter(a => !skip.includes(a.id)).length;
+    return `<span class="panel-note">참고로 넣을 제품 사진 ${refs.length}장 중 ${used}장 사용 · 누르면 빼거나 다시 넣어요 · 이미지·영상을 만들 때 함께 보내요</span>
+      <div class="cnt-ref-thumbs">${refs.map(a => { const on = !skip.includes(a.id);
+        return `<button type="button" class="cnt-ref-pick${on ? '' : ' off'}" data-act="sheet-ref" data-id="${esc(a.id)}" aria-pressed="${on}" title="${esc(a.desc)}${on ? '' : ' (뺌)'}"><img src="${esc(a.url)}" alt="${esc(a.desc)}" loading="lazy"></button>`; }).join('')}</div>`;
   }
   async function loadAssets() {
     try { S.assets = (await REBOOT.api(`${API}/assets`)).items || []; } catch (e) { S.assets = []; }
@@ -436,8 +443,8 @@
     const step = sheetMissing(S.sheet).length ? 0 : 1;
     return `<section class="card"><div class="card-head"><h2>이렇게 만들어져요</h2></div>
         ${DATA.workflow.map((t, i) => `<div class="workflow-step ${i === step ? 'current' : i < step ? 'done' : ''}"><span class="stepnum">${i < step ? '✓' : '0' + (i + 1)}</span>${esc(t)}</div>`).join('')}
-        <div class="empty-art cnt-empty">${icon('image')}<span>완성된 콘텐츠가 여기에 표시됩니다.</span></div>
-        <p class="panel-note mt-8">AI 결과는 참고용 초안이에요. 게시 전 담당자가 확인합니다.</p>
+        <div class="empty-art cnt-empty">${icon('image')}<span>완성된 콘텐츠가 여기에 표시돼요.</span></div>
+        <p class="panel-note mt-8">AI 결과는 참고용 초안이에요. 게시 전 담당자가 확인해요.</p>
       </section>`;
   }
 
@@ -509,6 +516,9 @@
       if (cur.includes(f) && cur.length === 1) { toast('맛을 하나 이상 골라 주세요.', 'error'); return true; }
       const next = cur.includes(f) ? cur.filter(x => x !== f) : cur.concat(f);
       s.product_flavors = Object.assign({}, s.product_flavors, { [id]: ALL_FLAVORS.filter(x => next.includes(x)) });
+    } else if (act === 'sheet-ref') {  // 참고 사진 누르면 빼기 · 다시 누르면 넣기
+      const id = b.dataset.id;
+      s.ref_skip = s.ref_skip.includes(id) ? s.ref_skip.filter(x => x !== id) : s.ref_skip.concat(id);
     } else if (act === 'sheet-language') {
       s.language = b.dataset.value;
     } else if (act === 'goal-pick') {  // 고른 것을 다시 누르면 해제 → 비우면 챗봇과 논의
@@ -587,7 +597,7 @@
   function editCopy(c) {
     const ch = c.decisions && c.decisions.use_character;
     return fitSheet(Object.assign(emptySheet(), JSON.parse(JSON.stringify(c.sheet)), { reference_text: c.referenceText || '',
-      use_character: (ch && ch.value) || 'AI 판단', product_flavors: JSON.parse(JSON.stringify(c.productFlavors || {})) }));
+      use_character: (ch && ch.value) || 'AI 판단', product_flavors: JSON.parse(JSON.stringify(c.productFlavors || {})), ref_skip: (c.refSkip || []).slice() }));
   }
 
   async function openCampaign(id, opts) {
@@ -666,7 +676,7 @@
         <span class="cnt-status ${statusTone(c.status)}" title="완성하기 → 완료 · 더 수정하기 → 제작 중 (자동)">${esc(c.status)}</span>
         <span class="cnt-saved" title="서버에 저장됨 · 리비전 ${esc(c.revision)}">${icon('check')}저장됨 · ${esc(fmt.relative(c.updatedAt))}</span>
         ${c.sheet.content_type === 'cardnews' && !cnActive() ? `<button type="button" class="btn small" data-act="cn-editor">${icon('doc')}카드뉴스 편집기</button>` : ''}
-        <button type="button" class="btn small ghost" data-act="new-campaign">${icon('plus')}새로 만들기</button>
+        <button type="button" class="btn small ghost" data-act="new-campaign">${icon('plus')}새 캠페인</button>
       </div>`;
   }
 
@@ -699,7 +709,7 @@
 
   function noKeyHtml() {
     return `<div class="note warn cnt-nokey">${icon('settings')}<div><b>AI 대화를 쓰려면 OpenAI 키가 필요해요.</b>
-      설정 › 연결에서 OPENAI_API_KEY를 넣으면 사용 가능합니다. 지금은 정한 내용을 적어 두고 초안을 직접 작성할 수 있어요.
+      설정 › 연결에서 OpenAI 키를 넣어 주세요. 지금은 정한 내용을 적어 두고 초안을 직접 작성할 수 있어요.
       <div class="flex wrap mt-8"><button type="button" class="btn small" data-act="manual-version">${icon('edit')}초안 직접 작성</button>
       <button type="button" class="btn small" data-act="add-decision">${icon('plus')}정한 내용 추가</button></div></div></div>`;
   }
@@ -714,7 +724,7 @@
     if (m.role === 'event') {
       const p = m.payload || {};
       const tone = p.kind === 'job_failed' ? ' error' : p.kind === 'job_done' ? ' done' : '';
-      const view = p.versionId ? ` <button type="button" class="link" data-act="select-version" data-id="${esc(p.versionId)}">보기</button>` : '';
+      const view = p.versionId ? ` <button type="button" class="link" data-act="select-version" data-id="${esc(p.versionId)}">결과 보기</button>` : '';
       return `<div class="cnt-event${tone}">${icon(p.kind === 'job_failed' ? 'x' : p.kind === 'job_done' ? 'image' : 'clock')}<span>${esc(m.text)}</span>${view}${time}</div>`;
     }
     const p = m.payload || {};
@@ -769,7 +779,7 @@
     if (!refs.length) return '';
     return refs.map(r => `<span class="cnt-ref-chip" title="${esc(r.summary || 'AI 요약 없음')}">
         <button type="button" class="cnt-ref-img" data-act="ref-view" data-id="${esc(r.id)}" aria-label="레퍼런스 보기"><img src="${esc(r.url)}" alt="레퍼런스 ${esc(r.id)}" loading="lazy"></button>
-        <button type="button" class="cnt-ref-x" data-act="ref-del" data-id="${esc(r.id)}" aria-label="레퍼런스 지우기">✕</button></span>`).join('') +
+        <button type="button" class="cnt-ref-x" data-act="ref-del" data-id="${esc(r.id)}" aria-label="레퍼런스 삭제">✕</button></span>`).join('') +
       `<span class="panel-note">레퍼런스 ${refs.length}/${(S.meta && S.meta.references && S.meta.references.max) || 3} · 대화에서 참고해요</span>`;
   }
   function renderRefs() { const el = ref('refs'); if (el) el.innerHTML = refsHtml(); }
@@ -801,7 +811,7 @@
     if (!c || !file) return;
     if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { toast('JPG · PNG · WebP 이미지만 올릴 수 있어요.', 'error'); return; }
     const max = (S.meta && S.meta.references && S.meta.references.max) || 3;
-    if ((c.references || []).length >= max) { toast(`레퍼런스는 ${max}장까지예요. 하나를 지우고 올려 주세요.`, 'error'); return; }
+    if ((c.references || []).length >= max) { toast(`레퍼런스는 ${max}장까지예요. 하나를 삭제하고 올려 주세요.`, 'error'); return; }
     const el = ref('refs');
     if (el) el.insertAdjacentHTML('beforeend', '<span class="panel-note cnt-ref-busy"><span class="spinner"></span>올리고 AI가 보는 중…</span>');
     try {
@@ -913,7 +923,7 @@
     if (img.image_text && img.image_text.length) return `AI가 문구를 이미지에 직접 그렸어요 (${esc(img.image_text.map(t => t.text).join(' / '))}). 철자는 게시 전 확인하세요.`;
     if (img.text_mode === 'none') return '글자 없이 만든 이미지예요.';
     if (img.baked) return '글자를 이미지에 합성한 버전이에요.';
-    return layers.length ? '예전 방식 버전 — 문구를 텍스트 레이어로 따로 얹어 보여 줘요.' : '이미지 속 글자는 검사하지 않아요.';
+    return layers.length ? '예전 방식 버전 — 문구를 텍스트 레이어로 따로 얹어 보여 줘요.' : '이미지 속 글자는 심의하지 않아요.';
   }
 
   // 카피 초안이 있으면 새 이미지는 그 초안 문구로 만들어짐 (서버가 가장 최근 텍스트 버전을 넘김)
@@ -1001,7 +1011,7 @@
 
   function ivCustom() {
     const v = S.ivDraft.trim();
-    if (!v) { toast('보기를 고르거나 직접 입력하세요.', 'error'); return; }
+    if (!v) { toast('답을 고르거나 직접 입력해 주세요.', 'error'); return; }
     interviewAct('answer', { value: v }, v);
   }
 
@@ -1020,7 +1030,7 @@
         onClick: el => {
           const typed = el.querySelector('[data-m="value"]').value.trim();
           if (typed) value = typed;
-          if (!value) { toast('보기를 고르거나 직접 입력하세요.', 'error'); return false; }
+          if (!value) { toast('답을 고르거나 직접 입력해 주세요.', 'error'); return false; }
           return true;
         }
       }]),
@@ -1083,8 +1093,7 @@
     const ct = S.camp ? S.camp.sheet.content_type : '';
     const set = ct === 'image' ? DATA.quick.image : DATA.quick.text;
     const persona = S.personas && S.personas.length ? `<button type="button" class="chip" data-act="persona">${icon('users')}타깃 참고</button>` : '';
-    const brief = S.brief ? `<button type="button" class="chip" data-act="brief">${icon('doc')}고객 브리프</button>` : '';
-    return `<div class="chips">${set.map((q, i) => `<button type="button" class="chip" data-act="quick" data-i="${i}">${esc(q.label)}</button>`).join('')}${persona}${brief}</div>`;
+    return `<div class="chips">${set.map((q, i) => `<button type="button" class="chip" data-act="quick" data-i="${i}">${esc(q.label)}</button>`).join('')}${persona}</div>`;
   }
   function renderQuick() { const el = ref('quick'); if (el) el.innerHTML = quickHtml(); }
 
@@ -1096,11 +1105,12 @@
 
   function toolsHtml() {
     const base = currentBase();
-    const baseChip = base ? `<span class="cnt-base" title="수정 요청은 이 안을 고쳐요">고치는 중: ${esc(base.label)} · v${esc(base.seq)}
-      <button type="button" data-act="base-off" aria-label="고치는 안 해제">✕</button></span>` : '';
+    const baseChip = base ? `<span class="cnt-base" title="수정 요청은 이 초안을 고쳐요">고치는 중: ${esc(base.label)} · v${esc(base.seq)}
+      <button type="button" data-act="base-off" aria-label="고치는 초안 해제">✕</button></span>` : '';
     const mode = textReady() ? `AI 대화 · ${esc(textModel())}` : '키 없음 · 직접 작성 모드';
     return `${baseChip}<button type="button" class="cnt-tool" data-act="ref-upload" title="JPG · PNG · WebP · 최대 3장 · AI가 보고 대화에 참고해요">${icon('image')}레퍼런스 이미지</button>
       <button type="button" class="cnt-tool" data-act="reference">${icon('plus')}참고 문구</button>
+      <button type="button" class="cnt-tool" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 입력창에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button>
       <button type="button" class="cnt-tool" data-act="ai-settings">${icon('settings')}설정</button><span class="cnt-mode">${mode}</span>`;
   }
 
@@ -1109,8 +1119,8 @@
     if (!input || !S.camp) return;
     const ok = textReady();
     input.disabled = !ok || S.sending;
-    input.placeholder = ok ? '원하는 방향이나 수정할 내용을 편하게 말해주세요. (Enter 보내기 · Shift+Enter 줄바꿈)'
-      : 'OpenAI 키가 없어 AI 대화를 쓸 수 없어요 — 설정 › 연결에서 키를 넣으면 사용 가능';
+    input.placeholder = ok ? '원하는 방향이나 수정할 내용을 편하게 말해 주세요. (Enter 보내기 · Shift+Enter 줄바꿈)'
+      : 'OpenAI 키가 없어 AI 대화를 쓸 수 없어요 — 설정 › 연결에서 OpenAI 키를 넣어 주세요';
     const send = S.root.querySelector('[data-act="send"]');
     if (send) send.disabled = !ok || S.sending;
     const tools = ref('tools');
@@ -1193,7 +1203,7 @@
     const steps = [
       ['기획 메모 정리', '완료'],
       ['방향 정하기', hasDec || vs.length ? '완료' : '진행 중'],
-      ['초안 · 시안', vs.length ? '완료' : hasDec ? '진행 중' : '대기'],
+      ['초안 만들기', vs.length ? '완료' : hasDec ? '진행 중' : '대기'],
       ['검토 · 최종본', complete ? '완성' : c.finalVersionId ? '완료' : vs.length ? '진행 중' : '대기']
     ];
     const jobs = c.jobs.filter(j => ACTIVE_JOB.includes(j.status) || j.status === 'failed' || j.status === 'submission_unknown').slice(0, 3);
@@ -1220,7 +1230,7 @@
           ${canImage ? imgTextHtml() : ''}
           ${sel && (!complete || sel.id !== c.finalVersionId) ? `<button type="button" class="btn small lime cnt-complete-btn" data-act="complete">${icon('check')}${complete ? '이 버전으로 완성하기' : '완성하기'} · ${esc(sel.label)} v${esc(sel.seq)}</button>
             <p class="panel-note">보고 있는 버전을 최종본으로 정하고 상태를 '완료'로 바꿔요. 나중에 더 수정할 수 있어요.</p>` : ''}
-          ${vs.length ? `<div class="cnt-vhead"><span class="field-label">버전 ${esc(vs.length)}개</span><button type="button" class="link" data-act="export">${icon('download')}전체 내보내기 (ZIP)</button></div>
+          ${vs.length ? `<div class="cnt-vhead"><span class="field-label">버전 ${esc(vs.length)}개</span>${ui.fileBtn('download', { label: '전체 다운로드', type: 'ZIP', act: 'export' })}</div>
             <div class="cnt-versions">${vs.map(v => versionRowHtml(v, sel)).join('')}</div>` : '<p class="panel-note">만든 결과물은 버전으로 여기에 쌓여요.</p>'}
         </div>
       </div>`;
@@ -1233,12 +1243,12 @@
       <div class="cnt-done-msg">${icon('check')}<div><b>완성됐어요 — ${esc(v.label)} · v${esc(v.seq)}</b>
         <small>최종본은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</small></div></div>
       <div class="flex wrap cnt-done-btns">
-        ${isImg ? `<button type="button" class="btn small lime" data-act="save-image" data-id="${esc(v.id)}">${icon('download')}이미지 저장하기</button>`
-          : v.videoUrl ? `<a class="btn small lime" href="${esc(v.videoUrl)}" download>${icon('download')}영상 저장하기</a>`
-          : `<button type="button" class="btn small lime" data-act="export-one" data-id="${esc(v.id)}">${icon('download')}파일 저장하기</button>`}
+        ${isImg ? ui.fileBtn('download', { label: '이미지 다운로드', type: 'PNG', act: 'save-image', attrs: `data-id="${esc(v.id)}"` })
+          : v.videoUrl ? ui.fileBtn('download', { label: '영상 다운로드', type: 'MP4', href: v.videoUrl })
+          : ui.fileBtn('download', { label: '파일 다운로드', act: 'export-one', attrs: `data-id="${esc(v.id)}"` })}
         <button type="button" class="btn small" data-act="reopen">${icon('edit')}더 수정하기</button>
         ${S.camp.sheet.content_type !== DATA.crm.type ? `<button type="button" class="btn small" data-act="copy-channel">${icon('refresh')}다른 채널로 만들기</button>` : ''}
-        <button type="button" class="btn small dark" data-act="new-campaign">${icon('plus')}새 콘텐츠 만들기</button>
+        <button type="button" class="btn small dark" data-act="new-campaign">${icon('plus')}새 캠페인</button>
       </div></div>`;
   }
 
@@ -1248,7 +1258,7 @@
     const options = DATA.channels.filter(ch => ch.id !== DATA.crm.channel && !c.sheet.channels.includes(ch.id));
     modal({
       title: '다른 채널로 만들기',
-      body: `<p>콘텐츠 · 대상 · 목적과 정한 내용(컨셉 · 스토리 · 톤 등)을 그대로 가져가요. 비율은 새 채널 기본값으로 바뀌고,
+      body: `<p>콘텐츠 · 대상 · 목적과 정한 내용(콘셉트 · 스토리 · 톤 등)을 그대로 가져가요. 비율은 새 채널 기본값으로 바뀌고,
           캡션 · 멘트와 대화 · 버전은 가져가지 않아요. 지금 최종본 문구는 참고 문구로 넘겨 새 채널에 맞게 고쳐 써요.</p>
         <div class="chips">${options.map(ch => `<button type="button" class="chip" data-copy-ch="${esc(ch.id)}">${esc(ch.label)}</button>`).join('')}</div>`,
       actions: [{ label: '닫기', value: null }],
@@ -1266,7 +1276,7 @@
             renderMain();
             loadList();
             toast(`${channelLabel(b.dataset.copyCh)}용 캠페인을 만들었어요.`);
-            if (textReady()) send('같은 컨셉으로 이 채널에 맞게 초안 만들어줘', { force: 'draft' });
+            if (textReady()) send('같은 콘셉트로 이 채널에 맞게 초안 만들어줘', { force: 'draft' });
           } catch (err) {
             el.querySelectorAll('[data-copy-ch]').forEach(x => { x.disabled = false; });
             toast(err.message, 'error');
@@ -1312,14 +1322,14 @@
     try {
       const res = await REBOOT.api(v.imageUrl, undefined, { raw: true });
       const blob = await res.blob();
-      if (!layers.length) { ui.download(name, blob); toast('이미지를 저장했어요.'); return; }
+      if (!layers.length) { ui.download(name, blob); toast('이미지를 내려받았어요.'); return; }
       const url = global.URL.createObjectURL(blob);
       const img = new global.Image();
       img.onload = () => {
         const out = global.document.createElement('canvas');
         drawEditor(out, img, { crop: 'original', offset: 0.5, brightness: 100, contrast: 100, saturation: 100, layers: layers.map(normLayer), sel: -1 }, 0, { text: true });
         global.URL.revokeObjectURL(url);
-        out.toBlob(b => { if (b) { ui.download(name, b); toast('문구를 합성한 이미지를 저장했어요.'); } else toast('이미지를 만들지 못했어요.', 'error'); }, 'image/png');
+        out.toBlob(b => { if (b) { ui.download(name, b); toast('문구를 합성한 이미지를 내려받았어요.'); } else toast('이미지를 만들지 못했어요.', 'error'); }, 'image/png');
       };
       img.onerror = () => { global.URL.revokeObjectURL(url); toast('이미지를 읽지 못했어요.', 'error'); };
       img.src = url;
@@ -1353,9 +1363,9 @@
 
   function keywordBadge(v, mini) {
     const kw = v.review && v.review.keyword;
-    if (!kw) return mini ? '' : badge('키워드 미확인');
+    if (!kw) return mini ? '' : badge('키워드 확인 전');
     const st = DATA.keywordStatus[kw.status] || DATA.keywordStatus.clear;
-    if (mini) return kw.status === 'clear' ? '' : badge(kw.status === 'error' ? '수정 필요' : '확인 필요', st.tone);
+    if (mini) return kw.status === 'clear' ? '' : badge(kw.status === 'error' ? '수정 필요' : '검토 필요', st.tone);
     return badge(st.label, st.tone);
   }
 
@@ -1382,13 +1392,13 @@
   function checkSummaryHtml(v, chk) {
     const label = {
       block: [`사용 불가 ${chk.block}곳`, 'red'], revise: [`수정 필요 ${chk.revise}곳`, 'orange'],
-      check: [`확인 필요 ${chk.check}곳`, 'blue'], ok: ['걸린 항목 없음', 'green'], none: ['아직 검사 전', '']
+      check: [`검토 필요 ${chk.check}곳`, 'blue'], ok: ['걸린 표현 없음', 'green'], none: ['아직 심의 전', '']
     }[chk.level];
     const note = chk.level === 'ok' ? '규칙에 걸린 문구는 없어요. 사람이 확인한 뒤 게시하세요.'
-      : chk.level === 'none' ? '[모두 검사]는 비용 없이 키워드 · 컴플라이언스 규칙으로 문구를 확인해요.'
+      : chk.level === 'none' ? '[모두 심의]는 비용 없이 키워드 · 컴플라이언스 규칙으로 문구를 확인해요.'
       : '아래 세부 결과에서 걸린 문구와 대체 문구를 확인하세요.';
     return `<div class="cnt-check-sum lv-${chk.level}"><span class="cnt-check-title">게시 전 체크</span>${badge(label[0], label[1])}
-        <button type="button" class="btn small ghost" data-act="check-all" data-id="${esc(v.id)}">${chk.level === 'none' ? '모두 검사' : '다시 검사'}</button>
+        <button type="button" class="btn small ghost" data-act="check-all" data-id="${esc(v.id)}">${chk.level === 'none' ? '모두 심의' : '다시 심의'}</button>
         <p class="panel-note">${esc(note)}</p></div>`;
   }
 
@@ -1400,16 +1410,16 @@
     const baked = !!(v.image && v.image.baked);  // 편집기에서 글자를 이미지에 합성함 → 겹쳐 그리지 않음
     const layers = baked ? [] : (v.image && v.image.text_layers) || [];
     const body = img
-      ? `<div class="cnt-preview${S.showLayers && layers.length ? ' layers' : ''}"><img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 시안" loading="lazy">
+      ? `<div class="cnt-preview${S.showLayers && layers.length ? ' layers' : ''}"><img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 초안" loading="lazy">
           ${layers.length ? `<div class="cnt-layer-box" aria-hidden="${!S.showLayers}">${layers.map(layerHtml).join('')}</div>` : ''}</div>
-         <div class="between cnt-img-foot"><span class="panel-note">${badge('시안')} ${imageFootNote(v, layers)}</span>
+         <div class="between cnt-img-foot"><span class="panel-note">${badge('초안')} ${imageFootNote(v, layers)}</span>
           ${layers.length ? `<button type="button" class="link" data-act="toggle-layers">텍스트 레이어 ${S.showLayers ? '숨기기' : '보기'}</button>` : ''}</div>
          ${referencesHtml(v)}
          ${socialHtml(v)}
          ${imageEditHtml(v)}`
       : vid
-      ? `<div class="cnt-preview cnt-video"><video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 시안"></video></div>
-         <p class="panel-note">${badge('시안')} 자막·로고는 영상에 넣지 않았어요. 제품 모양·라벨·장면은 게시 전에 직접 확인하세요.</p>
+      ? `<div class="cnt-preview cnt-video"><video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 초안"></video></div>
+         <p class="panel-note">${badge('초안')} 자막·로고는 영상에 넣지 않았어요. 제품 모양·라벨·장면은 게시 전에 직접 확인하세요.</p>
          ${v.body ? `<p class="panel-note">${esc(v.body)}</p>` : ''}
          ${referencesHtml(v)}
          ${socialHtml(v)}
@@ -1427,23 +1437,23 @@
       ${body}
       <div class="cnt-review">
         ${checkSummaryHtml(v, chk)}
-        <details class="cnt-review-more"${chk.level === 'ok' || chk.level === 'none' ? '' : ' open'}><summary>세부 검사 결과</summary>
+        <details class="cnt-review-more"${chk.level === 'ok' || chk.level === 'none' ? '' : ' open'}><summary>세부 심의 결과</summary>
         ${(v.needsCheck || []).length ? `<div class="note cnt-check-list"><b>확인 필요</b><ul>${v.needsCheck.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : ''}
         ${unitReviewsHtml(v)}
         <div class="cnt-review-row"><span>키워드 확인</span>${keywordBadge(v, false)}</div>
         ${kw && kw.items && kw.items.length ? `<ul class="cnt-review-items">${kw.items.map(i => `<li class="${esc(i.level)}">${esc(i.label)}${i.terms && i.terms.length ? ` <code>${esc(i.terms.join(', '))}</code>` : ''}</li>`).join('')}</ul>` : ''}
-        <div class="cnt-review-row"><span>컴플라이언스</span>${cmp ? badge(cmp.label || cmp.verdict, DATA.complianceTone[cmp.verdict] || '') : badge('미검토')}</div>
+        <div class="cnt-review-row"><span>컴플라이언스</span>${cmp ? badge(cmp.label || cmp.verdict, DATA.complianceTone[cmp.verdict] || '') : badge('심의 전')}</div>
         ${cmp && cmp.findings && cmp.findings.length ? `<ul class="cnt-review-items">${cmp.findings.map(f => `<li class="${f.verdict === 'BLOCK' ? 'error' : 'warn'}">${esc(f.code)} ${esc(f.name)}${f.terms && f.terms.length ? ` <code>${esc(f.terms.join(', '))}</code>` : ''}${f.alt ? ` → ${esc(f.alt)}` : ''}</li>`).join('')}</ul>` : ''}
         </details>
         <p class="panel-note">${esc((v.review && v.review.videoScope) || (kw && kw.scope) || '텍스트만 확인')} · 결과는 참고용이며 법적 승인이 아니에요.</p>
       </div>
       <div class="flex wrap cnt-sel-actions">
-        <button type="button" class="btn small" data-act="use-base" data-id="${esc(v.id)}">${icon('chat')}이 안 고치기</button>
-        ${compareCandidates(v).length ? `<button type="button" class="btn small" data-act="compare" data-id="${esc(v.id)}">비교</button>` : ''}
+        <button type="button" class="btn small" data-act="use-base" data-id="${esc(v.id)}">${icon('chat')}이 초안 고치기</button>
+        ${compareCandidates(v).length ? `<button type="button" class="btn small" data-act="compare" data-id="${esc(v.id)}">버전 비교</button>` : ''}
         ${!media ? `<button type="button" class="btn small" data-act="manual-edit" data-id="${esc(v.id)}">${icon('edit')}직접 수정</button>
           <button type="button" class="btn small" data-act="view-version" data-id="${esc(v.id)}">크게 보기</button>
           <button type="button" class="btn small ghost" data-act="copy" data-id="${esc(v.id)}">복사</button>` : `<a class="btn small ghost" href="${esc(v.imageUrl || v.videoUrl)}" target="_blank" rel="noopener">원본 열기</a>`}
-        <button type="button" class="btn small ghost" data-act="export-one" data-id="${esc(v.id)}">${icon('download')}이 버전만</button>
+        ${ui.fileBtn('download', { label: '이 버전 다운로드', act: 'export-one', attrs: `data-id="${esc(v.id)}"` })}
       </div>
       ${c.finalVersionId === v.id ? '<p class="panel-note">최종본 지정은 팀이 고른 버전이라는 뜻이에요. 법적 승인이나 사실 확인 완료가 아니에요.</p>' : ''}
     </div>`;
@@ -1463,7 +1473,7 @@
       <div class="between"><strong>AI 추천 캡션 · 해시태그</strong>${st ? badge(st.label, st.tone) : ''}</div>
       <p class="panel-note">${badge('AI 제안')} ${esc(basis)}${s.note ? ` · ${esc(s.note)}` : ''}</p>
       <ol class="cnt-social-caps">${caps.map((c, i) => `<li>
-        <div class="between"><span class="small muted">${esc(c.angle || `${i + 1}안`)}</span>
+        <div class="between"><span class="small muted">${esc(c.angle || `초안 ${i + 1}`)}</span>
           <button type="button" class="btn small ghost" data-act="copy-text" data-text="${esc(c.text + (tags ? '\n\n' + tags : ''))}">복사</button></div>
         <p>${esc(c.text)}</p></li>`).join('')}</ol>
       ${tags ? `<div class="between cnt-social-tags"><span>${esc(tags)}</span><button type="button" class="btn small ghost" data-act="copy-text" data-text="${esc(tags)}">해시태그 복사</button></div>` : ''}
@@ -1491,7 +1501,7 @@
   function imageEditHtml(v) {
     const ready = textReady();
     const off = ready ? '' : 'disabled title="OpenAI 키가 필요해요"';
-    const quick = DATA.quick.image.filter(q => q.label !== '다른 시안');
+    const quick = DATA.quick.image.filter(q => q.label !== '다른 초안');
     return `<div class="cnt-img-edit">
       <div class="field-label">${icon('spark')}이 이미지 수정하기</div>
       <div class="chips">${quick.map((q, i) => `<button type="button" class="chip" data-act="img-quick" data-i="${i}">${esc(q.label)}</button>`).join('')}</div>
@@ -1499,10 +1509,10 @@
         <button type="button" class="btn small dark" data-act="img-ai-edit" data-id="${esc(v.id)}" ${off}>${icon('spark')}AI로 수정</button></div>
       <div class="flex wrap cnt-img-edit-btns">
         <button type="button" class="btn small" data-act="img-editor" data-id="${esc(v.id)}">${icon('edit')}직접 편집 (자르기 · 색)</button>
-        <button type="button" class="btn small ghost" data-act="img-new" ${off}>AI로 다른 시안</button>
+        <button type="button" class="btn small ghost" data-act="img-new" ${off}>AI로 다른 초안</button>
       </div>
       ${imgTextHtml()}
-      <p class="panel-note">문구를 바꾸려면 [문구 수정]처럼 AI에게 말해 주세요. AI 수정은 이 이미지를 기준으로 넣어 새 버전을 만들어요 (원본 유지 · 이미지 생성 비용). ${S.meta && S.meta.imageEdit === false ? '지금 이미지 모델은 편집을 지원하지 않아 새 시안으로 만들어요. ' : ''}직접 편집은 AI 없이 브라우저에서 해요.</p>
+      <p class="panel-note">문구를 바꾸려면 [문구 수정]처럼 AI에게 말해 주세요. AI 수정은 이 이미지를 기준으로 넣어 새 버전을 만들어요 (원본 유지 · 이미지 생성 비용). ${S.meta && S.meta.imageEdit === false ? '지금 이미지 모델은 편집을 지원하지 않아 새 초안으로 만들어요. ' : ''}직접 편집은 AI 없이 브라우저에서 해요.</p>
     </div>`;
   }
 
@@ -1719,7 +1729,7 @@
     const usd = n => '$' + Number(n).toFixed(2);
     const priceText = p => (p.price || []).map(x => `${x.option} ${usd(x.usd)}${x.per_unit_usd != null ? ` (1개당 ${usd(x.per_unit_usd)})` : ''}`).join(' · ');
     const nutritionText = n => (n ? [n.sugar && `당류 ${n.sugar}`, n.calories && `열량 ${n.calories}`, n.status].filter(Boolean).join(' · ') : null);
-    return `<p class="panel-note">AI는 아래 값만 사실 근거로 써요 (기준 ${esc(f.facts_version || '—')}). 바꾸려면 설정 › 제품 정보에서 고칩니다.</p>
+    return `<p class="panel-note">AI는 아래 값만 사실 근거로 써요 (기준 ${esc(f.facts_version || '—')}). 바꾸려면 설정 › 제품 정보에서 고쳐요.</p>
       <div class="cnt-fact"><b>Reboot 브랜드 ${badge('항상 포함')}</b>
         ${cell('슬로건', (b.slogans || []).join(' · ') || b.slogan)}${cell('브랜드 색', b.colors)}${cell('캐릭터', b.character)}${cell('CM송', b.cm_song)}${cell('구분', b.category)}</div>
       ${prods.length ? prods.map(p => `<div class="cnt-fact"><b>${esc(p.internal_name)} ${badge(p.evidence || '확인 필요', p.evidence === '확인 완료' ? 'green' : 'orange')}</b>
@@ -1752,10 +1762,10 @@
         <div class="cnt-model">${esc(textModel())} ${ready ? badge('연결됨', 'green') : badge('키 없음', 'orange')}</div></div>
       <div class="setting-row"><div><b>이미지 AI</b><p>이미지 작업 때만 써요. OpenAI · ${esc(meta.imageModel || 'gpt-image-2.5-sunburst')} 또는 Higgsfield · ${esc(meta.higgsfieldImageModel || 'marketing-studio/image')} (제품·Rebu 사진을 참고 이미지로 넣어요).</p></div>
         <select class="cnt-model" data-setting="image_provider" aria-label="이미지 AI">${opts(providersImg, st.image_provider || 'openai')}</select></div>
-      <div class="setting-row"><div><b>영상 AI</b><p>실제 영상은 Higgsfield ${esc(video.model || 'Seedance 2.0')} · ${esc(video.resolution || '720p')} · 4~15초 · 소리 없음 (유료 · 명확히 요청할 때만).${hfKey ? '' : ' HIGGSFIELD_API_KEY가 없으면 구성안만 만들어요.'}</p></div>
+      <div class="setting-row"><div><b>영상 AI</b><p>실제 영상은 Higgsfield ${esc(video.model || 'Seedance 2.0')} · ${esc(video.resolution || '720p')} · 4~15초 · 소리 없음 (유료 · 명확히 요청할 때만).${hfKey ? '' : ' 설정 › 연결에서 Higgsfield 키를 넣기 전에는 구성안만 만들어요.'}</p></div>
         <select class="cnt-model" data-setting="video_mode" aria-label="영상 AI">${opts(modes, st.video_mode || 'plan_only')}</select></div>
       ${hfKey ? '' : `<p class="note warn">${icon('settings')}Higgsfield 키가 없어요. Higgsfield를 고르면 키를 넣기 전까지 이미지·영상을 만들지 않아요 (OpenAI로 자동 전환하지 않음).</p>`}
-      <p class="panel-note">모델은 서버 설정이에요: 대화·제작 = CONTENT_TEXT_MODEL 또는 공통 OPENAI_MODEL(설정 › 연결) · OpenAI 이미지 = CONTENT_IMAGE_MODEL · Higgsfield = HIGGSFIELD_API_KEY.</p>
+      <p class="panel-note">모델은 서버 설정이에요. 공통 OpenAI 모델과 Higgsfield 키는 설정 › 연결에서 바꿔요.</p>
       <details class="cnt-adv"${inModal ? ' open' : ''}><summary>고급 옵션 ${camp ? '(이 캠페인)' : '(새 캠페인 기본값)'}</summary>
         <div class="field-grid three">
           <label class="field"><span>답변 길이</span><select data-setting="answer_length">${Object.keys(lengths).map(k => `<option value="${esc(k)}" ${st.answer_length === k ? 'selected' : ''}>${esc(lengths[k])}</option>`).join('')}</select></label>
@@ -1813,7 +1823,7 @@
   function complianceCheck(text) {
     let api = null;
     try { api = REBOOT.use('compliance'); } catch (e) { api = null; }
-    if (!api || typeof api.review !== 'function') return { verdict: 'UNAVAILABLE', label: '미연동', findings: [] };
+    if (!api || typeof api.review !== 'function') return { verdict: 'UNAVAILABLE', label: '연결 안 됨', findings: [] };
     const channels = Array.from(new Set(S.camp.sheet.channels.map(ch => DATA.complianceChannel[ch] || 'b2c')));
     const prods = complianceProducts();
     try {
@@ -1827,13 +1837,13 @@
       });
       return { verdict, label: DATA.complianceLabels[verdict] || verdict, findings: Object.values(byCode), channel: channels.join(','), products: prods };
     } catch (e) {
-      return { verdict: 'ERROR', label: '미검토 (검사 오류)', findings: [] };
+      return { verdict: 'ERROR', label: '심의하지 못함 (오류)', findings: [] };
     }
   }
 
   async function runCompliance(v) {
     const text = v.kind === 'image' ? ((v.image && v.image.text_layers) || []).map(t => t.text).join('\n') : v.body;
-    if (!String(text || '').trim()) { toast('검사할 문구가 없어요 (이미지 속 글자는 검사하지 않아요).', 'error'); return; }
+    if (!String(text || '').trim()) { toast('심의할 문구가 없어요 (이미지 속 글자는 심의하지 않아요).', 'error'); return; }
     const result = complianceCheck(text);
     S.reviews[v.id] = result;
     renderResults();
@@ -1844,7 +1854,7 @@
       });
       setCampaign(res.campaign);
       renderResults();
-    } catch (e) { toast('검사 결과를 서버에 기록하지 못했어요: ' + e.message, 'error'); }
+    } catch (e) { toast('심의 결과를 서버에 기록하지 못했어요: ' + e.message, 'error'); }
   }
 
   /* 문구별 컴플라이언스 — 초안을 소비자에게 보일 문구 단위(헤드라인 · 캡션 · CTA · 장 · 자막 · 이미지 레이어)로 나눠 검사.
@@ -1913,7 +1923,7 @@
     const units = cmpUnits(v);
     if (!units.length) return '';
     const done = units.filter((u, i) => S.unitReviews[`${v.id}:${i}`]).length;
-    return `<details class="cnt-units" open><summary>문구별 컴플라이언스 <span class="muted small">${units.length}개 문구${done ? ` · ${done}개 검사함` : ''}</span></summary>
+    return `<details class="cnt-units" open><summary>문구 심의 <span class="muted small">${units.length}개 문구${done ? ` · ${done}개 심의함` : ''}</span></summary>
       <div class="cnt-units-head"><span class="panel-note">채널(${esc(S.camp.sheet.channels.map(channelLabel).join(', '))}) · 선택 제품 기준 1차 참고 판정이에요. 법적 승인이 아니에요.</span></div>
       <ul class="cnt-unit-list">${units.map((u, i) => {
         const r = S.unitReviews[`${v.id}:${i}`];
@@ -1967,7 +1977,7 @@
         label: '새 버전으로 저장', value: 'save', tone: 'lime',
         onClick: el => {
           const get = k => el.querySelector(`[data-m="${k}"]`).value;
-          if (!get('body').trim()) { toast('본문을 입력하세요.', 'error'); return false; }
+          if (!get('body').trim()) { toast('본문을 입력해 주세요.', 'error'); return false; }
           values = { kind: get('kind'), label: get('label'), title: get('title'), body: get('body'), parent_id: parent ? parent.id : null };
           return true;
         }
@@ -1992,9 +2002,9 @@
     const head = `<div class="cnt-cmp-head"><b>${esc(v.label)} · v${esc(v.seq)}</b> <span class="muted small">${esc(v.kindLabel)} · ${esc(fmt.datetime(v.createdAt))}</span>
       ${v.isFinal ? badge('최종본', 'lime') : ''}${v.stale ? badge('미반영', 'orange') : ''}</div>`;
     const body = v.kind === 'image' && v.imageUrl
-      ? `<img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 시안">`
+      ? `<img src="${esc(v.imageUrl)}" alt="${esc(v.label)} 이미지 초안">`
       : v.kind === 'video' && v.videoUrl
-      ? `<video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 시안"></video>`
+      ? `<video src="${esc(v.videoUrl)}" controls playsinline preload="metadata" aria-label="${esc(v.label)} 영상 초안"></video>`
       : `<div class="prose">${ui.markdown(v.body)}</div>`;
     return head + (v.approach ? `<p class="panel-note">접근: ${esc(v.approach)}</p>` : '') + body;
   }
@@ -2038,7 +2048,7 @@
       const cd = res.headers.get('Content-Disposition') || '';
       const m = cd.match(/filename="?([^";]+)"?/);
       ui.download(m ? m[1] : `reboot-content-${c.id}.zip`, blob);
-      toast('내보냈어요. 파일 머리말에 미검토·임시 상태가 함께 적혀 있어요.');
+      toast('내려받았어요. 파일 머리말에 미검토·임시 상태가 함께 적혀 있어요.');
     } catch (e) { toast(e.message, 'error'); }
   }
 
@@ -2083,7 +2093,7 @@
         label: '저장', value: 'save', tone: 'lime',
         onClick: el => {
           const get = k => el.querySelector(`[data-m="${k}"]`).value;
-          if (!get('value').trim()) { toast('값을 입력하세요.', 'error'); return false; }
+          if (!get('value').trim()) { toast('값을 입력해 주세요.', 'error'); return false; }
           values = { field: 'decisions.' + get('key'), value: get('value').trim(), status: get('status') };
           return true;
         }
@@ -2133,6 +2143,7 @@
     if (usesCharacter(e.content_type) && e.use_character !== curChar) sheet.use_character = e.use_character;
     const curFlavors = Object.fromEntries(cur.product_ids.map(id => [id, (c.productFlavors && c.productFlavors[id]) || ALL_FLAVORS]));
     if (sheet.product_ids || JSON.stringify(flavorMap(e)) !== JSON.stringify(curFlavors)) sheet.product_flavors = flavorMap(e);
+    if (e.ref_skip.join(',') !== (c.refSkip || []).join(',')) sheet.ref_skip = e.ref_skip.slice();
     const body = { expected_revision: c.revision };
     if (Object.keys(sheet).length) body.sheet = sheet;
     if ((e.reference_text || '') !== (c.referenceText || '')) body.reference_text = e.reference_text || '';
@@ -2157,9 +2168,9 @@
       title: '캠페인 정보',
       body: `<label class="field"><span>캠페인명</span><input data-m="title" maxlength="80" value="${esc(c.title)}"></label>
         <p class="hint">캠페인명은 결과물에 영향을 주지 않아 '변경 사항 미반영' 비교에서 빠져요.</p>
-        ${canDelete ? '<div class="note error mt-16">캠페인을 삭제하면 대화·버전·이미지 파일이 함께 지워지고 되돌릴 수 없어요.</div>' : ''}`,
+        ${canDelete ? '<div class="note error mt-16">캠페인을 삭제하면 대화·버전·이미지 파일이 함께 삭제되고 되돌릴 수 없어요.</div>' : ''}`,
       actions: [{ label: '취소', value: null }].concat(canDelete ? [{ label: '캠페인 삭제', value: 'delete', tone: 'danger', onClick: () => { del = true; } }] : [])
-        .concat([{ label: '저장', value: 'save', tone: 'lime', onClick: el => { title = el.querySelector('[data-m="title"]').value.trim(); if (!title) { toast('캠페인명을 입력하세요.', 'error'); return false; } return true; } }])
+        .concat([{ label: '저장', value: 'save', tone: 'lime', onClick: el => { title = el.querySelector('[data-m="title"]').value.trim(); if (!title) { toast('캠페인명을 입력해 주세요.', 'error'); return false; } return true; } }])
     }).then(async v => {
       if (v === 'delete' && del) {
         if (!(await ui.confirm(`'${c.title}' 캠페인을 삭제할까요?`, { ok: '삭제', danger: true }))) return;
@@ -2202,8 +2213,8 @@
   function personaModal() {
     const list = S.personas || [];
     modal({
-      title: '타깃 참고 (인사이트 파트)',
-      body: `<p>인사이트 파트의 페르소나예요. 예시 데이터일 수 있으니 참고로만 쓰세요. 고르면 입력창에 넣어 드려요 (자동 전송 안 함).</p>
+      title: '타깃 참고 (인사이트 탭)',
+      body: `<p>인사이트 탭의 페르소나예요. 예시 데이터일 수 있으니 참고로만 쓰세요. 고르면 입력창에 넣어 드려요 (자동 전송 안 함).</p>
         <div class="cnt-persona-list">${list.map((p, i) => `<button type="button" class="choice" data-persona="${i}"><span><b>${esc(p.name)}</b><br><small>${esc(p.oneLine || '')}</small></span></button>`).join('')}</div>`,
       actions: [{ label: '닫기', value: null }],
       onOpen: el => {
@@ -2222,12 +2233,21 @@
   }
 
   // 고객 브리프 (인사이트 파트 · 사람이 승인한 요약만). 원본 리뷰는 오지 않음. 고르면 입력창에 넣음 (자동 전송 안 함)
-  function briefModal() {
+  async function briefModal() {
+    await loadBrief();  // 콘텐츠 탭을 연 뒤에 승인했을 수 있어 누를 때마다 새로 읽음
     const b = S.brief;
-    if (!b) return;
+    if (!b) {
+      modal({
+        title: '인사이트 브리프',
+        body: `<p>아직 승인한 콘텐츠 브리프가 없어요. 인사이트 탭 › 월간 리뷰 맨 아래 '콘텐츠 브리프'에서 [전체 승인]을 누르면 여기로 가져올 수 있어요.</p>
+          <a class="link" href="/dashboard/insights#monthly">월간 리뷰로 가기 ${icon('arrow')}</a>`,
+        actions: [{ label: '닫기', value: null }]
+      });
+      return;
+    }
     const list = b.themes;
     modal({
-      title: `고객 브리프 (인사이트 파트 · ${esc(b.month)})`,
+      title: `고객 브리프 (인사이트 탭 · ${esc(b.month)})`,
       body: `<p>리뷰 · 유튜브 질문을 주제로 묶어 사람이 승인한 요약이에요. 참고용이고, 만든 문구는 컴플라이언스 검토를 거쳐요. 고르면 입력창에 넣어 드려요 (자동 전송 안 함).</p>
         <div class="cnt-persona-list">${list.map((t, i) => `<button type="button" class="choice" data-brief="${i}"><span><b>${esc(t.theme)}</b> ${badge(`신뢰도 ${t.confidence}`, t.confidence === '높음' ? 'green' : 'blue')}
           <br><small>각도: ${esc(t.angle)}</small><br><small>말할 방향: ${esc(t.say)}</small>
@@ -2373,7 +2393,7 @@
     if (S.list == null) { el.innerHTML = '<div class="skeleton" style="height:220px"></div>'; return; }
     if (S.listErr) { el.innerHTML = `<p class="note error">캠페인 목록을 불러오지 못했어요: ${esc(S.listErr)}</p>`; return; }
     if (!S.list.length) {
-      el.innerHTML = ui.empty(S.query || S.filter !== '전체' ? '조건에 맞는 캠페인이 없어요.' : "아직 캠페인이 없어요. 'AI와 함께 제작'에서 시작해 보세요.", 'spark');
+      el.innerHTML = ui.empty(S.query || S.filter !== '전체' ? '조건에 맞는 캠페인이 없어요.' : "아직 캠페인이 없어요. [새 캠페인]을 눌러 시작하세요.", 'spark');
       return;
     }
     if (S.folder !== '전체') {
@@ -2428,7 +2448,7 @@
   }
 
   async function deleteCampaign(id, title) {
-    if (!(await ui.confirm(`'${title}' 캠페인을 삭제할까요? 대화·버전·이미지 파일이 함께 지워지고 되돌릴 수 없어요.`, { ok: '삭제', danger: true }))) return;
+    if (!(await ui.confirm(`'${title}' 캠페인을 삭제할까요? 대화·버전·이미지 파일이 함께 삭제되고 되돌릴 수 없어요.`, { ok: '삭제', danger: true }))) return;
     try {
       await REBOOT.api(`${API}/campaigns/${id}`, undefined, { method: 'DELETE' });
       if (S.camp && S.camp.id === id) { stopPolling(); S.camp = null; S.edit = null; setHash('campaigns'); }
@@ -2640,13 +2660,13 @@
     }
     const sample = cnNorm(CN.sample.cards[0]);
     return `<div class="cnt-cn-pad">
-      <div class="cnt-cn-step"><span class="stepnum">1</span><strong>카드뉴스에 넣을 내용</strong><span class="panel-note">직접 쓰거나 파일에서 불러와요</span></div>
+      <div class="cnt-cn-step"><span class="stepnum">1</span><strong>카드뉴스에 넣을 내용</strong><span class="panel-note">직접 쓰거나 파일을 올려요</span></div>
       <textarea class="input cnt-cn-source" data-cn-input="source" rows="7" aria-label="카드뉴스에 넣을 내용"
         placeholder="예: 제품 소개 메모, 블로그 글, FAQ, 이벤트 안내…&#10;'1장 / 2장'이나 '## 제목'으로 나눠 쓰면 그 단위로 카드를 나눠요.">${esc(n.source)}</textarea>
       <div class="flex between cnt-cn-srcbar">
         <span class="panel-note" data-ref="cn-count">${cnCountText()}</span>
         <span class="flex"><input type="file" data-ref="cn-file" accept=".md,.markdown,.txt,.csv,.docx,.pdf" hidden>
-          <button type="button" class="btn small" data-act="cn-file">${icon('upload')}파일 불러오기 (.md · .txt · .csv · .docx)</button></span>
+          ${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
       </div>
       <div class="cnt-cn-step"><span class="stepnum">2</span><strong>옵션</strong></div>
       <div class="cnt-cn-opts">
@@ -2685,8 +2705,8 @@
       <span class="field-label">계정 라벨</span><input class="input cnt-cn-brand-input" data-cn-input="brand" value="${esc(d.brand || 'REBOOT')}" aria-label="카드에 찍을 계정 라벨">
       <span class="flex wrap cnt-cn-right">
         <button type="button" class="btn small" data-act="cn-bg" title="우리 제품 사진을 참고해 이미지 AI가 카드 배경을 그려요 (장당 이미지 생성 1번)">${icon('image')}AI 배경</button>
-        <button type="button" class="btn small" data-act="cn-check">${icon('shield')}문구 검사</button>
-        <button type="button" class="btn small dark" data-act="cn-save-images">${icon('download')}이미지 저장하기</button></span>`;
+        <button type="button" class="btn small" data-act="cn-check">${icon('shield')}문구 심의</button>
+        ${ui.fileBtn('download', { label: '이미지 다운로드', type: 'PNG', act: 'cn-save-images' })}</span>`;
   }
   function cnSizebarHtml() {
     const sel = S.cn.sel, d = S.cn.deck;
@@ -2699,7 +2719,7 @@
   }
   function cnReviewFlag(r) {
     if (r.verdict === 'UNAVAILABLE' || r.verdict === 'ERROR') return `<div class="cnt-cn-flag">컴플라이언스: ${esc(r.label)}</div>`;
-    if (r.verdict === 'PASS') return '<div class="cnt-cn-flag ok">컴플라이언스: 규칙 미탐지 (법적 승인 아님)</div>';
+    if (r.verdict === 'PASS') return '<div class="cnt-cn-flag ok">컴플라이언스: 걸린 표현 없음 (법적 승인 아님)</div>';
     const terms = r.findings.slice(0, 3).map(f => `${(f.terms || []).join(', ') || f.name}${f.alt ? ` → ${f.alt}` : ''}`).join(' · ');
     return `<div class="cnt-cn-flag${r.verdict === 'BLOCK' ? ' red' : ''}">컴플라이언스: ${esc(r.label)}${terms ? ' — ' + esc(terms) : ''}</div>`;
   }
@@ -2721,7 +2741,7 @@
         <button type="button" class="btn small ghost" data-act="cn-dup" data-i="${i}" ${n >= CN_MAX ? 'disabled' : ''}>복제</button>
         <button type="button" class="btn small ghost" data-act="cn-del" data-i="${i}" ${n <= 1 ? 'disabled' : ''} aria-label="${i + 1}장 삭제">${icon('trash')}</button>
         <button type="button" class="btn small ghost" data-act="cn-bg" data-i="${i}" title="이 카드 AI 배경 만들기">AI 배경</button>
-        <button type="button" class="btn small" data-act="cn-png" data-i="${i}" title="이 카드만 PNG로 저장">PNG</button>
+        ${ui.fileBtn('download', { label: '다운로드', type: 'PNG', act: 'cn-png', title: '이 카드만 PNG로 저장', attrs: `data-i="${i}"` })}
       </div>${flags}</div>`;
   }
 
@@ -2744,7 +2764,7 @@
         <input class="input" data-cn-input="hashtags" value="${esc((d.hashtags || []).join(' '))}" placeholder="#Reboot #RebootJelly" aria-label="해시태그">
         ${n.reviews.caption ? cnReviewFlag(n.reviews.caption) : ''}
         ${checks ? `<div class="note warn"><b>확인할 점</b><ul class="cnt-cn-checks">${checks}</ul></div>` : ''}
-        ${v && v.review && v.review.keyword ? `<div class="panel-note">저장한 버전 키워드 확인: ${keywordBadge(v, true)} · 카드 문구는 [문구 검사]로 컴플라이언스 1차 판정을 볼 수 있어요 (법적 승인 아님).</div>` : ''}
+        ${v && v.review && v.review.keyword ? `<div class="panel-note">저장한 버전 키워드 확인: ${keywordBadge(v, true)} · 카드 문구는 [문구 심의]로 컴플라이언스 1차 판정을 볼 수 있어요 (법적 승인 아님).</div>` : ''}
         <p class="panel-note">이미지(PNG)는 크롬 · 엣지에서 저장돼요. 글꼴은 이 PC에 설치된 글꼴로 그려요. 게시 전에 사람이 한 번 더 확인하세요.</p>
       </div>`;
   }
@@ -2765,7 +2785,7 @@
         <ul class="cnt-cn-tips">
           <li>카드 위 <b>글자를 누르면</b> 바로 고쳐져요. 강조는 <b>**단어**</b>.</li>
           <li>글자를 고른 뒤 위 줄의 <b>A− / A＋</b>로 그 칸만 크기를 바꿔요.</li>
-          <li><b>사진 칸</b>을 누르면 브랜드 사진을 고르거나 내 사진을 올려요.</li>
+          <li><b>사진 칸</b>을 누르면 브랜드 사진을 고르거나 사진 파일을 올려요.</li>
           <li>템플릿 · 비율 · 카드 순서는 언제든 바꿀 수 있어요. 수정은 [저장]해야 버전으로 남아요.</li>
         </ul>
         <button type="button" class="link" data-act="cn-chat">${icon('chat')}대화로 만들기 (예전 방식)</button>
@@ -2925,7 +2945,7 @@
       n.sourceName = res.name;
       lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
       cnRenderSetup();
-      toast(`${res.name}에서 ${res.chars.toLocaleString()}자를 불러왔어요. 내용을 확인하고 고쳐도 돼요.`);
+      toast(`${res.name}에서 ${res.chars.toLocaleString()}자를 가져왔어요. 내용을 확인하고 고쳐도 돼요.`);
     } catch (e) { toast(e.message, 'error'); }
   }
 
@@ -3017,7 +3037,7 @@
       title: `${i + 1}장 사진`,
       wide: true,
       body: `<div class="flex wrap cnt-cn-photo-bar"><input type="file" accept="image/jpeg,image/png,image/webp" data-ref="cn-photo-file" hidden>
-          <button type="button" class="btn small lime" data-cn-photo-act="upload">${icon('upload')}내 사진 올리기</button>
+          ${ui.fileBtn('upload', { label: '사진 업로드', type: 'JPG · PNG', attrs: 'data-cn-photo-act="upload"' })}
           ${c.photo ? '<button type="button" class="btn small ghost" data-cn-photo-act="none">사진 빼기</button>' : ''}
           <label class="check"><input type="checkbox" data-ref="cn-photo-full" ${c.photo && c.photo.full ? 'checked' : ''}> 카드 전체 배경으로 깔기</label>
           <span class="panel-note">고른 제품 사진이 먼저 나와요</span></div>
@@ -3087,8 +3107,8 @@
     d.cards.forEach((c, i) => run(i, cnCardText(c)));
     run('caption', [d.caption, (d.hashtags || []).join(' ')].filter(Boolean).join('\n'));
     cnRenderResult();
-    if (unavailable) toast('컴플라이언스 탭을 불러오지 못해 일부는 미검토예요.', 'error');
-    else if (bad) toast(`확인이 필요한 곳이 ${bad}군데 있어요. 카드 아래를 보세요.`, 'error');
+    if (unavailable) toast('컴플라이언스 탭을 불러오지 못해 일부는 심의하지 못했어요.', 'error');
+    else if (bad) toast(`검토가 필요한 곳이 ${bad}군데 있어요. 카드 아래를 보세요.`, 'error');
     else toast('걸린 규칙이 없어요. 그래도 게시 전에 사람이 확인하세요 (법적 승인 아님).');
   }
 
@@ -3293,14 +3313,14 @@
     let saved = 0;
     try {
       for (let i = 0; i < d.cards.length; i++) {
-        btn.textContent = `이미지 저장 중 ${i + 1}/${d.cards.length}`;
+        btn.textContent = `내려받는 중 ${i + 1}/${d.cards.length}`;
         ui.download(`${cnFileBase()}_${cnPad(i)}.png`, await cnPng(i));
         saved++;
         await new Promise(r => global.setTimeout(r, 350));  // 한꺼번에 내려받으면 브라우저가 막을 수 있어 조금씩 띄움
       }
-      toast(`카드 ${saved}장을 이미지(PNG)로 저장했어요.`);
+      toast(`카드 ${saved}장을 이미지(PNG)로 내려받았어요.`);
     } catch (e) {
-      toast(saved ? `${saved}장까지 저장했어요. ${e.message}` : e.message, 'error');
+      toast(saved ? `${saved}장까지 내려받았어요. ${e.message}` : `이미지를 내려받지 못했어요: ${e.message}`, 'error');
     } finally { btn.disabled = false; btn.innerHTML = label; }
   }
 
@@ -3367,7 +3387,7 @@
         case 'export-one': if (v) exportZip(v.id); break;
         case 'toggle-layers': S.showLayers = !S.showLayers; renderResults(); break;
         case 'make-draft': send('초안 만들어줘', { force: 'draft' }); break;
-        case 'make-image': send('이미지 시안 만들어줘', { force: 'image' }); break;
+        case 'make-image': send('이미지 초안 만들어줘', { force: 'image' }); break;
         case 'make-video': makeVideo('이 초안으로 영상 만들어줘'); break;
         case 'vid-quick': {
           const q = DATA.quick.video[+b.dataset.i];
@@ -3377,7 +3397,7 @@
         }
         case 'vid-ai-edit': if (v) videoAiEdit(v); break;
         case 'vid-new': makeVideo('지금 정한 내용으로 새 영상 만들어줘', { noBase: true }); break;
-        case 'retry-image': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = b.dataset.kind === 'video' ? '영상 다시 만들어줘' : '이미지 시안 다시 만들어줘'; inp.focus(); } break; }
+        case 'retry-image': { const inp = ref('input'); if (inp && !inp.disabled) { inp.value = b.dataset.kind === 'video' ? '영상 다시 만들어줘' : '이미지 초안 다시 만들어줘'; inp.focus(); } break; }
         case 'cancel-job': cancelJob(b); break;
         case 'api-check': apiCheck(); break;
         case 'complete': completeCampaign(b); break;
@@ -3402,13 +3422,13 @@
         case 'iv-finish': interviewAct('finish'); break;
         case 'brief-edit': { const m = S.camp && S.camp.messages.find(x => String(x.id) === b.dataset.msg); if (m) briefEditModal(m); break; }
         case 'img-quick': {
-          const q = DATA.quick.image.filter(x => x.label !== '다른 시안')[+b.dataset.i];
+          const q = DATA.quick.image.filter(x => x.label !== '다른 초안')[+b.dataset.i];
           const ta = ref('img-prompt');
           if (q && ta) { ta.value = q.text; S.imgDraft = q.text; selectRange(ta, q.text); }
           break;
         }
         case 'img-ai-edit': if (v) imageAiEdit(v); break;
-        case 'img-new': send('지금 정한 내용으로 다른 이미지 시안 만들어줘', { force: 'image', noBase: true }); break;
+        case 'img-new': send('지금 정한 내용으로 다른 이미지 초안 만들어줘', { force: 'image', noBase: true }); break;
         case 'img-editor': if (v) imageEditor(v); break;
         case 'img-text': lsSet('imgText', b.dataset.value === 'none' ? 'none' : 'bake'); renderResults(); break;
         default: break;

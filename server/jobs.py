@@ -37,6 +37,44 @@ def _lock_path(name, data_dir=None):
     return base / "locks" / f"{name}.lock"
 
 
+def _pid_alive(pid):
+    """프로세스가 살아 있는지. 확인할 수 없으면 살아 있다고 봄 (잘못 지우지 않게)."""
+    if pid == os.getpid():
+        return True
+    if os.name == "nt":  # Windows의 os.kill은 프로세스를 꺼 버려서 OpenProcess로 확인
+        import ctypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.OpenProcess.restype = ctypes.c_void_p
+        h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ctypes.get_last_error() != 87  # ERROR_INVALID_PARAMETER = 없는 프로세스
+        try:
+            code = ctypes.c_ulong()
+            if not k32.GetExitCodeProcess(ctypes.c_void_p(h), ctypes.byref(code)):
+                return True
+            return code.value == 259  # STILL_ACTIVE
+        finally:
+            k32.CloseHandle(ctypes.c_void_p(h))
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def _stale(path, stale_seconds):
+    """오래됐거나, 잠금을 잡은 프로세스가 꺼진 잠금 (서버가 중간에 꺼지거나 다시 켜져 남은 것)."""
+    if time.time() - path.stat().st_mtime > stale_seconds:
+        return True
+    try:
+        pid = int(path.read_text().strip())
+    except ValueError:  # 막 만들어져 PID를 아직 안 쓴 잠금
+        return False
+    return not _pid_alive(pid)
+
+
 def _acquire(path, name, stale_seconds):
     """잠금 파일을 만들고 파일 번호를 돌려줌. 이미 있으면 Busy (오래된 잠금은 지우고 다시 시도)."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -47,8 +85,8 @@ def _acquire(path, name, stale_seconds):
             return fd
         except FileExistsError:
             try:
-                if time.time() - path.stat().st_mtime > stale_seconds:
-                    path.unlink(missing_ok=True)  # 서버가 중간에 꺼져 남은 잠금
+                if _stale(path, stale_seconds):
+                    path.unlink(missing_ok=True)
                     continue
             except FileNotFoundError:
                 continue
@@ -77,7 +115,7 @@ def file_lock(name, stale_seconds=3600):
 def is_running(name, stale_seconds=3600):
     """잠금 파일이 있으면 실행 중. 오래된 잠금(서버가 중간에 꺼져 남은 것)은 실행 중으로 보지 않음."""
     try:
-        return time.time() - _lock_path(name).stat().st_mtime <= stale_seconds
+        return not _stale(_lock_path(name), stale_seconds)
     except FileNotFoundError:
         return False
 

@@ -10,9 +10,9 @@
 
     // 01 만들 콘텐츠 (README 2.2) — kind: 기본 텍스트 결과물
     contentTypes: [
-      { id: 'image', label: '이미지', icon: 'image', kind: 'copy', hint: '이미지 시안 + 위에 얹을 문구' },
+      { id: 'image', label: '이미지', icon: 'image', kind: 'copy', hint: '이미지 초안 + 위에 얹을 문구' },
       { id: 'cardnews', label: '카드뉴스', icon: 'doc', kind: 'cardnews', hint: '장별 문구 (S1, S2 …)' },
-      { id: 'shortform', label: '숏폼 영상', icon: 'video', kind: 'script', hint: '구성안 · 실제 영상 생성은 미연동' },
+      { id: 'shortform', label: '숏폼 영상', icon: 'video', kind: 'script', hint: '구성안 · 실제 영상 생성은 연결 안 됨' },
       { id: 'crm', label: 'CRM 메시지', icon: 'mail', kind: 'crm', hint: '이메일·SMS 문안 (발송은 하지 않음) · CRM 채널 전용' }
     ],
 
@@ -55,13 +55,13 @@
       language: '결과물 언어', cta: 'CTA', headline: '헤드라인', message: '핵심 메시지', target: '타깃', length: '길이',
       format: '형식', season: '시즌', accent_color: '포인트 색', featured_product: '메인 제품', slide_count: '장 수',
       duration: '영상 길이', lighting: '조명', composition: '구도', mood: '분위기', caption: '캡션', hashtags: '해시태그',
-      subtitle: '자막', use_character: '캐릭터 Rebu', flavor: '맛', product_flavors: '제품별 맛',
-      story: '스토리', design_note: '시안 설명', emphasis: '강조할 내용', content_points: '담을 내용', hook: '멘트',
+      subtitle: '자막', use_character: '캐릭터 Rebu', flavor: '맛', product_flavors: '제품별 맛', ref_skip: '뺀 참고 사진',
+      story: '스토리', design_note: '초안 설명', emphasis: '강조할 내용', content_points: '담을 내용', hook: '멘트',
       slogan_choice: '쓸 슬로건'
     },
     // 오른쪽 '브리프' 표의 항목 설명 (흐름 순서는 서버 options.CONTENT_FLOWS → campaign.flow)
     flowHints: {
-      concept: '컨셉 · 레퍼런스', story: '담을 이야기 · 장면', design_note: '글로 쓰는 시안', emphasis: '꼭 강조할 것',
+      concept: '콘셉트 · 레퍼런스', story: '담을 이야기 · 장면', design_note: '글로 쓰는 초안', emphasis: '꼭 강조할 것',
       ratio: '비율 · 크기 (채널 추천)', content_points: '꼭 넣을 내용', slide_count: '카드뉴스 장 수', duration: '영상 길이',
       format: '이메일 · SMS · 시퀀스', tone: '말투', cta: '행동 유도 문구', target: '받는 고객',
       caption: '게시글 캡션', hook: '첫 줄 훅 · 고정 댓글'
@@ -82,7 +82,7 @@
         { label: '제품 크기·배치', text: '제품을 [가운데 크게] 배치해서 다시 만들어줘' },
         { label: '스타일 변경', text: '스타일을 [밝은 아침 느낌]으로 바꿔줘' },
         { label: '비율 변경', text: '비율을 [4:5 세로]로 바꿔줘' },
-        { label: '다른 시안', text: '다른 시안도 만들어줘' }
+        { label: '다른 초안', text: '다른 초안도 만들어줘' }
       ],
       video: [
         { label: '장면 변경', text: '[첫 장면]을 [제품 클로즈업]으로 바꿔줘' },
@@ -113,13 +113,13 @@
     // 컴플라이언스 파트 review() 연결 — 채널: Amazon → amazon, 나머지(CRM 포함) → b2c
     // Global Olive Young은 임시로 b2c (별도 규칙 필요 여부는 컴플라이언스 담당 확인 전)
     complianceChannel: { instagram: 'b2c', tiktok: 'b2c', amazon: 'amazon', weee: 'b2c', yamibuy: 'b2c', oliveyoung: 'b2c', crm: 'b2c' },
-    complianceLabels: { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '규칙 미탐지' },
+    complianceLabels: { BLOCK: '사용 불가', REVISE: '수정 필요', COND: '조건부', REVIEW: '검토 필요', PASS: '걸린 표현 없음' },
     complianceTone: { BLOCK: 'red', REVISE: 'orange', COND: 'blue', REVIEW: 'purple', PASS: 'green' },
 
     keywordStatus: {
       error: { label: '키워드 확인 · 수정 필요', tone: 'red' },
-      warn: { label: '키워드 확인 · 확인 필요', tone: 'orange' },
-      clear: { label: '키워드 미탐지', tone: '' }
+      warn: { label: '키워드 확인 · 검토 필요', tone: 'orange' },
+      clear: { label: '키워드 확인 · 걸린 표현 없음', tone: '' }
     },
 
     // 카드뉴스 편집기 (tabs/content/cardnews.py와 같은 ID) — 템플릿을 늘리려면 templates에 한 줄 + content.css에 .cnt-cn-t-<ID> 변수 묶음

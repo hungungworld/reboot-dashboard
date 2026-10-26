@@ -356,7 +356,7 @@ def weekly_changes(now, prev, limit=30):
             out.append(dict(base, kind=kind, group=CHANGE_GROUP[group], label=label, text=text, impact=impact, weight=weight, **extra))
 
         if p is None:
-            add("new", "new", "새 상품", f"{x['title'][:70]} ({x['sourceLabel']}" + (f" · ${x['price']:.2f})" if x["price"] is not None else ")"),
+            add("new", "new", "새 제품", f"{x['title'][:70]} ({x['sourceLabel']}" + (f" · ${x['price']:.2f})" if x["price"] is not None else ")"),
                 _vs_own(ps, own_ps) or "이번 주 진열대에 처음 보여요.", 50)
             continue
         if p.get("price") and x.get("price") and abs(x["price"] - p["price"]) / p["price"] >= 0.05:
@@ -368,7 +368,7 @@ def weekly_changes(now, prev, limit=30):
                 100 + abs(pct), prevPrice=p["price"], pct=round(pct, 1))
         if p.get("in_stock") is not False and x["in_stock"] is False:
             add("oos", "oos", "품절", f"{x['title'][:60]} · {x['sourceLabel']}",
-                f"{x['sourceLabel']}에서 이 상품을 찾던 고객을 데려올 기회예요" + (" (알디콤도 여기서 팔아요)." if x["source"] in own_src else "."), 60)
+                f"{x['sourceLabel']}에서 이 제품을 찾던 고객을 데려올 기회예요" + (" (알디콤도 여기서 팔아요)." if x["source"] in own_src else "."), 60)
         elif p.get("in_stock") is False and x["in_stock"] is True:
             add("back", "back", "재입고", f"{x['title'][:60]} · {x['sourceLabel']}", "다시 팔기 시작했어요. 품절 동안 넘어온 고객을 지켜야 해요.", 40)
         if p.get("message") and x.get("message") and clean(p["message"], 400) != clean(x["message"], 400):
@@ -503,7 +503,7 @@ def _empty(f, v):
 def research(c, items):
     """경쟁사 한 곳 분석 → {usage, cached, changed, warnings}. OpenAI 키가 없으면 CollectError."""
     if not insights_ai.ready():
-        raise CollectError("OpenAI 키가 없어 경쟁사 분석을 할 수 없어요 (설정 › 연결).")
+        raise CollectError("OpenAI 키가 없어 경쟁 브랜드 분석을 할 수 없어요 (설정 › 연결).")
     usage, warnings = {"firecrawl": 0, "openai": 0}, []
     ev = evidence(c, items)
     fc = envkeys.get("FIRECRAWL_API_KEY")
@@ -598,7 +598,7 @@ def run(rows, tier_of, force=False, only=None):
         warnings += r["warnings"]
         done += 1
         changed += bool(r["changed"])
-    msg = (f"새 경쟁사 {len(added)}개 · 제형 분류 {cls['rule']}개(AI {cls['ai']}개) · 브랜드 분석 {done}개"
+    msg = (f"새 경쟁 브랜드 {len(added)}개 · 제형 분류 {cls['rule']}개(AI {cls['ai']}개) · 브랜드 분석 {done}개"
            + (f" (바뀐 곳 {changed}개)" if changed else "") + ".")
     return {"count": done, "added": added, "usage": {k: v for k, v in usage.items() if v}, "warnings": warnings, "message": msg}
 

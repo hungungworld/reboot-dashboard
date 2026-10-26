@@ -13,27 +13,27 @@ from . import options as O
 from . import brandkit, repository
 from .media import upload_dir
 
-NOTICE = """REBOOT 콘텐츠 제작 — 내보내기 묶음
+NOTICE = """REBOOT 콘텐츠 제작 — 내려받기 묶음
 
-이 파일들은 작업 중인 초안입니다. 승인본이 아닙니다.
-- 각 버전 파일 머리말에 상태(최종본 지정 여부 · 검토 상태 · 변경 사항 미반영 여부)를 적었습니다.
-- '최종본'은 팀이 고른 버전이라는 뜻일 뿐 법적 승인이나 사실 확인 완료를 뜻하지 않습니다.
-- 검토 표시: 키워드 확인(서버 규칙) · 컴플라이언스(1차 규칙 판정, 외부 검토)는 서로 다릅니다.
-  기록이 없으면 '미검토'입니다. 어떤 결과도 법적 승인이 아닙니다.
-- 제품 정보는 브랜드 키트(2026-10-25 · 제품 사양서 반영) 기준입니다. Balance의 Zero Sugar는 당류 0.5 g 미만 측정 확인(PM 2026-10-25)이며 'Not a low calorie food'를 함께 적습니다. 성분 함량·젤리 중량·알레르기는 미정입니다 (facts.json 참고).
-- 이미지는 AI 시안입니다. 최종 패키지·캐릭터 사진을 참고해 만들지만 라벨 글자·모양은 게시 전 확인이 필요하며, 헤드라인·슬로건 문구는 이미지에 그리지 않고 텍스트 레이어로 따로 둡니다.
-- 숏폼 구성안은 실제 영상이 아닙니다.
+이 파일들은 작업 중인 초안이에요. 승인본이 아니에요.
+- 각 버전 파일 머리말에 상태(최종본 지정 여부 · 검토 상태 · 변경 사항 미반영 여부)를 적었어요.
+- '최종본'은 팀이 고른 버전이라는 뜻일 뿐 법적 승인이나 사실 확인 완료를 뜻하지 않아요.
+- 검토 표시: 키워드 확인(서버 규칙) · 컴플라이언스(1차 규칙 판정, 외부 검토)는 서로 달라요.
+  기록이 없으면 '미검토'예요. 어떤 결과도 법적 승인이 아니에요.
+- 제품 정보는 브랜드 키트(2026-10-25 · 제품 사양서 반영) 기준이에요. Balance의 Zero Sugar는 당류 0.5 g 미만 측정 확인(PM 2026-10-25)이며 'Not a low calorie food'를 함께 적어요. 성분 함량·젤리 중량·알레르기는 미정이에요 (facts.json 참고).
+- 이미지는 AI 초안이에요. 최종 패키지·캐릭터 사진을 참고해 만들지만 라벨 글자·모양은 게시 전 확인이 필요하며, 헤드라인·슬로건 문구는 이미지에 그리지 않고 텍스트 레이어로 따로 둬요.
+- 숏폼 구성안은 실제 영상이 아니에요.
 """
 
 
 def _review_line(review_):
     kw = (review_ or {}).get("keyword")
     cmp_ = (review_ or {}).get("compliance")
-    kw_s = {"error": "수정 필요", "warn": "확인 필요", "clear": "키워드 미탐지"}.get((kw or {}).get("status"), "미검토")
+    kw_s = {"error": "수정 필요", "warn": "검토 필요", "clear": "걸린 표현 없음"}.get((kw or {}).get("status"), "미검토")
     if not cmp_:
         cmp_s = "미검토"
     elif cmp_.get("verdict") in ("UNAVAILABLE", "ERROR"):
-        cmp_s = "미연동" if cmp_["verdict"] == "UNAVAILABLE" else "미검토 (검사 오류)"
+        cmp_s = "연결 안 됨" if cmp_["verdict"] == "UNAVAILABLE" else "심의하지 못함 (오류)"
     else:
         cmp_s = f"{cmp_.get('label') or cmp_.get('verdict')} (규칙 판정 · 승인 아님)"
     return kw_s, cmp_s
@@ -90,7 +90,7 @@ def build_zip(c, only_version_id=None):
         lines = [
             f"# {c.title}", "",
             f"- 캠페인 상태: {c.status} · 리비전 {c.revision}",
-            f"- 내보낸 시각: {now:%Y-%m-%d %H:%M} (Asia/Seoul)",
+            f"- 내려받은 시각: {now:%Y-%m-%d %H:%M} (Asia/Seoul)",
             f"- 제품 기준 버전(facts_version): {facts.get('facts_version')}",
             f"- 묶음 상태: 초안 · 미승인 (최종본 지정 ≠ 승인)", "",
             "## 기본 정보 시트", "",
@@ -118,7 +118,7 @@ def build_zip(c, only_version_id=None):
                 if path.is_file():
                     z.write(path, stem + path.suffix)
                 else:
-                    z.writestr(stem + "-파일없음.txt", "결과 파일을 찾지 못했습니다 (서버 저장소 확인).")
+                    z.writestr(stem + "-파일없음.txt", "결과 파일을 찾지 못했어요 (서버 저장소 확인).")
             index.append({"id": v.id, "seq": v.seq, "label": v.label, "kind": v.kind, "final": vd["isFinal"],
                           "stale": vd["stale"], "source": v.source, "facts_version": v.facts_version,
                           "settings": (v.snapshot or {}).get("settings"), "model": (v.snapshot or {}).get("model"),

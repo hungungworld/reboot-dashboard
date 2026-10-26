@@ -91,11 +91,11 @@ def draft(persona, inquiry, current, facts=None, banned=None):
     inquiry = inquiry if isinstance(inquiry, dict) else {}
     persona_text = _clip(persona.get("text"), 600).strip()
     if not persona_text:
-        raise DraftError("페르소나가 없습니다 (tabs/cs/static/data.js persona).", 400)
+        raise DraftError("페르소나가 없어요. 담당자에게 페르소나 등록을 요청해 주세요.", 400)
     if not _clip(inquiry.get("body"), 20000).strip():
-        raise DraftError("문의 본문이 없습니다.", 400)
+        raise DraftError("문의 본문이 없어요.", 400)
     if not available():
-        raise DraftError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+        raise DraftError("AI 연결 안 됨 · 설정 › 연결에서 Anthropic 키를 넣어 주세요.", 503)
     budget = ai_usage.over_budget()
     if budget:
         raise DraftError(budget, 429)
@@ -105,12 +105,12 @@ def draft(persona, inquiry, current, facts=None, banned=None):
     truncated = []
     msg_body = str(inquiry.get("body") or "")
     if len(msg_body) > BODY_MAX:
-        truncated.append(f"문의 본문이 길어 앞 {BODY_MAX:,}자만 AI에 보냈습니다 (전체 {len(msg_body):,}자) → 뒷부분(증상·요청)을 직접 확인하세요.")
+        truncated.append(f"문의 본문이 길어 앞 {BODY_MAX:,}자만 AI에 보냈어요 (전체 {len(msg_body):,}자) → 뒷부분(증상·요청)을 직접 확인하세요.")
     long_facts = [k for k, v in facts.items() if len(str(v)) > FACT_MAX]
     if long_facts:
-        truncated.append(f"제품·정책 값이 길어 {FACT_MAX}자까지만 보냈습니다: {', '.join(long_facts[:5])}")
+        truncated.append(f"제품·정책 값이 길어 {FACT_MAX}자까지만 보냈어요:{', '.join(long_facts[:5])}")
     if len(str(current or "")) > BODY_MAX:
-        truncated.append(f"현재 초안이 길어 앞 {BODY_MAX:,}자만 보냈습니다.")
+        truncated.append(f"현재 초안이 길어 앞 {BODY_MAX:,}자만 보냈어요.")
     # 확인된 사실(회사가 정한 값)과 고객 주장(메일 내용)을 나눠서 넘김 (GPT 검토 ⑩)
     payload = {
         "inquiry_type": {"code": _clip(inquiry.get("type"), 4), "name": _clip(inquiry.get("typeName"), 40)},
@@ -142,26 +142,26 @@ def draft(persona, inquiry, current, facts=None, banned=None):
                                                   + json.dumps(payload, ensure_ascii=False)}],
         )
     except anthropic.AuthenticationError:
-        raise DraftError("ANTHROPIC_API_KEY가 올바르지 않습니다 (설정 › 연결 확인).", 503)
+        raise DraftError("Anthropic 키가 올바르지 않아요. 설정 › 연결에서 키를 확인해 주세요.", 503)
     except anthropic.RateLimitError:
-        raise DraftError("요청이 많아 잠시 막혔습니다. 1분 뒤 다시 시도하세요.", 429)
+        raise DraftError("요청이 많아 잠시 막혔어요. 1분 뒤 다시 시도하세요.", 429)
     except anthropic.APIStatusError as e:
         raise DraftError(f"AI 서버 오류 ({e.status_code}). 잠시 뒤 다시 시도하세요.")
     except anthropic.APIConnectionError:
-        raise DraftError("AI 서버에 연결하지 못했습니다 (인터넷 확인).")
+        raise DraftError("AI 서버에 연결하지 못했어요 (인터넷 확인).")
     ai_usage.record("cs", "CS 답장 초안", res)
     if res.stop_reason == "refusal":
-        raise DraftError("AI가 이 문의의 초안 작성을 거절했습니다. 템플릿으로 직접 작성하세요.", 422)
+        raise DraftError("AI가 이 문의의 초안 작성을 거절했어요. 템플릿으로 직접 작성하세요.", 422)
     if res.stop_reason == "max_tokens":
-        raise DraftError("AI 응답이 잘렸습니다. 다시 시도하세요.")
+        raise DraftError("AI 응답이 잘렸어요. 다시 시도하세요.")
     text = next((b.text for b in res.content if b.type == "text"), "")
     try:
         out = json.loads(text)
     except ValueError:
-        raise DraftError("AI 응답을 읽지 못했습니다. 다시 시도하세요.")
+        raise DraftError("AI 응답을 읽지 못했어요. 다시 시도하세요.")
     body = str(out.get("draft", "")).strip()
     if not body:
-        raise DraftError("AI가 빈 초안을 돌려줬습니다. 다시 시도하세요.")
+        raise DraftError("AI가 빈 초안을 돌려줬어요. 다시 시도하세요.")
     # 영어 이외 빈칸 표기 통일: [확인 필요 …] 형식이 깨지지 않게
     body = re.sub(r"\[\s*확인\s*필요\s*[:：]?\s*(?=[^\]\s])", "[확인 필요: ", body)
     return {"draft": body, "notes_ko": [str(n)[:200] for n in out.get("notes_ko", [])][:4], "model": res.model,

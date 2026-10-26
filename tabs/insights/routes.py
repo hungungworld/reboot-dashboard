@@ -99,7 +99,7 @@ def data_tab(tab):
         return jsonify(service.trends_view())
     if tab == "accuracy":
         return jsonify(accuracy.view())
-    raise ApiError("없는 데이터 탭입니다.", 404)
+    raise ApiError("없는 데이터 탭이에요.", 404)
 
 
 # ───────── 수정 · 올리기 ─────────
@@ -108,7 +108,7 @@ def data_tab(tab):
 def shelf_edit(row_id):
     row = db.session.get(ShelfItem, row_id)
     if row is None:
-        raise ApiError("없는 진열대 항목입니다.", 404)
+        raise ApiError("없는 진열대 항목이에요.", 404)
     data = json_body()
     changed = []
     if "price" in data:
@@ -128,7 +128,7 @@ def shelf_edit(row_id):
     if "in_stock" in data:
         v = data["in_stock"]
         if v not in (True, False, None):
-            raise ApiError("재고는 있음 · 품절 · 모름 중 하나입니다.")
+            raise ApiError("재고는 있음 · 품절 · 모름 중 하나로 고르세요.")
         row.in_stock = v
         changed.append("in_stock")
     if "own" in data:
@@ -137,7 +137,7 @@ def shelf_edit(row_id):
         kv_set("own_overrides", ovr, _who())
         changed.append("own")
     if not changed:
-        raise ApiError("고칠 값이 없습니다.")
+        raise ApiError("고칠 값이 없어요.")
     row.edited_by = _who()
     db.session.commit()
     worklog.add("insights", "기타", f"진열대 값 수정: {row.title[:60]}", detail={"fields": changed, "week": row.week})
@@ -149,7 +149,7 @@ def servings_edit():
     data = json_body()
     key = clip(data.get("key"), 200)
     if not key or db.session.query(ShelfItem.id).filter_by(key=key).first() is None:
-        raise ApiError("없는 상품입니다.", 404)
+        raise ApiError("없는 제품이에요.", 404)
     v = data.get("servings")
     row = db.session.get(ServingOverride, key)
     if v in (None, ""):
@@ -177,7 +177,7 @@ def line_edit():
     data = json_body()
     key = clip(data.get("key"), 200)
     if not key or db.session.query(ShelfItem.id).filter_by(key=key).first() is None:
-        raise ApiError("없는 상품입니다.", 404)
+        raise ApiError("없는 제품이에요.", 404)
     brand, form = clean(data.get("brand"), 60) or None, data.get("form") or None
     if form is not None and form not in competitors.FORM_LABEL:
         raise ApiError("제형은 목록에서 고르세요.")
@@ -199,7 +199,7 @@ def watch_edit():
     data = json_body()
     brand = clean(data.get("brand"), 60)
     if not brand:
-        raise ApiError("브랜드 이름이 없습니다.")
+        raise ApiError("브랜드 이름이 없어요.")
     watch = [b for b in kv_get("watch", []) if b.lower() != brand.lower()]
     on = bool(data.get("watch", True))
     if on:
@@ -217,9 +217,9 @@ def watch_edit():
 def competitors_discover():
     now, _, _ = service.snapshots()
     if not now:
-        raise ApiError("진열대 데이터가 없어요. 먼저 데이터 업데이트에서 Amazon · Weee! 진열대를 모으세요.")
+        raise ApiError("아직 진열대 데이터가 없어요. 먼저 최신 데이터 받기에서 Amazon · Weee! 진열대를 고르세요.")
     added = competitors.sync(now, service._tier)
-    worklog.add("insights", "수집", "새 경쟁사 찾기 (진열대 기준)", detail={"added": added[:30]})
+    worklog.add("insights", "수집", "새 경쟁 브랜드 찾기 (진열대 기준)", detail={"added": added[:30]})
     return jsonify(ok=True, added=added)
 
 
@@ -238,25 +238,25 @@ def _start_competitors(options, label):
 def competitor_research(cid):
     c = db.session.get(Competitor, cid)
     if c is None:
-        raise ApiError("없는 경쟁사입니다.", 404)
-    return _start_competitors({"only": c.id}, f"경쟁사 다시 조사: {c.brand}")
+        raise ApiError("없는 경쟁 브랜드예요.", 404)
+    return _start_competitors({"only": c.id}, f"경쟁 브랜드 다시 분석: {c.brand}")
 
 
 @bp.post("/competitors/research-all")
 def competitors_research_all():
-    return _start_competitors({"force": True}, "경쟁사 전체 다시 조사")
+    return _start_competitors({"force": True}, "경쟁 브랜드 전체 다시 분석")
 
 
 @bp.patch("/competitors/<int:cid>")
 def competitor_edit(cid):
     c = db.session.get(Competitor, cid)
     if c is None:
-        raise ApiError("없는 경쟁사입니다.", 404)
+        raise ApiError("없는 경쟁 브랜드예요.", 404)
     data = json_body()
     changed = []
     if "status" in data:
         if data["status"] not in ("active", "archived"):
-            raise ApiError("상태는 active(관리 중) · archived(보관) 중 하나입니다.")
+            raise ApiError("상태는 관리 중 · 보관 중 하나로 고르세요.")
         c.status = data["status"]
         changed.append("status")
     if "website" in data:
@@ -266,9 +266,9 @@ def competitor_edit(cid):
         c.website = url
         changed.append("website")
     if not changed:
-        raise ApiError("고칠 값이 없습니다.")
+        raise ApiError("고칠 값이 없어요.")
     db.session.commit()
-    worklog.add("insights", "기타", f"경쟁사 수정: {c.brand}", detail={"fields": changed, "status": c.status})
+    worklog.add("insights", "기타", f"경쟁 브랜드 수정: {c.brand}", detail={"fields": changed, "status": c.status})
     return jsonify(competitors.comp_dict(c))
 
 
@@ -323,7 +323,7 @@ def amazon_summary_translate(asin):
 def review_cs(rid):
     r = _review(rid)
     if not r.own:
-        raise ApiError("CS 대응은 자사 리뷰에만 표시할 수 있어요.")
+        raise ApiError("CS 대응은 알디콤 리뷰에만 표시할 수 있어요.")
     data = json_body()
     status = str(data.get("status", "")).strip()
     if status not in service.CS_STATUS:
@@ -380,10 +380,10 @@ def update_start():
     data = json_body()
     items = data.get("items")
     if not isinstance(items, list) or not all(isinstance(i, str) for i in items):
-        raise ApiError("항목 목록이 올바르지 않습니다.")
+        raise ApiError("항목 목록이 올바르지 않아요.")
     unknown = [i for i in items if i not in update.BY_ID]
     if unknown:
-        raise ApiError("없는 항목이 있습니다: " + ", ".join(clip(u, 20) for u in unknown[:3]))
+        raise ApiError("없는 항목이 있어요: " + ", ".join(clip(u, 20) for u in unknown[:3]))
     try:
         run = update.start(items, _who())
     except ValueError as e:

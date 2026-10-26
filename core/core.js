@@ -258,6 +258,21 @@
         `<div class="trend">${o.change ? `<b class="${tone}">${esc(o.change)}</b>` : ''}${esc(o.foot || '')}</div></div>`;
     },
     empty: (text, iconName) => `<div class="empty-art">${icon(iconName || 'doc')}<span>${esc(text)}</span></div>`,
+    /** 파일 버튼 (모든 탭 같은 이름·모양): kind = 'upload' | 'download' | 'report'
+        o = { label: '매출 데이터 업로드', type: 'CSV', act, href(있으면 <a download>), attrs, cls, title, disabled }
+        이름은 '… 업로드' · '… 다운로드' · '보고서 만들기', 형식은 뒤에 작은 글씨. lime은 보고서 만들기만 */
+    fileBtn(kind, o) {
+      o = o || {};
+      const K = { upload: ['upload', '업로드'], download: ['download', '다운로드'], report: ['doc', '보고서 만들기'] }[kind] || ['download', '다운로드'];
+      const cls = `btn small file-btn${kind === 'report' ? ' lime' : ''}${o.cls ? ' ' + o.cls : ''}`;
+      const inner = `${icon(K[0])}${esc(o.label || K[1])}${o.type ? ` <span class="tiny muted">${esc(o.type)}</span>` : ''}`;
+      const attrs = `${o.act ? ` data-act="${esc(o.act)}"` : ''}${o.title ? ` title="${esc(o.title)}"` : ''}${o.attrs ? ' ' + o.attrs : ''}`;
+      return o.href
+        ? `<a class="${cls}" href="${esc(o.href)}" download${attrs}>${inner}</a>`
+        : `<button type="button" class="${cls}"${attrs}${o.disabled ? ' disabled' : ''}>${inner}</button>`;
+    },
+    /** 파일 버튼 줄: 카드 머리 오른쪽 · 순서는 업로드 → 다운로드 → 보고서 만들기 */
+    fileActions: (html) => `<div class="file-actions">${html}</div>`,
     toast(msg, tone) {
       if (!doc) return;
       let box = doc.getElementById('reboot-toast');
@@ -434,15 +449,8 @@
      - 왼쪽 항목을 누르면 원래 탭 버튼을 누른 것과 같음 (tab.click())
      - 옮긴 탭 줄은 화면에서 숨김 (.is-subnav-mirrored). 탭이 바뀌면(aria-selected · class) 왼쪽도 따라 바뀜
      - 탭 패널 안의 두 번째 탭 줄(예: 인사이트 › 데이터의 세부 탭)은 고른 항목 아래에 들여 써서 보여 줌
-     - 옮기지 않을 탭 줄: data-subnav="off" · 아이콘 지정: 탭 버튼에 data-icon="mail" (없으면 이름으로 고름)
+     - 옮기지 않을 탭 줄: data-subnav="off" · 아이콘 없이 순서대로 01, 02 … 번호를 붙임
      - 탭이 없는 파트는 서버가 그린 기본 항목(파트 이름) 하나가 그대로 보임 */
-  const NAV_ICONS = [
-    [/시작/, 'home'], [/브리핑|대시보드/, 'chart'], [/캘린더|일정/, 'calendar'], [/주간/, 'calendar'], [/월간/, 'chart'], [/데이터/, 'grid'],
-    [/AI|제작/, 'spark'], [/캠페인/, 'image'], [/단건|점검/, 'shield'], [/일괄/, 'doc'], [/이력|로그/, 'clock'], [/규칙|가이드|사례/, 'edit'],
-    [/모니터링/, 'globe'], [/기관|출처/, 'link'], [/문의/, 'mail'], [/부작용|긴급/, 'bell'], [/템플릿/, 'doc'], [/컨택|업체/, 'users'],
-    [/메일/, 'mail'], [/판매|실적|성과/, 'chart'], [/보고서/, 'doc'], [/브랜드|제품/, 'grid'], [/수집/, 'filter'], [/연결/, 'link'],
-    [/계정|프로필/, 'user'], [/알림/, 'bell']
-  ];
   const isOn = el => el.getAttribute('aria-selected') === 'true' || el.getAttribute('aria-pressed') === 'true' ||
     el.classList.contains('active') || el.classList.contains('selected') || el.classList.contains('is-active');
   let navState = { items: [], subs: [], sig: "" };
@@ -460,8 +468,7 @@
     });
     let label = c.textContent.replace(/\s+/g, ' ').trim() || el.textContent.replace(/\s+/g, ' ').trim();
     label = label.replace(/^[^\p{L}\p{N}]+/u, '').trim();  // 앞의 이모지·기호 (🔎 업체 컨택 → 업체 컨택)
-    const hit = NAV_ICONS.find(([re]) => re.test(label));
-    return { el, label, count, on: isOn(el), disabled: !!el.disabled, icon: el.dataset.icon || (hit ? hit[1] : 'grid') };
+    return { el, label, count, on: isOn(el), disabled: !!el.disabled };
   }
   function hiddenUpTo(el, root) {
     for (let p = el.parentElement; p && p !== root; p = p.parentElement) if (p.hidden) return true;
@@ -478,15 +485,16 @@
     [primary, nested].forEach(l => { if (l && !l.classList.contains('is-subnav-mirrored')) l.classList.add('is-subnav-mirrored'); });
     const items = Array.from(primary.querySelectorAll('[role="tab"]')).map(tabInfo);
     const subs = nested ? Array.from(nested.querySelectorAll('[role="tab"]')).map(tabInfo) : [];
-    const sig = JSON.stringify([items.map(i => [i.label, i.count, i.on, i.disabled, i.icon]), subs.map(i => [i.label, i.on, i.disabled])]);
+    const sig = JSON.stringify([items.map(i => [i.label, i.count, i.on, i.disabled]), subs.map(i => [i.label, i.on, i.disabled])]);
     navState.items = items;
     navState.subs = subs;
     if (sig === navState.sig) return;
     navState.sig = sig;
-    const btn = (it, key) => `<button type="button" data-subnav="${key}" class="${it.on ? 'active' : ''}${it.count ? ' has-count' : ''}"` +
-      `${it.on ? ' aria-current="page"' : ''}${it.disabled ? ' disabled' : ''}>${icon(it.icon)}<span class="label">${esc(it.label)}</span>` +
-      `${it.count ? `<span class="sub-count">${esc(it.count)}</span>` : ''}</button>`;
-    box.innerHTML = items.map((it, i) => btn(it, 'p' + i) +
+    // 아이콘 없이 이름 + 오른쪽 번호(01, 02 …). 세부 메뉴는 번호 없이 이름만
+    const btn = (it, key, no) => `<button type="button" data-subnav="${key}" class="${it.on ? 'active' : ''}${it.count ? ' has-count' : ''}"` +
+      `${it.on ? ' aria-current="page"' : ''}${it.disabled ? ' disabled' : ''}><span class="label">${esc(it.label)}</span>` +
+      `${it.count ? `<span class="sub-count">${esc(it.count)}</span>` : ''}${no ? `<span class="sub-no" aria-hidden="true">${no}</span>` : ''}</button>`;
+    box.innerHTML = items.map((it, i) => btn(it, 'p' + i, String(i + 1).padStart(2, '0')) +
       (it.on && subs.length ? `<div class="nested">${subs.map((s, j) => btn(s, 's' + j)).join('')}</div>` : '')).join('');
     const on = items.find(x => x.on);
     const subOn = subs.find(x => x.on);
