@@ -887,3 +887,26 @@
   background: var(--surface); color: var(--muted); font-size: 11px; cursor: pointer; white-space: nowrap; }
 .part-insights .ins-dock-btn:hover { border-color: var(--lime-line); color: var(--ink); background: var(--soft-2); }
 .part-insights .ins-dock-btn .icon { width: 12px; height: 12px; }
+
+/* 월간 화면 담기: 작은 + 버튼 (마우스를 올리거나 키보드로 오면 보임) · 끄는 동안 흐리게 */
+.part-insights .ins-ul li[data-dock-id], .part-insights .ins-swot-cell li[data-dock-id] { position: relative; padding-right: 30px; }
+.part-insights .ins-ul li[data-dock-id] > .ins-dock-mini, .part-insights .ins-swot-cell li[data-dock-id] > .ins-dock-mini { position: absolute; right: 0; top: 1px; }
+.part-insights .ins-dock-mini { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-left: auto; padding: 0;
+  border: 1px solid var(--muted-2); border-radius: 50%; background: var(--surface); color: var(--ink-2); cursor: pointer; opacity: 0; transition: opacity .15s, transform .15s, background .15s; }
+.part-insights .ins-dock-mini .icon { width: 12px; height: 12px; }
+.part-insights [data-dock-id]:hover > .ins-dock-mini, .part-insights [data-dock-id]:focus-within > .ins-dock-mini,
+.part-insights [data-dock-id]:hover td > .ins-dock-mini, .part-insights [data-dock-id]:focus-within td > .ins-dock-mini, .part-insights .ins-dock-mini:focus-visible { opacity: 1; }
+.part-insights .ins-dock-mini:hover { background: var(--lime); border-color: var(--lime-line); color: var(--lime-ink); transform: scale(1.08); }
+.part-insights td > .ins-dock-mini { margin-left: 6px; vertical-align: middle; }
+.part-insights .ins-dock-wrap { position: relative; display: grid; }
+.part-insights .ins-dock-wrap > .ins-dock-mini { position: absolute; top: 8px; right: 8px; z-index: 1; }
+.part-insights .ins-insight > summary .ins-dock-mini { align-self: center; }
+.part-insights .ins-dragging { opacity: .45; outline: 2px dashed var(--lime-line); outline-offset: 2px; border-radius: 8px; }
+@media (hover: none) { .part-insights .ins-dock-mini { opacity: 1; } }
+
+/* 끌 때 마우스를 따라오는 카드 (body에 잠깐 붙음 → 접두사만) */
+.ins-drag-ghost { position: fixed; top: -1000px; left: -1000px; display: grid; gap: 2px; max-width: 260px; padding: 10px 14px; border-radius: 12px;
+  background: var(--dark); color: var(--dark-ink); box-shadow: 0 12px 28px rgba(0, 0, 0, .25); font: 12px/1.45 inherit; }
+.ins-drag-ghost span { font-size: 10px; font-weight: 700; color: var(--lime); }
+.ins-drag-ghost b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ins-drag-ghost small { font-size: 10px; opacity: .7; }
