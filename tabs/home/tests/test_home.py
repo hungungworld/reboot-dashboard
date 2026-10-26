@@ -700,7 +700,7 @@ def test_dock_items_save_dedupe_and_download(auth_client):
     assert auth_client.patch(f"/api/home/dock/items/{same['id']}", json={"memo": "릴스 소재로"}).get_json()["memo"] == "릴스 소재로"
 
     md = auth_client.get("/api/home/dock/items.md")
-    assert "attachment" in md.headers["Content-Disposition"] and "## [이번 주 액션] 고친 제목" in md.get_data(as_text=True)
+    assert "attachment" in md.headers["Content-Disposition"] and "## [주간 액션] 고친 제목" in md.get_data(as_text=True)
     csv_text = auth_client.get("/api/home/dock/items.csv").get_data(as_text=True)
     assert csv_text.startswith("﻿종류") and "릴스 소재로" in csv_text
     assert len(auth_client.get("/api/home/dock/items.json").get_json()) == 2

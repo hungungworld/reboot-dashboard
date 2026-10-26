@@ -1,5 +1,5 @@
 /* 시장 · 고객 인사이트 (담당: 이현경) — tabs/insights/docs/README.md '3번째 대시보드'.
-   왼쪽 메뉴 (2026-10-26 묶음): TO DO = 이번 주 · 이번 달 / 데이터 = 시장 · 고객 · 데이터 관리 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
+   왼쪽 메뉴 (2026-10-26 묶음): TO DO = 주간 · 월간 / 데이터 = 시장 · 고객 · 데이터 관리 (2026-10-25 진열대 + 경쟁사를 '시장'으로 합침)
    - 시장: 변화 · 가격 위치 · 브랜드 비교 / 고객: 구매자 리뷰 · 유튜브 댓글
    - 데이터 관리: 마지막 업데이트 · 진열대 수집 · 고치기 · AI 정확도 검증 (예전엔 머리글 버튼으로만 열렸음)
    - 보관한 기사는 2026-10-26 홈 › 미국 시장 브리핑 보관함 창으로 옮김 (옛 주소는 홈으로 넘김)
@@ -20,7 +20,7 @@
   const store = REBOOT.store('insights');   // 저장 키: reboot:insights:summary (메뉴 숫자용)
 
   // [id, 이름, 왼쪽 메뉴 묶음, 흐린 글씨] — 묶음 이름표는 core.js가 data-group으로 그림
-  const TABS = [['weekly', '이번 주', 'TO DO'], ['monthly', '이번 달', 'TO DO'],
+  const TABS = [['weekly', '주간', 'TO DO'], ['monthly', '월간', 'TO DO'],
     ['market', '시장', '데이터'], ['customers', '고객', '데이터'], ['manage', '데이터 관리', '데이터', true]];
   // 화면 안 탭
   const SUBS = {
@@ -75,7 +75,7 @@
       items: actionRows(w.actions).filter(r => r.grade !== '참고').map(r => {
         const src = ACTION_SRC[r.rule];
         return { id: r.key, grade: r.grade, title: r.title, todo: r.steps.join(' → '),
-          href: `/dashboard/insights${src ? src[0] : '#weekly'}`, src: src ? src[1] : '이번 주' };
+          href: `/dashboard/insights${src ? src[0] : '#weekly'}`, src: src ? src[1] : '주간' };
       })
     } : null));
   }
@@ -408,7 +408,7 @@
       case 'brief-make': makeBrief(b); break;
       case 'brief-save': saveBrief(b, false); break;
       case 'brief-approve': saveBrief(b, true); break;
-      case 'dock-add': dockAdd(d.id); break;
+      case 'dock-add': e.preventDefault(); dockAdd(d.id); break;   // 접는 칸(summary) 안에서 눌러도 펼쳐지지 않게
       case 'promo-make': makePromo(b); break;
       case 'aud-month': loadData('audience', d.month); break;
       case 'aud-q': openAudQuestion(Number(d.i)); break;
@@ -519,6 +519,21 @@
   }
   const dockBtn = (kind, key) => `<button type="button" class="ins-dock-btn" data-act="dock-add" data-id="${esc(dockId(kind, key))}"
     title="노란 체크 패널 › 인사이트 자료에 담아요 (끌어다 놓아도 돼요)">${icon('plus')}패널에 담기</button>`;
+  // 월간 화면처럼 항목이 많은 곳: 아이콘만 있는 작은 버튼 (항목에 마우스를 올리거나 키보드로 오면 보임 · 터치 화면은 늘 보임)
+  const dockMini = (kind, key) => `<button type="button" class="ins-dock-mini" data-act="dock-add" data-id="${esc(dockId(kind, key))}"
+    aria-label="노란 체크 패널에 담기" title="노란 체크 패널 › 인사이트 자료에 담기 (끌어다 놓아도 돼요)">${icon('plus')}</button>`;
+  const DOCK_KIND_LABEL = { action: '주간 액션', brief: '콘텐츠 브리프', price: '1회분 단가', promo: '시즌 프로모션', brand: '브랜드', change: '경쟁사 변화',
+    review: '리뷰', summary: '이달의 요약', insight: '고객 인사이트', trend: '경쟁 동향', priority: '개선 우선순위', persona: '페르소나', swot: 'SWOT', strategy: '전략' };
+  // 끌 때 마우스를 따라오는 작은 카드 (종류 + 제목) — 화면 밖에 잠깐 그렸다가 지움
+  function dockGhost(e, p) {
+    if (!e.dataTransfer.setDragImage || !document.body) return;
+    const g = document.createElement('div');
+    g.className = 'ins-drag-ghost';
+    g.innerHTML = `<span>${esc(DOCK_KIND_LABEL[p.kind] || '인사이트')}</span><b>${esc(clip(p.title, 60))}</b><small>노란 체크 패널로 끌어다 놓으세요</small>`;
+    document.body.appendChild(g);
+    e.dataTransfer.setDragImage(g, 18, 18);
+    setTimeout(() => g.remove(), 0);
+  }
   function dockStart(e) {
     const el = e.target.closest && e.target.closest('[data-dock-id]');
     const p = el && DOCK[el.dataset.dockId];
@@ -526,6 +541,10 @@
     e.dataTransfer.setData(DOCK_MIME, JSON.stringify(p));
     e.dataTransfer.setData('text/plain', [p.title, p.text].filter(Boolean).join('\n'));
     e.dataTransfer.effectAllowed = 'copy';
+    dockGhost(e, p);
+    el.classList.add('ins-dragging');
+    const done = () => { el.classList.remove('ins-dragging'); el.removeEventListener('dragend', done); };
+    el.addEventListener('dragend', done);
   }
   async function dockAdd(id) {
     const p = DOCK[id];
@@ -540,7 +559,7 @@
     own_oos_season: ['#market/brands', '시장 › 브랜드 비교'], price_cut: ['#market/changes', '시장 › 변화'], price_up: ['#market/changes', '시장 › 변화'],
     comp_oos: ['#market/changes', '시장 › 변화'], comp_oos_multi: ['#market/changes', '시장 › 변화'], low_stock: ['#market/changes', '시장 › 변화'],
     restock: ['#market/changes', '시장 › 변화'], new_entry: ['#market/changes', '시장 › 변화'], own_complaint: ['#customers/reviews', '고객 › 구매자 리뷰'],
-    top_question: ['#customers/audience', '고객 › 유튜브 댓글'], season_search: ['#monthly', '이번 달 · 검색 트렌드']
+    top_question: ['#customers/audience', '고객 › 유튜브 댓글'], season_search: ['#monthly', '월간 · 검색 트렌드']
   };
 
   // 사실 문장의 첫 문장만 (참고 한 줄 · 홈 할 일 제목)
@@ -850,8 +869,11 @@
   // 개선 우선순위 카드 (서버 review_priorities · 규칙 계산): 자사 불만 건수 × 심각도. 부작용은 CS · 컴플라이언스 확인 표시
   function prioritiesCard(p) {
     const items = p && p.items ? p.items : [];
-    const rows = items.map((x, i) => `<tr><td>${i + 1}</td><td><b>${esc(x.topic)}</b>
-        ${x.check ? ' ' + badge('CS · 컴플라이언스 확인', 'red') : ''}</td>
+    const month = S.monthly ? S.monthly.month : '';
+    const rows = items.map((x, i) => `<tr${dockable('priority', `${month}:${x.topic}`, { title: `개선 우선순위 ${i + 1} · ${x.topic}`,
+        text: `자사 불만 ${x.count}건 × 심각도 ${x.weight} = ${x.score}점 · 판매처 ${x.channels.join(' · ')}${x.check ? ' · CS · 컴플라이언스 확인 필요' : ''}`,
+        href: '/dashboard/insights#monthly', data: { month, topic: x.topic, count: x.count, weight: x.weight, score: x.score, channels: x.channels } })}><td>${i + 1}</td><td><b>${esc(x.topic)}</b>
+        ${x.check ? ' ' + badge('CS · 컴플라이언스 확인', 'red') : ''}${dockMini('priority', `${month}:${x.topic}`)}</td>
         <td class="num">${esc(x.count)}건</td><td class="num">×${esc(x.weight)} = <b>${esc(x.score)}</b></td>
         <td class="small">${esc(x.channels.join(' · '))}</td></tr>`).join('');
     const body = items.length
@@ -895,11 +917,14 @@
     const thisMonth = REBOOT.today().slice(0, 7);
     const aiBadge = on => (on ? badge('AI 분석', 'purple') : badge('규칙 요약'));
     const summary = m.summary.length
-      ? `<ol class="ins-summary">${m.summary.map(s => `<li>${esc(s)}</li>`).join('')}</ol>`
+      ? `<ol class="ins-summary">${m.summary.map((s, i) => `<li${dockable('summary', `${m.month}:${i}`, { title: `${m.label} 요약 · ${clip(s, 60)}`, text: s,
+        href: '/dashboard/insights#monthly', data: { month: m.month } })}><span class="grow">${esc(s)}</span>${dockMini('summary', `${m.month}:${i}`)}</li>`).join('')}</ol>`
       : `<div class="empty-art">${icon('spark')}<span><b>AI 요약이 아직 없어요</b><br>${m.aiReady ? '월간 분석 실행에서 \'요약 · 전략\'을 고르면 3줄 요약이 생겨요.' : 'OpenAI 키를 설정 › 연결에 넣으면 월간 분석 실행으로 3줄 요약을 만들 수 있어요.'}</span>
         <button type="button" class="btn small" data-act="ins-monthly-run">${icon('spark')}월간 분석 실행</button></div>`;
     const insights = m.insights.length ? m.insights.map((x, i) => `<details class="ins-insight" data-fold="insight-${i}"${S.open['insight-' + i] ? ' open' : ''}>
-        <summary><span class="ins-idx">${i + 1}</span><span class="grow"><b>${esc(x.title)}</b><small>${esc(x.detail || '')}</small></span></summary>
+        <summary${dockable('insight', `${m.month}:${i}`, { title: `고객 인사이트 · ${x.title}`, href: '/dashboard/insights#monthly',
+          text: [x.detail, (x.faq || []).length && 'FAQ: ' + x.faq.join(' / '), (x.expressions || []).length && '고객 표현: ' + x.expressions.join(' / ')].filter(Boolean).join('\n'),
+          data: { month: m.month, title: x.title, detail: x.detail || '', faq: x.faq || [], expressions: x.expressions || [] } })}><span class="ins-idx">${i + 1}</span><span class="grow"><b>${esc(x.title)}</b><small>${esc(x.detail || '')}</small></span>${dockMini('insight', `${m.month}:${i}`)}</summary>
         <div class="ins-insight-body">
           ${x.faq && x.faq.length ? `<div><span class="field-label">FAQ</span><ul>${x.faq.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
           ${x.expressions && x.expressions.length ? `<div><span class="field-label">고객 표현</span><ul>${x.expressions.map(f => `<li>${esc(f)}</li>`).join('')}</ul></div>` : ''}
@@ -909,14 +934,19 @@
     const st = m.strategy;
     const usedPeeps = new Set();
     const swot = st && st.swot ? `<div class="ins-swot">${[['S', '강점'], ['W', '약점'], ['O', '기회'], ['T', '위협']].map(([k, l]) =>
-      `<div class="ins-swot-cell s-${k}"><b>${k} · ${l}</b><ul>${(st.swot[k] || []).map(x => `<li>${esc(x)}</li>`).join('') || '<li class="muted">—</li>'}</ul></div>`).join('')}</div>` : '';
+      `<div class="ins-swot-cell s-${k}"><b>${k} · ${l}</b><ul>${(st.swot[k] || []).map((x, i) => `<li${dockable('swot', `${m.month}:${k}:${i}`, { title: `SWOT ${l} · ${clip(x, 60)}`, text: x,
+        href: '/dashboard/insights#monthly', data: { month: m.month, kind: k } })}><span class="grow">${esc(x)}</span>${dockMini('swot', `${m.month}:${k}:${i}`)}</li>`).join('') || '<li class="muted">—</li>'}</ul></div>`).join('')}</div>` : '';
     const strategy = st ? `
-        ${st.changes && st.changes.length ? `<div class="note lime"><b>지난달 대비 바뀐 점</b><ul class="ins-ul">${st.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul></div>`
+        ${st.changes && st.changes.length ? `<div class="note lime"><b>지난달 대비 바뀐 점</b><ul class="ins-ul">${st.changes.map((c, i) => `<li${dockable('strategy', `${m.month}:change:${i}`, { title: `지난달 대비 바뀐 점 · ${clip(c, 60)}`, text: c,
+          href: '/dashboard/insights#monthly', data: { month: m.month } })}><span class="grow">${esc(c)}</span>${dockMini('strategy', `${m.month}:change:${i}`)}</li>`).join('')}</ul></div>`
           : m.prevStrategy ? '<p class="small muted">지난달 전략과 비교해 바뀐 점이 없어요.</p>' : ''}
         <h3 class="ins-h3">페르소나</h3>
-        <div class="grid-3 ins-personas">${(st.personas || []).map((p, i) => personaCard(p, i, usedPeeps)).join('') || '<p class="small muted">없음</p>'}</div>
+        <div class="grid-3 ins-personas">${(st.personas || []).map((p, i) => `<div class="ins-dock-wrap"${dockable('persona', `${m.month}:${p.name}`, { title: `페르소나 · ${p.name}`,
+          text: [`“${p.oneLine}”`, '핵심 니즈: ' + p.needs, '쓸 메시지: ' + p.message].join('\n'), href: '/dashboard/insights#monthly', data: Object.assign({ month: m.month }, p) })}>${personaCard(p, i, usedPeeps)}${dockMini('persona', `${m.month}:${p.name}`)}</div>`).join('') || '<p class="small muted">없음</p>'}</div>
         <h3 class="ins-h3">SWOT</h3>${swot}
-        <div class="mt-16">${ui.row('타깃', esc(st.target || '—'))}${ui.row('포지셔닝', esc(st.positioning || '—'))}</div>
+        <div class="mt-16">${[['target', '타깃', st.target], ['positioning', '포지셔닝', st.positioning]].map(([k, l, v]) => v
+          ? `<div class="ins-dock-wrap"${dockable('strategy', `${m.month}:${k}`, { title: `${l} (${m.label})`, text: v, href: '/dashboard/insights#monthly', data: { month: m.month } })}>${ui.row(l, esc(v))}${dockMini('strategy', `${m.month}:${k}`)}</div>`
+          : ui.row(l, '—')).join('')}</div>
         <p class="panel-note mt-8">소비자에게 보이는 문구는 컴플라이언스 탭에서 문구 심의를 거쳐요.</p>`
       : `<div class="empty-art">${icon('doc')}<span><b>전략 업데이트가 없어요</b><br>월간 분석 실행의 '요약 · 전략'을 돌리면 페르소나(최대 3개) · SWOT · 타깃 · 포지셔닝이 채워져요${m.aiReady ? '' : ' (OpenAI 키 필요)'}.</span></div>`;
     el.innerHTML = `
@@ -934,7 +964,8 @@
       <div class="ins-mrow">
         <section class="card"><div class="card-head"><h2>고객 인사이트</h2>${aiBadge(m.insightsAi)}</div>${insights}</section>
         <section class="card ins-mcomp"><div class="card-head"><h2>경쟁 브랜드 동향</h2>${aiBadge(m.competitorAi)}</div>
-          ${m.competitorTrends.length ? `<ul class="ins-ul">${m.competitorTrends.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="small muted">아직 경쟁 브랜드 데이터가 없어요.</p>'}
+          ${m.competitorTrends.length ? `<ul class="ins-ul">${m.competitorTrends.map((x, i) => `<li${dockable('trend', `${m.month}:${i}`, { title: `경쟁 브랜드 동향 · ${clip(x, 60)}`, text: x,
+            href: '/dashboard/insights#monthly', data: { month: m.month } })}><span class="grow">${esc(x)}</span>${dockMini('trend', `${m.month}:${i}`)}</li>`).join('')}</ul>` : '<p class="small muted">아직 경쟁 브랜드 데이터가 없어요.</p>'}
           <a class="link mt-8" href="#market/brands">브랜드 비교 보기 ${icon('arrow')}</a></section>
       </div>
       ${prioritiesCard(m.priorities)}

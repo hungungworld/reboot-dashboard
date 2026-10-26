@@ -182,7 +182,37 @@
 .home-dock-note-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; color: var(--ink); margin-top: 3px; line-height: 1.5; }
 .home-dock-note .home-dock-reason a { color: inherit; }
 .home-dock-tools { margin-top: 8px; }
-body.home-dock-dragging .home-fab { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(208, 230, 60, .45), var(--shadow); }
+body.home-dock-dragging .home-fab { animation: home-fab-pulse 1.3s ease-in-out infinite; }
+.home-fab.bump { animation: home-fab-bump .5s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes home-fab-pulse { 0%, 100% { transform: scale(1.06); box-shadow: 0 0 0 4px rgba(208, 230, 60, .45), var(--shadow); }
+  50% { transform: scale(1.14); box-shadow: 0 0 0 12px rgba(208, 230, 60, .12), var(--shadow); } }
+@keyframes home-fab-bump { 0% { transform: scale(1); } 40% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+/* 끄는 동안 노란 버튼 위에 떠오르는 '인사이트 자료에 담기' 팝업 (놓는 곳) */
+.home-dock-pop { position: fixed; right: 24px; bottom: 90px; z-index: 56; display: flex; align-items: center; gap: 12px; width: 280px; padding: 16px 18px;
+  border: 2px dashed var(--lime-line); border-radius: 18px; background: var(--surface); color: var(--ink); box-shadow: 0 18px 40px rgba(23, 23, 32, .18);
+  opacity: 0; transform: translateY(14px) scale(.94); transform-origin: 90% 100%;
+  transition: opacity .22s ease, transform .28s cubic-bezier(.2, .9, .3, 1.2), background .2s, border-color .2s; }
+.home-dock-pop[hidden] { display: none; }
+.home-dock-pop.on { opacity: 1; transform: none; }
+.home-dock-pop.hot { border-style: solid; background: var(--soft-2); transform: scale(1.04); }
+.home-dock-pop.done { border-style: solid; border-color: var(--lime-line); background: var(--lime); color: var(--lime-ink); }
+.home-dock-pop::after { content: ''; position: absolute; right: 22px; bottom: -9px; width: 14px; height: 14px; background: inherit; border: inherit;
+  border-top: 0; border-left: 0; transform: rotate(45deg); }   /* 노란 버튼을 가리키는 꼬리 */
+.home-dock-pop-ic { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--lime); color: var(--lime-ink); }
+.home-dock-pop-ic .icon { grid-area: 1 / 1; width: 18px; height: 18px; transition: opacity .2s, transform .25s; }
+.home-dock-pop-ic .icon + .icon, .home-dock-pop.done .home-dock-pop-ic .icon:first-child { opacity: 0; transform: scale(.5) rotate(-45deg); }
+.home-dock-pop.done .home-dock-pop-ic { background: var(--surface); }
+.home-dock-pop.done .home-dock-pop-ic .icon + .icon { opacity: 1; transform: none; }
+.home-dock-pop.hot .home-dock-pop-ic { animation: home-fab-bump .6s ease infinite; }
+.home-dock-pop-t { display: grid; gap: 2px; min-width: 0; }
+.home-dock-pop-t b { font-size: 13px; }
+.home-dock-pop-t small { font-size: 11px; color: inherit; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 640px) { .home-dock-pop { right: 16px; bottom: 80px; width: min(280px, calc(100vw - 32px)); } }
+@media (prefers-reduced-motion: reduce) {
+  .home-dock-pop, .home-dock-pop-ic .icon { transition: opacity .15s; transform: none !important; }
+  body.home-dock-dragging .home-fab, .home-fab.bump, .home-dock-pop.hot .home-dock-pop-ic { animation: none; }
+}
 .home-dock-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: var(--radius-sm); cursor: pointer; }
 .home-dock-item:hover { background: var(--soft-2); }
 .home-dock-item input { margin-top: 3px; }
@@ -202,14 +232,14 @@ body.home-dock-dragging .home-fab { transform: scale(1.12); box-shadow: 0 0 0 6p
 
 /* 미국 시장 브리핑 — 헤더 한 줄 · 오늘의 핵심 1개 · 짧은 목록 · 하단 한 줄. 글자 15/13/12/11px, 색은 잉크 · 회색 · 라임만 */
 /* 헤더: 왼쪽 제목 · 배송 정보, 오른쪽 새로고침은 항상 같은 줄. 업계/트렌드 버튼은 그 아래 줄 */
-.part-home .home-brief-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.part-home .home-brief-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }   /* 탭 줄이 비어도 본문과 띄움 */
 .part-home .home-brief-title { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; min-width: 0; }
 .part-home .home-brief-title h2 { white-space: nowrap; }
 .part-home .home-brief-refresh { flex-shrink: 0; width: 30px; height: 30px; }
 .part-home .home-brief-refresh .icon { width: 15px; height: 15px; }
 .part-home .home-brief-title > .head-cap { margin-left: 0; }   /* 줄바꿈되는 flex라 제목 밖에 둠 — gap 8px이 간격 */
 .part-home .home-brief-tabs:empty { display: none; }
-.part-home .home-brief-tabs { margin-top: 10px; }
+.part-home .home-brief-tabs { margin: 0; }
 .part-home .home-news-more { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; height: 26px; margin-top: 2px;
   border-top: 1px solid var(--line-3); font-size: 11px; color: var(--muted); }
 .part-home .home-news-more:hover { color: var(--ink); background: var(--soft-2); }

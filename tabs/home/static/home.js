@@ -1092,7 +1092,7 @@
         const r = await REBOOT.api('/api/home/dock/items', p);
         D.notes = [r].concat((D.notes || []).filter(x => x.id !== r.id));
         if (!D.kinds[r.kind]) { const k = await safe(() => REBOOT.api('/api/home/dock/items?kind=_')); if (k) D.kinds = k.kinds || {}; }
-        toast(`'${r.title}'을(를) 인사이트 자료에 담았어요.`);
+        if (!D.el || q('pop').hidden) toast(`'${r.title}'을(를) 인사이트 자료에 담았어요.`);   // 끌어다 놓으면 팝업이 알려 줌
         paint();
         return r;
       } catch (e) { toast(`인사이트 자료를 담지 못했어요: ${e.message}`, 'error'); return null; }
@@ -1107,33 +1107,68 @@
         paint();
       } catch (e) { busy(btn, false); toast(`삭제하지 못했어요: ${e.message}`, 'error'); }
     }
-    // 끌어다 놓기: 끌기 시작하면 노란 버튼을 강조 → 버튼 위로 오면 패널 · 인사이트 자료 묶음을 열고 → 패널 안에 놓으면 담기
-    function openNotes() {
-      if (!D.open) setOpen(true);
-      const sec = D.el.querySelector('.home-dock-sec[data-sec="insight"]');
-      if (sec) sec.open = true;
+    // 끌어다 놓기: 끌기 시작하면 노란 버튼 위로 '인사이트 자료에 담기' 팝업이 떠오름 → 팝업 · 노란 버튼 · 열린 패널에 놓으면 담기
+    // → 팝업이 '담았어요'로 바뀌었다가 사라지고 노란 버튼이 한 번 통통 튐 (패널을 억지로 열지 않음)
+    const pop = { timer: 0, done: false };
+    function showPop() {
+      const el = q('pop');
+      clearTimeout(pop.timer);
+      pop.done = false;
+      el.classList.remove('hot', 'done');
+      q('pop-title').textContent = '인사이트 자료에 담기';
+      q('pop-sub').textContent = '여기로 끌어다 놓으세요';
+      el.hidden = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
+    }
+    function hidePop(delay) {
+      const el = q('pop');
+      clearTimeout(pop.timer);
+      pop.timer = setTimeout(() => {
+        el.classList.remove('on', 'hot');
+        pop.timer = setTimeout(() => { el.hidden = true; el.classList.remove('done'); pop.done = false; }, 240);
+      }, delay || 0);
+    }
+    function hotPop(on) {
+      if (pop.done) return;
+      q('pop').classList.toggle('hot', on);
+      q('pop-sub').textContent = on ? '놓으면 담겨요' : '여기로 끌어다 놓으세요';
     }
     function bindDrop() {
-      doc.addEventListener('dragstart', e => { if (hasDockData(e)) doc.body.classList.add('home-dock-dragging'); });
-      doc.addEventListener('dragend', () => { doc.body.classList.remove('home-dock-dragging'); D.el.querySelector('.home-dock-panel').classList.remove('drop-on'); });
-      const fab = q('fab'), panel = q('panel');
+      const fab = q('fab'), panel = q('panel'), popEl = q('pop');
+      const overTarget = t => !!t && (fab.contains(t) || popEl.contains(t));
+      doc.addEventListener('dragstart', e => { if (hasDockData(e)) { doc.body.classList.add('home-dock-dragging'); showPop(); } });
+      doc.addEventListener('dragend', () => {
+        doc.body.classList.remove('home-dock-dragging');
+        panel.classList.remove('drop-on');
+        if (!pop.done) hidePop();
+      });
       ['dragenter', 'dragover'].forEach(ev => {
-        fab.addEventListener(ev, e => { if (!hasDockData(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; openNotes(); });
+        [fab, popEl].forEach(t => t.addEventListener(ev, e => { if (!hasDockData(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; hotPop(true); }));
         panel.addEventListener(ev, e => { if (!hasDockData(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; panel.classList.add('drop-on'); });
       });
+      [fab, popEl].forEach(t => t.addEventListener('dragleave', e => { if (!overTarget(e.relatedTarget)) hotPop(false); }));
       panel.addEventListener('dragleave', e => { if (!panel.contains(e.relatedTarget)) panel.classList.remove('drop-on'); });
-      const drop = e => {
+      const drop = async e => {
         if (!hasDockData(e)) return;
         e.preventDefault();
         panel.classList.remove('drop-on');
         doc.body.classList.remove('home-dock-dragging');
         let p = null;
         try { p = JSON.parse(e.dataTransfer.getData(DOCK_MIME)); } catch (err) { p = null; }
-        openNotes();
-        addNote(p);
+        pop.done = true;
+        popEl.classList.remove('hot');
+        q('pop-title').textContent = '담는 중…';
+        q('pop-sub').textContent = p && p.title ? p.title : '';
+        const r = await addNote(p);
+        if (!r) { hidePop(); return; }
+        popEl.classList.add('done');
+        q('pop-title').textContent = '인사이트 자료에 담았어요';
+        fab.classList.remove('bump');
+        void fab.offsetWidth;   // 같은 애니메이션을 다시 시작
+        fab.classList.add('bump');
+        hidePop(1400);
       };
-      fab.addEventListener('drop', drop);
-      panel.addEventListener('drop', drop);
+      [fab, popEl, panel].forEach(t => t.addEventListener('drop', drop));
     }
     function mount() {
       if (D.el || !doc.body || !REBOOT.user || !REBOOT.user()) return;
@@ -1142,6 +1177,10 @@
       D.el.innerHTML = `
         <button type="button" class="home-fab" data-dock="fab" aria-expanded="false" aria-controls="home-dock-panel" aria-label="이번 주 할 일 열기">
           ${icon('check')}<span class="home-fab-count" data-dock="count" hidden></span></button>
+        <div class="home-dock-pop" data-dock="pop" role="status" aria-live="polite" hidden>
+          <span class="home-dock-pop-ic" aria-hidden="true">${icon('plus')}${icon('check')}</span>
+          <span class="home-dock-pop-t"><b data-dock="pop-title">인사이트 자료에 담기</b><small data-dock="pop-sub">여기로 끌어다 놓으세요</small></span>
+        </div>
         <div class="home-dock-scrim" data-dock="scrim" hidden></div>
         <aside class="home-dock-panel" id="home-dock-panel" data-dock="panel" role="dialog" aria-modal="true" aria-labelledby="home-dock-title" hidden>
           <div class="home-dock-head"><h2 id="home-dock-title">이번 주</h2>

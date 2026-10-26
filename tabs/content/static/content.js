@@ -927,9 +927,9 @@
   const imgTextMode = () => lsGet('imgText', 'bake') === 'none' ? 'none' : 'bake';
   function imgTextHtml() {
     const cur = imgTextMode();
-    return `<div class="chips cnt-img-text" role="group" aria-label="이미지 글자">${[['bake', '글자 넣기'], ['none', '글자 없이']]
+    return `<div class="chips cnt-img-text" role="group" aria-labelledby="cnt-img-text-l"><span class="field-label" id="cnt-img-text-l">이미지 속 글자</span>${[['bake', '글자 넣기'], ['none', '글자 없이']]
       .map(([k, l]) => `<button type="button" class="chip" data-act="img-text" data-value="${k}" aria-pressed="${cur === k}">${l}</button>`).join('')}
-      <span class="panel-note">${cur === 'bake' ? '새 이미지에 헤드라인·슬로건을 그림과 어울리게 넣어요.' : '새 이미지는 글자 없이 만들어요.'}</span></div>`;
+      <span class="panel-note" aria-live="polite">${cur === 'bake' ? '새 이미지에 헤드라인·슬로건을 그림과 어울리게 넣어요.' : '새 이미지는 글자 없이 만들어요.'}</span></div>`;
   }
   function imageFootNote(v, layers) {
     const img = v.image || {};
@@ -1235,13 +1235,15 @@
         <div class="cnt-results-side">
           ${jobs.map(jobHtml).join('')}
           <div class="flex wrap cnt-make">
-            <button type="button" class="btn small ${canImage && hasDraft() ? '' : 'lime'}" data-act="make-draft" ${!ready ? 'disabled title="OpenAI 키가 필요해요"' : S.sending ? 'disabled' : ''}>${icon('spark')}초안 만들기</button>
+            <button type="button" class="btn small ${canImage && hasDraft() ? '' : 'lime'}" data-act="make-draft" ${!ready ? 'disabled aria-describedby="cnt-need-key"' : S.sending ? 'disabled' : ''}>${icon('spark')}초안 만들기</button>
             ${draftBusy ? '<span class="cnt-typing cnt-make-busy" role="status"><span></span><span></span><span></span><em>만드는 중…</em></span>' : ''}
-            ${canImage ? `<button type="button" class="btn small ${hasDraft() ? 'lime' : 'dark'}" data-act="make-image" ${ready ? '' : 'disabled title="OpenAI 키가 필요해요"'}>${icon('image')}${esc(imageButtonLabel())}</button>` : ''}
             ${vs.some(v => v.kind !== 'image' && v.kind !== 'video') ? videoButtonHtml('btn small dark') : ''}
             <button type="button" class="btn small" data-act="manual-version">${icon('edit')}직접 작성</button>
           </div>
-          ${canImage ? imgTextHtml() : ''}
+          ${ready ? '' : '<p class="cnt-make-need" id="cnt-need-key">AI로 만들려면 OpenAI 키가 필요해요 (설정 › 연결). 지금은 [직접 작성]으로 쓸 수 있어요.</p>'}
+          ${canImage ? `<div class="cnt-img-block">
+            <button type="button" class="btn small ${hasDraft() ? 'lime' : ''}" data-act="make-image" ${ready ? '' : 'disabled aria-describedby="cnt-need-key"'}>${icon('image')}${esc(imageButtonLabel())}</button>
+            ${imgTextHtml()}</div>` : ''}
           ${sel && (!complete || sel.id !== c.finalVersionId) ? `<button type="button" class="btn small lime cnt-complete-btn" data-act="complete">${icon('check')}${complete ? '이 버전으로 완성하기' : '완성하기'} · ${esc(sel.label)} v${esc(sel.seq)}</button>
             <p class="panel-note">보고 있는 버전을 최종본으로 정하고 상태를 '완료'로 바꿔요. 나중에 더 수정할 수 있어요.</p>` : ''}
           ${vs.length ? `<div class="cnt-vhead"><span class="field-label">버전 ${esc(vs.length)}개</span>${ui.fileBtn('download', { label: '전체 다운로드', type: 'ZIP', act: 'export' })}</div>
