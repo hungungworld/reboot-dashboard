@@ -657,7 +657,6 @@
       <div class="cnt-dock">
         <div class="cnt-quick" data-ref="quick">${quickHtml()}</div>
         <div class="cnt-refs-bar" data-ref="refs">${refsHtml()}</div>
-        <input type="file" data-ref="ref-file" accept="image/jpeg,image/png,image/webp" hidden>
         <div class="composer cnt-composer">
           <textarea data-ref="input" rows="2" aria-label="AI에게 보낼 메시지"></textarea>
           <div class="cnt-composer-bottom">
@@ -2665,8 +2664,7 @@
         placeholder="예: 제품 소개 메모, 블로그 글, FAQ, 이벤트 안내…&#10;'1장 / 2장'이나 '## 제목'으로 나눠 쓰면 그 단위로 카드를 나눠요.">${esc(n.source)}</textarea>
       <div class="flex between cnt-cn-srcbar">
         <span class="panel-note" data-ref="cn-count">${cnCountText()}</span>
-        <span class="flex"><input type="file" data-ref="cn-file" accept=".md,.markdown,.txt,.csv,.docx,.pdf" hidden>
-          ${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
+        <span class="flex">${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
       </div>
       <div class="cnt-cn-step"><span class="stepnum">2</span><strong>옵션</strong></div>
       <div class="cnt-cn-opts">
@@ -2807,7 +2805,12 @@
       case 'cn-deck': d[b.dataset.key] = b.dataset.value; n.opts[b.dataset.key] = b.dataset.value; cnTouch(); cnRenderResult(); break;
       case 'cn-setup': n.setup = true; cnRenderSetup(); break;
       case 'cn-setup-close': n.setup = false; cnRenderSetup(); break;
-      case 'cn-file': { const f = ref('cn-file'); if (f) { f.value = ''; f.click(); } break; }
+      case 'cn-file':
+        ui.uploadModal({
+          title: '카드뉴스 내용 파일 업로드', type: 'MD · TXT · CSV · DOCX · PDF', accept: '.md,.markdown,.txt,.csv,.docx,.pdf',
+          help: '<p>파일의 글을 뽑아 내용 칸 끝에 붙여요.</p>'
+        }).then(got => { if (got) cnLoadFile(got.files[0]); });
+        break;
       case 'cn-generate': cnGenerate(); break;
       case 'cn-split':
         if (n.source.trim().length < 2) { toast('나눌 내용을 먼저 넣어 주세요.', 'error'); break; }
@@ -3413,7 +3416,12 @@
         }
         case 'offer-make': send('좋아요, 이대로 만들어줘'); break;
         case 'brief-say': briefSay(b.dataset.key); break;
-        case 'ref-upload': { const f = ref('ref-file'); if (f) { f.value = ''; f.click(); } break; }
+        case 'ref-upload':
+          ui.uploadModal({
+            title: '레퍼런스 이미지 업로드', type: 'JPG · PNG · WebP · 최대 3장', accept: 'image/jpeg,image/png,image/webp',
+            help: '<p>AI가 이미지를 보고 대화에 참고해요.</p>'
+          }).then(got => { if (got) uploadReference(got.files[0]); });
+          break;
         case 'ref-del': deleteReference(b.dataset.id); break;
         case 'ref-view': referenceViewModal(b.dataset.id); break;
         case 'iv-pick': ivPick(b); break;
@@ -3451,8 +3459,6 @@
     root.addEventListener('change', e => {
       const el = e.target;
       if (el.dataset.sheetCheck) { onSheetCheck(el); return; }
-      if (el.dataset.ref === 'ref-file') { if (el.files && el.files[0]) uploadReference(el.files[0]); return; }
-      if (el.dataset.ref === 'cn-file') { if (el.files && el.files[0]) cnLoadFile(el.files[0]); return; }
       if (el.dataset.cnLayout != null) cnLayout(el);
     });
 

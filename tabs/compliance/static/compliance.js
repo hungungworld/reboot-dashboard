@@ -592,7 +592,7 @@
   </div>
   <section class="cmp-panel" data-panel="review">
     <div class="cmp-subpanel" data-sub="single">${singleHTML()}</div>
-    <div class="cmp-subpanel" data-sub="batch" hidden><section class="cmp-card cmp-paper">${batchHTML()}</section></div></section>
+    <div class="cmp-batch-card" data-sub="batch" hidden><section class="cmp-card cmp-paper">${batchHTML()}</section></div></section>
   <section class="cmp-panel" data-panel="history" hidden></section>
   <section class="cmp-panel" data-panel="monitor" hidden>${monitorHTML()}</section>
   <section class="cmp-panel" data-panel="refs" hidden>${refsHTML()}</section>
@@ -678,7 +678,7 @@
         return;
       }
       const sub = e.target.closest('[data-subtab]');
-      if (sub) { showSub(root, sub.dataset.subtab); return; }
+      if (sub) { if (sub.dataset.subtab !== 'batch') showSub(root, sub.dataset.subtab); return; }   // CSV 업로드는 팝업 (wireBatch)
       const btn = e.target.closest('[data-act="goto"]');
       if (!btn) return;
       const tab = showTab(btn.dataset.goto);
@@ -1542,29 +1542,42 @@
 
   /* 일괄 심의 */
 
+  // CSV 심의 결과 카드: 직접 입력 화면 아래에 붙음 (파일 고르기는 팝업 · batchUploadHTML)
   function batchHTML() {
-    const n = (DATA.batchSample || []).length;
     return `
-<div class="cmp-work-head"><h3>여러 문구를 한 번에</h3>${modeSegHTML('batch')}</div>
+<div class="cmp-work-head"><h3>CSV 심의 결과</h3>${REBOOT.ui.fileActions(
+    REBOOT.ui.fileBtn('upload', { label: '다른 파일 올리기', type: 'CSV', act: 'batch-open' }) +
+    REBOOT.ui.fileBtn('download', { label: '심의 결과 다운로드', type: 'CSV', act: 'download', disabled: true }))}</div>
+<div class="cmp-row">
+  <label class="cmp-field"><span>채널 (열이 없을 때)</span><select class="cmp-input" data-el="channel">${channelOptions(ALL)}</select></label>
+  <label class="cmp-field"><span>제품 (열이 없을 때)</span><select class="cmp-input" data-el="product">${productOptions(ALL)}</select></label>
+</div>
+<div data-el="trmsg" aria-live="polite"></div>
+<div data-el="out" aria-live="polite"></div>`;
+  }
+
+  // CSV 업로드 팝업: 안내(help) · 기본 채널·제품과 예시·양식 버튼(extra)
+  function batchUploadHTML(channel, product) {
+    const n = (DATA.batchSample || []).length;
+    return {
+      help: `
 <p class="cmp-muted"><code>copy</code> 열이 있는 CSV 파일을 올리면 한 줄씩 판정해요 (최대 1MB · ${MAX_ROWS}행 · UTF-8 권장). <b>'규칙 미탐지'는 법적 승인이 아니에요.</b></p>
 <details class="cmp-more"><summary>CSV 열 안내 · 한국어 문구 · 건강기능식품 비교</summary><p class="cmp-muted">
   <b>한국어 문구</b>는 서버 AI(Claude)가 영어로 옮긴 뒤 <b>영어와 한국어를 둘 다</b> 심의해요 (뜻 그대로 번역 · 1회 소액 과금). 결과에는 한국어 원문 아래에 영어 번역과 걸린 표현이 함께 나와요.<br>
   <code>channel</code>·<code>product</code> 열이 있으면 줄마다 그 채널·제품으로 심의해요 (값: <code>${Object.keys(DATA.channels).join(' · ')} · all</code> / <code>${(DATA.products || []).map(p => p.id).join(' · ')} · all</code>, 한국어 이름도 됨). 없으면 아래 선택값을 써요.<br>
-  <code>category</code> 열(선택): <code>SUPPLEMENT</code>(또는 '건강기능식품')이면 그 줄만 <b>건강기능식품 기준으로 비교</b>해요 → 같은 구조·기능 표현이 일반식품은 수정 필요, 건강기능식품은 <b>조건부</b>. 비우면 일반식품.</p></details>
+  <code>category</code> 열(선택): <code>SUPPLEMENT</code>(또는 '건강기능식품')이면 그 줄만 <b>건강기능식품 기준으로 비교</b>해요 → 같은 구조·기능 표현이 일반식품은 수정 필요, 건강기능식품은 <b>조건부</b>. 비우면 일반식품.</p></details>`,
+      extra: `
 <div class="cmp-row">
-  <label class="cmp-field"><span>${icon('upload')} 심의할 문구 업로드 <span class="tiny muted">CSV</span></span><input type="file" accept=".csv,text/csv" class="cmp-input" data-el="file"></label>
-  <label class="cmp-field"><span>채널 (열이 없을 때)</span><select class="cmp-input" data-el="channel">${channelOptions(ALL)}</select></label>
-  <label class="cmp-field"><span>제품 (열이 없을 때)</span><select class="cmp-input" data-el="product">${productOptions(ALL)}</select></label>
+  <label class="cmp-field"><span>채널 (열이 없을 때)</span><select class="cmp-input" data-bm="channel">${channelOptions(channel)}</select></label>
+  <label class="cmp-field"><span>제품 (열이 없을 때)</span><select class="cmp-input" data-bm="product">${productOptions(product)}</select></label>
 </div>
 <div class="cmp-actions">
   <button type="button" class="cmp-btn" data-act="dummy-run">예시 ${n}개로 심의해 보기</button>
   ${REBOOT.ui.fileActions(
     REBOOT.ui.fileBtn('download', { label: '양식 다운로드', type: 'CSV', act: 'sample' }) +
-    REBOOT.ui.fileBtn('download', { label: '예시 양식 다운로드', type: 'CSV', act: 'dummy-csv', title: `한국어 예시 ${n}개 · 채널·제품 전체 · 판정별 6개씩` }) +
-    REBOOT.ui.fileBtn('download', { label: '심의 결과 다운로드', type: 'CSV', act: 'download', disabled: true }))}
-</div>
-<div data-el="trmsg" aria-live="polite"></div>
-<div data-el="out" aria-live="polite"></div>`;
+    REBOOT.ui.fileBtn('download', { label: '예시 양식 다운로드', type: 'CSV', act: 'dummy-csv', title: `한국어 예시 ${n}개 · 채널·제품 전체 · 판정별 6개씩` }))}
+</div>`
+    };
   }
 
   const HANGUL = /[가-힣]/;
@@ -1678,9 +1691,14 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
       el('out').innerHTML = `<p class="cmp-note cmp-note-block">${msg}</p>`;
     }
 
-    el('file').addEventListener('change', async () => {
-      const file = el('file').files[0];
-      if (!file) return;
+    // 결과 카드를 직접 입력 화면 아래에 보여 줌
+    function showCard() {
+      p.hidden = false;
+      p.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+
+    async function loadFile(file) {
+      showCard();
       if (file.size > MAX_CSV_BYTES) return reject(`파일을 읽지 못했어요. 1MB를 넘어요 (${Math.ceil(file.size / 1024)}KB). 나눠서 올려 주세요.`);
       const table = parseCSV(await file.text());
       const header = (table[0] || []).map(h => h.trim().toLowerCase());
@@ -1700,6 +1718,54 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
       if (body.length > MAX_ROWS) {
         el('out').insertAdjacentHTML('afterbegin', `<p class="cmp-note">${body.length}행 중 앞의 ${MAX_ROWS}행만 판정했어요.</p>`);
       }
+    }
+
+    async function runDummy() {
+      showCard();
+      const sample = DATA.batchSample || [];
+      rows = sample.map(x => ({ src: x.ko, ko: true, en: '', note: '', colChannel: x.channel, colProduct: x.product, channel: x.channel, product: x.product, category: x.category || 'FOOD' }));
+      const fallback = new Map(rows.map((r, i) => [r, sample[i].copy]));
+      el('out').innerHTML = '';
+      await translateRows(fallback);
+      run();
+    }
+
+    // CSV 업로드: 화면을 바꾸지 않고 팝업에서 파일 · 기본 채널·제품을 고름 → 결과는 직접 입력 아래 카드
+    async function openUpload() {
+      const keepSel = b => {
+        el('channel').value = b.querySelector('[data-bm="channel"]').value;
+        el('product').value = b.querySelector('[data-bm="product"]').value;
+      };
+      const html = batchUploadHTML(el('channel').value, el('product').value);
+      const got = await REBOOT.ui.uploadModal({
+        title: '여러 문구를 한 번에 심의', type: `CSV · 최대 1MB · ${MAX_ROWS}행`, accept: '.csv,text/csv', okLabel: '심의 시작', wide: true,
+        help: html.help, extra: html.extra,
+        onOpen: b => {
+          b.classList.add('part-compliance');
+          b.querySelector('[data-act="sample"]').addEventListener('click', () => {
+            const out = [['copy', 'channel', 'product']].concat(DATA.safePhrases.map(s => [s.text, '', '']), DATA.selfTest.filter(t => !t.channel && !t.category).map(t => [t.text, '', '']));
+            download('sample', toCSV(out));
+          });
+          // 더미 문구: 한국어(copy) · 줄마다 채널·제품(전체 포함) · 예상 판정 · 예시 영어 번역 (판정에는 copy·channel·product만 씀)
+          b.querySelector('[data-act="dummy-csv"]').addEventListener('click', () => {
+            const sample = DATA.batchSample || [];
+            download(`batch-dummy-${sample.length}`, toCSV([['copy', 'channel', 'product', 'category', 'expect', 'note', 'english_example']].concat(
+              sample.map(x => [x.ko, x.channel, x.product, x.category || '', x.expect, x.note, x.copy]))));
+          });
+          b.querySelector('[data-act="dummy-run"]').addEventListener('click', () => {
+            keepSel(b);
+            REBOOT.ui.closeModal();
+            runDummy();
+          });
+        }
+      });
+      if (!got) return;
+      keepSel(got.body);
+      loadFile(got.files[0]);
+    }
+
+    root.addEventListener('click', e => {
+      if (e.target.closest('[data-subtab="batch"], [data-act="batch-open"]')) openUpload();
     });
     el('channel').addEventListener('change', run);
     el('product').addEventListener('change', run);
@@ -1710,25 +1776,6 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
         y.x.src, y.x.en || '', y.x.channel, y.x.product, y.x.category || 'FOOD', y.r.verdict, LABEL[y.r.verdict],
         y.r.legal ? `${LIGHT[y.r.legal].icon} ${LIGHT[y.r.legal].label}` : '', y.r.codes.join(' '), y.r.findings.flatMap(f => f.terms).join('; ')]));
       download('review', toCSV(out));
-    });
-
-    p.querySelector('[data-act="sample"]').addEventListener('click', () => {
-      const out = [['copy', 'channel', 'product']].concat(DATA.safePhrases.map(s => [s.text, '', '']), DATA.selfTest.filter(t => !t.channel && !t.category).map(t => [t.text, '', '']));
-      download('sample', toCSV(out));
-    });
-    // 더미 문구: 한국어(copy) · 줄마다 채널·제품(전체 포함) · 예상 판정 · 예시 영어 번역 (판정에는 copy·channel·product만 씀)
-    p.querySelector('[data-act="dummy-csv"]').addEventListener('click', () => {
-      const sample = DATA.batchSample || [];
-      download(`batch-dummy-${sample.length}`, toCSV([['copy', 'channel', 'product', 'category', 'expect', 'note', 'english_example']].concat(
-        sample.map(x => [x.ko, x.channel, x.product, x.category || '', x.expect, x.note, x.copy]))));
-    });
-    p.querySelector('[data-act="dummy-run"]').addEventListener('click', async () => {
-      const sample = DATA.batchSample || [];
-      rows = sample.map(x => ({ src: x.ko, ko: true, en: '', note: '', colChannel: x.channel, colProduct: x.product, channel: x.channel, product: x.product, category: x.category || 'FOOD' }));
-      const fallback = new Map(rows.map((r, i) => [r, sample[i].copy]));
-      el('out').innerHTML = '';
-      await translateRows(fallback);
-      run();
     });
   }
 
@@ -2076,12 +2123,9 @@ ${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refre
     <span class="cmp-muted">(fda.gov → Inspections, Compliance, Enforcement, and Criminal Investigations → Compliance Actions and Activities → Warning Letters)</span></li>
   <li>표 위의 검색 칸에 <code>hangover</code>·<code>dietary supplement</code> 등을 넣어 좁히거나 그대로 둠</li>
   <li>표 위의 <b>Export Excel</b>(엑셀 내보내기) 버튼으로 파일 다운로드 · 버튼 이름이 다르면 담당에게 알려 주세요</li>
-  <li>내려받은 파일을 아래에 올림 → 최근 365일 식품·건강기능식품 경고장만 골라 넣음</li>
+  <li>아래 [경고장 목록 업로드]를 눌러 내려받은 파일을 올림 → 최근 365일 식품·건강기능식품 경고장만 골라 넣음</li>
 </ol>
-<div class="cmp-row">
-  <label class="cmp-field cmp-grow"><span>경고장 목록 파일 <span class="tiny muted">XLSX</span></span><input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="cmp-input" data-el="wlfile"></label>
-  <div class="cmp-actions">${REBOOT.ui.fileBtn('upload', { label: '경고장 목록 업로드', type: 'XLSX', act: 'wl-xlsx', disabled: true })}</div>
-</div>
+<div class="cmp-actions">${REBOOT.ui.fileBtn('upload', { label: '경고장 목록 업로드', type: 'XLSX', act: 'wl-xlsx', disabled: true })}</div>
 <h4 class="cmp-h4">② 경고장 본문 붙여넣기 → 인용 문구 추출</h4>
 <ol class="cmp-steps">
   <li>위 새 소식의 FDA 경고장 목록에서 제목 링크를 누르거나, 경고장 목록 페이지 표에서 회사 이름을 눌러 경고장을 엶</li>
@@ -2587,8 +2631,12 @@ ${cands.length ? `
     };
     const wlFail = e => { el('wlmsg').innerHTML = `<p class="cmp-note cmp-note-block">${esc(e.message)}</p>`; };
     wlXlsx.addEventListener('click', async () => {
-      const file = el('wlfile').files[0];
-      if (!file) return wlFail(new Error('XLSX 파일을 먼저 고르세요.'));
+      const got = await REBOOT.ui.uploadModal({
+        title: '경고장 목록 업로드', type: 'XLSX · FDA 경고장 목록 Export Excel 파일',
+        accept: '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      if (!got) return;
+      const file = got.files[0];
       const fd = new global.FormData();
       fd.append('file', file);
       wlXlsx.disabled = true;

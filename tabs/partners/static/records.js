@@ -146,7 +146,7 @@
           <button type="button" class="btn small dark" data-rec-act="check"${smtp ? '' : ' disabled'}>새 회신 확인 (Gmail)</button>
         </div>
         <div class="flex wrap">
-          <div class="seg" role="group" aria-label="보기">
+          <div class="linetabs" role="group" aria-label="보기">
             <button type="button" data-rec-view="board" aria-pressed="${st.f.view === 'board'}">진행 상태</button>
             <button type="button" data-rec-view="table" aria-pressed="${st.f.view !== 'board'}">활동 이력</button>
           </div>

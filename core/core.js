@@ -382,6 +382,48 @@
         body: `<p>${esc(message)}</p>`,
         actions: [{ label: o.cancel || '취소', value: false }, { label: o.ok || '확인', value: true, tone: o.danger ? 'danger' : 'lime' }]
       }).then(v => v === true);
+    },
+    /** 업로드 팝업 (모든 탭 같은 모양): 끌어다 놓거나 눌러서 파일을 고르고 [올리기]
+        o = { title, accept, type('CSV' 등 작은 글씨), multiple, help(html, 칸 위), extra(html, 칸 아래), okLabel, wide, onOpen(body) }
+        → Promise({ files, body }) · 닫으면 null. body는 닫힌 뒤에도 extra 입력값을 읽을 수 있음 */
+    uploadModal(o) {
+      o = o || {};
+      let files = [];
+      let bodyEl = null;
+      const hint = '파일을 끌어다 놓거나 눌러서 고르세요';
+      const size = n => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))}KB` : `${(n / 1048576).toFixed(1)}MB`);
+      return ui.modal({
+        title: o.title || '파일 업로드',
+        wide: o.wide,
+        body: `${o.help || ''}
+          <label class="dropzone upload-drop" data-upload-drop>${icon('upload')}
+            <strong data-upload-picked>${hint}</strong>${o.type ? `<span class="tiny muted">${esc(o.type)}</span>` : ''}
+            <input type="file" class="sr-only" accept="${esc(o.accept || '')}"${o.multiple ? ' multiple' : ''} data-upload-input aria-label="${esc(o.title || '파일')} 고르기"></label>
+          ${o.extra || ''}`,
+        actions: [{ label: '취소', value: null }, { label: o.okLabel || '올리기', value: 'ok', tone: 'lime', onClick: () => files.length > 0 }],
+        onOpen(b) {
+          bodyEl = b;
+          const zone = b.querySelector('[data-upload-drop]');
+          const okBtn = b.closest('.modal').querySelector('[data-modal-act="1"]');
+          const pick = list => {
+            files = Array.from(list || []).slice(0, o.multiple ? undefined : 1);
+            zone.querySelector('[data-upload-picked]').textContent = files.length
+              ? files.map(f => `${f.name} (${size(f.size)})`).join(' · ') : hint;
+            zone.classList.toggle('picked', files.length > 0);
+            okBtn.disabled = !files.length;
+          };
+          okBtn.disabled = true;
+          zone.querySelector('[data-upload-input]').addEventListener('change', e => pick(e.target.files));
+          zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+          zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+          zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.classList.remove('drag');
+            if (e.dataTransfer) pick(e.dataTransfer.files);
+          });
+          if (o.onOpen) o.onOpen(b);
+        }
+      }).then(v => (v === 'ok' && files.length ? { files, body: bodyEl } : null));
     }
   };
 

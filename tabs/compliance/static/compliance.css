@@ -425,11 +425,12 @@
 .part-compliance .cmp-mon-guide code { font-size: 12px; }
 
 /* 세부 메뉴 (문구 심의 · 규제 모니터링 · 기준·참고): 보통은 core가 왼쪽 메뉴로 옮기고 숨김. 옮기지 못했을 때만 보이는 모양 */
-.part-compliance .cmp-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-/* 하위 탭 버튼: 모든 탭 공통 크기 (core .subtabs button 값: 12px · 9px 13px) */
+.part-compliance .cmp-subtabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--cmp-rule); }
+/* 하위 탭 버튼: 밑줄 탭 (파트너 제안 작성 단계 .ptn-v2-steps와 같은 모양) */
 .part-compliance .cmp-subtab { font: inherit; font-size: 12px; padding: 9px 13px; border-radius: var(--radius-sm); border: 0; background: none; color: var(--cmp-muted); cursor: pointer; }
-.part-compliance .cmp-subtab:hover { background: var(--cmp-soft); }
-.part-compliance .cmp-subtab[aria-selected="true"], .part-compliance .cmp-subtab[aria-pressed="true"] { background: var(--cmp-dark); color: var(--cmp-dark-ink); }
+.part-compliance .cmp-subtabs .cmp-subtab { font-size: 13px; padding: 12px 14px 14px; border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.part-compliance .cmp-subtabs .cmp-subtab:hover { color: var(--cmp-ink); }
+.part-compliance .cmp-subtabs .cmp-subtab[aria-selected="true"] { color: var(--cmp-ink); font-weight: 750; border-bottom-color: var(--cmp-ink); }
 
 /* 수집 항목의 제품군 태그 (젤리 · 음료 · 당·저당 · 숙취·성분 · 공통) */
 .part-compliance .cmp-ptags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

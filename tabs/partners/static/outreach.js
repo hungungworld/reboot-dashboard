@@ -266,69 +266,20 @@
     const im = st.data.imports || {};
     const file = s => String(s || '').replace(/ · [0-9a-f]{8}$/, '');   // 기본 파일 표시에서 내용 해시는 뺌
     const now = t => (im[t] && im[t].count ? `${fmt.num(im[t].count)}곳 · ${esc(file(im[t].file))} · ${esc(fmt.datetime(im[t].at))}` : '아직 없음');
-    st.files = {};
     box.innerHTML = `<details class="card ptn-out-import${empty ? ' is-empty' : ''}"${empty || scroll ? ' open' : ''}>
       <summary class="card-head"><h2>${empty ? '업체 목록을 업로드해 주세요' : '업체 목록 업로드'}</h2>
         ${empty ? badge('업체 0곳', 'orange') : `<span class="small muted">케이터링 ${now('케이터링')} · 인플루언서 ${now('인플루언서')}</span>`}</summary>
       <p class="panel-note">기본 업체 파일은 따로 올리지 않아도 자동으로 불러와요. 케이터링 CSV와 인플루언서 XLSX·CSV를 직접 올리면 그 구분 목록만 새 파일로 바뀌고, 협업 기록은 그대로 남아요.</p>
-      <div class="grid-2 ptn-out-drops mt-16">
-        ${dropzone('catering', '케이터링 CSV', D.importHelp.catering, '.csv', now('케이터링'))}
-        ${dropzone('influencer', '인플루언서 XLSX·CSV', D.importHelp.influencer, '.xlsx,.csv', now('인플루언서'))}
-      </div>
       <div class="flex wrap mt-16">
         ${empty ? '<button type="button" class="btn soft" data-act="example">예시 데이터로 둘러보기</button>' : ''}
         ${ui.fileActions(
-          ui.fileBtn('upload', { label: '업로드', type: 'CSV · XLSX', act: 'import-upload', disabled: true }) +
+          ui.fileBtn('upload', { label: '업체 목록 업로드', type: 'CSV · XLSX', act: 'csv-open' }) +
           ui.fileBtn('download', { label: '케이터링 양식 다운로드', type: 'CSV', href: '/api/partners/template/catering.csv' }) +
           ui.fileBtn('download', { label: '인플루언서 양식 다운로드', type: 'XLSX', href: '/api/partners/template/influencer.xlsx' }))}
       </div>
       <p class="panel-note mt-8">공개된 업체 연락처만 올려요. 예시 데이터는 지어낸 업체(example.com)이고 화면에 '예시' 배지로 표시되며, 판매 실적에는 쓰이지 않아요.</p>
     </details>`;
     if (scroll) box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function dropzone(key, title, help, accept, current) {
-    return `<label class="dropzone ptn-out-drop" data-drop="${key}">
-      <strong>${esc(title)}</strong>
-      <span class="small">${esc(help)}</span>
-      <span class="small muted">현재: ${current}</span>
-      <span class="ptn-out-picked" data-ref="picked-${key}"></span>
-      <span class="btn small soft" aria-hidden="true">${icon('upload')} 파일 고르기</span>
-      <input type="file" class="sr-only" accept="${accept}" data-file="${key}" aria-label="${esc(title)} 고르기">
-    </label>`;
-  }
-
-  function pickFile(st, key, file) {
-    if (!file) return;
-    st.files[key] = file;
-    const tag = st.el.querySelector(`[data-ref="picked-${key}"]`);
-    if (tag) tag.innerHTML = badge(`선택: ${file.name} (${fmtBytes(file.size)})`, 'green');
-    const btn = st.el.querySelector('[data-act="import-upload"]');
-    if (btn) btn.disabled = !Object.keys(st.files).length;
-  }
-
-  async function doImport(st, btn) {
-    const keys = Object.keys(st.files);
-    if (!keys.length) return;
-    const fd = new FormData();
-    keys.forEach(k => fd.append(k, st.files[k], st.files[k].name));
-    ui.busy(btn, true);
-    try {
-      const out = await REBOOT.upload('/api/partners/import', fd);
-      const warns = [];
-      out.results.forEach(r => (r.warnings || []).forEach(w => warns.push(`${r.type}: ${w}`)));
-      importNote = `<p class="note lime mb-16">파일을 올렸어요 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>` +
-        (warns.length ? `<p class="note warn mb-16">${warns.map(esc).join('<br>')}</p>` : '');
-      toast('업체 파일을 올렸어요.');
-      const f = getFilters();
-      f.selected = '';
-      saveFilters(f);
-      contactsP = null;
-      if (st.el.isConnected) renderContacts(fresh(st.el));   // 새 요소로 (이벤트 중복 방지)
-    } catch (e) {
-      toast(`업체 파일을 올리지 못했어요: ${e.message}`, 'error');
-      ui.busy(btn, false);
-    }
   }
 
   /* 업체 목록 › CSV 팝업: 지금 목록 내보내기 · CSV(또는 XLSX) 가져오기
@@ -369,7 +320,10 @@
       fd.append('file', file, file.name);
       try {
         const out = await REBOOT.upload('/api/partners/import', fd);
-        importNote = `<p class="note lime mb-16">파일을 올렸어요 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>`;
+        const warns = [];
+        out.results.forEach(r => (r.warnings || []).forEach(w => warns.push(`${r.type}: ${w}`)));
+        importNote = `<p class="note lime mb-16">파일을 올렸어요 — ${out.results.map(r => `${esc(r.type)} ${fmt.num(r.count)}곳 (이메일 ${fmt.num(r.withEmail)}곳, ${esc(r.file)})`).join(' · ')}</p>` +
+          (warns.length ? `<p class="note warn mb-16">${warns.map(esc).join('<br>')}</p>` : '');
         toast('업체 파일을 올렸어요.');
         contactsP = null;
         if (st.el.isConnected) renderContacts(fresh(st.el));
@@ -727,7 +681,7 @@
       <button type="button" class="btn small dark" data-act="yt-search"${d.ready ? '' : ' disabled title="설정 › 연결에서 YouTube 키를 넣어 주세요"'}>${icon('search')}추천 받기</button>
       <button type="button" class="btn small ghost" data-act="yt-delete" disabled>선택 삭제</button>
       <details class="ptn-export"><summary class="btn small file-btn">${icon('upload')}크리에이터 목록 업로드 · 다운로드 <span class="tiny muted">CSV</span></summary>
-        <div class="ptn-export-menu"><label>${icon('upload')} 업로드<input type="file" class="sr-only" accept=".csv" data-yt-file aria-label="유튜브 크리에이터 CSV 업로드"></label>
+        <div class="ptn-export-menu"><button type="button" data-act="yt-upload">${icon('upload')} 업로드</button>
           <a href="/api/partners/youtube/export.csv" download>${icon('download')} 다운로드</a></div></details>`;
     const total = st.el.querySelector('[data-ref="total"]');
     if (total) total.innerHTML = badge(`${fmt.num(d.items.length)}명`);
@@ -826,6 +780,14 @@
       const c = st.yt && st.yt.items.find(x => x.id === btn.dataset.id);
       // 협업 이력의 업체 번호(20자)에 채널 id가 들어가지 않으므로 이름으로 기록됨
       if (c) compose({ id: '', type: '인플루언서', name: c.title, email: c.email });
+    } else if (a === 'yt-upload') {
+      const menu = btn.closest('details');
+      if (menu) menu.open = false;
+      const got = await ui.uploadModal({
+        title: '유튜브 크리에이터 목록 업로드', type: 'CSV', accept: '.csv,text/csv',
+        help: '<p>다운로드한 크리에이터 목록에 줄을 더하거나 고쳐서 올려요. 기준일이 30일 넘은 값 · 형식이 틀린 줄은 건너뛰어요.</p>'
+      });
+      if (got) ytImport(st, got.files[0]);
     } else if (a === 'yt-kw') {
       let text = null;
       const ok = await ui.modal({
@@ -978,7 +940,6 @@
           if (c) compose(c);
         } else if (a === 'import-open') paintImport(st, !st.data.total, true);
         else if (a === 'csv-open') csvModal(st);
-        else if (a === 'import-upload') doImport(st, act);
         else if (a === 'example') loadExample(st, act);
         else if (a.startsWith('yt-')) ytAction(st, a, act);
         else if (a.startsWith('cf-')) cfAction(st, a, act);
@@ -1028,29 +989,8 @@
     el.addEventListener('change', e => {
       const t = e.target;
       if (t.matches('[data-cf]')) { cfChange(st, t.dataset.cf, t.value); return; }
-      if (t.matches('[data-yt-file]')) { if (t.files && t.files[0]) ytImport(st, t.files[0]); t.value = ''; return; }
       if (t.matches('[data-yt-sel]')) { if (t.checked) st.ytSel.add(t.dataset.ytSel); else st.ytSel.delete(t.dataset.ytSel); ytSelState(st); return; }
       if (t.matches('[data-yt-all]')) { ytSorted(st).forEach(c => { if (t.checked) st.ytSel.add(c.id); else st.ytSel.delete(c.id); }); paintYtRows(st); return; }
-      const inp = t.closest('[data-file]');
-      if (inp && inp.files && inp.files[0]) pickFile(st, inp.dataset.file, inp.files[0]);
-    });
-    el.addEventListener('dragover', e => {
-      const z = e.target.closest('[data-drop]');
-      if (!z || z.dataset.drop === 'attach') return;
-      e.preventDefault();
-      z.classList.add('drag');
-    });
-    el.addEventListener('dragleave', e => {
-      const z = e.target.closest('[data-drop]');
-      if (z) z.classList.remove('drag');
-    });
-    el.addEventListener('drop', e => {
-      const z = e.target.closest('[data-drop]');
-      if (!z || z.dataset.drop === 'attach') return;
-      e.preventDefault();
-      z.classList.remove('drag');
-      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (file) pickFile(st, z.dataset.drop, file);
     });
   }
 
@@ -1075,7 +1015,7 @@
     el.innerHTML = `
       <div class="ptn-out-statusline" aria-label="연결 상태">${statusLine(cfg.status)}</div>
       <div class="between ptn-out-subbar">
-        <div class="seg" role="group" aria-label="제안 작성 화면">
+        <div class="linetabs" role="group" aria-label="제안 작성 화면">
           <button type="button" data-sub="compose" aria-pressed="${d.sub !== 'guide'}">제안 메일</button>
           <button type="button" data-sub="guide" aria-pressed="${d.sub === 'guide'}">협업 가이드</button>
         </div>
@@ -1814,7 +1754,7 @@
 
         <section class="card">
           <div class="card-head"><h2>협업 가이드 <span class="tiny muted">같은 조건으로 만드는</span></h2><span data-ref="g-badge">${g.ai ? badge('AI 초안 · 참고용', 'purple') : ''}</span></div>
-          <div class="seg" role="group" aria-label="보기">
+          <div class="linetabs" role="group" aria-label="보기">
             <button type="button" data-gview="preview" aria-pressed="${g.view !== 'edit'}">문서 미리보기</button>
             <button type="button" data-gview="edit" aria-pressed="${g.view === 'edit'}">원문 편집</button>
           </div>

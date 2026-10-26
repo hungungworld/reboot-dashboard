@@ -118,7 +118,7 @@
 .part-partners .ptn-out-pill.is-on::before { background: var(--green); }
 .part-partners .ptn-out-pill .link { font-size: 11px; text-decoration: underline; }
 .part-partners .ptn-out-subbar { margin-bottom: 18px; flex-wrap: wrap; }
-.part-partners .ptn-out-subbar .seg button { font-size: 12px; padding: 9px 13px; }   /* 하위 탭 공통 크기 (core .subtabs) */
+.part-partners .ptn-out-subbar .linetabs { flex: 1; }
 
 .part-partners .ptn-out-prompt { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-2); }
 .part-partners .ptn-out-prompt > summary { cursor: pointer; font-size: 12px; font-weight: 600; }
@@ -335,8 +335,8 @@
 .part-partners .ptn-export > summary { list-style: none; }
 .part-partners .ptn-export > summary::-webkit-details-marker { display: none; }
 .part-partners .ptn-export-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); box-shadow: var(--shadow); padding: 4px; min-width: 120px; }
-.part-partners .ptn-export-menu a, .part-partners .ptn-export-menu label { display: block; padding: 6px 10px; border-radius: var(--radius-xs); font-size: 12px; color: var(--text); cursor: pointer; }
-.part-partners .ptn-export-menu a:hover, .part-partners .ptn-export-menu label:hover { background: var(--soft); }
+.part-partners .ptn-export-menu a, .part-partners .ptn-export-menu label, .part-partners .ptn-export-menu button { display: block; width: 100%; padding: 6px 10px; border: 0; border-radius: var(--radius-xs); background: none; font: inherit; font-size: 12px; text-align: left; color: var(--text); cursor: pointer; }
+.part-partners .ptn-export-menu a:hover, .part-partners .ptn-export-menu label:hover, .part-partners .ptn-export-menu button:hover { background: var(--soft); }
 .part-partners .ptn-yt-table .ptn-yt-av { width: 28px; height: 28px; }
 /* 협업 이력 › 편집 창: 두 칸씩 같은 높이로 좌우 정렬 */
 .part-partners.ptn-rec-form .ptn-rec-grid { align-items: start; }
