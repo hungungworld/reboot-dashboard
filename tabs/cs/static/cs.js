@@ -9,7 +9,7 @@
   if (!REBOOT || !DATA) throw new Error('cs: REBOOT core와 tabs/cs/static/data.js를 먼저 불러와야 합니다');
 
   const store = REBOOT.store('cs');   // 저장 키: reboot:cs:*
-  const KEY = { inquiries: 'inquiries', adverse: 'adverse-events', defaults: 'reply-defaults', custTags: 'customer-tags' };
+  const KEY = { inquiries: 'inquiries', adverse: 'adverse-events', defaults: 'reply-defaults', custTags: 'customer-tags', persona: 'persona' };
   // 문의 1건 = 저장 키 1개 (inq.<id>). 예전처럼 문의함 전체를 키 하나에 두면 두 사람이 다른 문의를 동시에 고칠 때
   // 나중에 저장한 사람의 목록이 앞사람 작업을 덮어씀 → 고친 문의만 저장 (2026-10-24)
   const INQ = 'inq.';
@@ -411,11 +411,18 @@
     return inq;
   }
 
-  const PERSONA = DATA.persona || {};
+  // 답장 페르소나: 팀이 답장 설정에서 고친 값(서버 저장 · 팀 공용)이 있으면 그것, 없으면 data.js 기본값
+  const PERSONA_DEFAULT = DATA.persona || {};
+  const PERSONA_MAX = 400;   // 서버(ai_draft.py)는 600자까지 받음
+  function persona() {
+    const v = store.get(KEY.persona, null);
+    return v && String(v.text || '').trim() ? v : PERSONA_DEFAULT;
+  }
+  const LIST_MAX = 5;   // 문의함 · 고객 기록 첫 화면에 보이는 개수 (나머지는 '더 보기')
 
   function aiNotesHTML(inq) {
     return `<div class="cs-ainotes">
-  <p class="cs-ainotes-head">${icon('spark')} ${esc(PERSONA.name || 'AI')}가 다듬은 초안 · ${fmt(inq.aiDraftAt)} · 문구 검토·CS 검토 전 확인할 것</p>
+  <p class="cs-ainotes-head">${icon('spark')} ${esc(persona().name || 'AI')}가 다듬은 초안 · ${fmt(inq.aiDraftAt)} · 문구 검토·CS 검토 전 확인할 것</p>
   <ul>${(inq.aiNotes || []).map(n => `<li>${esc(n)}</li>`).join('')}</ul>
   ${(inq.aiTruncated || []).length ? `<p class="cs-warn">${inq.aiTruncated.map(esc).join('<br>')}</p>` : ''}
   ${inq.prevDraft ? '<button type="button" class="cs-btn cs-btn-sm" data-act="ai-undo">이전 초안으로 되돌리기</button>' : ''}
@@ -431,11 +438,11 @@
     try { banned = REBOOT.use('compliance').bannedTerms().map(b => b.term); } catch (e) { banned = []; }
     const box = ui.root.querySelector('[data-el="ainotes"]');
     btn.disabled = true;
-    box.innerHTML = `<p class="cs-muted">${icon('spark')} ${esc(PERSONA.name || 'AI')}가 초안을 다듬는 중이에요… (보통 10~30초)</p>`;
+    box.innerHTML = `<p class="cs-muted">${icon('spark')} ${esc(persona().name || 'AI')}가 초안을 다듬는 중이에요… (보통 10~30초)</p>`;
     try {
       const t = TYPES[inq.type];
       const res = await api('/api/cs/ai-draft', {
-        persona: PERSONA,
+        persona: (({ name, title, text }) => ({ name, title, text }))(persona()),
         inquiry: { type: inq.type, typeName: t.name, name: inq.name, orderNo: inq.orderNo, subject: inq.subject, body: inq.body },
         current: inq.draft, banned,
         facts: Object.assign({}, facts(inq), {
@@ -465,7 +472,7 @@
         x.aiTruncated = res.truncated || [];
         if (x.status === '승인') { x.approval = null; revokeServer(x); }
         if (x.status === '답변 대기' || x.status === '승인') x.status = '검토 중';
-        logTo(x, `AI 초안 다듬기 (${PERSONA.name || '페르소나'})`);
+        logTo(x, `AI 초안 다듬기 (${persona().name || '페르소나'})`);
       });
       toast('AI가 초안을 다듬었어요. 걸린 표현과 [확인 필요]를 확인하고 문구 검토를 다시 하세요.');
       renderDetail(ui);
@@ -641,8 +648,15 @@
       if (tr && !tr.disabled) runTranslate(root, tr.closest('.cs-trblock'));
       const sh = e.target.closest('[data-act^="share-"]');
       if (sh && !sh.disabled) { runShare(ui, sh); return; }
+      if (e.target.closest('[data-act="list-more"]')) {
+        const key = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
+        ui.listMore = ui.listMore === key ? null : key;
+        renderList(ui);
+        return;
+      }
       if (e.target.closest('[data-act="cust-clear"]')) { ui.custFilter = null; ui.filter = 'open'; renderList(ui); return; }
       if (e.target.closest('[data-act="open-settings"]')) { ui.showTab('templates'); return; }
+      if (e.target.closest('[data-act="edit-persona"]')) { TPL_OPEN.set('persona', true); ui.showTab('templates'); return; }
       if (e.target.closest('[data-act="tpl-back"]')) { ui.showTab('inbox'); return; }
     });
 
@@ -788,7 +802,12 @@
     ui.root.querySelector('[data-el="filter"]').innerHTML = VIEWS.map(([v, l]) =>
       `<button type="button" class="cs-btn cs-btn-sm" data-filter="${v}" aria-pressed="${v === ui.filter}">${l}</button>`).join('');
     const unread = i => !i.readAt && i.status === '답변 대기';
-    ui.root.querySelector('[data-el="list"]').innerHTML = shown.length ? shown.map(i => {
+    // 처음엔 LIST_MAX건만 (선택한 메일이 뒤쪽이면 모두) · 단계·필터가 바뀌면 다시 접힘
+    const moreKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
+    const all5 = ui.listMore === moreKey || shown.length <= LIST_MAX || shown.findIndex(i => i.id === ui.selected) >= LIST_MAX;
+    const visible = all5 ? shown : shown.slice(0, LIST_MAX);
+    const moreBtn = shown.length > LIST_MAX ? `<li class="cs-list-more"><button type="button" class="cs-btn cs-btn-sm" data-act="list-more">${all5 ? '접기' : `나머지 ${shown.length - LIST_MAX}건 더 보기`}</button></li>` : '';
+    ui.root.querySelector('[data-el="list"]').innerHTML = shown.length ? visible.map(i => {
       const late = isOpen(i) && now > due(i);
       const snippet = String(i.body || '').replace(/\s+/g, ' ').trim().slice(0, 140);
       return `
@@ -799,7 +818,7 @@
     <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span>${ui.filter === 'all' ? `<span class="cs-chip">${STAGE_NAME[stageOf(i)]}</span>` : ''}${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}${i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}${gatesMini(i)}</span></span>
   <span class="cs-row-side"><span class="cs-row-time" title="받은 시간">${fmt(i.receivedAt)}</span><span class="cs-due${late ? ' is-late' : ''}">${dueText(i)}</span></span>
 </button></li>`;
-    }).join('') : `<li class="cs-muted cs-list-empty">${ui.filter === 'all' ? '해당하는 문의가 없어요.' : STAGE_EMPTY[ui.sub]}</li>`;
+    }).join('') + moreBtn : `<li class="cs-muted cs-list-empty">${ui.filter === 'all' ? '해당하는 문의가 없어요.' : STAGE_EMPTY[ui.sub]}</li>`;
     const head = ui.root.querySelector('[data-el="listhead"]');
     if (head) head.innerHTML = `<b>${ui.filter === 'all' ? '이 고객 문의' : STAGE_NAME[ui.sub]}</b> <span class="cs-muted">${shown.length}건${shown.filter(unread).length ? ` · 안 읽음 <b>${shown.filter(unread).length}</b>` : ''}</span>`;
     const cf = ui.root.querySelector('[data-el="custfilter"]');
@@ -877,9 +896,10 @@
       <div class="cs-ctabs">
         <button type="button" class="cs-ctab" data-act="ctab" data-ctab="reply" aria-pressed="${ui.ctab !== 'note'}">답장</button>
         <button type="button" class="cs-ctab" data-act="ctab" data-ctab="note" aria-pressed="${ui.ctab === 'note'}">내부 메모${notes.length ? ` ${notes.length}` : ''}</button>
-        <span class="cs-ctabs-side"><span class="cs-chip cs-chip-dim">${inq.aiDraftAt ? `AI · ${esc(PERSONA.name || '페르소나')}` : `${t.code} 템플릿`}</span>
+        <span class="cs-ctabs-side"><span class="cs-chip cs-chip-dim">${inq.aiDraftAt ? `AI · ${esc(persona().name || '페르소나')}` : `${t.code} 템플릿`}</span>
           <button type="button" class="cs-btn cs-btn-sm" data-act="ai-draft" disabled
-            title="${esc(`${PERSONA.name || ''} 페르소나로 문의에 맞게 다시 써요 · 결과는 문구 검토와 CS 검토를 다시 거쳐요`)}">${icon('spark')} AI로 초안 다듬기</button></span>
+            title="${esc(`${persona().name || ''} 페르소나로 문의에 맞게 다시 써요 · 결과는 문구 검토와 CS 검토를 다시 거쳐요`)}">${icon('spark')} AI로 초안 다듬기</button>
+          <button type="button" class="cs-btn cs-btn-sm" data-act="edit-persona" title="답장 설정에서 페르소나 고치기">페르소나 수정</button></span>
       </div>
       <div class="cs-cpane" data-ctab-pane="reply"${ui.ctab === 'note' ? ' hidden' : ''}>
         <dl class="cs-cfields"><div><dt>받는 사람</dt><dd>${esc(inq.from)}</dd></div><div><dt>제목</dt><dd>${esc(subject)}</dd></div></dl>
@@ -1463,7 +1483,7 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
   </div>
   <div class="cs-actions cs-cust-tools"><button type="button" class="cs-btn cs-btn-sm" data-act="cust-all" data-open="1">모두 펼치기</button>
     <button type="button" class="cs-btn cs-btn-sm" data-act="cust-all" data-open="">모두 접기</button></div>
-  ${shown.length ? `<div class="cs-custs">${shown.map(c => `
+  ${shown.length ? `<div class="cs-custs">${shown.slice(0, ui.custMore ? shown.length : LIST_MAX).map(c => `
   <details class="cs-sec cs-cust" data-email="${esc(c.email)}"${CUST_OPEN.get(c.email) ? ' open' : ''}>
     <summary><span class="cs-avatar" aria-hidden="true">${initials(c.names[0])}</span>
       <span class="cs-sec-title">${esc(c.names.join(' · '))} <span class="cs-muted cs-cust-email">${esc(c.email)}</span></span>
@@ -1480,12 +1500,13 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
         ${c.tag && c.tag.at ? `<span class="cs-muted cs-cust-by">${esc(c.tag.by || '')} · ${fmt(c.tag.at)}</span>` : ''}
         <button type="button" class="cs-btn cs-btn-sm" data-act="cust-open">문의함에서 보기</button>
       </div>
-      <h4 class="cs-thread-title">주고받은 메일 <span class="cs-muted">오래된 순 · ${c.list.length}건</span></h4>
+      <h4 class="cs-thread-title">주고받은 메일<span class="head-cap">오래된 순 · ${c.list.length}건</span></h4>
       <ol class="cs-thread">${c.list.slice().reverse().map(threadHTML).join('')}</ol>
     </div>
-  </details>`).join('')}</div>` : '<p class="cs-muted">해당하는 고객이 없어요. 보기를 \'전체 고객\'으로 바꿔 보세요.</p>'}
+  </details>`).join('')}</div>
+  ${shown.length > LIST_MAX ? `<div class="cs-list-more"><button type="button" class="cs-btn cs-btn-sm" data-act="cust-more">${ui.custMore ? '접기' : `나머지 ${shown.length - LIST_MAX}명 더 보기`}</button></div>` : ''}` : '<p class="cs-muted">해당하는 고객이 없어요. 보기를 \'전체 고객\'으로 바꿔 보세요.</p>'}
 </div>`;
-    p.querySelector('[data-el="cust-view"]').onchange = e => { ui.custView = e.target.value; renderCustomers(ui, p); };
+    p.querySelector('[data-el="cust-view"]').onchange = e => { ui.custView = e.target.value; ui.custMore = false; renderCustomers(ui, p); };
     p.querySelector('[data-el="cust-sort"]').onchange = e => { ui.custSort = e.target.value; renderCustomers(ui, p); };
     const save = row => {
       const email = row.dataset.email;
@@ -1506,6 +1527,7 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     p.onkeydown = e => { if (e.target.dataset.el === 'cust-note' && e.key === 'Enter') save(card(e.target)); };
     p.onfocusout = e => { if (e.target.dataset.el === 'cust-note' && e.target.value.trim() !== ((custTags()[card(e.target).dataset.email] || {}).note || '')) save(card(e.target)); };
     p.onclick = e => {
+      if (e.target.closest('[data-act="cust-more"]')) { ui.custMore = !ui.custMore; renderCustomers(ui, p); return; }
       const all = e.target.closest('[data-act="cust-all"]');
       if (all) {
         p.querySelectorAll('details.cs-cust').forEach(d => { d.open = !!all.dataset.open; CUST_OPEN.set(d.dataset.email, d.open); });
@@ -1843,6 +1865,8 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
     const dFields = DATA.replyDefaults || [];
     const dFilled = dFields.filter(f => String(dv[f.key] || '').trim()).length;
     const allTodos = rows.reduce((n, x) => n + x.todos.length, 0);
+    const P = persona();
+    const pmeta = store.get(KEY.persona, null) || {};
     p.innerHTML = `<div class="cs-backbar"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-back">← 문의함</button><b>답장 설정</b>
   <span class="cs-muted">담당자 연락처 · 답장 기본값 · 페르소나 · 템플릿</span></div>` + contactsHTML() + `
 <details class="cs-sec cs-defaults" data-tpl="defaults"${TPL_OPEN.has('defaults') ? op('defaults') : allTodos ? ' open' : ''}>
@@ -1859,12 +1883,19 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
   </div>
 </details>
 <details class="cs-sec" data-tpl="persona"${op('persona')}>
-  <summary><span class="cs-avatar cs-persona-avatar cs-persona-mini" aria-hidden="true">${initials(PERSONA.name || 'AI')}</span>
-    <span class="cs-sec-title">답장 페르소나 · ${esc(PERSONA.name || '없음')}</span>
-    <span class="cs-sec-sum"><span class="cs-chip cs-chip-dim">${esc(PERSONA.title || '')}</span><span class="cs-chip cs-chip-dim">${String(PERSONA.text || '').length}자</span></span></summary>
+  <summary><span class="cs-avatar cs-persona-avatar cs-persona-mini" aria-hidden="true">${initials(P.name || 'AI')}</span>
+    <span class="cs-sec-title">답장 페르소나 · ${esc(P.name || '없음')}</span>
+    <span class="cs-sec-sum"><span class="cs-chip cs-chip-dim">${esc(P.title || '')}</span>${pmeta.at ? `<span class="cs-chip cs-chip-dim">${esc(pmeta.by || '')} · ${fmt(pmeta.at)}</span>` : '<span class="cs-chip cs-chip-dim">기본값</span>'}</span></summary>
   <div class="cs-sec-body cs-persona-body">
-    <p class="cs-persona-text">${esc(PERSONA.text || '아직 페르소나가 없어요. 담당자에게 페르소나 등록을 요청해 주세요.')}</p>
-    <p class="cs-muted">문의함 → 답장 초안의 <b>[AI로 초안 다듬기]</b>가 이 인물로 써요. 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버에서 따로 지키고, 결과는 문구 검토와 CS 검토를 다시 거쳐요. (${String(PERSONA.text || '').length}자 / 300자)</p>
+    <div class="cs-defaults-grid">
+      <label class="cs-field"><span>이름</span><input class="cs-input" data-p="name" maxlength="40" value="${esc(P.name || '')}" placeholder="예: Hana"></label>
+      <label class="cs-field"><span>직함</span><input class="cs-input" data-p="title" maxlength="80" value="${esc(P.title || '')}" placeholder="예: REBOOT 고객경험 매니저"></label>
+      <label class="cs-field cs-wide"><span>설명 <span class="cs-muted" data-el="p-count">${String(P.text || '').length}자 / ${PERSONA_MAX}자</span></span>
+        <textarea class="cs-input" rows="6" data-p="text" maxlength="${PERSONA_MAX}" placeholder="말투 · 경력 · 지켜야 할 태도를 한국어로">${esc(P.text || '')}</textarea></label>
+    </div>
+    <p class="cs-muted">문의함 → 답장 초안의 <b>[AI로 초안 다듬기]</b>가 이 인물로 써요 (팀 공용). 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버에서 따로 지키고, 결과는 문구 검토와 CS 검토를 다시 거쳐요.</p>
+    <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="persona-save">저장</button>
+      ${pmeta.at ? '<button type="button" class="cs-btn" data-act="persona-reset">기본값으로 되돌리기</button>' : ''}</div>
   </div>
 </details>
 <details class="cs-sec" data-tpl="voc"${op('voc')}>
@@ -1920,6 +1951,25 @@ ${i.body}`, '받은 메일 한글 번역')}</div>
       TPL_OPEN.set('defaults', true);
       renderTemplates(p);
       toast(`답장 기본값을 저장했어요${n ? ` · 초안 ${n}건을 새 값으로 다시 만들었어요` : ''}.`);
+    });
+    const ptext = p.querySelector('[data-p="text"]');
+    ptext.addEventListener('input', () => { p.querySelector('[data-el="p-count"]').textContent = `${ptext.value.length}자 / ${PERSONA_MAX}자`; });
+    p.querySelector('[data-act="persona-save"]').addEventListener('click', () => {
+      const val = k => p.querySelector(`[data-p="${k}"]`).value.trim();
+      const text = val('text').slice(0, PERSONA_MAX);
+      if (!text) { toast('설명을 입력해 주세요. 비워 두려면 [기본값으로 되돌리기]를 누르세요.'); return; }
+      store.set(KEY.persona, { name: val('name').slice(0, 40), title: val('title').slice(0, 80), text, by: (REBOOT.user && REBOOT.user().name) || '', at: Date.now() });
+      TPL_OPEN.set('persona', true);
+      renderTemplates(p);
+      toast('답장 페르소나를 저장했어요. 다음 [AI로 초안 다듬기]부터 적용돼요.');
+    });
+    const preset = p.querySelector('[data-act="persona-reset"]');
+    if (preset) preset.addEventListener('click', () => {
+      if (!global.confirm(`팀이 고친 페르소나를 지우고 기본값(${PERSONA_DEFAULT.name || '기본'})으로 되돌릴까요?`)) return;
+      store.remove(KEY.persona);
+      TPL_OPEN.set('persona', true);
+      renderTemplates(p);
+      toast('기본 페르소나로 되돌렸어요.');
     });
     p.querySelectorAll('[data-act="tpl-all"]').forEach(b => b.addEventListener('click', () => {
       p.querySelectorAll('.cs-templates details[data-tpl]').forEach(d => { d.open = !!b.dataset.open; });

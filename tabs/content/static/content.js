@@ -148,6 +148,13 @@
     if (saved && typeof saved === 'object') S.sheet = fitSheet(Object.assign(emptySheet(), saved));
     const hash = parseHash();
     if (hash.tab) S.tab = hash.tab;
+    if (hash.season) {  // add-season 칩과 같은 방식으로 추가 요청에 넣음
+      const s = S.sheet, add = `시즌: ${hash.season.name} (${hash.season.start})`;
+      if (!s.extra_request.includes(hash.season.name)) s.extra_request = s.extra_request ? `${s.extra_request}, ${add}` : add;
+      lsSet('sheet', s);
+      setHash('');
+      toast(`${hash.season.name} 시즌을 추가 요청에 넣었어요. 콘텐츠를 준비해 보세요.`);
+    }
     root.innerHTML = '<div data-ref="tabs"></div><div data-ref="main"></div>';
     bind(root);
     setupActions();
@@ -165,6 +172,9 @@
     const h = String(global.location && global.location.hash || '').replace(/^#/, '');
     const m = h.match(/^campaign=(\d+)$/);
     if (m) return { tab: 'create', campaign: +m[1] };
+    // 홈 콘텐츠 캘린더에서 시즌을 누르고 온 경우: #season=이름|시작일
+    const sm = h.match(/^season=([^|]+)\|(\d{4}-\d{2}-\d{2})$/);
+    if (sm) { try { return { tab: 'create', season: { name: decodeURIComponent(sm[1]), start: sm[2] } }; } catch (e) { return {}; } }
     if (h === 'campaigns') return { tab: 'campaigns' };
     return {};
   }
@@ -2259,12 +2269,22 @@
           const btn = e.target.closest('[data-brief]');
           if (!btn) return;
           const t = list[+btn.dataset.brief];
+          const avoid = t ? [].concat(t.avoid || [], b.avoid || []) : [];
+          const close = el.closest('.modal-backdrop') && el.closest('.modal-backdrop').querySelector('[data-modal-close]');
+          if (t && cnActive()) {  // 카드뉴스 편집기: 1단계 '넣을 내용' 칸 뒤에 덧붙임 (파일 업로드와 같은 방식)
+            const n = S.cn;
+            const add = `## 고객 브리프: ${t.theme}\n각도: ${t.angle}\n말할 방향: ${t.say}${avoid.length ? `\n피할 말: ${avoid.join(', ')}` : ''}`;
+            n.source = n.source.trim() ? `${n.source.trim()}\n\n${add}` : add;
+            lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
+            if (close) close.click();
+            cnRenderSetup();
+            toast(`'${t.theme}' 브리프를 넣었어요. 내용을 확인하고 고쳐도 돼요.`);
+            return;
+          }
           const input = ref('input');
           if (input && t) {
-            const avoid = [].concat(t.avoid || [], b.avoid || []);
             input.value = `고객 브리프 '${t.theme}' 방향으로 만들어 줘. 각도: ${t.angle} / 말할 방향: ${t.say}${avoid.length ? ` / 피할 말: ${avoid.join(', ')}` : ''}`;
           }
-          const close = el.closest('.modal-backdrop') && el.closest('.modal-backdrop').querySelector('[data-modal-close]');
           if (close) close.click();
           if (input) input.focus();
         });
@@ -2404,7 +2424,7 @@
     }
     el.innerHTML = DATA.contentTypes.map(t => {
       const items = S.list.filter(c => inFolder(c, t.id));
-      return items.length ? `<section class="cnt-folder-group"><div class="cnt-folder-head">${icon('grid')}<h3>${esc(t.label)}</h3><span class="muted small">${esc(items.length)}개</span>
+      return items.length ? `<section class="cnt-folder-group"><div class="cnt-folder-head">${icon('grid')}<h3>${esc(t.label)}<span class="head-cap">${esc(items.length)}개</span></h3>
           <button type="button" class="link" data-act="folder" data-value="${esc(t.id)}">폴더 열기</button></div>
         <div class="cnt-campaign-grid">${items.map(cardHtml).join('')}</div></section>` : '';
     }).join('');
@@ -2664,7 +2684,7 @@
         placeholder="예: 제품 소개 메모, 블로그 글, FAQ, 이벤트 안내…&#10;'1장 / 2장'이나 '## 제목'으로 나눠 쓰면 그 단위로 카드를 나눠요.">${esc(n.source)}</textarea>
       <div class="flex between cnt-cn-srcbar">
         <span class="panel-note" data-ref="cn-count">${cnCountText()}</span>
-        <span class="flex">${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
+        <span class="flex"><button type="button" class="btn small" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 이 칸에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button>${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
       </div>
       <div class="cnt-cn-step"><span class="stepnum">2</span><strong>옵션</strong></div>
       <div class="cnt-cn-opts">
@@ -2771,7 +2791,7 @@
     const c = S.camp, n = S.cn, v = cnVersion();
     const vs = c.versions.filter(cnIsDeckVersion);
     const complete = c.status === '완료';
-    return `<section class="card"><div class="card-head"><h2>저장한 버전</h2><span class="muted small">${vs.length}개</span></div>
+    return `<section class="card"><div class="card-head"><h2>저장한 버전<span class="head-cap">${vs.length}개</span></h2></div>
         ${vs.length ? `<div class="cnt-cn-versions">${vs.map(x => `<button type="button" class="cnt-version${x.id === n.versionId ? ' on' : ''}" data-act="cn-version" data-id="${esc(x.id)}">
             <span><b>${esc(x.label)}</b> · v${esc(x.seq)}${x.isFinal ? ' ' + badge('최종본', 'lime') : ''}</span>
             <span class="cnt-vmeta">${esc(x.source === 'ai' ? 'AI 구성' : '직접 수정')} · ${esc(fmt.relative(x.createdAt))}</span></button>`).join('')}</div>`
@@ -3516,7 +3536,7 @@
   }
 
   REBOOT.register({
-    id: 'content', label: '콘텐츠 제작', order: 30,
+    id: 'content', label: '콘텐츠', order: 30,
     title: '아이디어에서 콘텐츠까지.',
     subtitle: 'REBOOT AI와 함께, 브랜드의 다음 이야기를 만들어보세요.',
     render,

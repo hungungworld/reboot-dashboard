@@ -37,7 +37,7 @@
       { id: 'jelly', re: 'jelly[ -]*original|(^|[^a-z])(jelly|jellies|sticks?)([^a-z]|$)|젤리|스틱' }
     ],
 
-    // 답장 초안 페르소나: 'AI로 초안 다듬기'(tabs/cs/ai_draft.py)가 이 인물로 씁니다. text는 300자 이내.
+    // 답장 초안 페르소나: 'AI로 초안 다듬기'(tabs/cs/ai_draft.py)가 이 인물로 씁니다. text는 400자 이내 (답장 설정에서 팀이 고칠 수 있고, 고친 값이 우선).
     // 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버 프롬프트에도 따로 들어 있습니다.
     persona: {
       name: 'Hana',

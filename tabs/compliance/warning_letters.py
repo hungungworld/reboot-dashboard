@@ -28,7 +28,7 @@ from flask import current_app
 from server.envkeys import get as env
 
 SOURCE_ID = "fda-warning-letters"
-LABEL = "FDA 경고장 (식품 분야 전체 · 🍺 표시만 숙취·음주 관련)"
+LABEL = "FDA 경고장 (식품 분야 전체 · 숙취·음주 관련 표시)"
 BASE = "https://www.fda.gov"
 WL_XLSX = (BASE + "/inspections-compliance-enforcement-and-criminal-investigations/"
            "compliance-actions-and-activities/warning-letters/datatables-data?page&_format=xlsx")
@@ -147,7 +147,7 @@ def _lookback():
 
 def _summary(subject, office, company):
     hot = TOPIC.search(f"{subject} {company}")
-    return " · ".join(x for x in [subject, office, "🍺 숙취·음주 관련 단어" if hot else ""] if x)[:400]
+    return " · ".join(x for x in [subject, office, "숙취·음주 관련 단어" if hot else ""] if x)[:400]
 
 
 def parse_xlsx(content):
@@ -329,7 +329,7 @@ def dashboard():
                       "firm": str(x.get("LegalName") or "")[:160],
                       "url": safe_url(x.get("FirmProfile")),
                       "summary": " · ".join(str(v) for v in (x.get("Center"), x.get("CountryName"),
-                                                              "🍺 숙취·음주 관련 단어" if TOPIC.search(str(x.get("LegalName") or "")) else "",
+                                                              "숙취·음주 관련 단어" if TOPIC.search(str(x.get("LegalName") or "")) else "",
                                                               "제목·본문은 FDA 경고장 목록에서 회사 이름으로 확인") if v)[:400], "via": "dashboard"})
     data["updatedAt"] = datetime.now().isoformat(timespec="seconds")
     _save(data)

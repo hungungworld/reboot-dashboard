@@ -487,3 +487,6 @@
 .part-cs .cs-checks .cs-check input { margin-top: 2px; flex-shrink: 0; }
 .part-cs .cs-rcard .cs-share-wrap { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) { .part-cs .cs-gate, .part-cs .cs-wire { transition: none; } }
+
+/* 문의함 · 고객 기록 '더 보기' (첫 화면 5건) */
+.part-cs .cs-list-more { list-style: none; display: flex; justify-content: center; padding: 12px 0 4px; }

@@ -189,7 +189,7 @@
       },
       {
         code: 'R10', name: '후기·리뷰', verdict: 'REVIEW', basis: ['official', 'platform', 'internal'],
-        legal: 'yellow', legalNote: '대가 관계 표시 등 조건을 지키면 후기를 쓸 수 있음 → 법무 확인 · 좋은 후기를 조건으로 한 보상은 16 CFR 465 위반(🔴)', compensatedLegal: 'red',
+        legal: 'yellow', legalNote: '대가 관계 표시 등 조건을 지키면 후기를 쓸 수 있음 → 법무 확인 · 좋은 후기를 조건으로 한 보상은 16 CFR 465 위반(법 위반 신호)', compensatedLegal: 'red',
         terms: ['testimonial', '5-star', 'five-star', 'customer review', 'rated #1', 'top-rated'],
         ko: ['후기', '리뷰', '별점'],
         // 1인칭 사용 경험 문장 = 후기 (경고장은 후기 문구도 의도된 용도의 증거로 인용)
@@ -246,7 +246,7 @@
       },
       {
         code: 'R12', name: "'Zero Sugar' 표시 (Balance만)", verdict: 'COND', basis: ['official', 'internal'],
-        legal: 'yellow', legalNote: 'Balance는 당 0.5 g 미만 + 저칼로리가 아니면 그 사실 표시 조건으로 가능 → 영양성분 시험 확인 · 당이 있는 Original·브랜드 전체에 쓰면 거짓 표시(🔴)', legalByProduct: { jelly: 'red', drink: 'red' },
+        legal: 'yellow', legalNote: 'Balance는 당 0.5 g 미만 + 저칼로리가 아니면 그 사실 표시 조건으로 가능 → 영양성분 시험 확인 · 당이 있는 Original·브랜드 전체에 쓰면 거짓 표시(법 위반 신호)', legalByProduct: { jelly: 'red', drink: 'red' },
         terms: ['zero sugar', 'sugar free', 'no sugar', 'sugarless'],
         ko: ['제로 슈거', '제로슈거', '제로 슈가', '제로슈가', '무설탕'],
         allow: ["\\bno\\s+sugar\\s+alcohols?\\b"],   // '당알코올 없음'은 당 함량 주장이 아님
@@ -640,7 +640,7 @@
     // goto: 이 대시보드에서 관련 내용을 볼 수 있는 탭 (단건 심의 single · 규칙 rules · 규제 모니터링 monitor)
     agencies: [
       {
-        code: 'FDA', en: 'Food and Drug Administration', ko: '미국 식품의약국', icon: '🍽️',
+        code: 'FDA', en: 'Food and Drug Administration', ko: '미국 식품의약국', icon: 'FDA',
         oneLine: '먹는 것과 약을 관리하는 기관입니다. 라벨과 광고 문구를 보고 우리 제품이 "식품"인지 "약"인지 판단합니다.',
         role: [
           '식품·의약품의 안전 기준과 표시(라벨) 규칙을 정하고 단속합니다.',
@@ -660,7 +660,7 @@
         url: 'https://www.fda.gov/'
       },
       {
-        code: 'FTC', en: 'Federal Trade Commission', ko: '미국 연방거래위원회', icon: '📣',
+        code: 'FTC', en: 'Federal Trade Commission', ko: '미국 연방거래위원회', icon: 'FTC',
         oneLine: '광고가 소비자를 속이지 않는지 감시하는 기관입니다. "효과가 있다"고 말하려면 근거가 있어야 합니다.',
         role: [
           '거짓·과장 광고를 단속합니다. 식품은 보통 라벨은 FDA, 광고는 FTC가 주로 봅니다.',
@@ -679,7 +679,7 @@
         url: 'https://www.ftc.gov/'
       },
       {
-        code: 'CBP', en: 'U.S. Customs and Border Protection', ko: '미국 관세국경보호청 (세관)', icon: '🛃',
+        code: 'CBP', en: 'U.S. Customs and Border Protection', ko: '미국 관세국경보호청 (세관)', icon: 'CBP',
         oneLine: '미국 국경의 세관입니다. 물건이 들어올 때 통관을 처리하고 관세를 걷습니다.',
         role: [
           '수입 물품의 통관을 처리하고 관세를 걷습니다.',
@@ -698,7 +698,7 @@
         url: 'https://www.cbp.gov/'
       },
       {
-        code: 'USTR', en: 'Office of the United States Trade Representative', ko: '미국 무역대표부', icon: '🤝',
+        code: 'USTR', en: 'Office of the United States Trade Representative', ko: '미국 무역대표부', icon: 'USTR',
         oneLine: '미국의 무역 협상 대표입니다. 나라와 나라 사이의 무역 협정과 관세 정책을 정합니다.',
         role: [
           '대통령 직속 기관으로 무역 협정을 협상하고 운영합니다 (한미 FTA = KORUS 포함).',
@@ -718,10 +718,10 @@
     ],
 
     // '기관 안내 → 광고 플랫폼': 정부 기관은 아니지만(사기업) 자기 광고 정책을 어기면 광고 거절·계정 제한 (2026-10-24 작성)
-    // 법은 아니므로 근거 구분은 📱 플랫폼 정책 · 정책은 자주 바뀌니 공식 페이지(url)로 확인
+    // 법은 아니므로 근거 구분은 플랫폼 정책 · 정책은 자주 바뀌니 공식 페이지(url)로 확인
     platforms: [
       {
-        code: 'Meta', ko: '페이스북 · 인스타그램 광고', icon: '📱',
+        code: 'Meta', ko: '페이스북 · 인스타그램 광고', icon: 'Meta',
         oneLine: '광고가 보는 사람의 특성(인종·건강 상태 등)을 단정하면 안 되고, 술을 언급하는 광고는 법과 업계 규약을 지켜야 합니다.',
         forUs: [
           "'Are you hungover?'처럼 보는 사람의 상태를 짚는 문구, 'Asian glow'처럼 인종·체질을 암시하는 문구는 '개인 특성' 정책에 걸릴 수 있습니다.",
@@ -731,14 +731,14 @@
         url: 'https://transparency.meta.com/policies/ad-standards/'
       },
       {
-        code: 'Google', ko: '구글 검색 · 유튜브 광고', icon: '🔎',
+        code: 'Google', ko: '구글 검색 · 유튜브 광고', icon: 'G',
         oneLine: '과음·폭음·음주 시합을 좋게 보이게 하는 광고와, 술로 건강·사회적 이득이 있다는 광고를 거절합니다.',
         forUs: ["'Drink all night'처럼 많이 마시는 것을 부추기는 표현은 '무책임한 음주 광고' 정책에 걸릴 수 있습니다."],
         risk: '광고 거절 · 경고 후 계정 정지', rules: 'R6',
         url: 'https://support.google.com/adspolicy/answer/16427712'
       },
       {
-        code: 'TikTok', ko: '틱톡 광고', icon: '🎵',
+        code: 'TikTok', ko: '틱톡 광고', icon: 'TT',
         oneLine: '미국에서 술 광고는 받지만(25세 이상 타기팅), 숙취 해소 제품 광고는 받지 않는 것으로 알려져 있습니다 (2024 업계 보도 기준).',
         forUs: [
           '숙취 해소 제품으로 보이면 광고 자체가 거절될 수 있어, 틱톡에서는 숙취를 떠올리는 표현을 특히 피해야 합니다.',
@@ -748,7 +748,7 @@
         url: 'https://ads.tiktok.com/help/'   // 광고 정책은 도움말 센터 › Advertising Policies
       },
       {
-        code: 'Amazon', ko: '아마존 상세페이지', icon: '🛒',
+        code: 'Amazon', ko: '아마존 상세페이지', icon: 'AMZ',
         oneLine: '상세페이지에서 질병을 진단·치료·완화·예방한다는 주장을 금지하고, 성분 함량은 라벨과 같아야 합니다.',
         forUs: [
           '숙취 해소·간 보호 같은 표현은 상세페이지·검색 키워드 모두에서 빼야 합니다 (FDA 기준과 같음).',
@@ -760,7 +760,7 @@
       // 2026-10-25 추가: Olive Young Global은 2026-05-29부터 미국 배송 중단 → 미국 판매는 별도 법인 Olive Young US
       // (us.oliveyoung.com · LA 매장 Pasadena·Century City, 영양제·간식 코너 있음). 입점 요구 서류는 공개되지 않아 알디콤 입점 담당에게 받아야 함
       {
-        code: 'Olive Young', ko: '올리브영 US (온라인 · LA 매장)', icon: '🫒',
+        code: 'Olive Young', ko: '올리브영 US (온라인 · LA 매장)', icon: 'OY',
         oneLine: '미국 판매는 Olive Young US(us.oliveyoung.com)와 캘리포니아 매장입니다. Global 사이트는 2026-05-29부터 미국으로 배송하지 않습니다.',
         forUs: [
           "상품명·상세 문구도 같은 기준입니다. Global에 올라간 'Hangover Helper'·'Hangover Cure Stick' 같은 이름은 우리 규칙에서 상품명 자체가 BLOCK(R1·R2)이라, 같은 이름으로 US에 올리면 안 됩니다.",
@@ -779,7 +779,7 @@
       { id: 'fda-warning-letters', range: '최근 1년 · 최대 80건 (본문 문구가 있는 경고장은 개수와 상관없이 남김)', agency: 'FDA', name: 'FDA 경고장', via: 'FDA Data Dashboard API (공식) · 직접 업로드', modes: ['auto', 'manual'],
         key: 'FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY',
         gets: '식품 분야 경고장 목록 (회사 · 발행일 · 담당 부서 · 나라). 직접 올리면 경고장 제목과 본문 속 광고 문구까지',
-        gives: '목록 · 🆕 새 경고장 표시 → 본문 문구는 사례집 후보 → 승인하면 경고장 사례·규칙 검증에 반영' },
+        gives: '목록 · ‘새’ 경고장 표시 → 본문 문구는 사례집 후보 → 승인하면 경고장 사례·규칙 검증에 반영' },
       { id: 'fda-import-refusals', range: '최근 순 · 최대 40건 (같은 회사·날짜·품목은 한 줄)', agency: 'FDA', name: 'FDA 수입 거부 (한국산 식품)', via: 'FDA Data Dashboard API (공식)', modes: ['auto'],
         key: 'FDA_DASHBOARD_USER · FDA_DASHBOARD_KEY',
         gets: '한국산 식품이 미국 통관에서 거부된 기록 (회사 · 제품 · 거부일 · 사유 코드)',
@@ -824,7 +824,7 @@
       { id: 'oliveyoung-policy', range: '주 1회 · 회원 정책 1쪽', agency: '플랫폼', name: '올리브영 US 회원 정책', via: 'us.oliveyoung.com 약관 (Firecrawl)', modes: ['auto'],
         key: 'FIRECRAWL_API_KEY',
         gets: '약관 갱신일(Last Updated) · 후기 작성 적립 문장',
-        gives: '갱신일이 바뀌면 🆕 · 기준·참고 › 기관·플랫폼의 올리브영 카드에 갱신일 표시 → 후기 이벤트를 따로 붙여도 되는지 (R10)' }
+        gives: '갱신일이 바뀌면 ‘새’ 표시 · 기준·참고 › 기관·플랫폼의 올리브영 카드에 갱신일 표시 → 후기 이벤트를 따로 붙여도 되는지 (R10)' }
     ],
     // range: 가져오는 범위 — 모든 결과가 아니라 '최근 최대 N건'임을 화면에 밝힘 (GPT 검토 ⑰ · 기간은 REFRESH_LOOKBACK_DAYS 기본 365일)
     // 수집 항목에 붙이는 우리 제품군 태그 (2026-10-24). 제목·회사·요약·한글 요약에서 찾음 · 어느 것도 아니면 '공통'

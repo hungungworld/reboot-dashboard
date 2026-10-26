@@ -19,9 +19,9 @@
   // 법적 신호 (2026-10-25 · 판정과 별도 축): 이 표현이 법으로 막히는지, 법무가 볼 회색지대인지, 팀·플랫폼 기준인지
   const LIGHT_RANK = { '': 0, green: 1, yellow: 2, red: 3 };
   const LIGHT = {
-    red: { icon: '🔴', label: '법 위반', help: '법·규정이 직접 금지하는 표현이에요. 근거 자료가 있어도 쓸 수 없어 법무 검토로도 풀리지 않아요 → 표현을 바꾸세요.' },
-    yellow: { icon: '🟡', label: '법무 확인', help: '근거 자료·조건·문맥에 따라 쓸 수도 있는 회색지대예요. 그대로 쓰려면 근거 자료와 함께 법무 검토를 요청하세요.' },
-    green: { icon: '🟢', label: '팀·플랫폼 기준', help: '법 위반은 아니에요. 팀 기준이나 광고 플랫폼 정책이라 법무 검토는 필요 없어요 (어기면 광고 거절 위험).' }
+    red: { label: '법 위반', help: '법·규정이 직접 금지하는 표현이에요. 근거 자료가 있어도 쓸 수 없어 법무 검토로도 풀리지 않아요 → 표현을 바꾸세요.' },
+    yellow: { label: '법무 확인', help: '근거 자료·조건·문맥에 따라 쓸 수도 있는 회색지대예요. 그대로 쓰려면 근거 자료와 함께 법무 검토를 요청하세요.' },
+    green: { label: '팀·플랫폼 기준', help: '법 위반은 아니에요. 팀 기준이나 광고 플랫폼 정책이라 법무 검토는 필요 없어요 (어기면 광고 거절 위험).' }
   };
   const MAX_ROWS = 500;
   const MAX_CSV_BYTES = 1024 * 1024;
@@ -424,7 +424,7 @@
   // 번역 블록: 버튼을 누르면 data-tr-text의 영어 원문을 번역해 바로 아래에 보여 줌 (render의 위임 처리)
   function trBlock(text, label) {
     return `<div class="cmp-trblock" data-tr-text="${esc(text)}">
-  <button type="button" class="cmp-btn-tr" data-act="translate" data-toggle="1" aria-pressed="false">${icon('translate')}<span>${esc(label || '한글로 번역')}</span>${icon('chevron')}</button>
+  <button type="button" class="cmp-btn cmp-btn-sm cmp-btn-tr" data-act="translate" data-toggle="1" aria-pressed="false">${icon('translate')}<span>${esc(label || '한글로 번역')}</span></button>
   <div data-tr-out aria-live="polite"></div></div>`;
   }
 
@@ -633,6 +633,20 @@
       }
       const ho = e.target.closest('[data-act="hist-open"]');
       if (ho) { const row = ho.closest('.cmp-hrow'); setHistOpen(row, !row.classList.contains('is-open')); return; }
+      const hf = e.target.closest('[data-act="hist-fold"]');
+      if (hf) {
+        const hp = root.querySelector('[data-panel="history"]');
+        const day = hf.dataset.day;
+        const rest = [...hp.querySelectorAll('.cmp-hist-rest')].find(x => x.dataset.day === day);
+        const open = rest.hidden;
+        hp._openDays = hp._openDays || new Set();
+        open ? hp._openDays.add(day) : hp._openDays.delete(day);
+        rest.hidden = !open;
+        fitHistRest(rest);
+        hf.setAttribute('aria-expanded', String(open));
+        hf.textContent = open ? '접기' : `펼치기 · ${rest.children.length}건 더`;
+        return;
+      }
       if (e.target.closest('[data-act="hist-more"]')) {
         const hp = root.querySelector('[data-panel="history"]');
         hp.dataset.limit = String((Number(hp.dataset.limit) || HIST_PAGE) + HIST_PAGE);
@@ -836,7 +850,7 @@
         : `<button type="button" class="cmp-btn cmp-primary" data-act="ai"${aiOk ? '' : ' disabled title="AI 키가 없어 제안 문장을 받을 수 없어요 · 항목의 수정 방향을 참고하세요"'}>대체 문장 만들기</button>`)
       : `<button type="button" class="cmp-btn cmp-primary" data-act="copy">${s.needConfirm ? 'AI 경고 확인하고 복사' : '문구 복사'}</button>`;
     const copy = fix ? `<button type="button" class="cmp-btn" data-act="copy"${s.canCopy ? '' : ' disabled title="사용 불가 문구는 복사할 수 없어요"'}>문구 복사</button>` : '';
-    return `${preview}<div class="cmp-result-acts">${primary}${copy}<button type="button" class="cmp-btn cmp-btn-quiet" data-act="new">새 문구 쓰기</button></div>`;
+    return `${preview}<div class="cmp-result-acts">${primary}${copy}</div>`;
   }
 
   /** 점검 기록 위 필터 칩 (판정마다 개수) — 점검 기록을 지금 규칙으로 다시 판정한 개수. 누르면 그 판정만 보여 줌 */
@@ -871,7 +885,6 @@
     <button type="button" class="cmp-link-btn" data-act="term-detail" data-code="${f.code}" data-term="${esc(f.terms[0])}" aria-haspopup="dialog">이유와 근거 보기 ›</button>
   </article>`;
   }).join('')}
-  <div class="cmp-result-tr">${trBlock(text, '뜻 한글로 보기')}</div>
 </div>`;
   }
 
@@ -1054,7 +1067,7 @@
     ${changed ? `<p class="cmp-muted">이 문구의 채널·제품에서는 판정이 ${badge(f.verdict)}예요 (규칙 기본은 ${badge(rule.verdict)}).</p>` : ''}</section>
   <section><h4>할 일</h4>${todoHTML(pl.todo && pl.todo.length ? pl.todo : [f.alt])}
     ${maps.length ? `<p class="cmp-todo-sub">이렇게 바꿔 보세요</p><ul class="cmp-dlg-list">${maps.map(m => `<li>${esc(m.ko)} → <b>${esc(m.us)}</b></li>`).join('')}</ul>` : ''}</section>
-  ${ai.length ? `<section><h4>${icon('spark')} AI 2차 심의 의견 <span class="cmp-muted">(참고용)</span></h4>${ai.map(x => `<p>${badge(LABEL[x.verdict] ? x.verdict : 'REVIEW')} ${esc(x.reason)}${x.suggestion ? `<br><span class="cmp-muted">제안: ${esc(x.suggestion)}</span>` : ''}</p>`).join('')}</section>` : ''}
+  ${ai.length ? `<section><h4>${icon('spark')} AI 2차 심의 의견<span class="head-cap">(참고용)</span></h4>${ai.map(x => `<p>${badge(LABEL[x.verdict] ? x.verdict : 'REVIEW')} ${esc(x.reason)}${x.suggestion ? `<br><span class="cmp-muted">제안: ${esc(x.suggestion)}</span>` : ''}</p>`).join('')}</section>` : ''}
   <details class="cmp-why"><summary>근거 보기 · 조문 · 경고장 사례</summary>
   <section><h4>왜 문제인가요?</h4><p>${esc(f.reason)}</p>
     ${changed ? `<p class="cmp-note">이 규칙의 기본 판정은 ${badge(rule.verdict)}이고, 이 문구의 채널·제품·기준(${esc(channelLabel(c.channel))} · ${esc(productLabel(c.product))} · ${c.category === 'SUPPLEMENT' ? '건강기능식품 비교' : '일반식품'})에서는 ${badge(f.verdict)}이에요.</p>` : ''}
@@ -1066,7 +1079,7 @@
   <section><h4>대체 방향 (원문)</h4><p>${esc(f.alt)}</p>
     ${maps.some(m => m.note) ? `<ul class="cmp-dlg-list">${maps.filter(m => m.note).map(m => `<li>${esc(m.ko)} → ${esc(m.us)} <span class="cmp-muted">(${esc(m.note)})</span></li>`).join('')}</ul>` : ''}</section>
   ${siblings.length ? `<section><h4>같은 규칙에 걸리는 다른 표현</h4><p class="cmp-dlg-chips">${siblings.slice(0, 16).map(t => `<code>${esc(t)}</code>`).join(' ')}</p></section>` : ''}
-  ${agencies.length ? `<section><h4>관련 기관</h4>${agencies.map(a => `<p><b>${esc(a.icon || '')} ${esc(a.code)} · ${esc(a.ko)}</b><br><span class="cmp-muted">${esc(a.oneLine || '')}</span>${a.risk ? `<br><span class="cmp-muted">어기면: ${esc(a.risk)}</span>` : ''}</p>`).join('')}</section>` : ''}
+  ${agencies.length ? `<section><h4>관련 기관</h4>${agencies.map(a => `<p><b>${esc(a.code)} · ${esc(a.ko)}</b><br><span class="cmp-muted">${esc(a.oneLine || '')}</span>${a.risk ? `<br><span class="cmp-muted">어기면: ${esc(a.risk)}</span>` : ''}</p>`).join('')}</section>` : ''}
   ${quotes.length ? `<section><h4>FDA 경고장 사례</h4>${quotes.map(q => `<div class="cmp-quote">${esc(q.text)}${q.ko ? `<p class="cmp-quote-ko"><span class="cmp-b-tag">한국어</span>${esc(q.ko)}</p>` : '<br>'}<span class="cmp-muted">${esc(q.firm || '')} ${esc(q.issued || '')}${q.kind === 'testimonial' ? ' · 경고장이 인용한 후기' : ''}</span></div>`).join('')}</section>` : ''}
   </details>
 </div>
@@ -1119,7 +1132,7 @@
         if (!btn) return;
         if (btn.dataset.act === 'dlg-close') dlg.close();
         else if (btn.dataset.act === 'goto') { dlg._opener = null; dlg.close(); }   // 탭 이동은 render의 공통 처리기가 함
-        else if (btn.dataset.act === 'rq-open') openRequestDialog(root);   // 🟡 법무 확인 → 같은 창을 검토 요청으로 바꿈
+        else if (btn.dataset.act === 'rq-open') openRequestDialog(root);   // 법무 확인 → 같은 창을 검토 요청으로 바꿈
         else if (dlg._onAct) dlg._onAct(btn, dlg);   // 창마다 따로 쓰는 버튼 (검토 요청 보내기 등)
         else if (btn.dataset.act === 'select-term') {
           dlg._opener = null;   // 포커스는 문구 칸으로
@@ -1245,7 +1258,6 @@
 
   /* ── 문구 검토 요청 (2026-10-25) — 법무·인허가·품질팀에 Slack으로 보내고 1회용 링크로 회신 받음 (서버: review_requests.py) ── */
   const RQ_TEAMS = [['legal', '법무팀'], ['regulatory', '인허가팀'], ['quality', '품질팀']];
-  const RQ_ICON = { '대기': '⏳', '승인': '✅', '수정 필요': '✏️', '반려': '⛔' };
   let REVIEW_REQS = [];
 
   async function loadReviews(root) {
@@ -1266,7 +1278,7 @@
     const mine = text ? REVIEW_REQS.filter(r => r.text === text).slice(0, 3) : [];
     box.innerHTML = mine.length ? `<div class="cmp-rq">${mine.map(r => `
   <div class="cmp-rq-row"><span class="cmp-muted">검토 요청 ${esc(fmt(Date.parse(r.createdAt)))}${r.expired ? ' · 기한 지남' : ''}</span>
-    ${RQ_TEAMS.filter(([k]) => r.teams[k]).map(([k]) => r.teams[k]).map(t => `<span class="cmp-rq-team" title="${esc(t.comment || '')}">${RQ_ICON[t.status] || ''} ${esc(t.label)} <b>${esc(t.status)}</b>${t.by ? ` · ${esc(t.by)}` : ''}${t.comment ? ` · ${esc(t.comment)}` : ''}</span>`).join('')}</div>`).join('')}
+    ${RQ_TEAMS.filter(([k]) => r.teams[k]).map(([k]) => r.teams[k]).map(t => `<span class="cmp-rq-team" title="${esc(t.comment || '')}">${esc(t.label)} <b>${esc(t.status)}</b>${t.by ? ` · ${esc(t.by)}` : ''}${t.comment ? ` · ${esc(t.comment)}` : ''}</span>`).join('')}</div>`).join('')}
   <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-refresh">새 회신 확인</button></div>` : '';
   }
 
@@ -1310,7 +1322,7 @@
           product: j.product === ALL ? '' : j.product, aiVerdict: ai, teams, memo: dlg.querySelector('[data-el="rq-memo"]').value });
         const label = Object.fromEntries(RQ_TEAMS);
         dlg.querySelector('[data-el="rq-body"]').innerHTML = `
-  <section><h4>${out.slack.ok ? '✅ Slack으로 보냈어요' : '⚠️ Slack에는 보내지 못했어요'}</h4>
+  <section><h4>${out.slack.ok ? 'Slack으로 보냈어요' : 'Slack에는 보내지 못했어요'}</h4>
     ${out.slack.ok ? '' : `<p class="cmp-muted">${esc(out.slack.error)}</p>`}</section>
   <section><h4>팀별 회신 링크 (14일 · 로그인 없음)</h4><ul class="cmp-dlg-list">${RQ_TEAMS.filter(([k]) => out.links[k]).map(([k]) => [k, out.links[k]]).map(([k, url]) => `
     <li><b>${esc(label[k] || k)}</b> <button type="button" class="cmp-btn cmp-btn-sm" data-act="rq-copy" data-link="${esc(url)}">링크 복사</button></li>`).join('')}</ul>
@@ -1397,13 +1409,6 @@
         el('text').value = 'Cure your hangover fast.';
         sync(); clearTimeout(runTimer); run();
         el('text').focus();
-      } else if (btn.dataset.act === 'new') {
-        saveJourney({ text: '', ko: '', channel: j.channel, product: j.product, category: j.category, checkedKey: '' });
-        el('text').value = '';
-        el('ko').value = '';
-        el('trmsg').innerHTML = '';
-        paintSingle(root);
-        el('ko').focus();
       } else if (btn.dataset.act === 'rq-open') {
         openRequestDialog(root);
       } else if (btn.dataset.act === 'rq-refresh') {
@@ -1416,7 +1421,7 @@
         el('text').value = rw;
         if (el('ko').value.trim()) {   // 한국어 칸에 옛 문장이 남아 팀에 잘못 공유되지 않게
           el('ko').value = '';
-          el('trmsg').innerHTML = '<p class="cmp-muted">영어 문장을 바꿔서 한국어 칸을 비웠어요. 바뀐 문장의 뜻은 아래 [뜻 한글로 보기]로 확인하세요.</p>';
+          el('trmsg').innerHTML = '<p class="cmp-muted">영어 문장을 바꿔서 한국어 칸을 비웠어요.</p>';
         }
         run();   // 바꾼 문장은 규칙으로 다시 심의 (AI 결과는 문구가 바뀌어 자동으로 숨김)
         el('text').focus();
@@ -1774,7 +1779,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
       if (!results) return;
       const out = [['copy', 'english', 'channel', 'product', 'category', 'verdict', 'label', 'legal', 'codes', 'terms']].concat(results.map(y => [
         y.x.src, y.x.en || '', y.x.channel, y.x.product, y.x.category || 'FOOD', y.r.verdict, LABEL[y.r.verdict],
-        y.r.legal ? `${LIGHT[y.r.legal].icon} ${LIGHT[y.r.legal].label}` : '', y.r.codes.join(' '), y.r.findings.flatMap(f => f.terms).join('; ')]));
+        y.r.legal ? LIGHT[y.r.legal].label : '', y.r.codes.join(' '), y.r.findings.flatMap(f => f.terms).join('; ')]));
       download('review', toCSV(out));
     });
   }
@@ -1842,6 +1847,21 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
 
   // 점검 기록 (2026-10-26 표형): 한 줄 = 기록 하나 · 문구를 누르면 그 줄만 펼침 · 검색 · 처음엔 HIST_PAGE줄
   const HIST_PAGE = 20;
+  const HIST_DAY_FIRST = 2;   // 날짜마다 처음 보이는 줄 · 나머지는 접기 (펼치면 5줄 높이 스크롤은 CSS)
+
+  function fitHistRest(rest) {   // 펼친 상자 높이 = 앞 5줄 실제 높이 (좁은 화면에서 두 줄짜리 행도 맞춤)
+    if (rest.hidden) return;
+    const h = [...rest.children].slice(0, 5).reduce((n, x) => n + x.offsetHeight, 0);
+    if (h) rest.style.maxHeight = `${h}px`;
+  }
+
+  function histDayHTML(p, day, xs) {
+    const open = (p._openDays || new Set()).has(day);
+    const rest = xs.slice(HIST_DAY_FIRST);
+    return `<h3 class="cmp-hist-day">${esc(day)} <span>${xs.length}건</span></h3>${xs.slice(0, HIST_DAY_FIRST).map(historyItemHTML).join('')}
+${rest.length ? `<div class="cmp-hist-rest" data-day="${esc(day)}"${open ? '' : ' hidden'}>${rest.map(historyItemHTML).join('')}</div>
+<button type="button" class="cmp-link-btn cmp-hist-fold" data-act="hist-fold" data-day="${esc(day)}" aria-expanded="${open}">${open ? '접기' : `펼치기 · ${rest.length}건 더`}</button>` : ''}`;
+  }
   function histHay(item, r) {   // 검색 대상: 문구 · 채널 · 제품 · 규칙 코드 · 걸린 표현
     return [item.text, channelLabel(r.channel), r.product ? productLabel(r.product) : '', ...r.codes, ...r.findings.flatMap(f => f.terms)].join(' ').toLowerCase();
   }
@@ -1870,10 +1890,11 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
     const left = list.length - shown.length;
     box.innerHTML = list.length ? `
 <div class="cmp-hrow cmp-hrow-head" aria-hidden="true"><span>판정</span><span>문구</span><span>채널 · 제품</span><span>걸린 표현</span><span>시간</span><span></span></div>
-${groupByDay(shown).map(([day, xs]) => `<h3 class="cmp-hist-day">${esc(day)} <span>${xs.length}건</span></h3>${xs.map(historyItemHTML).join('')}`).join('')}
+${groupByDay(shown).map(([day, xs]) => histDayHTML(p, day, xs)).join('')}
 ${left ? `<button type="button" class="cmp-btn cmp-hist-more" data-act="hist-more">더 보기 <span class="cmp-muted">${left}건 남음</span></button>` : ''}`
       : q ? `<div class="cmp-empty"><h2>'${esc(p.dataset.q.trim())}' 검색 결과가 없습니다</h2><p>다른 말로 찾거나 판정 필터를 '전체'로 바꿔 보세요.</p></div>`
       : `<div class="cmp-empty"><h2>${all.length ? '이 판정의 기록이 없습니다' : '아직 기록이 없습니다'}</h2><p>${all.length ? '다른 판정을 골라 보세요.' : '문구 점검에서 문구를 입력하면 자동으로 점검되어 여기에 쌓여요.'}</p></div>`;
+    box.querySelectorAll('.cmp-hist-rest').forEach(fitHistRest);
   }
 
   /* 기준·참고 (2026-10-26: 규칙·검증 + 기관 안내를 세부 탭 5개로) — 관리 = 담당자만 쓰는 시험·설정 */
@@ -1882,7 +1903,7 @@ ${left ? `<button type="button" class="cmp-btn cmp-hist-more" data-act="hist-mor
     const active = DATA.rules.filter(r => !r.off).length;
     return `
 <section class="cmp-card cmp-paper">
-  <div class="cmp-paper-head"><h3>심의 규칙과 대체 방향</h3><span class="cmp-muted">사용 ${active}개 · 사용 안 함 ${DATA.rules.length - active}개</span></div>
+  <div class="cmp-paper-head"><h3>심의 규칙과 대체 방향<span class="head-cap">사용 ${active}개 · 사용 안 함 ${DATA.rules.length - active}개</span></h3></div>
   <div class="cmp-rows" ${ctxAttrs('')}>${DATA.rules.map(r => `
   <details class="cmp-row-fold${r.off ? ' is-off' : ''}">
     <summary><span class="cmp-code">${r.code}</span> <b>${esc(r.name)}</b> ${r.off ? '<span class="cmp-chip">사용 안 함</span>' : badge(r.verdict)}</summary>
@@ -1903,7 +1924,7 @@ ${left ? `<button type="button" class="cmp-btn cmp-hist-more" data-act="hist-mor
 
   /* 운영 설정 (2026-10-26: 참고 자료에서 분리 · AI 페르소나 · 규칙 검증 · 사용량과 연결) */
   function settingsHTML() {
-    return `<div class="cmp-subpanel cmp-paper" data-sub="admin"><div class="cmp-card-head"><h3>운영 설정 <span class="cmp-muted cmp-h-sub">컴플라이언스 담당자만 바꿔요</span></h3></div>${adminHTML()}</div>`;
+    return `<div class="cmp-subpanel cmp-paper" data-sub="admin"><div class="cmp-card-head"><h3>운영 설정<span class="head-cap">컴플라이언스 담당자만 바꿔요</span></h3></div>${adminHTML()}</div>`;
   }
 
   function adminHTML() {
@@ -2079,7 +2100,7 @@ ${v.selfBad.length ? `<h4 class="cmp-h4">기대와 다른 예문</h4><ul class="
 
   function monHead(id, extra) {
     const t = MON_TABS.find(x => x[0] === id);
-    return `<div class="cmp-card-head"><h3>${t[1]} <span class="cmp-muted cmp-h-sub">${t[3]}</span></h3>${extra || ''}</div>`;
+    return `<div class="cmp-card-head"><h3>${t[1]}<span class="head-cap">${t[3]}</span></h3>${extra || ''}</div>`;
   }
 
   /** 세부 탭 바꾸기 (문구 점검 · 규제 소식 · 기준·참고 공통) — id는 화면 전체에서 하나뿐 */
@@ -2372,7 +2393,7 @@ ${monHead('manual')}
         const list = g.rows.filter(r => r.src.id === id);
         return `
   <div class="cmp-mon-src">
-    <h4 class="cmp-h4">${esc(meta.name)} <span class="cmp-muted">· ${esc(meta.via)}</span> <span class="cmp-tag">${list.length}개</span>${src.stale ? ` <span class="cmp-fail">이번에 받기 실패 · 이전 자료${src.updatedAt ? ` (${fmt(Date.parse(src.updatedAt))})` : ''}</span>` : ''}</h4>
+    <h4 class="cmp-h4">${esc(meta.name)}<span class="head-cap">· ${esc(meta.via)}</span> <span class="cmp-tag">${list.length}개</span>${src.stale ? ` <span class="cmp-fail">이번에 받기 실패 · 이전 자료${src.updatedAt ? ` (${fmt(Date.parse(src.updatedAt))})` : ''}</span>` : ''}</h4>
     <p class="cmp-muted cmp-mon-io"><b>가져옴</b> ${esc(meta.gets)}<br><b>쓰는 곳</b> ${esc(meta.gives)}</p>
     ${src.note ? `<p class="cmp-muted cmp-src-note">ℹ️ ${esc(src.note)}</p>` : ''}
     <div class="cmp-table-wrap"><table class="cmp-table">
@@ -2761,7 +2782,7 @@ ${cands.length ? `
 
   // summary(검토 대기 카피 수)는 승인 절차를 없애면서 뺐습니다 → 홈 '검토가 필요한 업무'에는 CS만 표시됩니다.
   REBOOT.register({
-    id: 'compliance', icon: '🛡️', label: '컴플라이언스', priority: 'P0', order: 30,
+    id: 'compliance', icon: '🛡️', label: '광고 심의', priority: 'P0', order: 35,
     title: '미국 광고 문구 심의',
     subtitle: 'FDA·FTC 기준에 걸리는 표현을 찾고, 쓸 수 있는 문장으로 바꿔요.',
     render

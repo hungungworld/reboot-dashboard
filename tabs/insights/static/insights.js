@@ -593,14 +593,14 @@
     if (!w) { el.innerHTML = `<div class="stack">${skel}${skel}</div>`; return; }
     const acts = w.actions;
     const s = w.shelf;
-    // 긴급 · 기회는 한 줄 목록(누르면 펼침, 처음엔 맨 위 한 줄만), 참고는 맨 아래 접기 · 위 칸으로 등급 고르기
+    // 긴급 · 기회는 한 줄 목록(누르면 펼침, 처음엔 모두 접힘), 참고는 맨 아래 접기 · 위 칸으로 등급 고르기
     const rows = actionRows(acts);
     const main = rows.filter(r => r.grade !== '참고'), refs = rows.filter(r => r.grade === '참고');
     const f = S.actF || 'all';
-    const openKey = S.actOpen === undefined ? (main[0] && main[0].key) : S.actOpen;
+    const openKey = S.actOpen === undefined ? null : S.actOpen;   // 처음엔 모두 접힘
     const seg = main.length ? `<div class="ins-aw-seg" role="group" aria-label="등급 고르기">${[['all', '전체', main.length], ['긴급', '긴급', rowCount(main, '긴급')], ['기회', '기회', rowCount(main, '기회')]]
       .map(([k, l, n]) => `<button type="button" data-act="act-f" data-f="${k}" aria-pressed="${f === k}"${f === k ? ' class="on"' : ''}>${l}<b>${n}</b></button>`).join('')}</div>` : '';
-    const head = `<div class="card-head"><h2>이번 주 액션 <span class="muted small">${esc(w.weekLabel)}</span></h2>
+    const head = `<div class="card-head"><h2>이번 주 액션<span class="head-cap">${esc(w.weekLabel)}</span></h2>
       <div class="flex">${w.aiUsed ? badge('AI 문장', 'purple') : ''}${seg}</div></div>`;
     let list;
     const shown = main.filter(r => f === 'all' || r.grade === f);
@@ -2034,7 +2034,7 @@
 
   function priceView(sh) {
     const priced = sh.items.filter(knownPs);
-    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에 <span class="ins-sw-sub">점 1개 = 제품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
+    const overview = priced.length ? `<section class="card mt-24"><div class="card-head"><h2>1회분 단가 한눈에<span class="head-cap">점 1개 = 제품 1개</span></h2></div>${shelfSummary(priced)}${shelfStrip(priced)}</section>` : '';
     return pantryHtml(sh) + overview;
   }
 
@@ -2348,8 +2348,8 @@
         <div class="ins-bc-item"><span class="field-label">칭찬 ${fb.praise ? `· ${esc(fb.praise.topic)} ${fb.praise.count}건` : ''}</span><div>${fb.praise ? esc(fb.praise.example) : '<span class="ins-none">칭찬 리뷰 없음</span>'}</div></div>
         <div class="ins-bc-item"><span class="field-label">불만 ${fb.complaint ? `· ${esc(fb.complaint.topic)} ${fb.complaint.count}건` : ''}</span><div>${fb.complaint ? esc(fb.complaint.example) : '<span class="ins-none">불만 리뷰 없음</span>'}</div></div></div>
         <p class="small muted">주제별: ${topics || '—'} (리뷰 ${fmt.num(fb.reviews)}개 기준)</p>` : '<p class="small muted">아직 모은 구매자 리뷰가 없어요.</p>'}
-      ${prods ? `<h3 class="ins-h3">진열대 제품</h3><ul class="ins-ul">${prods}</ul>` : ''}
-      ${c.own ? '' : `<h3 class="ins-h3">근거 자료</h3>${srcs.length ? `<ul class="ins-ul">${srcs.map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('')}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}
+      ${prods ? `<details class="ins-fold mt-16"><summary>진열대 제품 ${(c.products || []).length}개</summary><ul class="ins-ul">${prods}</ul></details>` : ''}
+      ${c.own ? '' : `<details class="ins-fold mt-16"><summary>근거 자료 ${srcs.length ? srcs.length + '개' : ''}</summary>${srcs.length ? `<ul class="ins-ul">${srcs.map(s => `<li><b>${esc(s.id)}</b> ${esc(s.type)} · ${esc(s.title)} ${extLink(s.url)}</li>`).join('')}</ul>` : '<p class="small muted">아직 분석 전이에요.</p>'}</details>
       <label class="field-label mt-8" for="comp-site">브랜드 홈페이지 (자동으로 찾고, 틀리면 고치세요)</label>
       <div class="flex"><input id="comp-site" class="grow" data-ref="site" value="${esc(c.website || '')}" placeholder="https://"><button type="button" class="btn small" data-ref="site-save">저장</button></div>
       <h3 class="ins-h3">분석 기록</h3>${hist ? `<ul class="ins-ul">${hist}</ul>` : '<p class="small muted">아직 기록이 없어요.</p>'}
@@ -2718,7 +2718,7 @@
 
   function compareHtml(d) {
     // 브랜드 × 주제 · 아마존 리뷰 요약: 제목 줄을 눌러 접기 · 펴기 (처음엔 펼침, 접은 상태는 화면에 남김)
-    return `<details class="ins-fold ins-fold-h card mt-24" data-fold="rv-matrix"${S.open['rv-matrix'] !== false ? ' open' : ''}><summary><h2>브랜드 × 주제</h2><span class="small muted">+칭찬 / −불만을 누르면 리뷰 목록에서 그 리뷰만 보여요 · 머리글을 누르면 정렬</span></summary>
+    return `<details class="ins-fold ins-fold-h card mt-24" data-fold="rv-matrix"${S.open['rv-matrix'] !== false ? ' open' : ''}><summary><h2>브랜드 × 주제<span class="head-cap">+칭찬 / −불만을 누르면 리뷰 목록에서 그 리뷰만 보여요 · 머리글을 누르면 정렬</span></h2></summary>
         <div class="ins-fold-body"><div data-ref="rvm-body">${rvmTable(d)}</div>
         <p class="panel-note mt-8">Amazon은 대표 리뷰만 모아요. 주제 · 칭찬/불만은 단어와 별점(4~5 칭찬 · 1~2 불만 · 3점은 빼요)으로 나누고, OpenAI 키가 있으면 AI가 다시 나눠요. 주제 칸 정렬은 칭찬 + 불만 수 기준이에요.</p></div></details>
       <details class="ins-fold ins-fold-h card mt-24" data-fold="rv-sum"${S.open['rv-sum'] !== false ? ' open' : ''}><summary><h2>아마존 리뷰 요약</h2>${badge(`${d.summaries.length}개`)}${badge('원문')}</summary>
@@ -2885,7 +2885,7 @@
     let table = '';
     if (s) {
       const keys = d.methods.map(m => m[0]).filter(k => s.methods[k]);
-      table = `<section class="card"><div class="card-head"><h2>채점 결과</h2><span class="small muted">${esc(fmt.datetime(s.at))}${s.model ? ` · ${esc(s.model)}` : ''}</span></div>
+      table = `<section class="card"><div class="card-head"><h2>채점 결과<span class="head-cap">${esc(fmt.datetime(s.at))}${s.model ? ` · ${esc(s.model)}` : ''}</span></h2></div>
         <div class="table-wrap"><table class="data-table"><thead><tr><th>방식</th>${d.fields.map(f => `<th>${esc(f[1])}</th>`).join('')}<th>틀린 댓글</th></tr></thead>
         <tbody>${keys.map(k => { const m = s.methods[k]; return `<tr${k === s.winner ? ' class="selected"' : ''}><td><b>${esc(name[k])}</b>${k === s.winner && keys.length > 1 ? ` ${badge('가장 높음', 'lime')}` : ''}</td>
           ${d.fields.map(f => `<td>${esc(m[f[0]])}%</td>`).join('')}<td>${esc(m.wrong.length)}건</td></tr>`; }).join('')}</tbody></table></div>
@@ -2925,8 +2925,8 @@
     const missing = plan.items.some(i => i.missing.length);
     const body = `<div class="part-insights ins-modal">
       <p>항목을 골라 시작하세요. 수집은 서버가 뒤에서 하고, 이 화면에서 진행 상황을 볼 수 있어요. 같은 주에 다시 모으면 그 주 결과를 새로 바꿔요.</p>
-      <h3 class="ins-h3">이번 주 데이터 <span class="small muted">${esc(plan.week)}</span></h3>${weekly.map(row).join('')}
-      <h3 class="ins-h3">월간 분석 <span class="small muted">${esc(plan.reviewMonth)} 기준 (1~7일에는 지난달)</span></h3>${monthly.map(row).join('')}
+      <h3 class="ins-h3">이번 주 데이터<span class="head-cap">${esc(plan.week)}</span></h3>${weekly.map(row).join('')}
+      <h3 class="ins-h3">월간 분석<span class="head-cap">${esc(plan.reviewMonth)} 기준 (1~7일에는 지난달)</span></h3>${monthly.map(row).join('')}
       <div class="note lime mt-16" data-ref="total"></div>
       <div class="ins-usage mt-8">
         <span>이 대시보드가 쓴 양</span>
@@ -3029,7 +3029,7 @@
   }
 
   REBOOT.register({
-    id: 'insights', label: '시장 · 고객 인사이트', order: 20,
+    id: 'insights', label: '인사이트', order: 20,
     render,
     summary: () => {
       const s = store.get('summary', null);

@@ -681,7 +681,7 @@
     const el = panel('collect');
     $(el, '[data-ref="collect-main"]').innerHTML = `
       <section class="card">
-        <div class="card-head"><h2>수집 대상 <span class="muted small" data-ref="src-count"></span></h2>${badge('주 1회 · 최신 데이터 받기 / 월 1회 · 월간 분석', 'blue')}</div>
+        <div class="card-head"><h2>수집 대상<span class="head-cap" data-ref="src-count"></span></h2>${badge('주 1회 · 최신 데이터 받기 / 월 1회 · 월간 분석', 'blue')}</div>
         <p class="panel-note mb-16">끈 항목은 인사이트 › 최신 데이터 받기에서 실행되지 않아요. 검색어 · 주소 같은 기준은 <b>편집</b>에서 바꿔요.</p>
         <div class="table-wrap">${fixedTable('collect', COLLECT_COLS, COLLECT_W)}<tbody data-ref="src-body"></tbody></table></div>
       </section>`;
@@ -893,7 +893,7 @@
     const list = S.seasons.filter(s => S.showPast || !s.past);
     const watching = S.seasons.filter(s => s.monitor && !s.past).length;
     box.innerHTML = `
-      <div class="card-head"><h2>모니터링 시즌 <span class="muted small">모니터링 ${watching}개</span></h2>
+      <div class="card-head"><h2>모니터링 시즌<span class="head-cap">모니터링 ${watching}개</span></h2>
         <div class="flex wrap">
           ${toggle('data-act="season-past"', S.showPast, '지난 시즌도 보기')}
           ${ui.fileBtn('upload', { label: '시즌 목록 업로드', type: 'CSV', act: 'season-import' })}
@@ -908,7 +908,7 @@
 
   function seasonRow(s) {
     const range = s.start === s.end ? fmt.date(s.start) : `${fmt.date(s.start)} ~ ${fmt.date(s.end)}`;
-    const dd = s.past ? badge('지남') : s.ongoing ? badge('진행 중', 'lime') : s.inLead ? badge(fmt.dday(s.start), 'orange') : esc(fmt.dday(s.start));
+    const dd = s.past ? badge('지남') : s.ongoing ? badge('진행 중', 'lime') : s.inLead ? badge(fmt.dday(s.start), 'orange') : badge(fmt.dday(s.start));
     return `<tr>
       <td title="${esc(s.notes || s.name)}"><strong>${esc(s.name)}</strong>${s.notes ? `<small class="set-sub">${esc(s.notes)}</small>` : ''}</td>
       <td>${esc(range)}</td>
@@ -1078,7 +1078,7 @@
     };
     const connected = keys.filter(i => i.connected).length;
     $(el, '[data-ref="keys"]').innerHTML = `
-      <div class="card-head"><h2>API 키 <span class="muted small">${connected}/${keys.length} 연결</span></h2>
+      <div class="card-head"><h2>API 키<span class="head-cap">${connected}/${keys.length} 연결</span></h2>
         <div class="flex">${admin ? badge('관리자 · 키 입력 가능', 'lime') : badge('보기 전용')}<button type="button" class="btn small ghost" data-act="conn-reload" aria-label="새로고침">${icon('refresh')}</button></div></div>
       ${admin ? '' : '<div class="note mb-16">키 입력은 관리자만 할 수 있어요. 키가 필요하면 관리자에게 요청하세요. 연결 테스트는 누구나 할 수 있어요.</div>'}
       <div class="table-wrap">${fixedTable('conn-keys', ['서비스', '쓰는 곳', '무료 한도', '상태', '값', ''], [170, 230, 130, 210, 110, 140], 'set-conn')}
@@ -1196,7 +1196,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
       ? `<button type="button" class="btn danger" data-act="gmail-off">${icon('x')}연결 해제</button>`
       : `<button type="button" class="btn lime" data-act="gmail-login"${g.webLogin ? '' : ' disabled'}>${icon('mail')}Google로 로그인</button>`;
     box.innerHTML = `
-      <div class="card-head"><h2>Google 로그인 <span class="muted small">CS Gmail 문의함 · 답장 초안</span></h2>${g.connected ? badge('정상', 'green') : badge('연결 안 됨')}</div>
+      <div class="card-head"><h2>Google 로그인<span class="head-cap">CS Gmail 문의함 · 답장 초안</span></h2>${g.connected ? badge('정상', 'green') : badge('연결 안 됨')}</div>
       <div class="setting-row">
         <div><strong class="set-pname">${g.connected ? esc(g.email || '연결된 계정') : '연결된 Google 계정이 없어요'}</strong>
           <p>${g.connected ? 'CS 문의함이 이 계정의 메일을 읽고 답장 초안을 만들어요. 발송은 사람이 Gmail에서 직접 해요.' : 'Google로 로그인을 누르고 문의 메일을 받을 계정을 고르면 연결돼요.'}</p></div>
@@ -1473,7 +1473,7 @@ GOOGLE_CLIENT_SECRET=...</pre>
     const list = S.users || [];
     const sw = (u, flag, on, label, disabled) => `<button type="button" class="switch${on ? '' : ' off'}" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(u.name)} ${label}" data-act="user-flag" data-id="${esc(u.id)}" data-flag="${flag}"${disabled ? ' disabled title="내 계정은 여기서 끌 수 없어요"' : ''}></button>`;
     box.innerHTML = `
-      <div class="card-head"><h2>계정 관리 <span class="muted small">${list.length}명</span></h2>
+      <div class="card-head"><h2>계정 관리<span class="head-cap">${list.length}명</span></h2>
         <div class="flex"><button type="button" class="btn small ghost" data-act="users-reload" aria-label="새로고침">${icon('refresh')}</button><button type="button" class="btn small lime" data-act="user-add">${icon('plus')}계정 추가</button></div></div>
       <div class="table-wrap"><table class="data-table"><thead><tr><th>이름 · 이메일</th><th>소속</th><th>관리자</th><th>사용</th><th>마지막 로그인</th><th></th></tr></thead>
         <tbody>${list.map(u => `<tr>

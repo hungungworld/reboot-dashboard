@@ -91,6 +91,8 @@
 .part-performance .perf-report-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
 .part-performance .perf-report-bar label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 .part-performance .perf-report-bar select { width: auto; min-width: 230px; }
+/* PDF 다운로드 — 옆 '← 성과분석으로'와 같은 크기 */
+.part-performance .perf-report-bar .btn.small { padding: 10px 15px; font-size: 12px; }
 .part-performance .perf-report { max-width: 210mm; margin: 0 auto; background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-xs); padding: 16mm 15mm 14mm; color: var(--ink); box-shadow: var(--shadow); }
 .part-performance .perf-wordmark { font-size: 26px; font-weight: 850; letter-spacing: -1px; }
 .part-performance .perf-report .eyebrow { margin-top: 34px; }

@@ -171,6 +171,8 @@
 .part-partners .ptn-out-gcheck { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; }
 .part-partners .ptn-out-gcheck > summary { cursor: pointer; font-size: 12px; font-weight: 600; }
 .part-partners .ptn-out-gactions { padding-top: 16px; border-top: 1px solid var(--line-3); }
+/* 보통 버튼 옆 파일 버튼 (업체 목록 · 가이드) — 옆 버튼과 같은 크기 */
+.part-partners .btn.small.ptn-btn-full { padding: 10px 15px; font-size: 12px; }
 
 /* ───────── records (ptn-rec-) : 협업 이력 ───────── */
 .part-partners .ptn-rec-bar { margin-bottom: 16px; }
@@ -356,7 +358,7 @@
 
 /* ───────── 제안 작성 V2 시안 (2026-10-26): 받는 파트너 → 01·02·03 단계 → 왼쪽 단계 카드 · 오른쪽 협업 가이드 ───────── */
 .part-partners .ptn-v2-paper { border-radius: 15px; padding: 26px; display: grid; gap: 16px; align-content: start; }
-.part-partners .ptn-v2-paper h2 { margin: 0; font-size: 17px; }
+.part-partners .ptn-v2-paper h2 { margin: 0; font-size: 15px; }
 /* 받는 파트너: 구분 탭(개수) → 검색 → 목록 · 고른 뒤 한 줄 */
 .part-partners .ptn-v2-pick { border-radius: 15px; padding: 18px 22px; margin-bottom: 22px; display: grid; gap: 12px; }
 .part-partners .ptn-v2-pick-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
