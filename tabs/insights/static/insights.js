@@ -2123,11 +2123,12 @@
 
   function brandRow(r) {
     const open = !!S.mk.open[r.brand] && r.items.length > 0;
-    const flags = r.own ? badge('알디콤', 'green') : [r.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', r.isNew ? badge('새', 'blue') : '',
+    const flags = r.own ? '' : [r.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', r.isNew ? badge('새', 'blue') : '',
       r.unlisted ? badge('분석 전') : ''].join('');
     const tog = r.items.length ? `<button type="button" class="ins-tg" data-act="mk-toggle" data-brand="${esc(r.brand)}" aria-expanded="${open}" aria-label="${esc(r.brand)} 제품 ${open ? '접기' : '펼치기'}">${open ? '▾' : '▸'}</button>`
       : '<span class="ins-tg none" aria-hidden="true"></span>';
-    const name = r.id != null ? `<button type="button" class="ins-bn" data-act="comp-detail" data-id="${esc(r.id)}" title="${esc(r.brand)} · 브랜드 카드 열기">${esc(r.brand)}</button>` : `<b class="ins-bn-t" title="${esc(r.brand)}">${esc(r.brand)}</b>`;
+    const ownCls = r.own ? ' ins-own-name' : '';
+    const name = r.id != null ? `<button type="button" class="ins-bn${ownCls}" data-act="comp-detail" data-id="${esc(r.id)}" title="${esc(r.brand)} · 브랜드 카드 열기">${esc(r.brand)}</button>` : `<b class="ins-bn-t${ownCls}" title="${esc(r.brand)}">${esc(r.brand)}</b>`;
     const forms = r.forms.length ? esc(r.forms.map(g => FORM_KO[g.f] || '기타').join(' · ')) : '<span class="muted">—</span>';
     const add = r.unlisted ? '<div class="ins-br-add"><button type="button" class="ins-link small" data-act="comp-discover" title="진열대에 새로 보인 브랜드를 경쟁 브랜드로 넣어요">경쟁 브랜드로 넣기</button></div>' : '';
     // 1회분은 가장 싼 값 하나 (제형별 값은 ▸ 펼침에) · 제형이 여럿이면 어느 제형인지 아래에 작게
@@ -2235,13 +2236,13 @@
     return `<span class="muted">${why}</span>${c.id != null ? ` · <button type="button" class="ins-link" data-act="comp-research" data-id="${esc(c.id)}">${icon('spark')}지금 분석</button>` : ''}`;
   }
   function compRow(c) {
-    const flags = c.own ? badge('알디콤', 'green') : [c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', c.isNew ? badge('새', 'blue') : ''].join('');
+    const flags = c.own ? '' : [c.watched ? '<span class="ins-star" title="주시 중">★</span>' : '', c.isNew ? badge('새', 'blue') : ''].join('');
     const forms = (c.forms || []).map(f => esc(f.label.split(' (')[0])).join(', ') || '—';
     const fb = c.feedback || {};
     const fbt = [fb.praise ? `<span class="ins-fb pos">+ ${esc(fb.praise.topic)}</span>` : '', fb.complaint ? `<span class="ins-fb neg">− ${esc(fb.complaint.topic)}</span>` : ''].join('') || '<span class="muted">—</span>';
     const one = (html, title) => `<div class="ins-1l"${title ? ` title="${esc(title)}"` : ''}>${html}</div>`;
     return `<tr class="${c.own ? 'ins-own-row' : ''}" data-act="comp-detail" data-id="${c.own ? 'own' : esc(c.id == null ? 'b:' + c.brand : c.id)}" tabindex="0">
-      <td>${one(`<strong>${esc(c.brand)}</strong>${flags}`, `${c.brand} · ${c.tierLabel}`)}</td>
+      <td>${one(`<strong${c.own ? ' class="ins-own-name"' : ''}>${esc(c.brand)}</strong>${flags}`, `${c.brand} · ${c.tierLabel}`)}</td>
       <td>${one(`<span class="ins-chans">${chanChips(c)}</span>`)}</td>
       <td class="num nowrap">${esc(compPop(c))}</td>
       <td class="num nowrap">${c.perServing != null ? esc(money(c.perServing)) : '—'}</td>
@@ -2563,7 +2564,7 @@
     const st = (S.data.reviews.csStatus.find(([k]) => k === r.cs) || [])[1];
     return `<tr class="${r.cs === 'todo' ? 'ins-rv-todo-row' : ''}" data-act="rv-open" data-id="${esc(r.id)}" tabindex="0">
       <td class="nowrap small">${esc(r.date || '—')}</td><td class="nowrap">${esc(r.sourceLabel || r.source)}</td>
-      ${own ? `<td class="nowrap"><span class="ins-tag">${esc(hashTag(r.line))}</span></td>` : `<td><div class="ins-1l"><strong>${esc(r.brand || '—')}</strong>${r.own ? badge('알디콤', 'green') : ''}</div></td>`}
+      ${own ? `<td class="nowrap"><span class="ins-tag">${esc(hashTag(r.line))}</span></td>` : `<td><div class="ins-1l"><strong${r.own ? ' class="ins-own-name"' : ''}>${esc(r.brand || '—')}</strong></div></td>`}
       <td class="nowrap">${stars(r.rating)}</td><td class="nowrap">${sentBadge(r.sentiment)}</td>
       <td><div class="ins-1l">${r.topics.map(t => `<span class="ins-tag">${esc(hashTag(t))}</span>`).join(' ') || '<span class="muted">—</span>'}</div></td>
       <td><div class="ins-1l" title="${esc(clip(pre, 300))}">${r.slackBy ? `<span class="ins-sl" title="${esc(`${r.slackBy} · ${fmt.datetime(r.slackAt)} 슬랙 공유`)}">${icon('chat')}공유</span>` : ''}${esc(pre)}</div></td>
@@ -2706,7 +2707,7 @@
       return `<td class="nowrap">${c.pos ? `<button type="button" class="ins-cell pos" data-act="rv" data-brand="${esc(b.brand)}" data-own="${b.own ? 1 : ''}" data-topic="${esc(t)}" data-s="+">+${c.pos}</button>` : ''}` +
         `${c.neg ? `<button type="button" class="ins-cell neg" data-act="rv" data-brand="${esc(b.brand)}" data-own="${b.own ? 1 : ''}" data-topic="${esc(t)}" data-s="-">−${c.neg}</button>` : ''}</td>`;
     };
-    const tr = b => `<tr class="${b.own ? 'ins-own-row' : ''}"><td><div class="ins-1l" title="${esc(b.brand)}">${b.own ? badge('알디콤', 'green') + ' ' : ''}${b.watched ? '<span class="ins-star">★</span> ' : ''}${esc(b.brand)}</div></td>
+    const tr = b => `<tr class="${b.own ? 'ins-own-row' : ''}"><td><div class="ins-1l" title="${esc(b.brand)}">${b.watched ? '<span class="ins-star">★</span> ' : ''}${b.own ? `<span class="ins-own-name">${esc(b.brand)}</span>` : esc(b.brand)}</div></td>
       <td class="num">${esc(b.total)}</td><td class="num">${b.avgRating == null ? '—' : esc(b.avgRating)}</td>${d.topics.map(t => cell(b, t)).join('')}</tr>`;
     return `<p class="small muted mb-8">브랜드 ${d.table.length}개</p><div class="table-wrap ins-rvm-scroll"><table class="data-table ins-table ins-fixed ins-matrix"${fc.attr}>${fc.group}<thead><tr>${head}</tr></thead><tbody>${rows.map(tr).join('')}</tbody></table></div>`;
   }

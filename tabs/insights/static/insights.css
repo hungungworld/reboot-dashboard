@@ -434,6 +434,8 @@
 .part-insights .ins-1l { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
 .part-insights .ins-1l > * { flex: none; }
 .part-insights .ins-field .ins-1l { display: block; }
+/* 알디콤 이름: 배지 대신 초록 테두리 */
+.part-insights .ins-own-name { display: inline-block; padding: 1px 7px; border: 1px solid var(--green); border-radius: 6px; line-height: 1.4; }
 .part-insights .ins-1l .ins-chans { display: flex; gap: 4px; flex-wrap: nowrap; }
 .part-insights .ins-th-sort { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
 .part-insights .ins-th-sort i { font-style: normal; font-size: 9px; color: var(--muted-2); display: inline-flex; align-items: center; justify-content: center; min-width: 15px; height: 15px; border-radius: 4px; }
