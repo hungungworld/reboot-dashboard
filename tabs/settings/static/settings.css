@@ -105,7 +105,16 @@
 .part-settings .set-search { width: 200px; padding: 8px 10px; }
 
 /* 작업 로그 */
+/* 연결 › 카드 접기 (API 키 · 설정값): 제목 버튼 + 꺾쇠 */
+.part-settings .set-fold { display: inline-flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.part-settings .set-fold .set-fold-caret { width: 16px; height: 16px; transform: rotate(-90deg); transition: transform .15s; }
+.part-settings .set-fold[aria-expanded="true"] .set-fold-caret { transform: none; }
+.part-settings .card-head:has(+ .set-fold-body[hidden]) { margin-bottom: 0; }
 .part-settings .set-wl td { vertical-align: middle; }
+/* 필터 줄: 이름표 + 칸 (SAP 필터 바처럼) · 구분 밑줄 탭은 표 바로 위 · 걸린 필터 한 줄 */
+.part-settings .set-wl-field { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-2); white-space: nowrap; }
+.part-settings .set-wl-kinds { margin-bottom: 12px; }
+.part-settings .set-wl-active { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .part-settings .set-more { display: flex; justify-content: center; margin-top: 14px; }
 .part-settings .set-kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-3); font-size: 12px; }
 .part-settings .set-kv > span { color: var(--muted); }

@@ -264,10 +264,24 @@
       case 'conn-key': openKey(b.dataset.name); break;
       case 'conn-test': testConn(b, b.dataset.name); break;
       case 'conn-reload': loadConnections(); break;
+      case 'conn-fold': {
+        const open = b.getAttribute('aria-expanded') !== 'true';
+        store.set('fold-' + b.dataset.k, open);
+        b.setAttribute('aria-expanded', String(open));
+        b.closest('.card').querySelector('.set-fold-body').hidden = !open;
+        break;
+      }
       case 'gmail-login': global.location.href = '/api/cs/gmail/connect'; break;
       case 'gmail-off': gmailDisconnect(b); break;
       case 'copy': copyText(b.dataset.text); break;
       case 'wl-kind': S.wl.kind = b.dataset.v || ''; drawWlFilters(); loadWorklog(true); break;
+      case 'wl-reset': {
+        S.wl.kind = ''; S.wl.part = ''; S.wl.q = '';
+        const el = panel('worklog');
+        $(el, '[data-ref="wl-q"]').value = '';
+        $(el, '[data-ref="wl-part"]').value = '';
+        drawWlFilters(); loadWorklog(true); break;
+      }
       case 'wl-more': loadWorklog(false); break;
       case 'wl-open': openLog(S.wl.items.find(x => String(x.id) === id)); break;
       case 'wl-csv': worklogCsv(b); break;
@@ -285,7 +299,7 @@
   function onInput(e) {
     const t = e.target;
     if (t.closest('[data-form="account"]')) { setDirty('account', true); return; }
-    if (t.dataset.ref === 'wl-q') { S.wl.q = t.value; drawWorklog(false); return; }
+    if (t.dataset.ref === 'wl-q') { S.wl.q = t.value; drawWorklog(false); drawWlActive(); return; }
     if (t.dataset.num) {
       S.collect[t.dataset.num] = t.value;
       setDirty('collect', true);
@@ -317,7 +331,7 @@
       return;
     }
     if (t.dataset.act === 'season-past') { S.showPast = t.checked; drawSeasons(); return; }
-    if (t.dataset.ref === 'wl-part') { S.wl.part = t.value; loadWorklog(true); }
+    if (t.dataset.ref === 'wl-part') { S.wl.part = t.value; drawWlActive(); loadWorklog(true); }
   }
 
   function onKeydown(e) {
@@ -1077,9 +1091,14 @@
       return `<div class="set-row-actions">${test}${key}</div>`;
     };
     const connected = keys.filter(i => i.connected).length;
+    // 카드 접기: 제목을 누르면 아래 표를 펴고 접음 (처음엔 접힘 · 펼친 상태는 이 브라우저에 기억)
+    const foldHead = (k, title) => `<h2><button type="button" class="set-fold" data-act="conn-fold" data-k="${k}" aria-expanded="${!!store.get('fold-' + k, false)}">` +
+      `${icon('chevron', 'icon set-fold-caret')}${title}</button></h2>`;
+    const foldBody = k => `<div class="set-fold-body"${store.get('fold-' + k, false) ? '' : ' hidden'}>`;
     $(el, '[data-ref="keys"]').innerHTML = `
-      <div class="card-head"><h2>API 키<span class="head-cap">${connected}/${keys.length} 연결</span></h2>
+      <div class="card-head">${foldHead('keys', `API 키<span class="head-cap">${connected}/${keys.length} 연결</span>`)}
         <div class="flex">${admin ? badge('관리자 · 키 입력 가능', 'lime') : badge('보기 전용')}<button type="button" class="btn small ghost" data-act="conn-reload" aria-label="새로고침">${icon('refresh')}</button></div></div>
+      ${foldBody('keys')}
       ${admin ? '' : '<div class="note mb-16">키 입력은 관리자만 할 수 있어요. 키가 필요하면 관리자에게 요청하세요. 연결 테스트는 누구나 할 수 있어요.</div>'}
       <div class="table-wrap">${fixedTable('conn-keys', ['서비스', '쓰는 곳', '무료 한도', '상태', '값', ''], [170, 230, 130, 210, 110, 140], 'set-conn')}
         <tbody>${keys.map(it => `<tr>
@@ -1088,15 +1107,15 @@
           <td title="${esc(it.limit || '')}">${esc(it.limit || '—')}</td>
           <td>${statusCell(it)}</td>
           <td class="mono nowrap">${esc(it.masked || '—')}</td>
-          <td>${actions(it)}</td></tr>`).join('')}</tbody></table></div>`;
+          <td>${actions(it)}</td></tr>`).join('')}</tbody></table></div></div>`;
     $(el, '[data-ref="values"]').innerHTML = `
-      <div class="card-head"><h2>설정값</h2>${badge('키가 아닌 값 · 그대로 보임')}</div>
-      <div class="table-wrap">${fixedTable('conn-values', ['항목', '쓰는 곳', '지금 값', ''], [200, 260, 280, 110], 'set-conn')}
+      <div class="card-head">${foldHead('values', '설정값')}${badge('키가 아닌 값 · 그대로 보임')}</div>
+      ${foldBody('values')}<div class="table-wrap">${fixedTable('conn-values', ['항목', '쓰는 곳', '지금 값', ''], [200, 260, 280, 110], 'set-conn')}
         <tbody>${values.map(it => `<tr>
           <td><strong>${esc(it.label)}</strong><small class="set-sub mono">${esc(it.name)}</small></td>
           <td class="set-used" title="${esc(it.usedBy)}">${esc(it.usedBy)}</td>
           <td title="${esc(it.masked || it.default || '')}">${it.masked ? `<span class="set-value">${esc(it.masked)}</span>` : `<span class="muted">${it.default ? `기본값 · ${esc(it.default)}` : '없음'}</span>`}${it.source ? ` <span class="small muted">${it.source === 'screen' ? '화면 입력' : '.env'}</span>` : ''}</td>
-          <td>${admin ? `<button type="button" class="btn small" data-act="conn-key" data-name="${esc(it.name)}">${icon('edit')}값 입력</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+          <td>${admin ? `<button type="button" class="btn small" data-act="conn-key" data-name="${esc(it.name)}">${icon('edit')}값 입력</button>` : ''}</td></tr>`).join('')}</tbody></table></div></div>`;
     drawSetup();
   }
 
@@ -1240,16 +1259,18 @@ GOOGLE_CLIENT_SECRET=...</pre>
       <section class="card">
         <div class="filters">
           <div class="flex wrap">
-            <input class="input set-search" type="search" data-ref="wl-q" placeholder="작업 · 사람 · 탭 검색" aria-label="작업 기록 검색">
-            <div class="linetabs" role="group" aria-label="구분" data-ref="wl-kinds"></div>
-            <select class="input set-select" data-ref="wl-part" aria-label="탭">
-              <option value="">모든 탭</option>${parts.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('')}
-            </select>
+            <input class="input set-search" type="search" data-ref="wl-q" placeholder="작업 · 사람 검색" aria-label="작업 기록 검색 (작업 · 사람 · 승인)">
+            <label class="set-wl-field"><span>메뉴</span>
+              <select class="input set-select" data-ref="wl-part" aria-label="메뉴">
+                <option value="">전체</option>${parts.map(p => `<option value="${esc(p.id)}">${esc(p.label)}</option>`).join('')}
+              </select></label>
           </div>
           ${ui.fileActions(ui.fileMenu('download', { label: '작업 기록 다운로드', items: [
             { label: 'CSV', act: 'wl-csv' }, { label: 'XLSX (구분별 시트)', act: 'wl-xlsx', title: '구분별로 시트를 나눠 다운로드해요' }] }))}
         </div>
-        <div class="table-wrap">${fixedTable('worklog', ['일시', '구분', '작업', '상태', '승인', '상세'], [160, 110, 360, 100, 120, 120], 'set-wl')}
+        <div class="linetabs set-wl-kinds" role="group" aria-label="구분" data-ref="wl-kinds"></div>
+        <div class="set-wl-active" data-ref="wl-active" hidden></div>
+        <div class="table-wrap">${fixedTable('worklog', ['일시', '메뉴', '구분', '작업', '상태', '승인', '상세'], [160, 130, 110, 330, 100, 120, 120], 'set-wl')}
           <tbody data-ref="wl-body"></tbody></table></div>
         <div class="set-more" data-ref="wl-more"></div>
         <p class="panel-note mt-16">대시보드에서 일어난 일을 자동으로 기록해요 (과제 제출용). 기록은 고치거나 삭제할 수 없고, API 키 · 이메일 주소는 가려서 저장돼요.</p>
@@ -1263,6 +1284,17 @@ GOOGLE_CLIENT_SECRET=...</pre>
     if (!box) return;
     box.innerHTML = [['', '전체']].concat(KINDS.map(k => [k, k])).map(([v, l]) =>
       `<button type="button" data-act="wl-kind" data-v="${esc(v)}" aria-pressed="${v === S.wl.kind}">${esc(l)}</button>`).join('');
+    drawWlActive();
+  }
+
+  // 지금 걸린 필터 (SAP 'Filtered by'): 구분 · 메뉴 · 검색어 + 한 번에 초기화
+  function drawWlActive() {
+    const box = $(panel('worklog'), '[data-ref="wl-active"]');
+    if (!box) return;
+    const on = [S.wl.kind && `구분 ${S.wl.kind}`, S.wl.part && `메뉴 ${partLabel(S.wl.part)}`, (S.wl.q || '').trim() && `검색 '${S.wl.q.trim()}'`].filter(Boolean);
+    box.hidden = !on.length;
+    box.innerHTML = on.length ? `<span class="small muted">필터: ${esc(on.join(' · '))}</span>
+      <button type="button" class="btn small ghost" data-act="wl-reset">${icon('x')}초기화</button>` : '';
   }
 
   function wlQuery() {
@@ -1300,17 +1332,18 @@ GOOGLE_CLIENT_SECRET=...</pre>
     const body = $(el, '[data-ref="wl-body"]');
     const more = $(el, '[data-ref="wl-more"]');
     if (!body) return;
-    if (loading) { body.innerHTML = '<tr><td colspan="6"><div class="skeleton set-skel"></div></td></tr>'; more.innerHTML = ''; return; }
+    if (loading) { body.innerHTML = '<tr><td colspan="7"><div class="skeleton set-skel"></div></td></tr>'; more.innerHTML = ''; return; }
     const q = (S.wl.q || '').trim().toLowerCase();
-    const rows = q ? S.wl.items.filter(r => [r.action, r.user, partLabel(r.part), r.approval].join(' ').toLowerCase().includes(q)) : S.wl.items;
+    const rows = q ? S.wl.items.filter(r => [r.action, r.user, r.approval].join(' ').toLowerCase().includes(q)) : S.wl.items;
     body.innerHTML = rows.length ? rows.map(r => `<tr>
       <td>${esc(fmt.datetime(r.at))}<small class="set-sub">${esc(r.user || '')}</small></td>
+      <td>${esc(partLabel(r.part) || '–')}</td>
       <td>${badge(r.kind, KIND_TONE[r.kind])}</td>
-      <td title="${esc(r.action)}">${esc(r.action)}<small class="set-sub">${esc(partLabel(r.part))}</small></td>
+      <td title="${esc(r.action)}">${esc(r.action)}</td>
       <td>${badge(r.status, STATUS_TONE[r.status])}</td>
       <td title="${esc(r.approval || '')}">${esc(r.approval || '–')}</td>
       <td><button type="button" class="btn small ghost" data-act="wl-open" data-id="${esc(r.id)}">${r.kind === 'AI 프롬프트' ? '프롬프트 보기' : '상세 보기'}</button></td>
-    </tr>`).join('') : `<tr><td colspan="6" class="set-wrap">${ui.empty(q ? `'${S.wl.q.trim()}' 검색 결과가 불러온 기록에 없어요. 기록 더 보기로 더 찾아보세요.` : '조건에 맞는 기록이 없어요.', 'clock')}</td></tr>`;
+    </tr>`).join('') : `<tr><td colspan="7" class="set-wrap">${ui.empty(q ? `'${S.wl.q.trim()}' 검색 결과가 불러온 기록에 없어요. 기록 더 보기로 더 찾아보세요.` : '조건에 맞는 기록이 없어요.', 'clock')}</td></tr>`;
     more.innerHTML = S.wl.done ? (S.wl.items.length ? `<span class="small muted">모두 ${fmt.num(S.wl.items.length)}건을 불러왔어요${q ? ` · 검색 결과 ${fmt.num(rows.length)}건` : ''}.</span>` : '')
       : `<button type="button" class="btn small" data-act="wl-more">기록 더 보기</button>`;
   }
