@@ -48,7 +48,7 @@
     // ownerRequired: 지정 담당의 추가 검토 체크 전에는 최종 승인 불가 (즉시 에스컬레이션·담당자 필수 유형)
     types: [
       {
-        code: 'C1', name: '부작용 신고', mode: '🔴 즉시 에스컬레이션', owner: '품질·규제 담당', dueHours: 1, tag: '불만·건강', ownerRequired: true,
+        code: 'C1', name: '부작용 신고', mode: '즉시 에스컬레이션', owner: '품질·규제 담당', dueHours: 1, tag: '불만·건강', ownerRequired: true,
         keywords: ['rash', 'hives', 'itchy', 'allergic reaction', 'swelling', 'swollen', 'vomit', 'threw up', 'throw up', 'dizzy', 'faint',
           'hospital', 'emergency', 'chest pain', 'trouble breathing', 'felt sick', 'got sick', 'side effect',
           // 2026-10-24 보강 (GPT 검토 ④: 설사·호흡곤란이 C3·C10으로 빠짐) · 젤리라 질식(choke)도 C1
@@ -77,7 +77,7 @@
         ])
       },
       {
-        code: 'C2', name: '건강·복용·효능', mode: '🟠 담당자 필수', owner: 'CS 리드(건강)', dueHours: 24, tag: '효과', ownerRequired: true,
+        code: 'C2', name: '건강·복용·효능', mode: '담당자 필수', owner: 'CS 리드(건강)', dueHours: 24, tag: '효과', ownerRequired: true,
         keywords: ['pregnant', 'pregnancy', 'breastfeeding', 'nursing', 'medication', 'safe to take', 'okay to have', 'how many',
           'dosage', 'children', 'kids', 'does it work', 'effective', 'health condition'],
         keywordsKo: ['임신', '수유', '복용', '효과'],
@@ -93,7 +93,7 @@
         ])
       },
       {
-        code: 'C3', name: '환불·교환', mode: '🟠 담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '환불', ownerRequired: true,
+        code: 'C3', name: '환불·교환', mode: '담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '환불', ownerRequired: true,
         keywords: ['refund', 'return', 'exchange', 'money back', 'cancel', 'cancellation'],
         keywordsKo: ['환불', '교환', '반품', '취소'],
         template: t([
@@ -107,7 +107,7 @@
         ])
       },
       {
-        code: 'C4', name: '포장·품질 불량', mode: '🟠 담당자 필수', owner: '품질 담당', dueHours: 24, tag: '포장', ownerRequired: true,
+        code: 'C4', name: '포장·품질 불량', mode: '담당자 필수', owner: '품질 담당', dueHours: 24, tag: '포장', ownerRequired: true,
         keywords: ['damaged', 'leaking', 'leak', 'broken', 'expired', 'mold', 'moldy', 'defective', 'wrong item', 'missing item', 'melted', 'loose cap', 'cap was loose', 'spilled', 'cracked bottle'],
         keywordsKo: ['파손', '불량', '유통기한', '곰팡이', '누락'],
         template: t([
@@ -119,7 +119,7 @@
         ])
       },
       {
-        code: 'C5', name: '배송', mode: '🟢 자동 초안', owner: 'CS 담당', dueHours: 24, tag: '배송', ownerRequired: false,
+        code: 'C5', name: '배송', mode: '자동 초안', owner: 'CS 담당', dueHours: 24, tag: '배송', ownerRequired: false,
         keywords: ['shipping', 'ship', 'shipped', 'delivery', 'deliver', 'delivered', 'tracking', 'where is my order',
           "haven't received", 'not received', 'arrive', 'arrived'],
         keywordsKo: ['배송', '택배', '도착'],
@@ -135,7 +135,7 @@
         ])
       },
       {
-        code: 'C6', name: '제품 정보 (맛·성분·알레르기)', mode: '🟢 자동 초안', owner: 'CS 담당', dueHours: 24, tag: '맛', ownerRequired: false,
+        code: 'C6', name: '제품 정보 (맛·성분·알레르기)', mode: '자동 초안', owner: 'CS 담당', dueHours: 24, tag: '맛', ownerRequired: false,
         keywords: ['flavor', 'flavour', 'taste', 'ingredient', 'allergen', 'allergy', 'nuts', 'gluten', 'vegan', 'sugar', 'calories', 'caffeine'],
         keywordsKo: ['맛', '성분', '알레르기'],
         template: t([
@@ -151,7 +151,7 @@
         ])
       },
       {
-        code: 'C7', name: '가격·프로모션', mode: '🟢 자동 초안', owner: 'CS 담당', dueHours: 24, tag: '가격', ownerRequired: false,
+        code: 'C7', name: '가격·프로모션', mode: '자동 초안', owner: 'CS 담당', dueHours: 24, tag: '가격', ownerRequired: false,
         keywords: ['price', 'pricing', 'discount', 'coupon', 'promo', 'promotion', 'sale', 'code', 'deal'],
         keywordsKo: ['가격', '할인', '쿠폰', '프로모션'],
         template: t([
@@ -163,7 +163,7 @@
         ])
       },
       {
-        code: 'C8', name: '리뷰·평점 (불만)', mode: '🟠 담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '불만', ownerRequired: true,
+        code: 'C8', name: '리뷰·평점 (불만)', mode: '담당자 필수', owner: 'CS 리드', dueHours: 24, tag: '불만', ownerRequired: true,
         keywords: ['1-star', 'one star', 'terrible', 'worst', 'awful', 'disappointed', 'waste of money', 'scam', 'rip-off'],
         keywordsKo: ['최악', '실망', '별점'],
         template: t([
@@ -175,7 +175,7 @@
         ])
       },
       {
-        code: 'C9', name: 'B2B·대량 구매', mode: '🔵 영업 전달', owner: '해외영업 {확인 필요}', dueHours: 48, tag: '—', ownerRequired: false,
+        code: 'C9', name: 'B2B·대량 구매', mode: '영업 전달', owner: '해외영업 {확인 필요}', dueHours: 48, tag: '—', ownerRequired: false,
         keywords: ['wholesale', 'bulk', 'distributor', 'distribution', 'B2B', 'MOQ', 'retail partner', 'reseller', 'carry your'],
         keywordsKo: ['도매', '대량', '유통', '입점'],
         template: t([
@@ -185,7 +185,7 @@
         ])
       },
       {
-        code: 'C10', name: '기타·협업 제안', mode: '⚪ 다른 탭 전달', owner: '인플루언서·파트너 (혁주)', dueHours: 72, tag: '—', ownerRequired: false,
+        code: 'C10', name: '기타·협업 제안', mode: '다른 탭 전달', owner: '인플루언서·파트너 (혁주)', dueHours: 72, tag: '—', ownerRequired: false,
         keywords: ['collab', 'collaborate', 'collaboration', 'partnership', 'influencer', 'sponsor', 'sponsorship', 'creator', 'PR package', 'affiliate'],
         keywordsKo: ['협업', '제휴', '협찬'],
         template: t([
@@ -203,6 +203,22 @@
 
     // 정할 것 #7 확정 전 임시 기준: REVISE·REVIEW 판정이 남은 초안은 승인 의견을 남겨야 승인 가능
     approvalPolicy: { reviseNeedsComment: true },
+
+    // ② CS 검토 확인 항목 (문의 유형별 · 모두 체크해야 CS 검토 승인 · 2026-10-26 메일함 구조)
+    // ① 문구 검토(표현·빈칸)는 자동 심의가 보고, 여기는 사람이 보는 내용·정책·말투
+    csChecks: {
+      common: ['분류가 맞다', '말투가 브랜드 톤이다 (페르소나)'],
+      C1: ['부작용 접수 기록을 남겼다', '품질·규제 담당에게 알렸다', '증상·제품에 대한 판단을 답장에 쓰지 않았다'],
+      C2: ['의료 조언으로 읽히지 않는다 (의사·약사 상담 안내)', '성분·용량은 라벨 기준이다'],
+      C3: ['주문번호 상태를 확인했다', '환불·교환 정책과 맞다'],
+      C4: ['사진·로트 번호를 요청하거나 확인했다', '품질 담당 회신 기한과 맞다'],
+      C5: ['운송사 조회 결과와 맞다'],
+      C6: ['제품표·팩트시트와 맞다'],
+      C7: ['현재 가격·프로모션과 맞다'],
+      C8: ['리뷰 삭제·수정을 요청하지 않았다', '보상과 후기를 엮지 않았다'],
+      C9: ['영업 담당에게 넘겼다'],
+      C10: ['담당 탭(파트너 등)에 넘겼다']
+    },
 
     adverse: {
       required: ['customer', 'contact', 'product', 'lot', 'symptoms'],

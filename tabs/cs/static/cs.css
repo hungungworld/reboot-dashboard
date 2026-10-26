@@ -26,30 +26,7 @@
 .part-cs .cs-sub, .part-cs .cs-muted { color: var(--cs-muted); font-size: 12px; margin: 0; line-height: 1.7; }
 .part-cs .cs-icon { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
 
-/* KPI 카드 (시안 .kpi) */
-.part-cs .cs-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.part-cs .cs-kpi { background: var(--cs-card); border: 1px solid var(--cs-rule); border-radius: var(--radius); padding: 20px 21px; min-height: 132px; display: grid; align-content: start; }
 /* core .kpi.featured와 같게: 지금 보기 = 라임 면 채움 · 경고 = 빨간 2px 테두리 + 빨간 숫자 */
-.part-cs .cs-kpi.is-featured { background: var(--accent); border-color: var(--accent); }
-.part-cs .cs-kpi.is-alert:not(.is-featured) { border: 2px solid var(--red); padding: 19px 20px; }
-.part-cs button.cs-kpi { font: inherit; color: inherit; text-align: left; width: 100%; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-.part-cs button.cs-kpi.is-featured { color: var(--lime-ink); }
-.part-cs button.cs-kpi:hover { border-color: var(--cs-rule-strong); box-shadow: 0 6px 18px rgba(32, 32, 48, .06); }
-.part-cs button.cs-kpi.is-featured:hover { border-color: var(--accent); }
-.part-cs button.cs-kpi.is-alert:not(.is-featured):hover { border-color: var(--red); }
-.part-cs button.cs-kpi:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: 2px; }
-.part-cs .cs-kpi > span { display: block; }
-.part-cs .cs-kpi > .cs-kpi-top { display: flex; }
-.part-cs .cs-kpi-top { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--cs-muted); }
-.part-cs .cs-kpi.is-featured .cs-kpi-top, .part-cs .cs-kpi.is-featured .cs-kpi-sub { color: var(--lime-ink); }
-.part-cs .cs-kpi-icon { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--cs-rule-strong); display: grid; place-items: center; }
-.part-cs .cs-kpi.is-featured .cs-kpi-icon { border-color: var(--lime-line); }
-.part-cs .cs-kpi-icon .cs-icon { width: 13px; height: 13px; }
-.part-cs .cs-kpi-num { font-size: 29px; font-weight: 720; letter-spacing: -1px; margin: 14px 0 8px; line-height: 1.1; }
-.part-cs .cs-kpi-num small { font-size: 13px; font-weight: 500; letter-spacing: 0; margin-left: 3px; }
-.part-cs .cs-kpi-sub { font-size: 11px; color: var(--cs-faint); }
-.part-cs .cs-kpi-sub b { font-weight: 600; color: inherit; margin-right: 6px; }
-.part-cs .cs-kpi.is-alert:not(.is-featured) .cs-kpi-num { color: var(--red); }
 
 /* 하위 탭 (시안 .subtabs) */
 /* 밑줄 탭 (파트너 제안 작성 단계 .ptn-v2-steps와 같은 모양) */
@@ -135,7 +112,6 @@
 .part-cs .cs-sec-sum { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .part-cs .cs-sec-body { padding: 16px; display: grid; gap: 12px; }
 .part-cs .cs-sec .cs-approve { border: 0; padding: 0; }
-.part-cs .cs-sec .cs-checkbox { border: 0; padding: 0; background: transparent; }
 .part-cs .cs-chip.cs-chip-warn { background: var(--cs-orange-bg); color: var(--cs-orange); }
 /* 답변 템플릿 탭 — 접힌 페르소나 · 템플릿 */
 .part-cs .cs-avatar.cs-persona-mini { width: 30px; height: 30px; font-size: 11px; }
@@ -184,10 +160,6 @@
 .part-cs .cs-input::placeholder { color: var(--cs-faint); }
 .part-cs .cs-input:disabled, .part-cs .cs-input[readonly] { background: var(--cs-soft); }
 
-/* 답변 초안 상자 (시안 .draft) */
-.part-cs .cs-draftbox { background: var(--cs-draft-bg); border: 1px solid var(--cs-draft-line); border-radius: var(--radius-sm); padding: 18px 20px; display: grid; gap: 10px; }
-.part-cs .cs-draftbox-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.part-cs .cs-draftbox-head b { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 680; }
 .part-cs .cs-draft { font-size: 13px; line-height: 1.85; resize: vertical; background: transparent; border: 0; padding: 0; min-height: 260px; }
 .part-cs .cs-draft[readonly] { background: transparent; }
 /* 초안 위 빈칸 안내 ([확인 필요]마다 무엇을 채울지 · 그 문장 · 누르면 위치로) */
@@ -205,7 +177,6 @@
 .part-cs .cs-draft::selection { background: var(--cs-orange); color: var(--cs-card); }
 .part-cs .cs-req { color: var(--cs-red); }
 .part-cs .cs-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.part-cs .cs-footbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
 
 /* 버튼 (시안 .btn · .btn.lime) */
 .part-cs .cs-btn {
@@ -226,8 +197,6 @@
 .part-cs .cs-check input { width: 16px; height: 16px; accent-color: var(--lime-dot); }
 
 /* 재검사 결과 (시안 .insight-strip 톤) */
-.part-cs .cs-checkbox { background: var(--cs-soft); border: 1px solid var(--cs-rule); border-radius: var(--radius-sm); padding: 15px 18px; display: grid; gap: 8px; font-size: 12px; }
-.part-cs .cs-findings, .part-cs .cs-gates { margin: 0; padding-left: 18px; font-size: 12px; display: grid; gap: 5px; line-height: 1.65; }
 .part-cs .cs-gates { list-style: none; padding-left: 0; }
 .part-cs .cs-gates .is-ok { color: var(--cs-green); }
 .part-cs .cs-gates .is-no { color: var(--cs-red); font-weight: 650; }
@@ -284,13 +253,9 @@
 .part-cs .cs-warn a { color: inherit; font-weight: 700; }
 
 @media (max-width: 1200px) {
-  .part-cs .cs-kpis { gap: 12px; }
-  .part-cs .cs-kpi { padding: 17px; }
-  .part-cs .cs-kpi-num { font-size: 29px; }
   .part-cs .cs-inbox { grid-template-columns: 270px minmax(0, 1fr); }
 }
 @media (max-width: 950px) {
-  .part-cs .cs-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .part-cs .cs-inbox { grid-template-columns: 235px minmax(0, 1fr); }
   .part-cs .cs-detail { padding: 20px; }
   .part-cs .cs-adverse { grid-template-columns: 1fr; }
@@ -299,45 +264,20 @@
   .part-cs .cs-inbox { grid-template-columns: 1fr; min-height: 0; }
   .part-cs .cs-listcol { border-right: 0; border-bottom: 1px solid var(--cs-rule); }
   .part-cs .cs-list { max-height: 270px; }
-  .part-cs .cs-kpi { min-height: 0; }
   .part-cs .cs-adverse { grid-template-columns: 1fr; }
 }
 
-/* 보내기 탭: 최종 승인된 답장 → 받는 사람 확인 → Gmail로 바로 보내기 */
+/* 고객 기록 목록 머리 (cs-outbox · cs-card-head) */
 .part-cs .cs-outbox { display: grid; gap: 14px; }
 .part-cs .cs-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .part-cs .cs-card-head h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
-.part-cs .cs-out { background: var(--cs-card); border: 1px solid var(--cs-rule); border-radius: var(--radius); padding: 18px 20px; display: grid; gap: 10px; }
-.part-cs .cs-out.is-focus { border-color: var(--cs-focus); box-shadow: 0 0 0 3px var(--cs-accent-soft); }
-.part-cs .cs-out-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.part-cs .cs-out-head b { font-size: 15px; margin-right: 6px; }
-.part-cs .cs-out-meta { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; background: var(--cs-soft); border-radius: var(--radius-sm); padding: 10px 12px; }
-.part-cs .cs-out-meta dt { font-size: 12px; color: var(--cs-muted); }
-.part-cs .cs-out-meta dd { margin: 2px 0 0; font-weight: 600; overflow-wrap: anywhere; }
-.part-cs .cs-out-body { margin: 0; white-space: pre-wrap; font: inherit; font-size: 13px; line-height: 1.7; background: var(--cs-draft-bg); border: 1px solid var(--cs-draft-line);
-  border-radius: var(--radius-sm); padding: 12px 14px; max-height: 260px; overflow: auto; }
 .part-cs .cs-note { margin: 0; font-size: 13px; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--cs-soft); }
 .part-cs .cs-note-block { background: var(--cs-red-bg); color: var(--cs-red); font-weight: 600; }
 /* C1 부작용 안내 띠 (문의 상세 위쪽) */
 .part-cs .cs-escal { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--cs-red-bg); color: var(--cs-red); font-size: 13px; }
 .part-cs .cs-escal > span { flex: 1 1 220px; }
 .part-cs .cs-escal.is-done { background: var(--cs-soft); color: var(--cs-muted); }
-.part-cs .cs-out-sent-head { margin-top: 10px; }
-.part-cs .cs-table-wrap { overflow-x: auto; border: 1px solid var(--cs-rule); border-radius: var(--radius-sm); background: var(--cs-card); }
-.part-cs .cs-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.part-cs .cs-table th, .part-cs .cs-table td { padding: 10px 12px; border-bottom: 1px solid var(--cs-rule); text-align: left; vertical-align: middle; }
-.part-cs .cs-table th { font-size: 12px; color: var(--cs-muted); font-weight: 600; background: var(--cs-soft); }
-.part-cs .cs-table tr:last-child td { border-bottom: 0; }
-.part-cs .cs-nowrap { white-space: nowrap; }
-@media (max-width: 720px) { .part-cs .cs-out-meta { grid-template-columns: 1fr; } }
 
-/* 최종 승인 버튼 옆: 승인하려면 남은 것 (누르면 그 칸으로) */
-.part-cs .cs-need { flex-basis: 100%; background: var(--cs-orange-bg); border: 1px solid var(--cs-orange); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; }
-.part-cs .cs-need b { color: var(--cs-orange); }
-.part-cs .cs-need ol { margin: 6px 0 0; padding-left: 20px; display: grid; gap: 4px; }
-.part-cs .cs-need-go { font: inherit; color: var(--cs-ink); background: none; border: 0; padding: 2px 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--cs-orange); text-underline-offset: 3px; }
-.part-cs .cs-need-go span { color: var(--cs-link); text-decoration: none; }
-.part-cs .cs-need-go:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: 2px; }
 
 /* 답변 템플릿 → 답변 기본값 (빈칸 한 번에 채우기) */
 .part-cs .cs-defaults-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 10px 0; }
@@ -353,7 +293,6 @@
 .part-cs .cs-cust-by { display: block; font-size: 12px; margin-top: 2px; }
 .part-cs .cs-cust-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 12px; }
 .part-cs .cs-custfilter:not(:empty) { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
-.part-cs .cs-table td .cs-chip { margin: 2px 2px 2px 0; }
 
 /* 고객 이력 카드 (접고 펼치기) · 주고받은 메일 */
 .part-cs .cs-custs { display: grid; gap: 10px; }
@@ -380,10 +319,12 @@
 .part-cs .cs-inbox[data-view="list"] .cs-detail { display: none; }
 .part-cs .cs-inbox[data-view="list"] .cs-listcol { border-right: 0; }
 .part-cs .cs-inbox[data-view="list"] .cs-list { max-height: none; }
-.part-cs .cs-inbox[data-view="detail"] { grid-template-columns: minmax(0, 1fr); }
-.part-cs .cs-inbox[data-view="detail"] .cs-listcol { display: none; }
-/* 문의 하나를 검토할 때는 KPI를 숨겨 본문이 첫 화면에 보이게 (KPI는 문의함 › 처리 중 목록에만 있음) */
-.part-cs .cs-subpanel:has(.cs-inbox[data-view="detail"]) .cs-kpis { display: none; }
+/* 문의를 열면 넓은 화면은 목록 옆에 · 좁은 화면은 문의만 (2026-10-26 메일함 구조) */
+.part-cs .cs-inbox[data-view="detail"] { grid-template-columns: 300px minmax(0, 1fr); }
+@media (max-width: 1280px) {
+  .part-cs .cs-inbox[data-view="detail"] { grid-template-columns: minmax(0, 1fr); }
+  .part-cs .cs-inbox[data-view="detail"] .cs-listcol { display: none; }
+}
 .part-cs .cs-listhead { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 0 2px; }
 .part-cs .cs-mailrow { grid-template-columns: 36px minmax(120px, 190px) minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: var(--radius-sm); border-bottom: 1px solid var(--cs-rule); }
 .part-cs .cs-mailrow:hover { background: var(--cs-card); box-shadow: 0 1px 4px rgba(32, 32, 48, .08); }
@@ -425,20 +366,10 @@
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"]:empty { display: none; }
 @media (max-width: 720px) { .part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: 1fr; } }
 
-/* 보내기 탭 · 보낸 답장 펼치기 (2026-10-25) */
-.part-cs .cs-out-row { cursor: pointer; }
-.part-cs .cs-out-row:hover td, .part-cs .cs-out-row.is-open td { background: var(--cs-soft); }
-.part-cs .cs-out-row.is-open td { border-bottom: 0; }
-.part-cs .cs-out-detail > td { background: var(--cs-soft); padding: 4px 12px 16px; }
-.part-cs .cs-sent-detail { display: grid; gap: 10px; }
-.part-cs .cs-sent-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 6px 16px; margin: 0; font-size: 12px; }
-.part-cs .cs-sent-meta dt { color: var(--cs-muted); font-weight: 600; font-size: 12px; }
-.part-cs .cs-sent-meta dd { margin: 2px 0 0; overflow-wrap: anywhere; }
-.part-cs .cs-sent-detail .cs-mail-out { margin-left: 0; }
 .part-cs .cs-voc-list { margin: 0 0 8px; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
 .part-cs .cs-voc-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
-/* 하위 구조 정리 (2026-10-26): 문의함 세부 보기 · 답변 설정 안내 · 재검사 남은 확인 · 승인 칸 보내기 */
+/* 문의함 단계 · 답장 설정 안내 (2026-10-26) */
 .part-cs .cs-subpanel { display: grid; gap: 18px; }
 .part-cs .cs-subpanel[hidden] { display: none; }
 .part-cs .cs-subtabs { margin-bottom: 4px; }
@@ -447,17 +378,112 @@
 .part-cs .cs-setupnote b { color: inherit; }
 .part-cs .cs-sec.is-warn { border-color: var(--cs-orange); }
 .part-cs .cs-sec.is-warn > summary { background: var(--cs-orange-bg); }
-.part-cs .cs-inline-out { flex-basis: 100%; }
-.part-cs .cs-inline-out .cs-out { margin: 0; }
 .part-cs .cs-linkbtn { font: inherit; font-weight: 650; color: var(--cs-link); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
 .part-cs .cs-linkbtn:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: 2px; }
 /* 초안 칸은 내용만큼 늘어남 (fitDraft) · 칸 안 스크롤 없음 */
 .part-cs .cs-draft { overflow: hidden; resize: none; }
-@media (max-width: 720px) {
-  /* 모바일: KPI 4장을 한 줄로 줄여 받은편지함이 첫 화면에 보이게 */
-  .part-cs .cs-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-  .part-cs .cs-kpi, .part-cs .cs-kpi.is-featured, .part-cs .cs-kpi.is-alert:not(.is-featured) { padding: 8px 9px; border-radius: var(--radius-sm); }
-  .part-cs .cs-kpi-icon, .part-cs .cs-kpi-sub { display: none !important; }
-  .part-cs .cs-kpi-top { font-size: 11px; white-space: nowrap; overflow: hidden; }
-  .part-cs .cs-kpi-num { font-size: 20px; margin: 4px 0 0; }
+
+/* ───────── 메일함 구조: 답장 작성기 · ① 문구 검토 · ② CS 검토 · 보내기 줄 (2026-10-26) ───────── */
+/* 목록 옆에 열린 문의: 목록 줄을 한 칸으로 줄임 */
+.part-cs .cs-inbox[data-view="detail"] .cs-mailrow { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 6px 10px; }
+.part-cs .cs-inbox[data-view="detail"] .cs-row-from { grid-column: 2; }
+.part-cs .cs-inbox[data-view="detail"] .cs-row-main { grid-column: 1 / -1; }
+.part-cs .cs-inbox[data-view="detail"] .cs-row-snippet { display: none; }
+.part-cs .cs-mailrow.is-selected { background: var(--cs-accent-soft); border-color: var(--cs-accent-line); }
+.part-cs .cs-list-empty { padding: 24px 6px; }
+/* 목록 줄의 두 검토 표시 (문구 · CS) */
+.part-cs .cs-gates-mini { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: var(--cs-faint); margin-left: auto; letter-spacing: 0; }
+.part-cs .cs-gm { display: inline-block; width: 16px; height: 5px; border-radius: 3px; background: var(--cs-rule-strong); margin-right: 3px; }
+.part-cs .cs-gm.is-ok { background: var(--cs-link); }
+
+.part-cs .cs-detail { container-type: inline-size; }
+.part-cs .cs-thread { gap: 18px; grid-template-columns: minmax(0, 1fr); }   /* 긴 내용이 칸을 밀어 넓히지 않게 */
+.part-cs .cs-classify > summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--cs-muted); }
+.part-cs .cs-classify[open] > .cs-row { margin-top: 10px; }
+/* 대화: 받은 메일 → 내부 메모 */
+.part-cs .cs-msgs { display: grid; gap: 12px; }
+.part-cs .cs-msg { display: grid; gap: 10px; }
+.part-cs .cs-msg-note { background: var(--cs-accent-soft); border: 1px solid var(--cs-accent-line); border-radius: var(--radius-sm); padding: 12px 16px; gap: 4px; }
+.part-cs .cs-msg-head { margin: 0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.part-cs .cs-msg-head b { color: var(--cs-link); }
+.part-cs .cs-msg-text { margin: 0; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 작성기 | 검토 패널 (넓으면 두 칸) */
+.part-cs .cs-work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@container (min-width: 860px) {
+  .part-cs .cs-work { grid-template-columns: minmax(0, 1fr) 300px; }
+  .part-cs .cs-review { position: sticky; top: 12px; }
 }
+.part-cs .cs-composer { border: 1.5px solid var(--cs-ink); border-radius: var(--radius); background: var(--cs-card); overflow: hidden; min-width: 0; }
+.part-cs .cs-ctabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 0 12px; background: var(--cs-soft); border-bottom: 1px solid var(--cs-rule); }
+.part-cs .cs-ctab { font: inherit; font-size: 13px; font-weight: 550; color: var(--cs-muted); background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 11px 8px; cursor: pointer; }
+.part-cs .cs-ctab[aria-pressed="true"] { color: var(--cs-ink); font-weight: 750; border-bottom-color: var(--cs-ink); }
+.part-cs .cs-ctab:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: -3px; }
+.part-cs .cs-ctabs-side { margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 6px 0; }
+.part-cs .cs-cpane[hidden] { display: none; }
+.part-cs .cs-cfields { margin: 0; }
+.part-cs .cs-cfields > div { display: flex; gap: 10px; padding: 8px 18px; border-bottom: 1px solid var(--cs-rule); font-size: 12px; }
+.part-cs .cs-cfields dt { color: var(--cs-muted); width: 60px; flex-shrink: 0; }
+.part-cs .cs-cfields dd { margin: 0; overflow-wrap: anywhere; }
+/* 초안 + 뒤에 깐 밑줄 층 (같은 글꼴·줄 간격·줄바꿈이어야 밑줄이 글자와 겹침) */
+.part-cs .cs-hl { position: relative; padding: 16px 18px; background: var(--cs-draft-bg); }
+.part-cs .cs-hl .cs-draft { display: block; margin: 0; font-family: inherit; font-size: 13px; font-weight: 400; line-height: 1.85; letter-spacing: normal;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; tab-size: 8; }
+.part-cs .cs-hl textarea.cs-draft { position: relative; background: transparent; caret-color: var(--cs-ink); }
+.part-cs .cs-hl-back { position: absolute; inset: 16px 18px; color: transparent; pointer-events: none; min-height: 0; overflow: hidden; }
+.part-cs .cs-hl-back mark { color: transparent; border-radius: 3px; padding: 0; background: none; text-decoration-thickness: 1.5px; text-underline-offset: 4px; }
+.part-cs .cs-hl-back .cs-hl-BLOCK { background: var(--cs-red-bg); text-decoration: underline wavy var(--cs-red); }
+.part-cs .cs-hl-back .cs-hl-REVISE { background: var(--cs-orange-bg); text-decoration: underline wavy var(--cs-orange); }
+.part-cs .cs-hl-back .cs-hl-REVIEW { background: var(--cs-blue-bg); text-decoration: underline wavy var(--cs-blue); }
+.part-cs .cs-hl-back .cs-hl-COND { background: var(--cs-purple-bg); text-decoration: underline wavy var(--cs-purple); }
+.part-cs .cs-hl-back .cs-hl-todo { background: var(--cs-orange-bg); text-decoration: underline dashed var(--cs-orange); }
+.part-cs .cs-cextra { display: grid; gap: 8px; padding: 0 18px 14px; background: var(--cs-draft-bg); }
+.part-cs .cs-cextra > [data-el="ainotes"]:empty { display: none; }
+.part-cs .cs-notepane { padding: 16px 18px; display: grid; gap: 10px; }
+
+/* 보내기 줄: 문구 검토 ─ CS 검토 ─ 보내기 */
+.part-cs .cs-sendbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px 16px; border-top: 1px solid var(--cs-rule); background: var(--cs-soft); }
+.part-cs .cs-track { display: flex; align-items: center; flex: 1 1 260px; min-width: 0; }
+.part-cs .cs-gate { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 6px; border-radius: 999px; border: 1.5px solid var(--cs-rule-strong);
+  background: var(--cs-card); color: var(--cs-muted); font-size: 12px; font-weight: 600; white-space: nowrap; transition: background .2s, border-color .2s, color .2s; }
+.part-cs .cs-gate-dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--cs-rule-strong); color: var(--cs-card); }
+.part-cs .cs-gate.is-on { border-color: var(--cs-ink); color: var(--cs-ink); }
+.part-cs .cs-gate.is-on .cs-gate-dot { background: var(--cs-ink); }
+.part-cs .cs-gate.is-ok { border-color: var(--cs-accent-line); background: var(--cs-accent-soft); color: var(--cs-link); }
+.part-cs .cs-gate.is-ok .cs-gate-dot { background: var(--cs-link); }
+.part-cs .cs-gate.is-no { border-color: var(--cs-red); color: var(--cs-red); }
+.part-cs .cs-gate.is-no .cs-gate-dot { background: var(--cs-red); }
+.part-cs .cs-wire { flex: 1; height: 2px; min-width: 12px; margin: 0 4px; background: var(--cs-rule-strong); transition: background .2s; }
+.part-cs .cs-wire.is-ok { background: var(--cs-link); }
+.part-cs .cs-sendbar > .cs-actions { margin-left: auto; }
+.part-cs .cs-btn.cs-btn-dark { background: var(--cs-dark); border-color: var(--cs-dark); color: var(--cs-dark-ink); }
+
+/* 검토 패널: ① 문구 검토 · ② CS 검토 */
+.part-cs .cs-review { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.part-cs .cs-rcard { border: 1px solid var(--cs-rule); border-radius: var(--radius); background: var(--cs-card); padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
+.part-cs .cs-rcard.is-locked { background: var(--cs-soft); }
+.part-cs .cs-rcard.is-locked .cs-approve, .part-cs .cs-rcard.is-locked .cs-share-wrap { opacity: .5; }
+.part-cs .cs-rhead { display: flex; align-items: center; gap: 8px; }
+.part-cs .cs-rhead h4 { margin: 0; font-size: 14px; font-weight: 720; }
+.part-cs .cs-rstate { margin-left: auto; font-size: 11px; font-weight: 650; padding: 3px 8px; border-radius: 999px; background: var(--cs-gray-bg); color: var(--cs-gray); white-space: nowrap; letter-spacing: 0; }
+.part-cs .cs-rstate.is-ok { background: var(--cs-accent); color: var(--cs-accent-ink); }
+.part-cs .cs-rstate.is-no { background: var(--cs-red-bg); color: var(--cs-red); }
+.part-cs .cs-rsub { margin: -6px 0 0; font-size: 12px; color: var(--cs-muted); }
+.part-cs .cs-rcard p { margin: 0; }
+.part-cs .cs-flags { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.part-cs .cs-flags li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; font-size: 12px; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--cs-soft); }
+.part-cs .cs-flags li > span { display: grid; gap: 3px; min-width: 0; }
+.part-cs .cs-flags small { color: var(--cs-muted); font-size: 11px; line-height: 1.6; }
+.part-cs .cs-flag-terms { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.part-cs .cs-rcard .cs-gates { padding-left: 0; }
+.part-cs .cs-rcard .cs-todo-panel { padding: 10px 12px; }
+.part-cs .cs-rcard .cs-todo-jump { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.part-cs .cs-rcard .cs-todo-go { display: none; }
+.part-cs .cs-rcard .cs-todo-what { white-space: normal; overflow-wrap: anywhere; }
+.part-cs .cs-rcard .cs-approve { border: 0; padding: 0; gap: 10px; }
+.part-cs .cs-rcard .cs-field { min-width: 0; }
+.part-cs .cs-checks { display: grid; gap: 6px; }
+.part-cs .cs-checks .cs-check { align-items: flex-start; line-height: 1.55; cursor: pointer; }
+.part-cs .cs-checks .cs-check input { margin-top: 2px; flex-shrink: 0; }
+.part-cs .cs-rcard .cs-share-wrap { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) { .part-cs .cs-gate, .part-cs .cs-wire { transition: none; } }
