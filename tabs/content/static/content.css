@@ -219,6 +219,10 @@
 .part-content .cnt-results-main { min-width: 0; }
 .part-content .cnt-results-side .cnt-make { margin-top: 0; }
 .part-content .cnt-results-side .cnt-versions { max-height: 520px; }
+/* 왼쪽이 길어 오른쪽 아래가 비면 오른쪽 열이 스크롤을 따라옴 (상단 바 아래 16px · 화면보다 길면 열 안에서 스크롤) */
+.part-content .cnt-bench > .cnt-aside, .part-content .cnt-results-side {
+  position: sticky; top: calc(var(--topbar-h) + 16px); max-height: calc(100vh - var(--topbar-h) - 32px); overflow-y: auto;
+}
 .part-content .cnt-results-card .cnt-empty { min-height: 260px; }
 .part-content .cnt-results-card .cnt-doc { max-height: 620px; font-size: 13px; padding: 16px 20px; }
 .part-content .cnt-results-card .cnt-preview { width: fit-content; max-width: 100%; margin: 10px auto 6px; }
@@ -425,6 +429,7 @@
   .part-content .cnt-campaign-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .part-content .cnt-messages { max-height: none; }
   .part-content .cnt-results-grid, .part-content .cnt-editor { grid-template-columns: 1fr; }
+  .part-content .cnt-bench > .cnt-aside, .part-content .cnt-results-side { position: static; max-height: none; overflow-y: visible; }
   .part-content .cnt-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
