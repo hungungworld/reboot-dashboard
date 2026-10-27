@@ -581,6 +581,7 @@
       S.reviews = {};
       setCampaign(res.campaign);
       renderMain();
+      if (global.scrollTo) global.scrollTo({ top: 0 });  // 버튼이 시트 맨 아래라 새 단계는 맨 위부터 보이게
       loadList();
       if (cardnews) { /* 카드뉴스는 편집기에서 내용을 넣고 시작 (질문 카드 · 대화 없음) */ }
       else if (quick) send('질문 없이 지금 정보로 바로 초안 만들어줘', { force: 'draft' });

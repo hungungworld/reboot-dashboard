@@ -713,6 +713,8 @@
   .part-compliance .cmp-mail-from { width: 100%; }
 }
 .part-compliance .cmp-result-card { min-height: 424px; display: grid; gap: 14px; align-content: start; }
+/* 왼쪽이 길어 오른쪽 아래가 비면 결과 박스가 스크롤을 따라옴 (상단 바 아래 16px · 화면보다 길면 박스 안에서 스크롤) */
+.part-compliance .cmp-work .cmp-result-card { position: sticky; top: calc(var(--topbar-h) + 16px); max-height: calc(100vh - var(--topbar-h) - 32px); overflow-y: auto; }
 .part-compliance .cmp-work .cmp-result-card { gap: 16px; }   /* 위 .cmp-work .cmp-card의 gap: 0을 결과 카드에서만 되돌림 — 박스 · 버튼 줄 · AI 박스 사이 16px (2026-10-26) */
 .part-compliance .cmp-result-card > :empty { display: none; }
 .part-compliance .cmp-empty { padding: 48px 8px; }
@@ -820,6 +822,7 @@
 @media (max-width: 980px) {
   .part-compliance .cmp-work { grid-template-columns: 1fr; }
   .part-compliance .cmp-result-card { min-height: 0; }
+  .part-compliance .cmp-work .cmp-result-card { position: static; max-height: none; overflow-y: visible; }
 }
 @media (max-width: 640px) {
   .part-compliance .cmp-work .cmp-card, .part-compliance .cmp-paper, .part-compliance .cmp-panel[data-panel="monitor"] .cmp-subpanel { padding: 20px; }
