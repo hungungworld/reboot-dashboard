@@ -1,6 +1,9 @@
 """컴플라이언스 API (담당: 소준희). 예전 server/app.py와 같은 주소·입력·출력입니다.
 
   POST /api/compliance/ai-review        {text, channel, category, rule, rules, product?} → AI 2차 판정 (참고용)
+  POST /api/compliance/rewrite          {text, channel, rule, rules, product?, refs?} → 대체 문장 3개(safe·bold·short) + 근거 (참고용)
+  GET  /api/compliance/ad-refs          실제 미국 광고 문구 (경쟁사 홈페이지 · 주 1회 수집분)
+  POST /api/compliance/ad-refs/refresh  실제 미국 광고 문구 지금 다시 모으기 (Firecrawl)
   POST /api/compliance/ko               {items:[{id, title, summary, source}]} → 한글 제목·한 줄 요약 (최대 30건)
   POST /api/compliance/translate        {text} → 한국어 광고 문구를 영어로 (뜻 그대로 · 참고용) {text, note_ko, model}
   POST /api/compliance/translate-ko     {text} → 영어를 한국어로 (뜻 확인용 · 크롬 내장 번역을 못 쓸 때) {text, note_ko, model}
@@ -35,6 +38,42 @@ def ai_review():
         "model": out.get("model"), "verdict": out.get("verdict"), "channel": clip(data.get("channel"), 60),
         "copy": clip(text, 400), "summary": clip(out.get("summary"), 300)})
     return jsonify(out)
+
+
+@bp.post("/rewrite")
+def rewrite():
+    from . import ai_review as ai
+    data = json_body(max_bytes=64 * 1024)
+    text = data.get("text", "")
+    try:
+        out = ai.rewrites(text, data.get("channel", ""), clip(data.get("product"), 300),
+                          data.get("rule"), data.get("rules"), data.get("refs"))
+    except ai.ReviewError as e:
+        raise ApiError(str(e), e.status)
+    worklog.add("compliance", "AI 프롬프트", "대체 문장 3개", detail={
+        "model": out.get("model"), "copy": clip(text, 400), "options": [clip(o.get("text"), 200) for o in out["options"]]})
+    return jsonify(out)
+
+
+@bp.get("/ad-refs")
+def ad_refs_list():
+    from . import ad_refs
+    return jsonify(ad_refs.load())
+
+
+@bp.post("/ad-refs/refresh")
+def ad_refs_refresh():
+    from . import ad_refs
+    try:
+        with jobs.file_lock("compliance-ad-refs", stale_seconds=900):
+            data = ad_refs.collect()
+    except jobs.Busy:
+        raise ApiError("이미 모으는 중입니다. 잠시 뒤 다시 확인하세요.", 409)
+    except RuntimeError as e:
+        raise ApiError(str(e), 503)
+    worklog.add("compliance", "수집", "실제 미국 광고 문구 모으기", status="실패" if not data["items"] and data["errors"] else "완료",
+                detail={"count": len(data["items"]), "errors": [f'{e["brand"]}: {e["error"]}' for e in data["errors"]]})
+    return jsonify(data)
 
 
 @bp.get("/ai-usage")
@@ -160,6 +199,16 @@ def letters_text():
 def daily_monitor():
     current_app.logger.info("규제 모니터링 수집 시작")
     _collect_and_save(bodies=True)
+
+
+@jobs.daily("compliance-ad-refs", "실제 미국 광고 문구 모으기 (Firecrawl: 경쟁사 홈페이지 · 주 1회)")
+def daily_ad_refs():
+    from . import ad_refs
+    if not ad_refs.due():
+        return
+    current_app.logger.info("실제 미국 광고 문구 모으기 시작")
+    ad_refs_data = ad_refs.collect()
+    worklog.add("compliance", "수집", "실제 미국 광고 문구 모으기", detail={"count": len(ad_refs_data["items"])})
 
 
 # ───────── 문구 검토 요청 — 법무·인허가·품질팀에 엑셀 요청서를 메일로 보내고 1회용 링크로 회신 받음 ─────────
