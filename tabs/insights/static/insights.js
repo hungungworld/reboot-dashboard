@@ -94,7 +94,7 @@
   /* ───────── 상태 ───────── */
   const S = {
     root: null, tab: 'weekly', subs: { market: 'changes', customers: 'reviews', manage: 'edit' }, weekly: null, monthly: null, month: null, data: {}, open: {},
-    poll: null, wasRunning: false, showResult: false, run: null, loading: {}, tbl: { q: '', page: 1, f: '' }, chg: 'all',
+    poll: null, wasRunning: false, showResult: false, run: null, runFold: store.get('runFold', false), loading: {}, tbl: { q: '', page: 1, f: '' }, chg: 'all',
     rv: { view: store.get('rvView', 'list'), scope: 'own', q: '', f: Object.assign({}, RV_F_EMPTY), todo: false, shared: false, sort: 'todo', dir: 1, page: 1 }, pf: 'all',
     sum: { q: '', dir: 1, page: 1 },   // 아마존 리뷰 요약 표 (제품 이름순)
     rvm: { sort: '', dir: 1 },         // 브랜드 × 주제 표 ('' = 서버 순서: 주시 중 → 리뷰 많은 순)
@@ -366,6 +366,7 @@
       }
       case 'ins-update-only': openUpdate('weekly', (d.items || '').split(',')); break;
       case 'run-close': S.showResult = false; drawRun(S.run); break;
+      case 'run-fold': S.runFold = !S.runFold; store.set('runFold', S.runFold); drawRun(S.run, S.wasRunning); break;
       case 'prod': openProduct(findShelf(d.id)); break;
       case 'tbl-page': S.tbl.page = Number(d.p) || 1; drawShelfTable(); break;
       case 'tbl-todo': S.tbl.f = S.tbl.f === d.f ? '' : d.f; S.tbl.page = 1; drawSub('edit'); break;
@@ -3171,9 +3172,10 @@
     box.hidden = false;
     box.className = `ins-run card ${running ? 'is-running' : ''}`;
     box.innerHTML = `<div class="between"><div class="flex"><h2>최신 데이터 받기</h2>${badge(label, tone)}<span class="small muted">${esc(fmt.datetime(run.startedAt))} · ${esc(run.user || '')}</span></div>
-        ${running ? '' : '<button type="button" class="btn small ghost" data-act="run-close" aria-label="닫기">닫기</button>'}</div>
-      <ul class="ins-steps-list">${items.map(li).join('')}</ul>
-      ${res._ ? `<p class="small">${esc(res._.message)}</p>` : ''}`;
+        <div class="flex"><button type="button" class="btn small ghost" data-act="run-fold" aria-expanded="${!S.runFold}">${S.runFold ? '펼치기' : '접기'}</button>
+        ${running ? '' : '<button type="button" class="btn small ghost" data-act="run-close" aria-label="닫기">닫기</button>'}</div></div>
+      <ul class="ins-steps-list"${S.runFold ? ' hidden' : ''}>${items.map(li).join('')}</ul>
+      ${res._ && !S.runFold ? `<p class="small">${esc(res._.message)}</p>` : ''}`;
   }
 
   REBOOT.register({
