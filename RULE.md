@@ -28,7 +28,7 @@
 | **HJ** | 혁주 | 팀원 | 인플루언서·파트너(`partners`), 성과분석(`performance`) |
 
 - **팀장**: 일정, 이슈 우선순위, 담당 조정
-- **PM**: PR 검토·병합, `pre_main → main` 승인
+- **PM**: PR 검토·병합, `pre_main → main` 병합
 - 이니셜이 곧 내 브랜치 이름입니다. 겹치는 사람은 성까지 넣습니다. (KHS, YHS)
 - 담당이 바뀌면 팀장이 이 표, `server/registry.py`(화면에 보이는 담당 이름), `.github/CODEOWNERS`, 각 탭 설명서 첫 줄을 한 PR로 고칩니다.
 
@@ -115,7 +115,7 @@ exit 0
 | `hotfix/이니셜-내용` | `main`이 고장 났을 때만. 고친 뒤 지움 |
 
 ```text
-내 브랜치(NW) ── PR ──▶ pre_main ── PR (PM 승인) ──▶ main ──▶ 배포
+내 브랜치(NW) ── PR ──▶ pre_main ── PR (PM 병합) ──▶ main ──▶ 배포
 ```
 
 ---
@@ -168,7 +168,7 @@ exit 0
 |---|---|---|
 | 내 브랜치 → `pre_main` | **자동 테스트 통과** + 작성자가 아닌 1명 승인 | PM |
 | 관리자(HK)의 PR → `pre_main` | 자동 테스트 통과를 **직접 확인**하고 예외 병합 가능 | 본인 |
-| `pre_main` → `main` | 아래 확인 + **PM 1명 승인** (연 사람 말고 다른 PM) | PM |
+| `pre_main` → `main` | 아래 확인 (**승인 불필요**) | PM |
 
 - 병합 방식은 모두 **Create a merge commit**입니다. (Squash·Rebase는 꺼져 있음)
 - 병합 후 **내 이니셜 브랜치는 지우지 않습니다.** (Delete branch 누르지 않기)
@@ -182,7 +182,7 @@ exit 0
 - [ ] `python -m pytest` 통과
 - [ ] `.env`, DB, 업로드 파일이 들어가지 않음
 
-**긴급 수정(hotfix)**: `main`에서 `hotfix/이니셜-내용` 브랜치 → `main`으로 PR(PM 승인) → 병합 직후 `main → pre_main` PR로 같은 수정을 반영 → hotfix 브랜치 삭제
+**긴급 수정(hotfix)**: `main`에서 `hotfix/이니셜-내용` 브랜치 → `main`으로 PR(PM 병합) → 병합 직후 `main → pre_main` PR로 같은 수정을 반영 → hotfix 브랜치 삭제
 
 ---
 
@@ -275,9 +275,10 @@ python -m server                                  화면 확인 http://127.0.0.1
 
 | 설정 | `main` | `pre_main` |
 |---|---|---|
-| PR 필수 · 승인 1명 · 새 커밋 시 승인 다시 | ✅ | ✅ |
+| PR 필수 | ✅ | ✅ |
+| 승인 1명 · 새 커밋 시 승인 다시 | — | ✅ |
 | 자동 테스트(test) 통과 필수 | — | ✅ |
-| CODEOWNERS(PM) 승인 필수 | ✅ | — |
+| CODEOWNERS(PM) 승인 필수 | — | — |
 | force push · 삭제 금지 | ✅ | ✅ |
 | 병합 방식 | Merge commit | Merge commit |
 | 예외 | 없음 | **저장소 관리자(HK)**는 PR 병합 때 규칙 예외 가능 |

@@ -152,6 +152,11 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="",
         system.append({"type": "text", "text": PERSONA_INTRO + persona})
     # 규칙 목록·페르소나는 매번 거의 같으니 시스템 프롬프트 끝에 캐시 지점
     system.append({"type": "text", "text": _rules_text(rules), "cache_control": {"type": "ephemeral"}})
+    return _ask(system, "Review this ad copy. Input as JSON:\n" + json.dumps(payload, ensure_ascii=False), SCHEMA, "AI 2차 판정")
+
+
+def _ask(system, content, schema, label):
+    """Claude 한 번 호출 → JSON 결과 (+model). 실패는 화면에 보일 ReviewError로."""
     client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=120.0)
     try:
         res = client.beta.messages.create(
@@ -159,9 +164,9 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="",
             max_tokens=16000,
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
-            output_config={"effort": "high", "format": {"type": "json_schema", "schema": SCHEMA}},
+            output_config={"effort": "high", "format": {"type": "json_schema", "schema": schema}},
             system=system,
-            messages=[{"role": "user", "content": "Review this ad copy. Input as JSON:\n" + json.dumps(payload, ensure_ascii=False)}],
+            messages=[{"role": "user", "content": content}],
         )
     except anthropic.AuthenticationError:
         raise ReviewError("ANTHROPIC_API_KEY가 올바르지 않습니다 (설정 › 연결 확인).", 503)
@@ -173,7 +178,7 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="",
         raise ReviewError(f"AI 서버 오류 ({e.status_code}). 잠시 뒤 다시 시도하세요.")
     except anthropic.APIConnectionError:
         raise ReviewError("AI 서버에 연결하지 못했습니다 (인터넷 확인).")
-    ai_usage.record("compliance", "AI 2차 판정", res)
+    ai_usage.record("compliance", label, res)
 
     if res.stop_reason == "refusal":
         raise ReviewError("AI가 이 문구의 판정을 거절했습니다. 규칙 판정과 담당자 검토로 진행하세요.", 422)
@@ -185,6 +190,88 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="",
     except ValueError:
         raise ReviewError("AI 응답을 읽지 못했습니다. 다시 시도하세요.")
     out["model"] = res.model
+    return out
+
+
+# ───────── 대체 문장 3개 (2026-10-27) — 실제 미국 광고 문구·FDA 경고장 문구를 근거로 ─────────
+REWRITE_STYLES = ["safe", "bold", "short"]
+REWRITE_SYSTEM = SYSTEM_BASE + """
+
+Task now: write exactly three safer English rewrites of the copy, one per style:
+safe = the most conservative wording; bold = keeps the energy and attitude of US after-party marketing while staying compliant; short = a headline of 8 words or fewer.
+Each rewrite must avoid every issue flagged by the rule engine, keep the copy's intent, and fit the product and channel.
+You get `references`: real lines from US competitor homepages (id starts with "ad:") to borrow tone and rhythm from, never their claims,
+and FDA warning-letter quotes (id starts with "fda:") that show what must be avoided.
+Never copy a reference line word for word. Never invent product facts, numbers, studies or certifications.
+In `basis_ko` explain in one short Korean sentence what you kept, what you removed and which reference (by brand or 'FDA 경고장') guided you.
+List the ids you actually used in `refs` (empty list if none). In `note_ko` give one Korean sentence for the marketer (empty string if nothing)."""
+
+REWRITE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "options": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "style": {"type": "string", "enum": REWRITE_STYLES},
+                    "text": {"type": "string"},
+                    "basis_ko": {"type": "string"},
+                    "refs": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["style", "text", "basis_ko", "refs"],
+                "additionalProperties": False,
+            },
+        },
+        "note_ko": {"type": "string"},
+    },
+    "required": ["options", "note_ko"],
+    "additionalProperties": False,
+}
+MAX_REFS = 16
+
+
+def _refs(refs):
+    out = []
+    for r in (refs or [])[:MAX_REFS]:
+        if isinstance(r, dict) and str(r.get("text", "")).strip():
+            out.append({"id": str(r.get("id", ""))[:40], "brand": str(r.get("brand", ""))[:80], "text": str(r["text"])[:300]})
+    return out
+
+
+def rewrites(text, channel="", product="", rule=None, rules=None, refs=None):
+    """막힌 문구 → 대체 문장 3개(safe · bold · short) + 근거. 참고용이며 화면에서 규칙으로 다시 심의함."""
+    text = str(text or "").strip()
+    if not text:
+        raise ReviewError("바꿀 문구가 없습니다.", 400)
+    if len(text) > MAX_TEXT:
+        raise ReviewError(f"문구가 너무 깁니다 ({MAX_TEXT}자 이하).", 400)
+    if not available():
+        raise ReviewError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+    budget = ai_usage.over_budget()
+    if budget:
+        raise ReviewError(budget, 429)
+    rule = rule if isinstance(rule, dict) else {}
+    refs = _refs(refs)
+    payload = {
+        "copy": text,
+        "channel": str(channel)[:60],
+        "product": str(product)[:300],
+        "rule_engine": {
+            "verdict": str(rule.get("verdict", ""))[:8],
+            "codes": [str(c)[:8] for c in (rule.get("codes") or [])][:10],
+            "matched_terms": [str(t)[:60] for t in (rule.get("terms") or [])][:20],
+        },
+        "references": refs,
+    }
+    system = [{"type": "text", "text": REWRITE_SYSTEM},
+              {"type": "text", "text": _rules_text(rules), "cache_control": {"type": "ephemeral"}}]
+    out = _ask(system, "Rewrite this ad copy. Input as JSON:\n" + json.dumps(payload, ensure_ascii=False), REWRITE_SCHEMA, "대체 문장 3개")
+    known = {r["id"] for r in refs}
+    opts = [o for o in out.get("options", []) if isinstance(o, dict) and str(o.get("text", "")).strip()][:3]
+    for o in opts:
+        o["refs"] = [i for i in o.get("refs", []) if i in known]   # 넘기지 않은 근거는 지움
+    out["options"] = opts
     return out
 
 

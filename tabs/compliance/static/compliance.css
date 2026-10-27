@@ -830,3 +830,21 @@
 }
 /* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
 .part-compliance .linetabs { overflow-y: hidden; }
+/* 실제 미국 광고와 비교 · 대체 문장 3개 (2026-10-27) */
+.part-compliance .cmp-refs { margin: 12px 0 0; padding: 14px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); display: grid; gap: 10px; }
+.part-compliance .cmp-refs-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 13px; }
+.part-compliance .cmp-refs-head .cmp-muted { font-size: 12px; }
+.part-compliance .cmp-refs-head .cmp-link-btn { margin-left: auto; }
+.part-compliance .cmp-refs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.part-compliance .cmp-refs-list li { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--cmp-soft); display: grid; gap: 4px; justify-items: start; }
+.part-compliance .cmp-refs-list p { margin: 0; font-size: 13px; line-height: 1.55; }
+.part-compliance .cmp-refs-list small, .part-compliance .cmp-rw3-opt small { color: var(--cmp-muted); font-size: 12px; line-height: 1.6; }
+.part-compliance .cmp-refs-list.is-fda li { background: var(--cmp-BLOCK-bg); }
+.part-compliance .cmp-refs-sub { margin: 4px 0 0; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.part-compliance .cmp-refs-links { margin: 0; font-size: 12px; color: var(--cmp-muted); line-height: 1.7; }
+.part-compliance .cmp-rw3 { display: grid; gap: 8px; }
+.part-compliance .cmp-rw3-opt { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 12px; border: 1px solid var(--cmp-rule); border-radius: var(--radius-sm); background: var(--cmp-card); cursor: pointer; }
+.part-compliance .cmp-rw3-opt:has(input:checked) { border-color: var(--cmp-focus); }
+.part-compliance .cmp-rw3-opt input { margin-top: 4px; }
+.part-compliance .cmp-rw3-opt > span { display: grid; gap: 4px; }
+.part-compliance .cmp-rw3-top { display: flex; align-items: center; gap: 8px; font-size: 13px; }

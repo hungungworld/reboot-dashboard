@@ -756,6 +756,7 @@
       category: 'FOOD', checkedKey: j.checkedKey || '', ko: String(j.ko || ''),
       product: productOf(j.product) || j.product === ALL ? j.product : 'jelly',
       ai: j.ai && typeof j.ai === 'object' && j.ai.result ? j.ai : null,   // { key, at, result } — 같은 문구·채널·기준일 때만 보여 줌
+      rw: j.rw && typeof j.rw === 'object' && Array.isArray(j.rw.options) ? j.rw : null,   // 대체 문장 3개 { key, at, options, note, refs } (2026-10-27)
       // 자동 번역 (2026-10-25): 마지막으로 번역한 한국어 · 그 번역 결과 (영어 칸을 직접 고쳤는지 알기 위해)
       trKo: String(j.trKo || ''), trLast: String(j.trLast || '')
     };
@@ -846,6 +847,10 @@
         <span class="cmp-act-txt"><b>검토 요청서 보내기 <span class="cmp-act-tag" data-el="rq-rec" hidden>권장</span></b>
           <small>걸린 규칙을 엑셀로 묶어 담당 팀에 메일로 보내요</small></span>
         <span class="cmp-act-go" aria-hidden="true">›</span></button>
+      <button type="button" class="cmp-act-row" data-act="refs" disabled aria-expanded="false" title="영어 문구를 입력하면 쓸 수 있어요">
+        <span class="cmp-act-ico">${icon('list')}</span>
+        <span class="cmp-act-txt"><b>실제 미국 광고와 비교</b><small>경쟁사 홈페이지 문구와 FDA 경고장 사례를 나란히 봐요</small></span>
+        <span class="cmp-act-go" aria-hidden="true">›</span></button>
       <p class="cmp-side-note">AI 검토 관점 · <b data-el="persona-now"></b>
         <button type="button" class="cmp-link-btn right" data-act="goto" data-goto="admin">바꾸기</button></p>
     </div>
@@ -854,6 +859,7 @@
     <div data-el="sum"></div>
     <div data-el="result"></div>
     <div data-el="acts"></div>
+    <div data-el="adrefs" aria-live="polite" hidden></div>
     <div data-el="ai" aria-live="polite"></div>
     <div data-el="reviews" aria-live="polite"></div>
   </section>
@@ -871,20 +877,146 @@
 <p>${esc(s.sub)}${s.r.legal === 'red' ? ' · 법 위반 표현 포함' : ''}</p></div>`;
   }
 
-  /** 결과 아래 버튼: 막힌 문구 → 대체 문장 만들기·적용, 그 밖 → 복사 (BLOCK은 복사 막음) */
-  function actsHTML(j, s, aiOk, busy) {
+  /** 결과 아래 버튼: 막힌 문구 → 대체 문장 3개 만들기·골라 적용, 그 밖 → 복사 (BLOCK은 복사 막음) */
+  function actsHTML(j, s, aiOk, busy, pick) {
     if (!s.r) return '';
     const fix = s.r.verdict === 'BLOCK' || s.r.verdict === 'REVISE';
-    const rw = j.ai && j.ai.key === journeyKey(j) && j.ai.result && j.ai.result.rewrite;
-    const preview = fix && rw ? `<div class="cmp-sum-rw"><p class="cmp-sum-eyebrow">대체 문장 (AI 제안)</p><p class="cmp-sum-rw-text" lang="en">${esc(rw)}</p></div>` : '';
+    const rw3 = fix && j.rw && j.rw.key === journeyKey(j) && j.rw.options.length ? j.rw : null;
+    const rw = !rw3 && j.ai && j.ai.key === journeyKey(j) && j.ai.result && j.ai.result.rewrite;   // AI 2차 심의가 준 대체 문장 1개
+    const preview = rw3 ? rw3HTML(j, rw3, pick)
+      : fix && rw ? `<div class="cmp-sum-rw"><p class="cmp-sum-eyebrow">대체 문장 (AI 제안)</p><p class="cmp-sum-rw-text" lang="en">${esc(rw)}</p></div>` : '';
+    const noAi = ' disabled title="AI 키가 없어 제안 문장을 받을 수 없어요 · 항목의 수정 방향을 참고하세요"';
     const primary = busy && fix
-      ? `<button type="button" class="cmp-btn cmp-primary is-busy" disabled aria-busy="true">대체 문장 만드는 중… 보통 20초</button>`
+      ? `<button type="button" class="cmp-btn cmp-primary is-busy" disabled aria-busy="true">대체 문장 3개 만드는 중… 보통 30초</button>`
+      : rw3 ? `<button type="button" class="cmp-btn cmp-primary" data-act="rw3-apply">고른 문장 적용</button>`
       : fix
       ? (rw ? `<button type="button" class="cmp-btn cmp-primary" data-act="ai-apply">이 문장 적용</button>`
-        : `<button type="button" class="cmp-btn cmp-primary" data-act="ai"${aiOk ? '' : ' disabled title="AI 키가 없어 제안 문장을 받을 수 없어요 · 항목의 수정 방향을 참고하세요"'}>대체 문장 만들기</button>`)
+        : `<button type="button" class="cmp-btn cmp-primary" data-act="rw3"${aiOk ? '' : noAi}>대체 문장 3개 만들기</button>`)
       : `<button type="button" class="cmp-btn cmp-primary" data-act="copy">${s.needConfirm ? 'AI 경고 확인하고 복사' : '문구 복사'}</button>`;
+    const again = rw3 && !busy ? `<button type="button" class="cmp-btn" data-act="rw3"${aiOk ? '' : noAi}>다시 만들기</button>` : '';
     const copy = fix ? `<button type="button" class="cmp-btn" data-act="copy"${s.canCopy ? '' : ' disabled title="사용 불가 문구는 복사할 수 없어요"'}>문구 복사</button>` : '';
-    return `${preview}<div class="cmp-result-acts">${primary}${copy}</div>`;
+    return `${preview}<div class="cmp-result-acts">${primary}${again}${copy}</div>`;
+  }
+
+  /* 실제 미국 광고와 비교 · 대체 문장 3개 (2026-10-27)
+     경쟁사 홈페이지 문구(서버가 주 1회 Firecrawl로 모음)와 FDA 경고장 문구(data.js)를 지금 문구와 견줘 보여 주고,
+     대체 문장 3개를 만들 때 근거로 함께 넘김. 근거 문구도 우리 규칙으로 판정해 배지를 붙임 (경쟁사가 써도 우리는 못 쓰는 표현이 보이게) */
+  const RW_STYLE = { safe: '안전하게', bold: '과감하게', short: '짧게' };
+  const STOP = new Set(['the', 'and', 'for', 'you', 'your', 'with', 'our', 'that', 'this', 'from', 'are', 'can', 'all', 'not', 'get', 'its', 'into', 'just', 'more']);
+  let adRefs = null;        // { generatedAt, items:[{id, brand, url, text}], errors }
+  let adRefsWait = null;
+  const quoteCodes = new Map();
+
+  function wordsOf(t) {
+    return new Set(String(t || '').toLowerCase().match(/[a-z]{3,}/g)?.filter(w => !STOP.has(w)) || []);
+  }
+  function overlap(a, b) { let n = 0; a.forEach(w => { if (b.has(w)) n++; }); return n; }
+
+  function loadAdRefs() {
+    if (adRefs) return Promise.resolve(adRefs);
+    if (!adRefsWait) {
+      adRefsWait = fetch('/api/compliance/ad-refs', { cache: 'no-store' })
+        .then(res => res.ok ? res.json() : { items: [], errors: [], failed: true })
+        .catch(() => ({ items: [], errors: [], failed: true }))
+        .then(d => { adRefs = d; adRefsWait = null; return d; });
+    }
+    return adRefsWait;
+  }
+
+  /** 지금 문구와 견줄 근거: 단어가 많이 겹치는 경쟁사 문구 n개 (브랜드마다 고르게) · 같은 규칙에 걸린 FDA 경고장 문구 m개 */
+  function refsFor(text, r, n, m) {
+    const mine = wordsOf(text);
+    const ads = ((adRefs && adRefs.items) || []).map((a, i) => ({ a, i, score: overlap(mine, wordsOf(a.text)) }))
+      .sort((x, y) => y.score - x.score || x.i - y.i);
+    const perBrand = {};
+    const pickedAds = [];
+    ads.forEach(({ a }) => {
+      if (pickedAds.length >= n || (perBrand[a.brand] || 0) >= 2) return;
+      perBrand[a.brand] = (perBrand[a.brand] || 0) + 1;
+      pickedAds.push({ id: 'ad:' + a.id, brand: a.brand, url: a.url, text: a.text, kind: 'ad' });
+    });
+    const codes = new Set(r ? r.codes : []);
+    const quotes = (DATA.warningQuotes || []).map((q, i) => {
+      if (q.kind === 'testimonial' || !codes.size) return null;
+      if (!quoteCodes.has(i)) quoteCodes.set(i, review(q.text, { channel: 'b2c', category: 'FOOD' }).codes);
+      const same = quoteCodes.get(i).filter(c => codes.has(c)).length;
+      return same ? { q, i, score: same * 10 + overlap(mine, wordsOf(q.text)) } : null;
+    }).filter(Boolean).sort((x, y) => y.score - x.score).slice(0, m)
+      .map(({ q, i }) => ({ id: 'fda:' + i, brand: q.firm, issued: q.issued, text: q.text, ko: q.ko, kind: 'fda' }));
+    return pickedAds.concat(quotes);
+  }
+
+  function adRefsHTML(j, s) {
+    if (!adRefs) return `<div class="cmp-refs"><p class="cmp-muted">실제 광고 문구를 불러오는 중…</p></div>`;
+    const list = refsFor(j.text.trim(), s.r, 5, 2);
+    const opts = { channel: j.channel, category: j.category, product: j.product };
+    const ads = list.filter(x => x.kind === 'ad');
+    const fda = list.filter(x => x.kind === 'fda');
+    const when = adRefs.generatedAt ? `${esc(adRefs.generatedAt.slice(0, 10))} 수집` : '아직 모은 문구가 없어요';
+    return `<div class="cmp-refs">
+  <div class="cmp-refs-head"><b>비슷한 실제 미국 광고</b><span class="cmp-muted">${when} · 우리 규칙으로 판정</span>
+    <button type="button" class="cmp-link-btn" data-act="refs-refresh">지금 다시 모으기</button></div>
+  ${ads.length ? `<ul class="cmp-refs-list">${ads.map(a => `<li>${badge(review(a.text, opts).verdict)}
+    <p lang="en">${esc(a.text)}</p><small>${esc(a.brand)} · 공식 홈페이지 · <a href="${esc(a.url)}" target="_blank" rel="noopener">원문 ↗</a></small></li>`).join('')}</ul>`
+    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "모은 문구가 없어요. '지금 다시 모으기'를 눌러 주세요 (Firecrawl 키 필요)."}</p>`}
+  ${fda.length ? `<p class="cmp-refs-sub">${icon('alert')} 같은 규칙에 걸려 FDA 경고장을 받은 문구</p>
+  <ul class="cmp-refs-list is-fda">${fda.map(q => `<li><p lang="en">${esc(q.text)}</p><small>${esc(q.brand)} · FDA 경고장 ${esc(q.issued || '')}${q.ko ? ` · ${esc(q.ko)}` : ''}</small></li>`).join('')}</ul>` : ''}
+  <p class="cmp-refs-links">자동으로 모으지 않는 곳 (약관) ·
+    <a href="https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&q=hangover" target="_blank" rel="noopener">Meta 광고 라이브러리 ↗</a> ·
+    <a href="https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en" target="_blank" rel="noopener">TikTok Top Ads ↗</a> ·
+    <a href="https://adstransparency.google.com/?region=US" target="_blank" rel="noopener">Google 광고 투명성 센터 ↗</a></p>
+</div>`;
+  }
+
+  /** 대체 문장 3개: 고르는 단추 · 우리 규칙으로 다시 판정한 배지 · 근거 한 줄과 근거 문구 */
+  function rw3HTML(j, rw, pick) {
+    const opts = { channel: j.channel, category: j.category, product: j.product };
+    const byId = new Map((rw.refs || []).map(x => [x.id, x]));
+    return `<div class="cmp-sum-rw cmp-rw3" role="radiogroup" aria-label="대체 문장 고르기">
+  <p class="cmp-sum-eyebrow">대체 문장 3개 (AI 제안 · 법적 승인 아님)</p>
+  ${rw.options.map((o, i) => `<label class="cmp-rw3-opt">
+    <input type="radio" name="cmp-rw3" value="${i}"${i === pick ? ' checked' : ''}>
+    <span><span class="cmp-rw3-top"><b>${esc(RW_STYLE[o.style] || o.style)}</b>${badge(review(o.text, opts).verdict)}</span>
+      <span class="cmp-sum-rw-text" lang="en">${esc(o.text)}</span>
+      <small>${esc(o.basis_ko)}${(o.refs || []).map(id => byId.get(id)).filter(Boolean).map(x => x.kind === 'ad'
+        ? ` · <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.brand)} ↗</a>` : ` · FDA 경고장(${esc(x.brand)})`).join('')}</small></span>
+  </label>`).join('')}
+  ${rw.note ? `<p class="cmp-muted">${esc(rw.note)}</p>` : ''}
+</div>`;
+  }
+
+  /** 대체 문장 3개 요청 → 진행 상태(journey.rw)에 저장. 근거(경쟁사 문구 8개 · 경고장 문구 4개)를 함께 넘김 */
+  async function runRewrite(root, j) {
+    const p = root.querySelector('[data-sub="single"]');
+    const s = journeyState(j);
+    if (!s.r || p.dataset.rwBusy === '1') return;
+    const key = journeyKey(j);
+    p.dataset.rwBusy = '1';
+    paintSingle(root);
+    try {
+      await loadAdRefs();
+      const refs = refsFor(j.text.trim(), s.r, 8, 4);
+      const result = await api('/api/compliance/rewrite', {
+        text: j.text.trim(), channel: j.channel === ALL ? 'all channels (B2C ads, social and Amazon listing; B2B buyer deck)' : DATA.channels[j.channel] || j.channel,
+        product: productBrief(j.product),
+        rule: { verdict: s.r.verdict, codes: s.r.codes, terms: s.r.findings.flatMap(f => f.terms) },
+        rules: rules().map(r => ({ code: r.code, name: r.name, verdict: r.verdict, reason: r.reason })),
+        refs: refs.map(x => ({ id: x.id, brand: x.brand, text: x.text }))
+      });
+      const cur = loadJourney();
+      if (journeyKey(cur) === key) {   // 기다리는 동안 문구가 바뀌었으면 버림
+        cur.rw = { key, at: Date.now(), model: result.model || '', options: result.options || [], note: result.note_ko || '', refs };
+        saveJourney(cur);
+      }
+      const opts = { channel: j.channel, category: j.category, product: j.product };
+      const firstOk = (result.options || []).findIndex(o => review(o.text, opts).verdict === 'PASS');
+      p.dataset.rwPick = String(Math.max(0, firstOk));   // 규칙에 안 걸리는 첫 문장을 먼저 골라 둠
+      if (!(result.options || []).length) toast('AI가 대체 문장을 만들지 못했어요. 항목의 수정 방향을 참고하세요.');
+    } catch (e) {
+      toast(`대체 문장을 만들지 못했어요: ${e.message}`);
+    }
+    p.dataset.rwBusy = '';
+    paintSingle(root);
   }
 
   /** 점검 기록 위 필터 칩 (판정마다 개수) — 점검 기록을 지금 규칙으로 다시 판정한 개수. 누르면 그 판정만 보여 줌 */
@@ -1236,11 +1368,22 @@
     // 🟡 법무 확인이거나, 규칙은 통과했지만 AI가 사용 불가로 본 경우 검토 요청을 눈에 띄게 (2026-10-26 최종 검토)
     rqBtn.classList.toggle('cmp-primary', !!s.r && s.r.legal !== 'red' && (s.r.legal === 'yellow' || s.aiVerdict === 'BLOCK'));
     paintReviews(p, j);
+    // 실제 미국 광고와 비교: 열어 둔 동안만 그림 (문구·수집 시각이 같으면 다시 그리지 않음)
+    const refsBtn = p.querySelector('.cmp-more-acts [data-act="refs"]');
+    const refsOpen = p.dataset.refsOpen === '1' && !!s.r;
+    refsBtn.disabled = !s.r;
+    refsBtn.setAttribute('aria-expanded', String(refsOpen));
+    el('adrefs').hidden = !refsOpen;
+    const refsKey = refsOpen ? `${key}|${adRefs ? adRefs.generatedAt : 'wait'}` : '-';
+    if (el('adrefs').dataset.key !== refsKey) {
+      el('adrefs').innerHTML = refsOpen ? adRefsHTML(j, s) : '';
+      el('adrefs').dataset.key = refsKey;
+    }
     const aiBtn = p.querySelector('.cmp-more-acts [data-act="ai"]');
     serverHealth().then(h => {
-      const busy = p.dataset.aiBusy === '1';
+      const busy = p.dataset.aiBusy === '1' || p.dataset.rwBusy === '1';
       const aiOk = !!(h && h.ai);
-      el('acts').innerHTML = actsHTML(j, s, aiOk && !busy, busy);
+      el('acts').innerHTML = actsHTML(j, s, aiOk && !busy, busy, Number(p.dataset.rwPick || 0));
       aiBtn.disabled = busy || !s.r || !aiOk;
       aiBtn.title = !h ? '서버 상태를 확인하지 못했어요. 새로고침해 주세요 (키는 서버에만 있음)'
         : !h.ai ? 'AI 연결 안 됨 · 설정 › 연결에서 Claude(Anthropic) 키를 넣어 주세요'
@@ -1658,7 +1801,8 @@
     el('product').addEventListener('change', () => { sync(); autoRun(0); paintSingle(root); });
     autoRun(0);   // 저장돼 있던 문구가 아직 심의 전이면 열자마자 심의
     loadReviews(root);   // 이 문구로 보낸 검토 요청의 회신 상태
-    p.addEventListener('change', e => {   // 회신 엑셀 올리기
+    p.addEventListener('change', e => {   // 회신 엑셀 올리기 · 대체 문장 고르기
+      if (e.target.name === 'cmp-rw3') { p.dataset.rwPick = e.target.value; return; }
       if (e.target.dataset.el !== 'rq-import-file' || !e.target.files[0]) return;
       const f = e.target.files[0];
       e.target.value = '';
@@ -1693,8 +1837,26 @@
         el('reviews').querySelector('[data-el="rq-import-file"]').click();
       } else if (btn.dataset.act === 'ai') {
         runAi(root, j);
-      } else if (btn.dataset.act === 'ai-apply') {
-        const rw = j.ai && j.ai.result && j.ai.result.rewrite;
+      } else if (btn.dataset.act === 'rw3') {
+        runRewrite(root, j);
+      } else if (btn.dataset.act === 'refs') {
+        p.dataset.refsOpen = p.dataset.refsOpen === '1' ? '' : '1';
+        if (p.dataset.refsOpen) loadAdRefs().then(() => paintSingle(root));
+        paintSingle(root);
+      } else if (btn.dataset.act === 'refs-refresh') {
+        btn.disabled = true;
+        btn.textContent = '모으는 중… (1분 안팎)';
+        api('/api/compliance/ad-refs/refresh').then(d => {
+          adRefs = d;
+          toast(`실제 광고 문구 ${d.items.length}개를 모았어요${d.errors.length ? ` · 못 읽은 곳 ${d.errors.length}곳` : ''}.`);
+        }).catch(e => toast(`모으지 못했어요: ${e.message}`)).then(() => {
+          el('adrefs').dataset.key = '';
+          paintSingle(root);
+        });
+      } else if (btn.dataset.act === 'ai-apply' || btn.dataset.act === 'rw3-apply') {
+        const rw = btn.dataset.act === 'rw3-apply'
+          ? j.rw && j.rw.options[Number(p.dataset.rwPick || 0)] && j.rw.options[Number(p.dataset.rwPick || 0)].text
+          : j.ai && j.ai.result && j.ai.result.rewrite;
         if (!rw) return;
         el('text').value = rw;
         if (el('ko').value.trim()) {   // 한국어 칸에 옛 문장이 남아 팀에 잘못 공유되지 않게

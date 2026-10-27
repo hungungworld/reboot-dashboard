@@ -1,0 +1,11 @@
+{
+  "_설명": "광고심의 '실제 미국 광고와 비교'에서 읽는 경쟁사 공개 홈페이지 (2026-10-27). 1곳 = Firecrawl 약 1크레딧 · 주 1회. 홈페이지 문구만 짧게 옮기고 원문 링크를 함께 둠",
+  "sites": [
+    {"brand": "Cheers", "url": "https://cheershealth.com/"},
+    {"brand": "ZBiotics", "url": "https://zbiotics.com/"},
+    {"brand": "Liquid I.V.", "url": "https://www.liquid-iv.com/"},
+    {"brand": "Drinkwel", "url": "https://drinkwel.com/"},
+    {"brand": "No Days Wasted", "url": "https://nodayswasted.co/"},
+    {"brand": "Flyby", "url": "https://flybyrecovery.com/"}
+  ]
+}
