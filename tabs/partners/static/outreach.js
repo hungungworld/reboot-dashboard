@@ -1191,9 +1191,16 @@
           <section class="card ptn-v2-paper ptn-out-send" data-step-panel="3"${composeStep === 3 ? '' : ' hidden'}>
             <h2>제안 내용을 확인하세요.</h2>
             <div data-ref="check"></div>
-            <div data-ref="review" class="ptn-v2-review"><div class="card-head"><h2>문구 심의</h2>${badge('B2B 기준', 'blue')}</div>
-              <p class="panel-note">‘문구 심의’를 누르면 제목·본문의 금지·주의 표현을 찾아 등급 · 사유 · 수정 후보를 보여 줘요. 1차 참고용이고 최종 판단은 담당자가 해요.</p>
-              <button type="button" class="btn soft small" data-act="review">문구 심의</button></div>
+            <div class="ptn-v2-fix">
+              <div class="ptn-v2-fix-edit">
+                <label class="field"><span>본문 · 여기서 바로 고칠 수 있어요</span>
+                  <textarea class="input ptn-out-body" rows="14" data-f="body" aria-describedby="ptn-fix-hint">${esc(d.body)}</textarea>
+                  <small id="ptn-fix-hint">제목은 맨 위 ‘제목’ 칸에서 고쳐요 · 고친 뒤 [다시 심의]를 누르면 바뀐 문장으로 다시 봐요 · <span data-ref="wc"></span></small></label>
+              </div>
+              <div data-ref="review" class="ptn-v2-review"><div class="card-head"><h2>문구 심의</h2>${badge('B2B 기준', 'blue')}</div>
+                <p class="panel-note">‘문구 심의’를 누르면 제목·본문의 금지·주의 표현을 찾아 등급 · 사유 · 수정 후보를 보여 줘요. 찾은 표현을 누르면 왼쪽 본문의 그 자리로 가요. 1차 참고용이고 최종 판단은 담당자가 해요.</p>
+                <button type="button" class="btn soft small" data-act="review">문구 심의</button></div>
+            </div>
             <div class="field-grid">
               <label class="field"><span>담당자</span><input class="input" data-f="owner" value="${esc(d.owner)}" placeholder="이름" maxlength="60"></label>
             </div>
@@ -1243,6 +1250,7 @@
     composeStep = n;
     box.querySelectorAll('[data-step-panel]').forEach(x => { x.hidden = Number(x.dataset.stepPanel) !== n; });
     box.querySelectorAll('.ptn-v2-steps [data-step]').forEach(x => x.setAttribute('aria-current', Number(x.dataset.step) === n ? 'step' : 'false'));
+    box.querySelectorAll('[data-f="body"]').forEach(x => { if (x.value !== d.body) x.value = d.body; });
     if (n === 3) paintCheck(box);
   }
 
@@ -1257,8 +1265,9 @@
     el.innerHTML = `<dl class="ptn-v2-check"><dt>받는 사람</dt><dd>${d.rcpts.length ? esc(d.rcpts.map(rcptLabel).join(', ')) : '미정'}</dd>
       <dt>보내는 방식</dt><dd>${many ? `업체마다 따로 ${fmt.num(d.rcpts.length)}통` : d.reply ? '같은 Gmail 대화로 답장' : '한 통'}</dd>
       <dt>협업 목적</dt><dd>${esc(cond.purpose || '미작성')}</dd><dt>일정</dt><dd>${esc(d.start || '미정')} ~ ${esc(d.end || '미정')}</dd></dl>
-      ${many ? `<p class="panel-note">미리 보기: ${esc(rcptLabel(first))} (${esc(first.email)})에게 가는 메일</p>` : ''}
-      <h3>${esc(fillName(d.subject, first && first.name) || '제목 미작성')}</h3><p class="ptn-v2-email-preview">${esc(fillName(d.body, first && first.name) || '본문 미작성')}</p>`;
+      <h3>${esc(fillName(d.subject, first && first.name) || '제목 미작성')}</h3>
+      ${first && (many || hasSlot(d)) ? `<details class="ptn-v2-tools"><summary>받는 사람에게 가는 모양 미리 보기 · ${esc(rcptLabel(first))}</summary>
+        <p class="ptn-v2-email-preview">${esc(fillName(d.body, first.name) || '본문 미작성')}</p></details>` : ''}`;
   }
   const rcptLabel = r => r.name || r.email;
   // {업체명} → 받는 업체 이름
@@ -1474,15 +1483,12 @@
   }
 
   function wordCount(box, text) {
-    const el = box.querySelector('[data-ref="wc"]');
-    if (!el) return;
     const n = String(text || '').trim() ? String(text).trim().split(/\s+/).length : 0;
-    el.textContent = n ? `${n}단어${n < 150 || n > 200 ? ' · 권장 150–200단어' : ''}` : '';
+    box.querySelectorAll('[data-ref="wc"]').forEach(el => { el.textContent = n ? `${n}단어${n < 150 || n > 200 ? ' · 권장 150–200단어' : ''}` : ''; });
   }
 
   function setField(box, name, value) {
-    const el = box.querySelector(`[data-f="${name}"]`);
-    if (el) el.value = value;
+    box.querySelectorAll(`[data-f="${name}"]`).forEach(el => { el.value = value; });   // 본문은 2단계 · 3단계 두 칸
   }
 
   function unconfirm(box) {
@@ -1492,10 +1498,10 @@
 
   function clearReview(box) {
     const card = box.querySelector('[data-ref="review"]');
-    if (card && card.dataset.done) {
-      delete card.dataset.done;
-      card.innerHTML = `<div class="card-head"><h2>문구 심의</h2>${badge('B2B 기준', 'blue')}</div><p class="panel-note">내용이 바뀌었어요. 발송 전에 다시 심의하세요.</p>`;
-    }
+    if (!card || !card.dataset.done || card.classList.contains('is-stale')) return;
+    card.classList.add('is-stale');
+    card.insertAdjacentHTML('afterbegin', `<div class="note warn ptn-v2-stale" role="status">내용이 바뀌었어요. 아래는 고치기 전 결과예요.
+      <button type="button" class="btn small dark" data-act="review">다시 심의</button></div>`);
   }
 
   function onField(st, box, t) {
@@ -1512,6 +1518,7 @@
     if (f === 'ideal') d.ideal[d.type] = t.value;
     else if (COND_FIELDS.includes(f)) d.cond[d.type][f] = t.value;
     else d[f] = t.value;
+    box.querySelectorAll(`[data-f="${f}"]`).forEach(x => { if (x !== t && x.value !== t.value) x.value = t.value; });
     if (f === 'subject' || f === 'body') {
       unconfirm(box);
       clearReview(box);
@@ -1564,6 +1571,7 @@ ${d.body}`)) toEn(st, box, b);
       }
       else if (a === 'ko-close') closeKo(box);
       else if (a === 'review') reviewMail(box);
+      else if (a === 'find-term') jumpToTerm(box, b.dataset.term);
       else if (a === 'send') doSend(st, box, b);
       else if (a === 'att-del') deleteAttachment(st, box, b.dataset.id);
       else if (a === 'reset-prompt') resetPrompt(st, box);
@@ -1704,13 +1712,15 @@ ${d.body}`)) toEn(st, box, b);
     try { return REBOOT.use('compliance').review(text, { channel: 'b2b' }); } catch (e) { return null; }
   }
 
-  function findingsHtml(r, what) {
+  // jump: 찾은 표현을 버튼으로 (누르면 메일 본문의 그 자리를 골라 줌 · 제안 메일 03 확인)
+  function findingsHtml(r, what, jump) {
     if (!r) return ui.empty('컴플라이언스 탭을 불러오지 못해 문구 심의를 할 수 없어요.', 'shield');
     if (!r.findings.length) return `<p class="small">${esc(what)}에서 금지·주의 표현을 찾지 못했어요.</p>`;
+    const term = t => (jump ? `<button type="button" class="ptn-term" data-act="find-term" data-term="${esc(t)}" title="본문에서 이 표현 찾기">${esc(t)}</button>` : `<mark>${esc(t)}</mark>`);
     return `<ul class="ptn-out-findings">${r.findings.map(f => {
       const fv = VERDICT[f.verdict] || [f.verdict, ''];
       return `<li><div class="between"><strong>${esc(f.code)} · ${esc(f.name)}</strong>${badge(fv[0], fv[1])}</div>
-        <p class="small mt-8">찾은 표현: ${f.terms.map(t => `<mark>${esc(t)}</mark>`).join(', ')}</p>
+        <p class="small mt-8">찾은 표현: ${f.terms.map(term).join(', ')}</p>
         <p class="small muted">${esc(f.reason)}</p>
         <p class="small"><b>수정 후보</b> ${esc(f.alt)}</p></li>`;
     }).join('')}</ul>`;
@@ -1724,10 +1734,32 @@ ${d.body}`)) toEn(st, box, b);
     const card = box.querySelector('[data-ref="review"]');
     const v = r ? (VERDICT[r.verdict] || [r.verdict, '']) : null;
     card.dataset.done = '1';
+    card.classList.remove('is-stale');
     card.innerHTML = `<div class="card-head"><h2>문구 심의</h2>${v ? badge(v[0], v[1]) : ''}</div>
-      ${findingsHtml(r, '제목·본문')}
+      ${findingsHtml(r, '제목·본문', true)}
+      ${r && r.findings.length ? '<p class="small mt-8">찾은 표현을 누르면 왼쪽 본문에서 그 자리를 골라 줘요 · 수정 후보를 참고해 고친 뒤 [다시 심의]를 누르세요.</p>' : ''}
+      <div class="flex wrap mt-8"><button type="button" class="btn soft small" data-act="review">다시 심의</button></div>
       <p class="panel-note mt-8">컴플라이언스 탭 규칙 · B2B 바이어 자료 기준 · 1차 참고용이고, 걸린 표현 없음은 법적 승인이 아니에요.</p>`;
     if (global.matchMedia && global.matchMedia('(max-width: 950px)').matches) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // 심의에서 찾은 표현 → 03 확인 본문 칸에서 그 자리를 고름 (본문에 없으면 맨 위 제목 칸) · 대소문자 무시
+  function jumpToTerm(box, term) {
+    const d = getDraft();
+    const low = String(term || '').toLowerCase();
+    const body = box.querySelector('[data-step-panel="3"] [data-f="body"]');
+    const subj = box.querySelector('.ptn-mail-head [data-f="subject"]');
+    const at = d.body.toLowerCase().indexOf(low);
+    const el = at >= 0 ? body : subj;
+    const i = at >= 0 ? at : d.subject.toLowerCase().indexOf(low);
+    if (!el || i < 0) { toast(`'${term}'은(는) 지금 제목·본문에 없어요. 이미 고쳤다면 [다시 심의]를 누르세요.`); return; }
+    el.focus();
+    el.setSelectionRange(i, i + low.length);
+    if (el === body) {   // 고른 줄이 보이게 칸 안에서 스크롤
+      const line = d.body.slice(0, i).split('\n').length - 1;
+      const lh = parseFloat(getComputedStyle(body).lineHeight) || 20;
+      body.scrollTop = Math.max(0, line * lh - body.clientHeight / 3);
+    }
   }
 
   /* 첨부파일 보관함 */

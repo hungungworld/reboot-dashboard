@@ -108,7 +108,7 @@ def _prepare_database(app):
     db.create_all()
     for sub in ("uploads", "cache", "parts_override", "backups", "locks"):
         os.makedirs(os.path.join(app.config["DATA_DIR"], sub), exist_ok=True)
-    # 공용 기준 데이터 초기값 (표가 비어 있을 때만): data/seasons.csv · data/products.json
+    # 공용 기준 데이터 초기값: data/seasons.csv (표가 비어 있을 때만) · data/products.json (없는 줄 · 아무도 안 고친 줄)
     from .catalog import service as catalog
     try:
         catalog.seed_seasons()

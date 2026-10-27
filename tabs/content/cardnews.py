@@ -190,11 +190,10 @@ def build_user(*, source, opts, sheet, decisions, facts, labels):
             + prompts.EVIDENCE_REMINDER)
 
 
-def _call(system, user):
+def _call(system, user, schema=schemas.CARDNEWS, name="content_cardnews", action="카드뉴스 덱 구성", max_tokens=6000):
     for i in range(len(RETRY_WAITS) + 1):
         try:
-            return providers.call_json(system, user, schema=schemas.CARDNEWS, name="content_cardnews",
-                                       action="카드뉴스 덱 구성", max_tokens=6000, timeout=90)
+            return providers.call_json(system, user, schema=schema, name=name, action=action, max_tokens=max_tokens, timeout=90)
         except AIError as e:
             if e.status not in RETRY_STATUSES or i == len(RETRY_WAITS):
                 if e.status in RETRY_STATUSES:
@@ -224,6 +223,19 @@ def generate(source, opts, *, campaign_id, sheet, decisions, facts, labels):
     fix_structure(deck["cards"])
     mark_numbers(deck["cards"], source, facts)
     return deck, _clip(out.get("note_ko"), 300)
+
+
+def tidy(source, opts, *, sheet, decisions, facts, labels):
+    """넣은 자료(브리프 · 노란 패널 자료 · 메모) + 제품 정보 → '1장 / 2장' 원고. AI 실패는 AIError."""
+    user = build_user(source=source, opts=opts, sheet=sheet, decisions=decisions, facts=facts, labels=labels)
+    user = user.replace("을 구성한다.", "의 원고를 정리한다 (덱 구성 전 단계).", 1)
+    out = _call(prompts.cardnews_tidy_system(LANGUAGES[opts["language"]]), user, schema=schemas.CARDNEWS_TIDY,
+                name="content_cardnews_tidy", action="카드뉴스 내용 정리", max_tokens=3000)
+    text = str(out.get("text") or "").strip()
+    if len(text) < 10:
+        raise AIError("AI가 정리한 내용을 돌려주지 않았어요. 다시 눌러 주세요.")
+    checks = [_clip(x, 200) for x in (out.get("needs_check") or []) if str(x or "").strip()][:10]
+    return {"text": text[:SOURCE_MAX], "needsCheck": checks, "note": _clip(out.get("note_ko"), 300)}
 
 
 def check(deck, sheet, facts):

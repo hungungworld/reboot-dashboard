@@ -2742,8 +2742,13 @@
         placeholder="예: 제품 소개 메모, 블로그 글, FAQ, 이벤트 안내…&#10;'1장 / 2장'이나 '## 제목'으로 나눠 쓰면 그 단위로 카드를 나눠요.">${esc(n.source)}</textarea>
       <div class="flex between cnt-cn-srcbar">
         <span class="panel-note" data-ref="cn-count">${cnCountText()}</span>
-        <span class="flex"><button type="button" class="btn small" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 이 칸에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button><button type="button" class="btn small" data-act="dock" title="인사이트 탭에서 노란 체크 패널에 담아 둔 자료를 이 칸에 덧붙여요">${icon('doc')}노란 패널 자료</button>${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}</span>
+        <span class="flex"><button type="button" class="btn small" data-act="brief" title="인사이트 탭에서 승인한 콘텐츠 브리프를 이 칸에 넣어요">${icon('doc')}인사이트 브리프 가져오기</button><button type="button" class="btn small" data-act="dock" title="인사이트 탭에서 노란 체크 패널에 담아 둔 자료를 이 칸에 덧붙여요">${icon('doc')}노란 패널 자료</button>${ui.fileBtn('upload', { label: '내용 파일 업로드', type: 'MD · TXT · CSV · DOCX', act: 'cn-file' })}
+          <button type="button" class="btn small lime" data-act="cn-tidy" ${!textReady() || n.busy || n.tidying ? 'disabled' : ''}
+            title="${textReady() ? '이 칸의 자료를 설정 › 제품 정보(REBOOT)와 함께 OpenAI로 \'1장 / 2장\' 원고로 정리해요 · 2단계 언어 · 장 수를 따라요' : 'OpenAI 키가 필요해요'}">${n.tidying ? '<span class="spinner"></span>정리하는 중…' : icon('spark') + 'AI로 내용 정리'}</button></span>
       </div>
+      ${n.tidyPrev != null ? `<div class="note mt-8 cnt-cn-tidy">${icon('spark')}<span>AI가 자료를 제품 정보와 함께 원고로 정리했어요.${n.tidyNote ? ' ' + esc(n.tidyNote) : ''} 확인하고 고친 뒤 카드뉴스를 만드세요.
+        ${n.tidyChecks && n.tidyChecks.length ? `<br><b>확인할 것</b> ${n.tidyChecks.map(esc).join(' · ')}` : ''}</span>
+        <button type="button" class="btn small ghost" data-act="cn-tidy-undo">정리 전으로 되돌리기</button></div>` : ''}
       <div class="cnt-cn-step"><span class="stepnum">2</span><strong>옵션</strong></div>
       <div class="cnt-cn-opts">
         <span class="field-label">언어</span>${cnOptChips('language', CN.languages)}
@@ -2890,6 +2895,15 @@
         }).then(got => { if (got) cnLoadFile(got.files[0]); });
         break;
       case 'cn-generate': cnGenerate(); break;
+      case 'cn-tidy': cnTidy(); break;
+      case 'cn-tidy-undo':
+        if (n.tidyPrev == null) break;
+        n.source = n.tidyPrev;
+        n.tidyPrev = null;
+        lsSet('cn-src-' + S.camp.id, n.source.slice(0, 30000));
+        cnRenderSetup();
+        toast('정리 전 내용으로 되돌렸어요.');
+        break;
       case 'cn-split':
         if (n.source.trim().length < 2) { toast('나눌 내용을 먼저 넣어 주세요.', 'error'); break; }
         cnStart(cnSplitDeck(), 'AI 없이 넣은 내용을 그대로 카드로 나눴어요. 글자를 눌러 다듬은 뒤 저장하세요.');
@@ -3014,6 +3028,30 @@
     cnTouch();
     const sb = ref('cn-sizebar');
     if (sb) sb.innerHTML = cnSizebarHtml();
+  }
+
+  // '넣을 내용' 칸의 자료(브리프 · 노란 패널 · 메모)를 제품 정보와 함께 '1장 / 2장' 원고로 정리 — 칸만 바꾸고 저장 · 생성은 안 함
+  async function cnTidy() {
+    const n = S.cn;
+    if (n.source.trim().length < 10) { toast('정리할 내용을 10자 이상 넣어 주세요.', 'error'); return; }
+    const cid = S.camp.id, before = n.source;
+    n.tidying = true;
+    cnRenderSetup();
+    try {
+      const res = await REBOOT.api(`${API}/campaigns/${cid}/cardnews/tidy`, Object.assign({ source: before }, n.opts));
+      if (!S.camp || S.camp.id !== cid) return;
+      n.tidyPrev = before;
+      n.tidyNote = res.note || '';
+      n.tidyChecks = res.needsCheck || [];
+      n.source = res.text;
+      lsSet('cn-src-' + cid, n.source.slice(0, 30000));
+      toast('내용을 원고로 정리했어요. 마음에 안 들면 \'정리 전으로 되돌리기\'를 누르세요.');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      n.tidying = false;
+      if (S.camp && S.camp.id === cid) cnRenderSetup();
+    }
   }
 
   async function cnLoadFile(file) {

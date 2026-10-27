@@ -413,3 +413,15 @@
 }
 /* 밑줄 탭: 선택 밑줄(margin-bottom:-1px) 때문에 생기는 1px 세로 스크롤바 막기 */
 .part-partners .linetabs { overflow-y: hidden; }
+
+/* 제안 작성 03 확인: 본문 고치기 | 문구 심의 나란히 (넓은 화면) · 심의 결과는 스크롤해도 옆에 붙어 있음 */
+.part-partners .ptn-v2-fix { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.part-partners .ptn-v2-fix-edit .field { margin: 0; }
+.part-partners .ptn-v2-fix .ptn-v2-review { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.part-partners .ptn-v2-review.is-stale .ptn-out-findings { opacity: .55; }
+.part-partners .ptn-v2-stale { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.part-partners .ptn-term { display: inline; padding: 0 4px; border: 0; border-radius: var(--radius-xs); background: var(--ptn-mark); color: inherit; font: inherit;
+  text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; }
+.part-partners .ptn-term:hover { text-decoration-style: solid; }
+.part-partners .ptn-term:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+@media (max-width: 950px) { .part-partners .ptn-v2-fix { grid-template-columns: 1fr; } .part-partners .ptn-v2-fix .ptn-v2-review { position: static; max-height: none; } }

@@ -1457,3 +1457,14 @@ def test_season_promo_uses_server_numbers(app, auth_client, monkeypatch, fixed_t
     items = d["summary"]["items"]
     assert len(items) == 1 and items[0]["start"] == "2026-11-26" and items[0]["dday"] == 31
     assert auth_client.get("/api/insights/promo").get_json()["summary"]["items"] == items
+
+
+def test_reboot_line_uses_spec_prices_apart_from_aldicom(app):
+    """REBOOT 4종은 설정 › 제품 정보 사양서 가격으로 따로 (알디콤 진열대 데이터와 섞지 않음 · 1개·1병당)."""
+    with app.app_context():
+        rb = service.reboot_line()
+    by = {x["id"]: x for x in rb["items"]}
+    assert rb["brand"] == "REBOOT" and rb["demo"] and len(by) == 4
+    assert by["jelly_original"]["perUnit"] == 1.8 and by["jelly_original"]["unitLabel"] == "1개"
+    assert by["drink_original"]["perUnit"] == 4.33 and by["drink_balance"]["form"] == "liquid"
+    assert rb["perUnit"] == 1.8 and by["jelly_balance"]["zeroSugar"] and not by["jelly_original"]["zeroSugar"]

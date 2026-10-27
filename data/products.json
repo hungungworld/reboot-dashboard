@@ -1,5 +1,5 @@
 {
-  "_note": "브랜드·제품 팩트시트 초기값. 출처: 제품 최종 정보 (2026-10-25 팀 확정 · 노션) — 브랜드 가이드 v1.1보다 우선. 첫 실행 때 DB로 옮기고 이후에는 설정 › 제품 정보에서 고칩니다 — 이미 DB가 있는 로컬·배포 서버는 설정 › 제품 정보에도 같은 값을 넣어야 합니다 (pack_count·price_box는 아직 설정 화면에 칸이 없음). 미정 값(원료 함량·영양 정보·알레르기·원가)은 null로 둡니다. 참고 이미지의 영양 수치(Original 약 43 kcal · 당 약 10 g/100 ml)는 팩트시트와 카피에 넣지 않습니다. 효능(숙취 해소 등)은 쓰지 않습니다. ZERO SUGAR는 Balance 2종에만 씁니다 (당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 · 칼로리 미정이라 저칼로리 확인 전까지 'Not a low calorie food' 함께 표시).",
+  "_note": "브랜드·제품 팩트시트 초기값. 출처: 제품 최종 정보 (2026-10-25 팀 확정 · 노션) — 브랜드 가이드 v1.1보다 우선. 첫 실행 때 DB로 옮기고 이후에는 설정 › 제품 정보에서 고칩니다 — 서버를 켤 때 아무도 고치지 않은 줄(초기값)은 이 파일 값으로 자동 갱신되고, 사람이 고친 줄은 그대로 둡니다. 미정 값(원료 함량·영양 정보·알레르기·원가)은 null로 둡니다. 참고 이미지의 영양 수치(Original 약 43 kcal · 당 약 10 g/100 ml)는 팩트시트와 카피에 넣지 않습니다. 효능(숙취 해소 등)은 쓰지 않습니다. ZERO SUGAR는 Balance 2종에만 씁니다 (당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25 · 칼로리 미정이라 저칼로리 확인 전까지 'Not a low calorie food' 함께 표시).",
   "facts_version": "final-2026-10-25",
   "brand": {
     "name": "REBOOT",
@@ -27,7 +27,7 @@
       "pack": "개별 포장된 젤리가 든 한 봉지 (10개)",
       "direction": "기본 젤리",
       "sugar_reduced": false,
-      "ingredients": "A-HAT + 헛개나무 열매",
+      "ingredients": "헛개나무 열매 추출물 (Hovenia dulcis fruit extract) · 락토바실러스 퍼멘텀 (Lactobacillus fermentum) · A-HAT (알디콤 조성물: 지구자·헛개나무 추출물 + L. fermentum, 라벨에는 실제 원료명으로) — 함량 미제공 · 배합·순서는 알디콤 배합표로 확정",
       "volume": null,
       "usage": null,
       "consumer_name": "Reboot Jelly Original",
@@ -35,10 +35,13 @@
       "cost": null,
       "evidence": "확인 필요",
       "sources": [],
-      "allergens": null,
+      "allergens": "미정 — 배합 확정 후 미국 9대 알레르기 기준으로 표시 · 미배아발효추출물을 쓰면 'Contains: Soy' · 젤리 코팅에 코코넛을 쓰면 표시 여부 다시 확인",
       "notes": "가격 $17.99 (1개당 $1.80) · 모양은 부츠·모자·올가미 3가지만 확정 (리볼버 모양 아님) · 체리=모자(분홍) · 레몬=올가미(노랑) · 라임=부츠(연두) · 진한 색 · 원료 A-HAT은 알디콤의 특허 조성물(지구자·헛개나무 추출물 + 유산균 Lactobacillus fermentum) · 함량 미제공 · 미국 원료 근거(GRAS) 확인 전 · 이 설명은 광고 문구에 쓰지 않음(특허 표현 R15)",
       "pack_count": 10,
-      "price_box": null
+      "price_box": null,
+      "zero_sugar": false,
+      "sugar": null,
+      "calories": null
     },
     {
       "id": "jelly_balance",
@@ -53,7 +56,7 @@
       "pack": "개별 포장된 젤리가 든 한 봉지 (10개)",
       "direction": "제로슈가 젤리 (당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25)",
       "sugar_reduced": true,
-      "ingredients": "A-HAT + 헛개나무 열매",
+      "ingredients": "헛개나무 열매 추출물 (Hovenia dulcis fruit extract) · 락토바실러스 퍼멘텀 (Lactobacillus fermentum) · A-HAT (알디콤 조성물: 지구자·헛개나무 추출물 + L. fermentum, 라벨에는 실제 원료명으로) — 함량 미제공 · 배합·순서는 알디콤 배합표로 확정",
       "volume": null,
       "usage": null,
       "consumer_name": "Reboot Jelly Balance",
@@ -61,10 +64,13 @@
       "cost": null,
       "evidence": "확인 필요",
       "sources": [],
-      "allergens": null,
+      "allergens": "미정 — 배합 확정 후 미국 9대 알레르기 기준으로 표시 · 미배아발효추출물을 쓰면 'Contains: Soy' · 젤리 코팅에 코코넛을 쓰면 표시 여부 다시 확인",
       "notes": "가격 $19.99 (1개당 $2.00) · 모양은 부츠·모자·올가미 3가지만 확정 · 연한 색 · 원료 A-HAT은 알디콤의 특허 조성물(지구자·헛개나무 추출물 + 유산균 Lactobacillus fermentum) · 함량 미제공 · 미국 원료 근거(GRAS) 확인 전 · 이 설명은 광고 문구에 쓰지 않음(특허 표현 R15)",
       "pack_count": 10,
-      "price_box": null
+      "price_box": null,
+      "zero_sugar": true,
+      "sugar": "0.5 g 미만 (1회 섭취 기준량·라벨 1회 제공량 모두 · 측정 PM 확인 2026-10-25)",
+      "calories": "40 kcal 이하 (설계 목표 · 측정 전 · 저칼로리 아님 → 'Not a low calorie food' 함께 표시)"
     },
     {
       "id": "drink_original",
@@ -79,7 +85,7 @@
       "pack": "소형 병 낱개 · 3병/박스",
       "direction": "기본 음료",
       "sugar_reduced": false,
-      "ingredients": "A-HAT + 헛개나무 열매",
+      "ingredients": "헛개나무 열매 추출물 (Hovenia dulcis fruit extract) · 락토바실러스 퍼멘텀 (Lactobacillus fermentum) · A-HAT (알디콤 조성물: 지구자·헛개나무 추출물 + L. fermentum, 라벨에는 실제 원료명으로) — 함량 미제공 · 배합·순서는 알디콤 배합표로 확정",
       "volume": "100ml (병 높이 108mm)",
       "usage": null,
       "consumer_name": "Reboot Drink Original",
@@ -87,10 +93,13 @@
       "cost": null,
       "evidence": "확인 필요",
       "sources": [],
-      "allergens": null,
+      "allergens": "미정 — 배합 확정 후 미국 9대 알레르기 기준으로 표시 · 미배아발효추출물을 쓰면 'Contains: Soy' · 젤리 코팅에 코코넛을 쓰면 표시 여부 다시 확인",
       "notes": "가격 $4.99 (낱개) · 3병 박스 $12.99 (1병당 $4.33) · 가격 칸에는 낱개 가격 · 원료 A-HAT은 알디콤의 특허 조성물(지구자·헛개나무 추출물 + 유산균 Lactobacillus fermentum) · 함량 미제공 · 미국 원료 근거(GRAS) 확인 전 · 이 설명은 광고 문구에 쓰지 않음(특허 표현 R15)",
       "pack_count": "1 (낱개) · 3 (박스)",
-      "price_box": 12.99
+      "price_box": 12.99,
+      "zero_sugar": false,
+      "sugar": null,
+      "calories": null
     },
     {
       "id": "drink_balance",
@@ -105,7 +114,7 @@
       "pack": "소형 병 낱개 · 3병/박스",
       "direction": "제로슈가 음료 (당류 0.5 g 미만 측정 확인 · 1회 섭취 기준량·라벨 1회 제공량 둘 다 · PM 확인 2026-10-25)",
       "sugar_reduced": true,
-      "ingredients": "A-HAT + 헛개나무 열매",
+      "ingredients": "헛개나무 열매 추출물 (Hovenia dulcis fruit extract) · 락토바실러스 퍼멘텀 (Lactobacillus fermentum) · A-HAT (알디콤 조성물: 지구자·헛개나무 추출물 + L. fermentum, 라벨에는 실제 원료명으로) — 함량 미제공 · 배합·순서는 알디콤 배합표로 확정",
       "volume": "100ml (병 높이 108mm)",
       "usage": null,
       "consumer_name": "Reboot Drink Balance",
@@ -113,10 +122,13 @@
       "cost": null,
       "evidence": "확인 필요",
       "sources": [],
-      "allergens": null,
+      "allergens": "미정 — 배합 확정 후 미국 9대 알레르기 기준으로 표시 · 미배아발효추출물을 쓰면 'Contains: Soy' · 젤리 코팅에 코코넛을 쓰면 표시 여부 다시 확인",
       "notes": "가격 $5.49 (낱개) · 3병 박스 $14.49 (1병당 $4.83) · 가격 칸에는 낱개 가격 · 원료 A-HAT은 알디콤의 특허 조성물(지구자·헛개나무 추출물 + 유산균 Lactobacillus fermentum) · 함량 미제공 · 미국 원료 근거(GRAS) 확인 전 · 이 설명은 광고 문구에 쓰지 않음(특허 표현 R15)",
       "pack_count": "1 (낱개) · 3 (박스)",
-      "price_box": 14.49
+      "price_box": 14.49,
+      "zero_sugar": true,
+      "sugar": "0.5 g 미만 (1회 섭취 기준량·라벨 1회 제공량 모두 · 측정 PM 확인 2026-10-25)",
+      "calories": "40 kcal 이하 (설계 목표 · 측정 전 · 저칼로리 아님 → 'Not a low calorie food' 함께 표시)"
     }
   ]
 }

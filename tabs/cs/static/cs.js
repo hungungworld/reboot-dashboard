@@ -145,17 +145,22 @@
     ta.setSelectionRange(m.index, m.index + m[0].length);
     const lineNo = ta.value.slice(0, m.index).split('\n').length - 1;
     const lh = parseFloat(getComputedStyle(ta).lineHeight) || 24;
-    // 초안 칸은 내용 높이만큼 늘어나므로(fitDraft) 칸 안이 아니라 페이지를 그 줄까지 내림
+    // 초안 칸이 내용만큼 늘어났으면 페이지를, 최대 높이에서 멈췄으면(fitDraft) 칸 안을 그 줄까지 내림
     if (ta.scrollHeight <= ta.clientHeight + 2 && global.scrollTo) {
       global.scrollTo({ top: global.scrollY + ta.getBoundingClientRect().top + lineNo * lh - global.innerHeight / 3, behavior: 'smooth' });
     } else ta.scrollTop = Math.max(0, lineNo * lh - ta.clientHeight / 3);
   }
 
-  /** 초안 칸 높이를 내용에 맞춤 (페이지 스크롤 안에 칸 스크롤이 겹치지 않게) */
+  /** 초안 칸 높이를 내용에 맞춤 · 화면 55%를 넘으면 그 높이로 멈추고 칸 안에서 스크롤 (밑줄 층도 같이 스크롤) */
   function fitDraft(ta) {
     if (!ta || !ta.offsetParent) return;
+    const max = Math.max(220, Math.round((global.innerHeight || 800) * 0.55));
     ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight + 2}px`;
+    const h = ta.scrollHeight + 2;
+    ta.style.height = `${Math.min(h, max)}px`;
+    ta.classList.toggle('is-capped', h > max);
+    const hl = ta.parentNode.querySelector('[data-el="hl"]');
+    if (hl) hl.scrollTop = ta.scrollTop;
   }
 
   // 문의 제품 기준으로 점검 (모르면 4종 중 가장 엄격 · 서버 재검사와 같은 기준 · 2026-10-25)
@@ -608,9 +613,9 @@
         <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="sort">
           <option value="priority" selected>처리 우선순위 (긴급·기한 순)</option><option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option></select></label>
         <div class="cs-gmailbar">
-          <button type="button" class="cs-btn" data-act="gmail-import" title="Gmail 최신 데이터 받기" disabled>${icon('mail')} Gmail 받기</button>
+          <button type="button" class="cs-btn" data-act="gmail-import" title="Gmail 최신 데이터 받기" aria-describedby="cs-gmailmsg" disabled>${icon('mail')} Gmail 받기</button>
           <button type="button" class="cs-btn" data-act="open-settings" title="담당자 연락처 · 답장 기본값 · 페르소나 · 템플릿">답장 설정</button>
-          <span class="cs-muted" data-el="gmailmsg" aria-live="polite"></span>
+          <span class="cs-muted" id="cs-gmailmsg" data-el="gmailmsg" aria-live="polite"></span>
         </div>
         <div data-el="setupnote"></div>
         <div data-el="listhead" class="cs-listhead"></div>
@@ -927,7 +932,6 @@
       <p class="cs-msg-text">${esc(n.text)}</p></article>`).join('')}
   </div>
 
-  <nav class="linetabs cs-steps" role="tablist" data-subnav="off" aria-label="답장 처리 단계" data-el="steps"></nav>
   <div class="cs-work">
     <section class="cs-composer" aria-label="답장 쓰기">
       <div class="cs-ctabs">
@@ -955,6 +959,7 @@
       </div>
     </section>
     <aside class="cs-review" aria-label="처리 단계 카드">
+      <nav class="linetabs cs-steps" role="tablist" data-subnav="off" aria-label="답장 처리 단계" data-el="steps"></nav>
       <section class="cs-rcard" data-step-pane="reply" data-el="replycard" aria-live="polite"></section>
       <section class="cs-rcard" data-step-pane="phrase" data-el="phrase" aria-live="polite"></section>
       <section class="cs-rcard" data-step-pane="cs" data-el="cscard">${csCardHTML(ui, inq, t)}</section>
@@ -1001,7 +1006,7 @@
     return `${head}${flags}${todoPanelHTML(inq.draft)}
 <ul class="cs-gates">${g.map(x => `<li class="${x.ok ? 'is-ok' : 'is-no'}">${x.ok ? '✓' : '✗'} ${esc(x.label)}</li>`).join('')}</ul>
 ${revise ? '<p class="cs-muted">수정 필요·검토 필요 표현을 그대로 두면 CS 검토 때 의견을 남겨야 해요.</p>' : ''}${legal}
-<div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark" data-act="phrase-done" ${g.every(x => x.ok) ? '' : 'disabled'}>문구 검토 완료</button></div>`;
+<div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark cs-next" data-act="phrase-done" ${g.every(x => x.ok) ? '' : 'disabled'}>문구 검토 완료 → 03 CS 검토</button></div>`;
   }
 
   /** ② CS 검토 카드의 고정 부분 (입력 칸이 있어 다시 그리지 않음 · 남은 조건·버튼 상태는 paintCsCard가 바꿈) */
@@ -1018,13 +1023,17 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
   <button type="button" class="cs-btn cs-btn-sm" data-act="unapprove">승인 취소</button></div>` : ''}`;
     }
     return `${head}
+<div class="cs-wait" data-el="cs-wait" hidden>
+  <p>02 문구 검토를 먼저 마쳐 주세요. 마치면 여기서 확인 항목을 체크하고 승인해요.</p>
+  <div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark cs-next" data-act="step" data-step="phrase">02 문구 검토로 가기 →</button></div>
+</div>
 <fieldset class="cs-approve" data-el="csfield" aria-label="CS 검토">
   <div class="cs-checks">${csChecks(inq).map((x, k) => `<label class="cs-check"><input type="checkbox" data-el="cs-check" data-k="${k}" ${(inq.csChecks || [])[k] ? 'checked' : ''}> ${esc(x)}</label>`).join('')}</div>
   <label class="cs-field"><span>검토자</span><input class="cs-input" data-el="approver" value="${esc(ui.approver)}" placeholder="이름"></label>
   <label class="cs-field"><span>검토 의견</span><textarea class="cs-input" rows="2" data-el="comment" placeholder="수정 필요·검토 필요 판정이거나 돌려보낼 때 필수">${esc(inq.pendingComment || '')}</textarea></label>
   <div data-el="cs-need"></div>
-  <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="approve" disabled>CS 검토 승인</button>
-    <button type="button" class="cs-btn" data-act="send-back">작성자에게 돌려보내기</button></div>
+  <div class="cs-actions"><button type="button" class="cs-btn cs-primary cs-next" data-act="approve" disabled>CS 검토 승인 → 04 보내기</button></div>
+  <p class="cs-subacts"><button type="button" class="cs-linkbtn" data-act="send-back">작성자에게 돌려보내기</button></p>
 </fieldset>
 <details class="cs-share-wrap"><summary>${icon('mail')} 검토 담당자에게 요청 보내기</summary>${shareBoxHTML(`inq:${inq.id}`, t.code === 'C1' ? 'adverse' : 'review', t.owner)}</details>`;
   }
@@ -1035,6 +1044,10 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     const after = inq.status === '승인' || DONE.includes(inq.status);
     const waiting = !after && !phraseDone(inq);
     card.classList.toggle('is-locked', waiting);
+    // 문구 검토 전에는 흐린 입력 칸 대신 할 일 한 줄과 02로 가는 버튼만
+    const wait = card.querySelector('[data-el="cs-wait"]');
+    if (wait) wait.hidden = !waiting;
+    card.querySelectorAll('[data-el="csfield"], .cs-share-wrap').forEach(el => { el.hidden = waiting; });
     const st = card.querySelector('[data-el="cs-state"]');
     if (st) { st.className = `cs-rstate${after ? ' is-ok' : ''}`; st.textContent = after ? '승인' : waiting ? '문구 검토 뒤' : '대기'; }
     const fs = card.querySelector('[data-el="csfield"]');
@@ -1058,10 +1071,10 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
       const c = sendCheck(inq);
       act = c.ok ? '' : `<span class="cs-note cs-note-block">보낼 수 없음 · ${esc(c.why)}</span>`;
       act += inq.gmailId
-        ? `<button type="button" class="cs-btn" data-act="draft-only" ${c.ok && ui.gmail ? '' : 'disabled'}>Gmail 초안으로${inq.gmailDraftAt ? ' (만듦)' : ''}</button>
-<button type="button" class="cs-btn cs-primary" data-act="send" ${c.ok && ui.gmail ? '' : 'disabled'}
-  title="${!ui.gmail ? '설정 › 연결에서 Google로 로그인한 뒤 사용' : '받는 사람을 확인한 뒤 Gmail로 바로 보내요'}">${icon('mail')} 보내기</button>`
-        : `<button type="button" class="cs-btn cs-primary" data-act="mark-sent" ${c.ok ? '' : 'disabled'}
+        ? `<button type="button" class="cs-btn cs-primary cs-next" data-act="send" ${c.ok && ui.gmail ? '' : 'disabled'}
+  title="${!ui.gmail ? '설정 › 연결에서 Google로 로그인한 뒤 사용' : '받는 사람을 확인한 뒤 Gmail로 바로 보내요'}">${icon('mail')} 보내기</button>
+<button type="button" class="cs-btn cs-btn-sm" data-act="draft-only" ${c.ok && ui.gmail ? '' : 'disabled'}>Gmail 초안으로${inq.gmailDraftAt ? ' (만듦)' : ''}</button>`
+        : `<button type="button" class="cs-btn cs-primary cs-next" data-act="mark-sent" ${c.ok ? '' : 'disabled'}
   title="예시 문의는 받는 주소가 example.com이라 실제로 보내지 않아요">보낸 것으로 표시 (시연)</button>`;
     } else {
       const left = [st === 'new' || st === 'phrase' ? '02 문구 검토' : '', st !== 'ready' ? '03 CS 검토' : ''].filter(Boolean);
@@ -1083,7 +1096,7 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
 </ul>
 ${todoPanelHTML(inq.draft)}
 <p class="cs-muted">「AI로 초안 다듬기」로 문의에 맞게 다시 쓸 수 있어요. 팀에게만 남길 말은 「내부 메모」에 적어요.</p>
-<div class="cs-actions"><button type="button" class="cs-btn${ok ? ' cs-btn-dark' : ''}" data-act="step" data-step="phrase">다음: 문구 검토 →</button></div>`;
+<div class="cs-actions"><button type="button" class="cs-btn cs-next${ok ? ' cs-btn-dark' : ''}" data-act="step" data-step="phrase">다음: 02 문구 검토 →</button></div>`;
   }
 
   /** 문의를 열 때 고를 단계 탭: 새 문의·문구 검토 단계는 빈칸이 남았으면 01, 다 채웠으면 02 */
@@ -1107,7 +1120,7 @@ ${todoPanelHTML(inq.draft)}
         phrase: past, cs: st === 'ready' || st === 'sent', send: st === 'sent'
       };
       nav.innerHTML = STEPS.map(([id, l], k) => `<button type="button" role="tab" data-act="step" data-step="${id}" aria-selected="${id === ui.step}">
-  <span class="cs-step-no">0${k + 1}</span>${l}${done[id] ? '<span class="cs-step-ok" aria-label="끝남">✓</span>' : ''}</button>`).join('');
+  <span class="cs-step-no">0${k + 1}${done[id] ? '<span class="cs-step-ok" aria-label="끝남">✓</span>' : ''}</span>${l}</button>`).join('');
     } else nav.querySelectorAll('[data-step]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.step === ui.step)));
     box.querySelectorAll('[data-step-pane]').forEach(p => { p.hidden = p.dataset.stepPane !== ui.step; });
   }
@@ -1155,6 +1168,13 @@ ${todoPanelHTML(inq.draft)}
         renderCheck(ui);
       }
     });
+
+    // 초안 칸 안 스크롤 → 뒤의 밑줄 층도 같은 위치로 (scroll은 버블되지 않아 캡처로 받음)
+    box.addEventListener('scroll', e => {
+      if (!e.target.dataset || e.target.dataset.el !== 'draft') return;
+      const hl = box.querySelector('[data-el="hl"]');
+      if (hl) hl.scrollTop = e.target.scrollTop;
+    }, true);
 
     box.addEventListener('change', e => {
       const el = e.target.dataset.el;

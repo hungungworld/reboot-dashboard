@@ -904,6 +904,22 @@ def cardnews_generate(cid):
     return _state(cid, 201, versionId=v.id, deck=deck)
 
 
+@bp.post("/campaigns/<int:cid>/cardnews/tidy")
+def cardnews_tidy(cid):
+    """'카드뉴스에 넣을 내용'을 제품 정보와 함께 '1장 / 2장' 원고로 정리 (저장 안 함 · 화면 칸만 바꿈)."""
+    c = _cardnews_campaign(cid)
+    data = json_body(max_bytes=128 * 1024)
+    source = repository.clip_text(data.get("source"), 30000)
+    if len(source) < 10:
+        raise ApiError("카드뉴스에 넣을 내용을 10자 이상 입력해 주세요.")
+    if not providers.ready():
+        raise ApiError("OpenAI 키가 없어요. 설정 › 연결에서 키를 넣으면 쓸 수 있어요.", 503)
+    sheet = repository.sheet_of(c)
+    out = cardnews.tidy(source, _cardnews_opts(data), sheet=sheet, decisions=c.decisions,
+                        facts=brandkit.product_facts(sheet["product_ids"]), labels=repository.labels_of(sheet))
+    return jsonify(out)
+
+
 @bp.post("/campaigns/<int:cid>/cardnews")
 def cardnews_save(cid):
     c = _cardnews_campaign(cid)
