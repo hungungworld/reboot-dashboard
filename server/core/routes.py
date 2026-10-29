@@ -40,7 +40,7 @@ bp = Blueprint("core", __name__)
 PART_RE = re.compile(r"^[a-z0-9-]{1,40}$")
 KEY_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 MAX_STORE_VALUE = 3 * 1024 * 1024
-PART_FILE_TYPES = {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif", ".json", ".csv", ".woff2"}
+PART_FILE_TYPES = {".js", ".css", ".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif", ".json", ".csv", ".woff2", ".glb"}
 
 
 # ───────── 화면 ─────────
