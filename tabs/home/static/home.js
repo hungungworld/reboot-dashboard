@@ -900,6 +900,185 @@
     ref('todo-form').addEventListener('submit', e => { e.preventDefault(); addTodo(e.currentTarget); });
     global.addEventListener('hashchange', () => { const v = viewFromHash() || 'briefing'; if (v !== S.view) showView(v, { hash: false }); });
     showView(viewFromHash() || 'briefing', { hash: false });
+    rebu(root.querySelector('.brief-hero'));
+  }
+
+  /* ───────── 히어로 마스코트 Rebu (3D) ─────────
+     rebu.glb(몸통 · 모자, 애니메이션 없음)를 three.js r147(모듈 아닌 판)로 그려 히어로 가운데 빈 곳을 걸어 다니게 함
+     - 라이브러리는 홈 히어로가 그려질 때만 불러옴 (/parts/home/vendor/…) · 실패하면 조용히 빠짐 (∞ 무늬만 보임)
+     - 화면 단위 = 픽셀 (직교 카메라) · 걷기 구역은 왼쪽 글자 끝 ~ 오른쪽 숫자 시작 사이 · 950px 이하는 CSS로 숨김
+     - 마우스: 히어로 위에서는 커서 쪽으로 걸어감 · 서 있을 때는 커서를 바라봄 (몸 돌리기 · 고개 들기/숙이기)
+     - 움직임 줄이기 설정이면 가운데 서 있기만 · 탭이 안 보이거나 히어로가 화면 밖이면 멈춤 */
+  const REBU_SRC = '/parts/home/rebu.glb';
+  const loadScript = (() => {
+    const cache = {};
+    return src => cache[src] || (cache[src] = new Promise((ok, fail) => {
+      const s = doc.createElement('script');
+      s.src = src; s.onload = ok; s.onerror = () => { delete cache[src]; fail(new Error(src)); };
+      doc.head.appendChild(s);
+    }));
+  })();
+
+  function rebu(hero) {
+    if (!hero || !global.WebGLRenderingContext || global.matchMedia('(max-width: 950px)').matches) return;
+    const box = doc.createElement('div');
+    box.className = 'home-rebu';
+    box.setAttribute('aria-hidden', 'true');
+    hero.prepend(box);
+    loadScript('/parts/home/vendor/three.min.js')
+      .then(() => loadScript('/parts/home/vendor/GLTFLoader.js'))
+      .then(() => new Promise((ok, fail) => new global.THREE.GLTFLoader().load(REBU_SRC, ok, undefined, fail)))
+      .then(gltf => rebuStage(hero, box, gltf.scene))
+      .catch(err => { box.remove(); if (global.console) console.warn('Rebu 3D를 불러오지 못했어요', err); });
+  }
+
+  function rebuStage(hero, box, model) {
+    const THREE = global.THREE;
+    const still = global.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2));
+    box.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, 1, 1, 0, -2000, 2000);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3b44, 1.1));
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(-1, 2, 3);
+    scene.add(sun);
+
+    // 모델을 발밑이 원점인 '키 1' 크기로 맞춘 뒤, 바깥 묶음(actor)에서 픽셀 크기로 키움
+    const size = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+    const center = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+    const unit = 1 / (size.y || 1);
+    model.scale.setScalar(unit);
+    model.position.set(-center.x * unit, -(center.y - size.y / 2) * unit, -center.z * unit);
+    const body = new THREE.Group();   // 통통 튀기 · 기울기
+    body.add(model);
+    body.rotation.x = 0.12;           // 살짝 위에서 내려다보는 각도
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.32, 32),
+      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+    shadow.scale.y = 0.16;
+    shadow.position.z = -0.5;
+    const actor = new THREE.Group();  // 위치 · 방향 · 크기
+    actor.add(shadow, body);
+    scene.add(actor);
+
+    const W = { w: 0, h: 0, x: 0, to: 0, wait: 0.6, face: 0, tilt: 0.12, t: 0, last: 0, raf: 0, seen: true,
+      zone: [0, 0], zoneAge: 9, px: 0, py: 0, moved: 0, over: false };
+    const halfW = Math.max(size.x, size.z) * unit / 2;   // 몸 반폭 (키 1 기준)
+    const clampX = x => Math.min(Math.max(x, W.zone[0]), W.zone[1]);
+    const pick = () => W.zone[0] + Math.random() * (W.zone[1] - W.zone[0]);
+    // 걷기 구역: 왼쪽 글자(제목 · 설명 · 버튼)가 끝나는 곳 ~ 오른쪽 숫자(.hero-stat)가 시작하는 곳 — 글자에 가리지 않게
+    const textRight = el => {
+      if (!el) return 0;
+      const r = doc.createRange();
+      r.selectNodeContents(el);
+      return r.getBoundingClientRect().right;
+    };
+    function measure() {
+      W.zoneAge = 0;
+      const hr = hero.getBoundingClientRect();
+      const left = hero.querySelector(':scope > div:not(.hero-stat):not(.home-rebu)');
+      const stat = hero.querySelector('.hero-stat');
+      const btns = left ? Array.from(left.querySelectorAll('.btn')) : [];
+      const l = Math.max(textRight(left && left.querySelector('h2')), textRight(left && left.querySelector('p')),
+        ...btns.map(b => b.getBoundingClientRect().right)) - hr.left;
+      const r = (stat ? stat.getBoundingClientRect().left : hr.right) - hr.left;
+      const half = halfW * actor.scale.x + 18;
+      let a = l + half, b = r - half;
+      if (a > b) a = b = (l + r) / 2;
+      W.zone = [a, b];
+    }
+
+    // 마우스: 히어로 위에 있으면 그쪽으로 걸어가고, 최근 4초 안에 움직였으면 화면 어디서든 커서를 바라봄
+    global.addEventListener('pointermove', e => {
+      if (!hero.isConnected) return;
+      const hr = hero.getBoundingClientRect();
+      W.px = e.clientX - hr.left;
+      W.py = hr.bottom - e.clientY;          // 아래에서 위로
+      W.over = W.px >= 0 && W.px <= hr.width && W.py >= 0 && W.py <= hr.height;
+      W.moved = performance.now();
+    }, { passive: true });
+    hero.addEventListener('pointerleave', () => { W.over = false; });
+
+    function resize() {
+      const w = hero.clientWidth, h = hero.clientHeight;
+      if (!w || !h || (w === W.w && h === W.h)) return;
+      const first = !W.w;
+      W.w = w; W.h = h;
+      renderer.setSize(w, h, false);
+      Object.assign(camera, { left: 0, right: w, top: h, bottom: 0 });
+      camera.updateProjectionMatrix();
+      actor.scale.setScalar(Math.min(h * 0.62, 150));
+      actor.position.y = 14;
+      measure();
+      if (first) W.x = W.to = still ? (W.zone[0] + W.zone[1]) / 2 : pick();
+      W.x = clampX(W.x);
+      W.to = clampX(W.to);
+      if (still) draw(0);
+    }
+
+    function step(dt) {
+      W.t += dt;
+      W.zoneAge += dt;
+      if (W.zoneAge > 1) { measure(); W.to = clampX(W.to); }   // 제목이 나중에 채워지거나 길이가 바뀌어도 따라감
+      const chase = W.over;
+      if (chase) { W.to = clampX(W.px); W.wait = 0; }
+      const gap = W.to - W.x;
+      const look = performance.now() - W.moved < 4000;
+      const head = actor.position.y + actor.scale.x * 0.8;
+      let want = 0;                         // 바라보는 방향: 0 = 정면, ± = 옆
+      let tilt = 0.12;                      // 앞뒤 기울기: 클수록 아래를 봄
+      if (W.wait > 0 || Math.abs(gap) < 2) {
+        if (!chase) {
+          if (W.wait <= 0) W.wait = 1.2 + Math.random() * 2.4;
+          W.wait -= dt;
+          if (W.wait <= 0) W.to = pick();
+        }
+        body.position.y = 0;
+        body.rotation.z = Math.sin(W.t * 1.6) * 0.03;   // 서서 살랑
+        if (look) {                                      // 커서 쪽으로 몸 · 고개
+          want = Math.max(-1, Math.min(1, (W.px - W.x) / 260)) * 0.85;
+          tilt = 0.12 - Math.max(-1, Math.min(1, (W.py - head) / 240)) * 0.28;
+        }
+      } else {
+        const dir = Math.sign(gap);
+        W.x += dir * Math.min(Math.abs(gap), 46 * dt);
+        want = dir * 0.95;
+        const hop = Math.abs(Math.sin(W.t * 7));
+        body.position.y = hop * 0.07;
+        body.rotation.z = -dir * 0.06 + Math.sin(W.t * 7) * 0.04;
+        shadow.scale.x = 1 - hop * 0.15;
+      }
+      W.face += (want - W.face) * Math.min(1, dt * 5);
+      W.tilt += (tilt - W.tilt) * Math.min(1, dt * 5);
+      body.rotation.y = W.face;
+      body.rotation.x = W.tilt;
+      actor.position.x = W.x;
+    }
+
+    function draw(dt) {
+      if (!still) step(dt);
+      else actor.position.x = W.x;
+      renderer.render(scene, camera);
+    }
+
+    function loop(now) {
+      W.raf = 0;
+      if (!hero.isConnected) { renderer.dispose(); return; }
+      const dt = Math.min((now - (W.last || now)) / 1000, 0.05);
+      W.last = now;
+      draw(dt);
+      if (W.seen && !doc.hidden) W.raf = global.requestAnimationFrame(loop);
+    }
+    const run = () => { if (!still && !W.raf && W.seen && !doc.hidden) { W.last = 0; W.raf = global.requestAnimationFrame(loop); } };
+
+    if (global.ResizeObserver) new ResizeObserver(() => { resize(); run(); }).observe(hero);
+    if (global.IntersectionObserver) new IntersectionObserver(es => { W.seen = es[es.length - 1].isIntersecting; run(); }).observe(hero);
+    doc.addEventListener('visibilitychange', run);
+    resize();
+    run();
   }
 
   /* ───────── 이번 주 To-Do 버튼 (모든 화면 오른쪽 아래) ─────────
