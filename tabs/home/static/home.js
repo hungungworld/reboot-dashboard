@@ -906,7 +906,8 @@
   /* ───────── 히어로 마스코트 Rebu (3D) ─────────
      rebu.glb(몸통 · 모자, 애니메이션 없음)를 three.js r147(모듈 아닌 판)로 그려 히어로 가운데 빈 곳을 걸어 다니게 함
      - 라이브러리는 홈 히어로가 그려질 때만 불러옴 (/parts/home/vendor/…) · 실패하면 조용히 빠짐 (∞ 무늬만 보임)
-     - 화면 단위 = 픽셀 (직교 카메라) · 걷기 구역은 히어로 너비 44~76% · 950px 이하는 CSS로 숨김
+     - 화면 단위 = 픽셀 (직교 카메라) · 걷기 구역은 왼쪽 글자 끝 ~ 오른쪽 숫자 시작 사이 · 950px 이하는 CSS로 숨김
+     - 마우스: 히어로 위에서는 커서 쪽으로 걸어감 · 서 있을 때는 커서를 바라봄 (몸 돌리기 · 고개 들기/숙이기)
      - 움직임 줄이기 설정이면 가운데 서 있기만 · 탭이 안 보이거나 히어로가 화면 밖이면 멈춤 */
   const REBU_SRC = '/parts/home/rebu.glb';
   const loadScript = (() => {
@@ -963,9 +964,43 @@
     actor.add(shadow, body);
     scene.add(actor);
 
-    const W = { w: 0, h: 0, x: 0, to: 0, wait: 0.6, face: 0, t: 0, last: 0, raf: 0, seen: true };
-    const zone = () => [W.w * 0.44, W.w * 0.76];
-    const pick = () => { const [a, b] = zone(); return a + Math.random() * (b - a); };
+    const W = { w: 0, h: 0, x: 0, to: 0, wait: 0.6, face: 0, tilt: 0.12, t: 0, last: 0, raf: 0, seen: true,
+      zone: [0, 0], zoneAge: 9, px: 0, py: 0, moved: 0, over: false };
+    const halfW = Math.max(size.x, size.z) * unit / 2;   // 몸 반폭 (키 1 기준)
+    const clampX = x => Math.min(Math.max(x, W.zone[0]), W.zone[1]);
+    const pick = () => W.zone[0] + Math.random() * (W.zone[1] - W.zone[0]);
+    // 걷기 구역: 왼쪽 글자(제목 · 설명 · 버튼)가 끝나는 곳 ~ 오른쪽 숫자(.hero-stat)가 시작하는 곳 — 글자에 가리지 않게
+    const textRight = el => {
+      if (!el) return 0;
+      const r = doc.createRange();
+      r.selectNodeContents(el);
+      return r.getBoundingClientRect().right;
+    };
+    function measure() {
+      W.zoneAge = 0;
+      const hr = hero.getBoundingClientRect();
+      const left = hero.querySelector(':scope > div:not(.hero-stat):not(.home-rebu)');
+      const stat = hero.querySelector('.hero-stat');
+      const btns = left ? Array.from(left.querySelectorAll('.btn')) : [];
+      const l = Math.max(textRight(left && left.querySelector('h2')), textRight(left && left.querySelector('p')),
+        ...btns.map(b => b.getBoundingClientRect().right)) - hr.left;
+      const r = (stat ? stat.getBoundingClientRect().left : hr.right) - hr.left;
+      const half = halfW * actor.scale.x + 18;
+      let a = l + half, b = r - half;
+      if (a > b) a = b = (l + r) / 2;
+      W.zone = [a, b];
+    }
+
+    // 마우스: 히어로 위에 있으면 그쪽으로 걸어가고, 최근 4초 안에 움직였으면 화면 어디서든 커서를 바라봄
+    global.addEventListener('pointermove', e => {
+      if (!hero.isConnected) return;
+      const hr = hero.getBoundingClientRect();
+      W.px = e.clientX - hr.left;
+      W.py = hr.bottom - e.clientY;          // 아래에서 위로
+      W.over = W.px >= 0 && W.px <= hr.width && W.py >= 0 && W.py <= hr.height;
+      W.moved = performance.now();
+    }, { passive: true });
+    hero.addEventListener('pointerleave', () => { W.over = false; });
 
     function resize() {
       const w = hero.clientWidth, h = hero.clientHeight;
@@ -977,24 +1012,36 @@
       camera.updateProjectionMatrix();
       actor.scale.setScalar(Math.min(h * 0.62, 150));
       actor.position.y = 14;
-      const [a, b] = zone();
-      if (first) W.x = W.to = still ? (a + b) / 2 : pick();
-      W.x = Math.min(Math.max(W.x, a), b);
-      W.to = Math.min(Math.max(W.to, a), b);
+      measure();
+      if (first) W.x = W.to = still ? (W.zone[0] + W.zone[1]) / 2 : pick();
+      W.x = clampX(W.x);
+      W.to = clampX(W.to);
       if (still) draw(0);
     }
 
     function step(dt) {
       W.t += dt;
+      W.zoneAge += dt;
+      if (W.zoneAge > 1) { measure(); W.to = clampX(W.to); }   // 제목이 나중에 채워지거나 길이가 바뀌어도 따라감
+      const chase = W.over;
+      if (chase) { W.to = clampX(W.px); W.wait = 0; }
       const gap = W.to - W.x;
-      let want = 0;                         // 바라보는 방향: 0 = 정면, ± = 걷는 쪽
-      if (W.wait > 0) {
-        W.wait -= dt;
+      const look = performance.now() - W.moved < 4000;
+      const head = actor.position.y + actor.scale.x * 0.8;
+      let want = 0;                         // 바라보는 방향: 0 = 정면, ± = 옆
+      let tilt = 0.12;                      // 앞뒤 기울기: 클수록 아래를 봄
+      if (W.wait > 0 || Math.abs(gap) < 2) {
+        if (!chase) {
+          if (W.wait <= 0) W.wait = 1.2 + Math.random() * 2.4;
+          W.wait -= dt;
+          if (W.wait <= 0) W.to = pick();
+        }
         body.position.y = 0;
         body.rotation.z = Math.sin(W.t * 1.6) * 0.03;   // 서서 살랑
-        if (W.wait <= 0) W.to = pick();
-      } else if (Math.abs(gap) < 2) {
-        W.wait = 1.2 + Math.random() * 2.4;
+        if (look) {                                      // 커서 쪽으로 몸 · 고개
+          want = Math.max(-1, Math.min(1, (W.px - W.x) / 260)) * 0.85;
+          tilt = 0.12 - Math.max(-1, Math.min(1, (W.py - head) / 240)) * 0.28;
+        }
       } else {
         const dir = Math.sign(gap);
         W.x += dir * Math.min(Math.abs(gap), 46 * dt);
@@ -1005,7 +1052,9 @@
         shadow.scale.x = 1 - hop * 0.15;
       }
       W.face += (want - W.face) * Math.min(1, dt * 5);
+      W.tilt += (tilt - W.tilt) * Math.min(1, dt * 5);
       body.rotation.y = W.face;
+      body.rotation.x = W.tilt;
       actor.position.x = W.x;
     }
 
