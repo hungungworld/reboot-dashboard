@@ -7,6 +7,7 @@
   GET    /api/performance/template.csv   빈 양식
   GET    /api/performance/export.csv     지금 데이터 내려받기
   GET    /api/performance/summary        기간 요약 (?start&end, 없으면 CSV 마지막 날짜 기준 최근 7일) — 홈 KPI
+  GET    /api/performance/shop           자사 홈페이지(시연 사이트) 매출 (?start&end&refresh=1) — 토큰 없으면 {ready: false}
   GET    /api/performance/fx             USD 환율 (?refresh=1) {status: ok|no_key|error, rate, date, reason}
   POST   /api/performance/advice         {start, end} → AI 해석 · 다음 주 예산 · 실행 과제 (키 없으면 503)
   POST   /api/performance/insight        {start, end} → 채널별 성과 표 위 AI 인사이트 {lines: 최대 3줄} (키 없으면 503)
@@ -17,9 +18,10 @@ from flask import Blueprint, Response, jsonify, request
 from flask_login import current_user
 
 from server import jobs, worklog
+from server.core import shopapi
 from server.core.ai import openai_ready
 from server.security import ApiError, clip, json_body
-from . import csvdata, metrics
+from . import csvdata, metrics, shop
 
 bp = Blueprint("performance", __name__, url_prefix="/api/performance")
 
@@ -54,6 +56,22 @@ def _period(rng, start="", end=""):
     if s > e:
         raise ApiError("고른 기간에는 CSV 데이터가 없어요. 기간을 바꿔 주세요.")
     return s.isoformat(), e.isoformat()
+
+
+@bp.get("/shop")
+def shop_sales():
+    """자사 홈페이지(시연 사이트) 매출 — 토큰 없으면 {ready: false}, API 오류는 {ready: true, error}."""
+    if not shopapi.ready():
+        return jsonify(ready=False)
+    s, e = str(request.args.get("start") or "")[:10], str(request.args.get("end") or "")[:10]
+    try:
+        s, e = date.fromisoformat(s), date.fromisoformat(e)
+    except ValueError:
+        raise ApiError("기간은 2026-10-19처럼 연-월-일 형식이어야 해요.")
+    try:
+        return jsonify(shop.summary(min(s, e), max(s, e), refresh=request.args.get("refresh") == "1"))
+    except shopapi.ShopApiError as err:
+        return jsonify(ready=True, error=str(err))
 
 
 @bp.get("/data")
