@@ -1141,7 +1141,7 @@
             <label class="field"><span>제안 구분</span><select class="input" data-f="type">${TYPES.map(t =>
               `<option value="${esc(t)}"${d.type === t ? ' selected' : ''}>${D.typeIcon[t]} ${esc(t)}</option>`).join('')}</select><small>기본 문구와 AI 초안 기준이 이 구분을 따라요 · 받는 사람을 처음 넣으면 그 업체 구분으로 맞춰져요.</small></label>
             <label class="field"><span>협업 목적</span><input class="input" data-f="purpose" value="${esc(cond.purpose)}"></label>
-            <div class="ptn-v2-dates">
+            <div class="field-grid">
               <label class="field"><span>시작일</span><input type="date" class="input" data-f="start" value="${esc(d.start)}"></label>
               <label class="field"><span>종료일</span><input type="date" class="input" data-f="end" value="${esc(d.end)}"></label>
             </div>
@@ -1191,16 +1191,14 @@
           <section class="card ptn-v2-paper ptn-out-send" data-step-panel="3"${composeStep === 3 ? '' : ' hidden'}>
             <h2>제안 내용을 확인하세요.</h2>
             <div data-ref="check"></div>
-            <div class="ptn-v2-fix">
-              <div class="ptn-v2-fix-edit">
-                <label class="field"><span>본문 · 여기서 바로 고칠 수 있어요</span>
-                  <textarea class="input ptn-out-body" rows="14" data-f="body" aria-describedby="ptn-fix-hint">${esc(d.body)}</textarea>
-                  <small id="ptn-fix-hint">제목은 맨 위 ‘제목’ 칸에서 고쳐요 · 고친 뒤 [다시 심의]를 누르면 바뀐 문장으로 다시 봐요 · <span data-ref="wc"></span></small></label>
-              </div>
+            <label class="field-label" for="ptn-fix-body">본문 · 여기서 바로 고칠 수 있어요</label>
+            <div class="ptn-v2-fix row-even">
+              <textarea class="input ptn-out-body" id="ptn-fix-body" rows="14" data-f="body" aria-describedby="ptn-fix-hint">${esc(d.body)}</textarea>
               <div data-ref="review" class="ptn-v2-review"><div class="card-head"><h2>문구 심의</h2>${badge('B2B 기준', 'blue')}</div>
                 <p class="panel-note">‘문구 심의’를 누르면 제목·본문의 금지·주의 표현을 찾아 등급 · 사유 · 수정 후보를 보여 줘요. 찾은 표현을 누르면 왼쪽 본문의 그 자리로 가요. 1차 참고용이고 최종 판단은 담당자가 해요.</p>
                 <button type="button" class="btn soft small" data-act="review">문구 심의</button></div>
             </div>
+            <small class="hint" id="ptn-fix-hint">제목은 맨 위 ‘제목’ 칸에서 고쳐요 · 고친 뒤 [다시 심의]를 누르면 바뀐 문장으로 다시 봐요 · <span data-ref="wc"></span></small>
             <div class="field-grid">
               <label class="field"><span>담당자</span><input class="input" data-f="owner" value="${esc(d.owner)}" placeholder="이름" maxlength="60"></label>
             </div>

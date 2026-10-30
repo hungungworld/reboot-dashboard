@@ -225,6 +225,13 @@ core.js가 그 탭을 왼쪽 메뉴로 옮기고, 화면 안의 탭 줄은 숨�
 색은 변수만: `var(--lime)` `var(--ink)` `var(--muted)` `var(--line)` `var(--surface)` `var(--soft)` `var(--green)` … (다크 모드 자동)
 `var(--dark)`(검은 버튼·알약)은 다크 모드에서 밝게 뒤집히므로 글자는 `var(--dark-ink)`. 늘 어두워야 하는 보드는 `var(--night)` + 흰 글자
 
+**나란히 놓인 박스 줄 맞춤**
+- 위쪽 선은 항상 맞춘다. 한쪽에만 박스 바깥 라벨이 있으면 라벨을 줄 위로 빼거나(`<label class="field-label" for="…">`) 박스 안 제목으로 넣는다.
+- 비슷한 비중의 2단(편집기 | 결과, 브리핑 | 할 일)은 줄에 `row-even`을 붙여 아래 끝도 맞춘다. 줄을 정의하는 탭 CSS에는 `align-items: start`를 쓰지 않는다.
+- 늘어난 카드 안이 grid면 `align-content: start`, 남는 높이를 채울 칸이 있으면 카드를 flex 세로로 두고 그 칸에 `flex: 1`.
+- 본문 + 좁은 옆 안내(`workbench` 등)는 아래 끝을 맞추지 않는다. 옆 카드가 비어 보이기 때문.
+- 입력칸 두 개를 나란히 둘 때는 `field-grid`. 직접 grid를 만들면 두 번째 `field`에 위 여백 18px이 붙어 어긋난다.
+
 ---
 
 ## 6. 데이터 원칙 (모든 파트)
