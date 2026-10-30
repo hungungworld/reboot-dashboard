@@ -816,7 +816,7 @@
 
   function singleHTML() {
     return `
-<div class="cmp-work">
+<div class="cmp-work row-even">
   <section class="cmp-card cmp-editor" aria-label="점검할 문구">
     <div class="cmp-work-head"><h3>점검할 문구</h3>${modeSegHTML('single')}</div>
     <div class="cmp-selects">
@@ -952,14 +952,14 @@
     const opts = { channel: j.channel, category: j.category, product: j.product };
     const ads = list.filter(x => x.kind === 'ad');
     const fda = list.filter(x => x.kind === 'fda');
-    const when = adRefs.generatedAt ? `${esc(adRefs.generatedAt.slice(0, 10))} 수집` : '아직 모은 문구가 없어요';
+    const when = `경쟁사 공식 홈페이지 · ${adRefs.generatedAt ? `${esc(adRefs.generatedAt.slice(0, 10))} 수집` : '수집 대기'}`;
     return `<div class="cmp-refs">
   <div class="cmp-refs-head"><b>비슷한 실제 미국 광고</b><span class="cmp-muted">${when} · 우리 규칙으로 판정</span>
     <button type="button" class="cmp-link-btn" data-act="refs-refresh">지금 다시 모으기</button></div>
   ${ads.length ? `<ul class="cmp-refs-list">${ads.map(a => `<li>${badge(review(a.text, opts).verdict)}
     <p lang="en">${esc(a.text)}</p><small>${esc(a.brand)} · 공식 홈페이지 · <a href="${esc(a.url)}" target="_blank" rel="noopener">원문 ↗</a></small></li>`).join('')}</ul>`
-    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "모은 문구가 없어요. '지금 다시 모으기'를 눌러 주세요 (Firecrawl 키 필요)."}</p>`}
-  ${fda.length ? `<p class="cmp-refs-sub">${icon('alert')} 같은 규칙에 걸려 FDA 경고장을 받은 문구</p>
+    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "수집된 경쟁사 문구가 없습니다. '지금 다시 모으기'로 수집하세요 (Firecrawl 키 필요)."}</p>`}
+  ${fda.length ? `<p class="cmp-refs-sub">${icon('alert')} 같은 규칙에 걸려 FDA 경고장을 받은 문구 · 내장 자료 (수집과 별개)</p>
   <ul class="cmp-refs-list is-fda">${fda.map(q => `<li><p lang="en">${esc(q.text)}</p><small>${esc(q.brand)} · FDA 경고장 ${esc(q.issued || '')}${q.ko ? ` · ${esc(q.ko)}` : ''}</small></li>`).join('')}</ul>` : ''}
   <p class="cmp-refs-links">자동으로 모으지 않는 곳 (약관) ·
     <a href="https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&q=hangover" target="_blank" rel="noopener">Meta 광고 라이브러리 ↗</a> ·
