@@ -165,7 +165,7 @@
 .part-cs .cs-grow { flex: 1; }
 .part-cs .cs-input {
   font: inherit; font-size: 12px; font-weight: 400; color: var(--cs-ink); background: var(--cs-card); letter-spacing: normal;
-  border: 1px solid var(--cs-rule-strong); border-radius: var(--radius-sm); padding: 11px 12px; width: 100%;
+  border: 1px solid var(--cs-rule-strong); border-radius: var(--radius-sm); padding: 11px 12px; width: 100%; min-height: 44px;   /* 입력칸 · 선택칸 높이 같게 */
 }
 .part-cs .cs-input::placeholder { color: var(--cs-faint); }
 .part-cs .cs-input:disabled, .part-cs .cs-input[readonly] { background: var(--cs-soft); }
