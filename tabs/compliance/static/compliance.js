@@ -816,7 +816,7 @@
 
   function singleHTML() {
     return `
-<div class="cmp-work">
+<div class="cmp-work row-even">
   <section class="cmp-card cmp-editor" aria-label="점검할 문구">
     <div class="cmp-work-head"><h3>점검할 문구</h3>${modeSegHTML('single')}</div>
     <div class="cmp-selects">
@@ -952,14 +952,14 @@
     const opts = { channel: j.channel, category: j.category, product: j.product };
     const ads = list.filter(x => x.kind === 'ad');
     const fda = list.filter(x => x.kind === 'fda');
-    const when = adRefs.generatedAt ? `${esc(adRefs.generatedAt.slice(0, 10))} 수집` : '아직 모은 문구가 없어요';
+    const when = `경쟁사 공식 홈페이지 · ${adRefs.generatedAt ? `${esc(adRefs.generatedAt.slice(0, 10))} 수집` : '수집 대기'}`;
     return `<div class="cmp-refs">
   <div class="cmp-refs-head"><b>비슷한 실제 미국 광고</b><span class="cmp-muted">${when} · 우리 규칙으로 판정</span>
     <button type="button" class="cmp-link-btn" data-act="refs-refresh">지금 다시 모으기</button></div>
   ${ads.length ? `<ul class="cmp-refs-list">${ads.map(a => `<li>${badge(review(a.text, opts).verdict)}
     <p lang="en">${esc(a.text)}</p><small>${esc(a.brand)} · 공식 홈페이지 · <a href="${esc(a.url)}" target="_blank" rel="noopener">원문 ↗</a></small></li>`).join('')}</ul>`
-    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "모은 문구가 없어요. '지금 다시 모으기'를 눌러 주세요 (Firecrawl 키 필요)."}</p>`}
-  ${fda.length ? `<p class="cmp-refs-sub">${icon('alert')} 같은 규칙에 걸려 FDA 경고장을 받은 문구</p>
+    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "수집된 경쟁사 문구가 없습니다. '지금 다시 모으기'로 수집하세요 (Firecrawl 키 필요)."}</p>`}
+  ${fda.length ? `<p class="cmp-refs-sub">${icon('alert')} 같은 규칙에 걸려 FDA 경고장을 받은 문구 · 내장 자료 (수집과 별개)</p>
   <ul class="cmp-refs-list is-fda">${fda.map(q => `<li><p lang="en">${esc(q.text)}</p><small>${esc(q.brand)} · FDA 경고장 ${esc(q.issued || '')}${q.ko ? ` · ${esc(q.ko)}` : ''}</small></li>`).join('')}</ul>` : ''}
   <p class="cmp-refs-links">자동으로 모으지 않는 곳 (약관) ·
     <a href="https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&q=hangover" target="_blank" rel="noopener">Meta 광고 라이브러리 ↗</a> ·
@@ -1589,7 +1589,7 @@
 <div class="cmp-dlg-foot cmp-mail-foot" data-el="rq-foot">
   <span class="cmp-mail-from" data-el="rq-from"></span>
   <button type="button" class="cmp-btn cmp-primary" data-act="rq-send" data-mode="mail" disabled>${icon('mail')} Gmail로 보내기</button>
-  <button type="button" class="cmp-btn" data-act="rq-send" data-mode="xlsx" disabled title="메일은 보내지 않고 요청번호 · 팀별 회신 링크를 만든 뒤 요청서 엑셀을 내려받아요. 직접 전달할 때 써요">${icon('download')} 메일 없이 요청만 만들기</button>
+  <button type="button" class="cmp-btn" data-act="rq-send" data-mode="xlsx" disabled title="메일은 보내지 않아요. 요청서 엑셀(요청번호 · 팀별 회신 링크 포함)을 내려받아 직접 전달해요">${icon('download')} 요청서 엑셀 받기</button>
   <button type="button" class="cmp-btn" data-act="dlg-close">취소</button>
 </div>`;
   }
@@ -1637,7 +1637,7 @@
         x.nextElementSibling.title = ps.map(c => `${c.name} <${c.email}>`).join('\n');
       });
     };
-    const paintSend = () => {   // Gmail로 보내기 · 메일 없이 요청만 만들기 둘 다 늘 보임 — 못 쓸 때는 끄고 이유는 툴팁·왼쪽 안내로
+    const paintSend = () => {   // Gmail로 보내기 · 요청서 엑셀 받기 둘 다 늘 보임 — 못 쓸 때는 끄고 이유는 툴팁·왼쪽 안내로
       const mailBtn = dlg.querySelector('[data-act="rq-send"][data-mode="mail"]');
       const xlsxBtn = dlg.querySelector('[data-act="rq-send"][data-mode="xlsx"]');
       if (!mailBtn || !xlsxBtn) return;
@@ -1646,8 +1646,8 @@
       mailBtn.title = !setup.gmail ? '설정 › 연결에서 Gmail을 연결하면 보낼 수 있어요'
         : !toNow().length ? '고른 팀에 등록된 담당자가 없어요' : '';
       xlsxBtn.disabled = !teams;
-      q('rq-from').innerHTML = !setup.gmail ? `${icon('info')} Gmail 연결 전 · [메일 없이 요청만 만들기]로 엑셀을 받아 직접 전달해요`
-        : !toNow().length ? `${icon('info')} 고른 팀에 등록된 담당자가 없어요 · [메일 없이 요청만 만들기]로 전달해요`
+      q('rq-from').innerHTML = !setup.gmail ? `${icon('info')} Gmail 연결 전 · [요청서 엑셀 받기]로 파일을 받아 직접 전달하세요`
+        : !toNow().length ? `${icon('info')} 고른 팀에 등록된 담당자가 없어요 · [요청서 엑셀 받기]로 직접 전달하세요`
           : `${icon('mail')} ${toNow().length}명에게 Gmail로 · 회신 링크는 본문 끝에 자동`;
     };
     const paintAttach = () => {

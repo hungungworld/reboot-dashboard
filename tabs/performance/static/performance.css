@@ -175,3 +175,10 @@
 .part-performance th.num .perf-th-label { align-items: flex-end; }
 .part-performance .perf-th-sub { display: block; font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
 .part-performance th.sorted .perf-th-sort i { color: var(--accent); font-size: 12px; -webkit-text-stroke: .6px var(--lime-line); }
+
+/* 자사 홈페이지(시연 사이트) 매출 카드 — performance.js renderShop */
+.part-performance .perf-shop-sub { font-size: 13px; font-weight: 650; margin: 8px 0 8px; }
+.part-performance .perf-shop .card-head .flex { gap: 8px; align-items: center; }
+.part-performance .perf-shop-tables { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
+.part-performance .perf-shop-tables th, .part-performance .perf-shop-tables td { white-space: nowrap; }
+@media (max-width: 1200px) { .part-performance .perf-shop-tables { grid-template-columns: 1fr; } }

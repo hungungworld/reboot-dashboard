@@ -11,6 +11,11 @@ Shopify를 연동하면 _day()를 Orders API(discount_codes) 집계로, 접속�
 - 크리에이터: Creator performance(creator-performance.csv) — 방문(clicks)은 기간 구분 없는 전체 누적
 - 전환율 = 기간 주문 ÷ 전체 누적 방문 (시연 사이트 관리자 화면과 같은 계산) · paid만 매출, refunded는 환불 건수
 - is_dummy 열이 True인 줄이 있으면 dummy=True (화면에 예시 배지 유지)
+
+자사 홈페이지(시연 사이트) 데이터 API (fetch_shop) — SHOP_EXPORT_TOKEN이 있으면 CSV 업로드 대신 자동으로 가져옴
+- GET <SHOP_EXPORT_URL>/api/export/<이름>.csv?start=&end= · 헤더 Authorization: Bearer <토큰> · 컬럼은 관리자 CSV와 같음
+- influencer-orders(주문 줄) · creator-performance(크리에이터) · creator-visits(날짜별 방문) — 최근 API_DAYS일을 한 번에 받음 (호출 · 캐시는 server/core/shopapi.py)
+- 날짜별 방문이 있으면 접속량 · 전환율을 고른 기간 기준으로 계산 (CSV 업로드는 전체 누적 그대로)
 """
 import csv
 import hashlib
@@ -19,6 +24,8 @@ import random
 import re
 from datetime import date, timedelta
 from functools import lru_cache
+
+from server.core import shopapi
 
 DAYS = 60
 TOP = 12
@@ -125,7 +132,7 @@ def report(names, today, start=None, end=None):
     return {"dummy": True, "source": source, "start": start.isoformat(), "end": end.isoformat(),
             "range": {"min": lo.isoformat(), "max": hi.isoformat()}, "unitPrice": UNIT_PRICE, "currency": "USD",
             "creators": rows, "daily": [daily[d] for d in days], "totals": totals,
-            "note": "Shopify · UTM 연동 전 (환불 주문 제외)"}
+            "note": "자사 홈페이지 연동 전 예시 (환불 주문 제외)"}
 
 
 # ───────── 시연 사이트 관리자 CSV ─────────
@@ -187,10 +194,26 @@ def _order_lines(rows):
     return out
 
 
-def shop_report(order_rows, creator_rows, start=None, end=None, uploaded_at=None):
+def _visit_map(visit_rows):
+    """날짜별 방문 줄 → {(코드, 날짜): 방문수}."""
+    out = {}
+    for r in visit_rows or []:
+        code = str(r.get("discount_code") or "").strip().upper()
+        try:
+            d = date.fromisoformat(str(r.get("date") or "")[:10])
+        except ValueError:
+            continue
+        if code:
+            out[(code, d)] = out.get((code, d), 0) + _num(r.get("visits"), int)
+    return out
+
+
+def shop_report(order_rows, creator_rows, start=None, end=None, uploaded_at=None, visit_rows=None, fetched_at=None):
     lines = _order_lines(order_rows)
     if not lines:
         raise ShopCsvError("주문 CSV에 크리에이터 링크 주문이 없어요.")
+    api = visit_rows is not None
+    visits = _visit_map(visit_rows)
     info = {}
     for r in creator_rows or []:
         code = str(r.get("discount_code") or "").strip().upper()
@@ -198,6 +221,8 @@ def shop_report(order_rows, creator_rows, start=None, end=None, uploaded_at=None
             info[code] = {"name": str(r.get("creator") or "").strip(), "platform": str(r.get("platform") or "").strip(),
                           "visits": _num(r.get("clicks"), int)}
     lo, hi = min(x[0] for x in lines), max(x[0] for x in lines)
+    if visits:                              # 주문이 없는 최근 날짜도 방문이 있으면 고를 수 있게
+        hi = max(hi, max(d for _, d in visits))
     end = min(max(end or hi, lo), hi)
     start = min(max(start or max(lo, end - timedelta(days=29)), lo), hi)
     if start > end:
@@ -229,13 +254,19 @@ def shop_report(order_rows, creator_rows, start=None, end=None, uploaded_at=None
         elif status == "refunded":
             b["refunds"].add(oid)
     rows = []
-    daily = {d: {"date": d.isoformat(), "visits": None, "orders": 0, "units": 0, "revenue": 0.0} for d in days}
+    daily = {d: {"date": d.isoformat(), "visits": 0 if api else None, "orders": 0, "units": 0, "revenue": 0.0} for d in days}
     for code, c in info.items():
         cd, t = [], {"orders": 0, "units": 0, "revenue": 0.0, "refunds": 0}
+        if api:
+            c["visits"] = 0                 # 날짜별 방문이 있으면 누적 대신 기간 합계
         for d in days:
             b = cur[code][d]
             o, rev = len(b["orders"]), round(b["revenue"], 2)
-            cd.append({"date": d.isoformat(), "visits": None, "orders": o, "revenue": rev})
+            v = visits.get((code, d), 0) if api else None
+            if api:
+                c["visits"] += v
+                daily[d]["visits"] += v
+            cd.append({"date": d.isoformat(), "visits": v, "orders": o, "revenue": rev})
             t["orders"] += o
             t["units"] += b["units"]
             t["revenue"] += b["revenue"]
@@ -256,8 +287,26 @@ def shop_report(order_rows, creator_rows, start=None, end=None, uploaded_at=None
     totals["change"] = _change(totals["revenue"], totals["prevRevenue"])
     for dd in daily.values():
         dd["revenue"] = round(dd["revenue"], 2)
-    return {"dummy": dummy, "source": "shop", "start": start.isoformat(), "end": end.isoformat(),
+    return {"dummy": dummy, "source": "api" if api else "shop", "start": start.isoformat(), "end": end.isoformat(),
             "range": {"min": lo.isoformat(), "max": hi.isoformat()}, "unitPrice": None, "currency": "USD",
-            "creators": rows, "daily": [daily[d] for d in days], "totals": totals, "hasVisits": bool(creator_rows),
-            "uploadedAt": uploaded_at,
-            "note": "시연 사이트 관리자 CSV 기준 (paid 주문만 매출 · 접속량은 전체 기간 누적)"}
+            "creators": rows, "daily": [daily[d] for d in days], "totals": totals, "hasVisits": api or bool(creator_rows),
+            "uploadedAt": uploaded_at, "fetchedAt": fetched_at,
+            "note": "자사 홈페이지(시연 사이트) 자동 연동 (paid 주문만 매출 · 접속량은 기간 합계)" if api
+            else "시연 사이트 관리자 CSV 기준 (paid 주문만 매출 · 접속량은 전체 기간 누적)"}
+
+
+# ───────── 자사 홈페이지(시연 사이트) 데이터 API (server/core/shopapi.py) ─────────
+
+API_DAYS = 365
+API_FILES = {"orders": "influencer-orders", "creators": "creator-performance", "visits": "creator-visits"}
+
+
+def fetch_shop(today, refresh=False):
+    """{'orders', 'creators', 'visits': 줄 목록, 'at': 받은 시각(UTC)} — 최근 API_DAYS일 (캐시는 shopapi)."""
+    start = today - timedelta(days=API_DAYS)
+    out, at = {}, None
+    for kind, name in API_FILES.items():
+        out[kind], got = shopapi.fetch(name, start, today, refresh=refresh)
+        at = min(at, got) if at else got
+    out["at"] = at
+    return out

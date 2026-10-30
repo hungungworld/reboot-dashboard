@@ -247,6 +247,7 @@
     if (btn) busy(btn, false);
     paintFx();
     if (S.currency === 'USD' && S.sum && S.sum.rows) renderCurrency();
+    renderShop();   // 자사몰 ROAS가 환율을 씀
   }
 
   /* ───────── AI 해석 · 예산 제안 ───────── */
@@ -592,6 +593,7 @@
         <section class="card"><div class="card-head"><h2>일별 매출 추이<span class="head-cap" data-ref="line-note"></span></h2></div>
           <div class="perf-chart"><canvas data-ref="line" role="img" aria-label="일별 매출 추이 선 차트 (범례를 누르면 선을 숨기거나 보임)"></canvas></div></section>
       </div>
+      <section class="card perf-shop" data-ref="shop" aria-live="polite"></section>
       <div class="grid-2" data-ref="review"></div>
       <section class="card tinted perf-ai" data-ref="ai" aria-live="polite"></section>`;
     renderInfo();
@@ -602,6 +604,82 @@
     renderReview();
     renderAi();
     drawCharts();
+    loadShop();
+  }
+
+  /* ───────── 자사 홈페이지(시연 사이트) 매출 ─────────
+     /api/performance/shop — 같은 기간의 자사몰 매출을 달러로 따로 보여 줌 (광고비 CSV와 섞지 않음)
+     인플루언서 플랫폼(Instagram · TikTok)은 같은 이름의 광고비 CSV 채널과 나란히: 자사몰 ROAS = 매출(달러 × 환율) ÷ 광고비 */
+  async function loadShop(refresh, btn) {
+    const el = ref('shop');
+    if (!el) return;
+    const p = S.period;
+    const key = `${p.start}~${p.end}`;
+    S.shopKey = key;
+    if (!S.shop || S.shop.key !== key || refresh) {
+      el.innerHTML = `${shopHead()}<div class="skeleton" style="height:120px"></div><p class="panel-note mt-8">자사 홈페이지에서 불러오는 중… (서버가 쉬고 있으면 처음엔 1분쯤 걸려요)</p>`;
+      if (btn) busy(btn, true);
+      try {
+        const d = await REBOOT.api(`/api/performance/shop?start=${encodeURIComponent(p.start)}&end=${encodeURIComponent(p.end)}${refresh ? '&refresh=1' : ''}`);
+        S.shop = { key, d };
+      } catch (e) {
+        S.shop = { key, d: { ready: true, error: e.message } };
+      } finally {
+        if (btn) busy(btn, false);
+      }
+      if (S.shopKey !== key || !el.isConnected) return;   // 그사이 기간을 바꿨으면 버림
+    }
+    renderShop();
+  }
+  function shopHead(d) {
+    const tags = d && d.ready && !d.error ? `${d.dummy ? badge('예시', 'orange') : ''}${badge('자사 홈페이지 연동', 'green')}` : '';
+    const again = d && d.ready ? `<button type="button" class="btn small ghost" data-act="shop-refresh">${icon('refresh')} 다시 가져오기</button>` : '';
+    return `<div class="card-head"><h2>자사 홈페이지 매출<span class="head-cap">단위: 달러 (할인 후 · paid 주문)</span></h2><div class="flex wrap">${tags}${again}</div></div>`;
+  }
+  function renderShop() {
+    const el = ref('shop');
+    if (!el || !S.shop) return;
+    const d = S.shop.d;
+    if (!d.ready) {
+      el.innerHTML = `${shopHead(d)}<p class="panel-note">설정 › 연결에 <b>자사 홈페이지 데이터 API 토큰</b>을 넣으면 같은 기간의 자사몰 매출(직접 구매 · 인플루언서 링크 · 상품별)이 여기 나와요.</p>`;
+      return;
+    }
+    if (d.error) {
+      el.innerHTML = `${shopHead(d)}<p class="note error">자사 홈페이지 매출을 불러오지 못했어요. ${esc(d.error)}</p>`;
+      return;
+    }
+    const t = d.totals;
+    const rate = S.fx && S.fx.rate;
+    const spend = {};
+    (S.sum.channels || []).forEach(c => { spend[c.channel.toLowerCase()] = c.spend; });
+    const roas = c => {
+      const s = spend[c.channel.toLowerCase()];
+      return s && rate ? fmt.pct(c.revenue * rate / s * 100, 0) : '—';
+    };
+    const chRows = d.channels.map(c => `<tr><td>${esc(c.channel)}${c.creators ? ` <span class="muted">· 크리에이터 ${fmt.num(c.creators)}명</span>` : ''}</td>
+      <td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${esc(fmt.usd(c.revenue))}</td>
+      <td class="num">${c.share == null ? '—' : fmt.pct(c.share, 1)}</td><td class="num">${c.commission ? esc(fmt.usd(c.commission)) : '—'}</td>
+      <td class="num">${spend[c.channel.toLowerCase()] ? esc(fmt.krw(spend[c.channel.toLowerCase()])) : '—'}</td><td class="num">${roas(c)}</td></tr>`).join('');
+    const prodRows = d.products.map(p => `<tr><td>${esc(p.name)}</td><td class="num">${fmt.num(p.orders)}</td><td class="num">${fmt.num(p.units)}</td>
+      <td class="num">${esc(fmt.usd(p.revenue))}</td><td class="num">${esc(fmt.usd(p.viaLink))}</td></tr>`).join('');
+    el.innerHTML = `${shopHead(d)}
+      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 자사 홈페이지(시연 사이트)에서 자동으로 가져왔어요${d.fetchedAt ? ' · ' + esc(fmt.datetime(d.fetchedAt)) + ' 기준' : ''}</p>
+      <div class="kpis">
+        ${ui.kpi({ label: '자사몰 매출', value: fmt.usd(t.revenue), icon: 'chart', featured: true, foot: '직접 구매 + 인플루언서 링크' })}
+        ${ui.kpi({ label: '주문', value: fmt.num(t.orders), unit: '건', icon: 'check', foot: 'paid 주문 (환불 제외)' })}
+        ${ui.kpi({ label: '판매량', value: fmt.num(t.units), unit: '개', icon: 'filter', foot: '주문 수량 합계' })}
+        ${ui.kpi({ label: '크리에이터 수수료', value: fmt.usd(t.commission), icon: 'dollar', foot: '인플루언서 매출 × 수수료율' })}
+      </div>
+      <div class="perf-shop-tables mt-8">
+        <div><h3 class="perf-shop-sub">채널별 매출</h3><div class="table-wrap"><table class="table">
+          <thead><tr><th>채널</th><th class="num">주문</th><th class="num">판매량</th><th class="num">매출</th><th class="num">비중</th><th class="num">수수료</th><th class="num">광고비 (CSV)</th><th class="num">자사몰 ROAS</th></tr></thead>
+          <tbody>${chRows}</tbody></table></div>
+          <p class="panel-note mt-8">자사몰 ROAS = 자사몰 매출 × 환율 ÷ 같은 이름 채널의 광고비 (위 CSV · ${rate ? `1$ = ${fmt.num(rate, 0)}원` : '환율 받는 중'}). 광고비가 없는 채널은 —</p></div>
+        <div><h3 class="perf-shop-sub">상품별 매출</h3><div class="table-wrap"><table class="table">
+          <thead><tr><th>상품</th><th class="num">주문</th><th class="num">판매량</th><th class="num">매출</th><th class="num">링크 매출</th></tr></thead>
+          <tbody>${prodRows || '<tr><td colspan="5">이 기간 판매가 없어요.</td></tr>'}</tbody></table></div>
+          <p class="panel-note mt-8">링크 매출 = 크리에이터 할인 링크로 팔린 금액</p></div>
+      </div>`;
   }
 
   function renderMain() {
@@ -893,6 +971,7 @@
       else if (a === 'template') ui.download('reboot-performance-template.csv', ui.csv([M.HEADER]), 'text/csv;charset=utf-8');
       else if (a === 'report') global.location.href = `/dashboard/performance?view=report&start=${encodeURIComponent(S.period.start)}&end=${encodeURIComponent(S.period.end)}`;
       else if (a === 'fx') loadFx(true, act);
+      else if (a === 'shop-refresh') loadShop(true, act);
       else if (a === 'fold-table') {   // 채널별 성과 표 접기·펴기
         S.tableOpen = act.getAttribute('aria-expanded') !== 'true';
         act.setAttribute('aria-expanded', String(S.tableOpen));

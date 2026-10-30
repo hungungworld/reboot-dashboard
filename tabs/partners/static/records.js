@@ -913,7 +913,7 @@
     const st = { el, data: null, pref: getSalesPref(), picked: [] };
     el.innerHTML = `
       <div class="filters ptn-rec-salesbar">
-        <div class="flex wrap" data-ref="src">${badge('예시', 'orange')}<span class="panel-note">Shopify · UTM 연동 전 (환불 주문 제외)</span></div>
+        <div class="flex wrap" data-ref="src"><span class="panel-note">자사 홈페이지에서 판매 실적을 불러오는 중…</span></div>
         <div class="flex wrap">
           <div class="period" role="group" aria-label="조회 기간">${R.salesPresets.map(n => `<button type="button" data-days="${n}">최근 ${n}일</button>`).join('')}</div>
           <input type="date" class="input ptn-rec-date" data-ref="start" aria-label="시작일"><span aria-hidden="true">~</span><input type="date" class="input ptn-rec-date" data-ref="end" aria-label="종료일">
@@ -1019,21 +1019,26 @@
     e.value = d.end;
     el.querySelectorAll('[data-days]').forEach(b => b.classList.toggle('selected', Number(b.dataset.days) === st.pref.days));
     const t = d.totals;
-    const shop = d.source === 'shop';
+    const api = d.source === 'api';                 // 자사 홈페이지 데이터 API 자동 연동 (날짜별 방문 포함)
+    const shop = api || d.source === 'shop';
     const ex = d.dummy ? badge('예시', 'orange') : '';
-    el.querySelector('[data-ref="src"]').innerHTML = shop
-      ? `${ex}${badge('시연 사이트 CSV', 'green')}<span class="panel-note">${d.uploadedAt ? esc(fmt.datetime(d.uploadedAt)) + ' 업로드 · ' : ''}paid 주문만 매출 (환불 제외)</span>`
-      : `${ex}<span class="panel-note">Shopify · UTM 연동 전 (환불 주문 제외)</span>`;
-    el.querySelector('[data-sales-act="reset"]').hidden = !shop;
+    const apiErr = d.apiError ? `<span class="panel-note error">자동 연동 실패: ${esc(d.apiError)}</span>` : '';
+    el.querySelector('[data-ref="src"]').innerHTML = api
+      ? `${ex}${badge('자사 홈페이지 연동', 'green')}<span class="panel-note">자사 홈페이지(시연 사이트)에서 자동으로 가져와요 · ${d.fetchedAt ? esc(fmt.datetime(d.fetchedAt)) + ' 기준 · ' : ''}paid 주문만 매출 (환불 제외)</span>`
+      : shop
+        ? `${ex}${badge('시연 사이트 CSV', 'green')}<span class="panel-note">${d.uploadedAt ? esc(fmt.datetime(d.uploadedAt)) + ' 업로드 · ' : ''}paid 주문만 매출 (환불 제외)</span>${apiErr}`
+        : `${ex}<span class="panel-note">자사 홈페이지 연동 전 예시 · 설정 › 연결에 데이터 API 토큰을 넣으면 자동으로 가져와요 (환불 주문 제외)</span>${apiErr}`;
+    el.querySelector('[data-sales-act="reset"]').hidden = !shop || api;
+    el.querySelector('[data-sales-act="upload"]').hidden = api;
     destroyCharts();
     el.querySelector('[data-ref="out"]').innerHTML = `
       <div class="kpis">
-        ${ui.kpi({ label: '접속량', value: fmt.num(t.visits), unit: '회', featured: true, icon: 'users', foot: shop ? (d.hasVisits ? '크리에이터 링크 방문 (전체 기간 누적)' : 'Creator performance CSV를 올리면 표시') : '할인코드 링크 방문 (예시)' })}
+        ${ui.kpi({ label: '접속량', value: fmt.num(t.visits), unit: '회', featured: true, icon: 'users', foot: api ? '크리에이터 링크 방문 (기간 합계)' : shop ? (d.hasVisits ? '크리에이터 링크 방문 (전체 기간 누적)' : 'Creator performance CSV를 올리면 표시') : '할인코드 링크 방문 (예시)' })}
         ${ui.kpi({ label: '주문', value: fmt.num(t.orders), unit: '건', icon: 'check', foot: `환불 ${fmt.num(t.refunds)}건 제외 · 전환율 ${fmt.pct(t.conversion, 2)}` })}
         ${ui.kpi({ label: '판매량', value: fmt.num(t.units), unit: '개', icon: 'chart', foot: shop ? '주문 수량 합계' : '주문 수량 합계 (예시)' })}
         ${ui.kpi({ label: '매출', value: usd(t.revenue), icon: 'dollar', foot: shop ? '주문 금액 합계 (할인 후)' : `예시 단가 $${fmt.num(d.unitPrice, 2)} 기준` })}
       </div>
-      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 크리에이터 ${fmt.num(d.creators.length)}명 ${shop ? '(시연 사이트 크리에이터 링크 · 전환율 = 기간 주문 ÷ 누적 방문)' : d.source === 'placeholder' ? '(올린 인플루언서가 없어 Creator A~L 예시 이름)' : '(올린 인플루언서 상위 ' + fmt.num(d.creators.length) + '곳 · 예시 행 제외)'}</p>
+      <p class="panel-note mb-16">${esc(d.start)} ~ ${esc(d.end)} · 크리에이터 ${fmt.num(d.creators.length)}명 ${api ? '(자사 홈페이지 크리에이터 링크 · 전환율 = 기간 주문 ÷ 기간 방문)' : shop ? '(시연 사이트 크리에이터 링크 · 전환율 = 기간 주문 ÷ 누적 방문)' : d.source === 'placeholder' ? '(올린 인플루언서가 없어 Creator A~L 예시 이름)' : '(올린 인플루언서 상위 ' + fmt.num(d.creators.length) + '곳 · 예시 행 제외)'}</p>
       <div class="grid-2 ptn-rec-charts">
         <section class="card"><div class="card-head"><h2>크리에이터별 매출</h2>${ex}</div>
           <div class="ptn-rec-chart" data-ref="bar-box"><canvas data-ref="bar" role="img" aria-label="크리에이터별 매출 막대 그래프 (표는 아래)"></canvas></div></section>

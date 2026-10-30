@@ -603,6 +603,9 @@ table.rb-fixed th, table.rb-fixed td { overflow: hidden; text-overflow: ellipsis
 .home-layout { display: grid; grid-template-columns: minmax(0, 1fr) 288px; gap: 22px; }
 .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 .workbench { display: grid; grid-template-columns: minmax(0, 1fr) 315px; gap: 20px; align-items: start; }
+/* 나란히 놓인 박스: 위·아래 끝을 같게. 박스 바깥 라벨은 이 줄 위로 빼서 둔다 (자세히: docs/DEV_GUIDE.md) */
+.row-even { align-items: stretch; }
+.row-even > .field { margin-top: 0; }
 .filters { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 15px; flex-wrap: wrap; }
 
 /* ───────── 15. 대화 · 시안 (콘텐츠 등) ───────── */
