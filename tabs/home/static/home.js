@@ -829,7 +829,7 @@
             <div class="home-glance home-box-body" data-ref="glance"><div class="skeleton" style="height:96px"></div></div></section>
           <section class="card"><div class="card-head"><h2>최근 워크스페이스 활동</h2></div><ul class="activity home-box-body" data-ref="activity"><li>불러오는 중…</li></ul></section>
         </div>
-        <div class="home-main2 section-gap">
+        <div class="home-main2 row-even section-gap">
             <section class="card home-brief" aria-label="미국 시장 브리핑">
               <div class="home-brief-head"><div class="home-brief-title"><h2>미국 시장 브리핑</h2><span class="head-cap" data-ref="news-sub"></span></div>
                 <button type="button" class="icon-btn home-brief-refresh" data-ref="news-collect" data-act="news-collect" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button></div>

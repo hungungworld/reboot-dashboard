@@ -60,7 +60,9 @@
 .part-home .home-top4 > .card { display: flex; flex-direction: column; height: 400px; min-width: 0; }
 .part-home .home-top4 .home-box-body { flex: 1; min-height: 0; overflow-y: auto; margin-top: 0; }
 .part-home .home-top4 .home-mini-cal { overflow: hidden; }   /* 달력에 스크롤바 없이 · 아래 시즌 목록은 넘치면 잘림 */
-.part-home .home-main2 { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 22px; align-items: start; }
+.part-home .home-main2 { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 22px; }   /* .row-even: 브리핑 · 할 일 아래 끝 맞춤 */
+.part-home .home-brief { display: flex; flex-direction: column; }
+.part-home .home-brief > [data-ref="news-body"] { flex: 1; }   /* 늘어난 높이는 본문이 차지 · 아래 줄(보관함 · 수집 정보)은 카드 바닥에 */
 @media (max-width: 1300px) { .part-home .home-top4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .part-home .home-main2 { grid-template-columns: 1fr; } }
 @media (max-width: 700px) { .part-home .home-top4 { grid-template-columns: 1fr; } .part-home .home-top4 > .card { height: auto; max-height: 420px; } }
