@@ -12,7 +12,7 @@ def make_app(tmp_path, monkeypatch, **overrides):
     for name in ("ADMIN_EMAIL", "ADMIN_PASSWORD", "OPENAI_API_KEY", "open_api", "AI_API_KEY", "ANTHROPIC_API_KEY",
                  "GMAIL_ADDRESS", "gmail_address", "GMAIL_APP_PASSWORD", "gmail_api", "SERPAPI_KEY", "YOUTUBE_API_KEY",
                  "FIRECRAWL_API_KEY", "KEXIM_API_KEY", "GMAIL_TOKEN_JSON", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
-                 "SLACK_WEBHOOK_URL"):
+                 "SLACK_WEBHOOK_URL", "SHOP_EXPORT_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     cfg = {
         "TESTING": True,

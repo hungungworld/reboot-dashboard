@@ -1589,7 +1589,7 @@
 <div class="cmp-dlg-foot cmp-mail-foot" data-el="rq-foot">
   <span class="cmp-mail-from" data-el="rq-from"></span>
   <button type="button" class="cmp-btn cmp-primary" data-act="rq-send" data-mode="mail" disabled>${icon('mail')} Gmail로 보내기</button>
-  <button type="button" class="cmp-btn" data-act="rq-send" data-mode="xlsx" disabled title="메일은 보내지 않고 요청번호 · 팀별 회신 링크를 만든 뒤 요청서 엑셀을 내려받아요. 직접 전달할 때 써요">${icon('download')} 메일 없이 요청만 만들기</button>
+  <button type="button" class="cmp-btn" data-act="rq-send" data-mode="xlsx" disabled title="메일은 보내지 않아요. 요청서 엑셀(요청번호 · 팀별 회신 링크 포함)을 내려받아 직접 전달해요">${icon('download')} 요청서 엑셀 받기</button>
   <button type="button" class="cmp-btn" data-act="dlg-close">취소</button>
 </div>`;
   }
@@ -1637,7 +1637,7 @@
         x.nextElementSibling.title = ps.map(c => `${c.name} <${c.email}>`).join('\n');
       });
     };
-    const paintSend = () => {   // Gmail로 보내기 · 메일 없이 요청만 만들기 둘 다 늘 보임 — 못 쓸 때는 끄고 이유는 툴팁·왼쪽 안내로
+    const paintSend = () => {   // Gmail로 보내기 · 요청서 엑셀 받기 둘 다 늘 보임 — 못 쓸 때는 끄고 이유는 툴팁·왼쪽 안내로
       const mailBtn = dlg.querySelector('[data-act="rq-send"][data-mode="mail"]');
       const xlsxBtn = dlg.querySelector('[data-act="rq-send"][data-mode="xlsx"]');
       if (!mailBtn || !xlsxBtn) return;
@@ -1646,8 +1646,8 @@
       mailBtn.title = !setup.gmail ? '설정 › 연결에서 Gmail을 연결하면 보낼 수 있어요'
         : !toNow().length ? '고른 팀에 등록된 담당자가 없어요' : '';
       xlsxBtn.disabled = !teams;
-      q('rq-from').innerHTML = !setup.gmail ? `${icon('info')} Gmail 연결 전 · [메일 없이 요청만 만들기]로 엑셀을 받아 직접 전달해요`
-        : !toNow().length ? `${icon('info')} 고른 팀에 등록된 담당자가 없어요 · [메일 없이 요청만 만들기]로 전달해요`
+      q('rq-from').innerHTML = !setup.gmail ? `${icon('info')} Gmail 연결 전 · [요청서 엑셀 받기]로 파일을 받아 직접 전달하세요`
+        : !toNow().length ? `${icon('info')} 고른 팀에 등록된 담당자가 없어요 · [요청서 엑셀 받기]로 직접 전달하세요`
           : `${icon('mail')} ${toNow().length}명에게 Gmail로 · 회신 링크는 본문 끝에 자동`;
     };
     const paintAttach = () => {

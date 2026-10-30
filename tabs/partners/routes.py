@@ -58,6 +58,7 @@ from werkzeug.utils import secure_filename
 from server import envkeys, worklog
 from server.catalog import service as catalog
 from server.core import ai as core_ai
+from server.core import shopapi
 from server.extensions import db
 from server.models import iso, utcnow
 from server.security import ApiError, clip, json_body
@@ -919,6 +920,16 @@ def _shop_file(kind):
 
 @bp.get("/sales")
 def sales_report():
+    """자사 홈페이지 데이터 API(토큰 있을 때) → 올린 시연 사이트 CSV → 예시 순서. API가 실패하면 다음 순서로 넘어가고 apiError로 알림."""
+    start, end = _date_arg("start"), _date_arg("end")
+    api_error = None
+    if shopapi.ready():
+        try:
+            got = sales.fetch_shop(catalog._today(), refresh=request.args.get("refresh") == "1")
+            return jsonify(sales.shop_report(got["orders"], got["creators"], start, end,
+                                             visit_rows=got["visits"], fetched_at=iso(got["at"])))
+        except (shopapi.ShopApiError, sales.ShopCsvError) as e:
+            api_error = str(e)
     orders = _shop_file("orders")
     if orders.exists():
         creators = _shop_file("creators")
@@ -926,13 +937,13 @@ def sales_report():
             _, order_rows = sales.read_csv(orders.read_bytes())
             creator_rows = sales.read_csv(creators.read_bytes())[1] if creators.exists() else []
             at = datetime.fromtimestamp(orders.stat().st_mtime, timezone.utc).replace(tzinfo=None)
-            return jsonify(sales.shop_report(order_rows, creator_rows, _date_arg("start"), _date_arg("end"), iso(at)))
+            return jsonify(dict(sales.shop_report(order_rows, creator_rows, start, end, iso(at)), apiError=api_error))
         except sales.ShopCsvError as e:
             raise ApiError(str(e))
     _sync_bundled()
     rows = PartnerContact.query.filter_by(ptype=INFLUENCER).order_by(PartnerContact.sort).all()
     names = [c.name for c in rows if not c.is_example]
-    return jsonify(sales.report(names, catalog._today(), _date_arg("start"), _date_arg("end")))
+    return jsonify(dict(sales.report(names, catalog._today(), start, end), apiError=api_error))
 
 
 @bp.post("/sales/upload")
