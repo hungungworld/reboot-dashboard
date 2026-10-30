@@ -10,6 +10,10 @@
 .part-home .brief-hero[data-go-view] { cursor: pointer; }
 /* 히어로 버튼 두 개 — 높이 · 길이 같게 */
 .part-home .brief-hero .btn { min-width: 150px; }
+/* 히어로 마스코트 Rebu (home.js rebu) — 카드 전체를 덮는 투명 캔버스, ∞ 무늬 위 · 글자 · 숫자 아래(먼저 넣음) · 클릭은 통과 */
+.part-home .brief-hero > .home-rebu { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.part-home .home-rebu canvas { display: block; width: 100%; height: 100%; }
+@media (max-width: 950px) { .part-home .home-rebu { display: none; } }
 
 /* 다가오는 시즌 (오른쪽 · 한 줄씩) — 누르면 콘텐츠 캘린더 */
 .part-home .home-season-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 0; border: 0; border-top: 1px solid var(--line-3);
