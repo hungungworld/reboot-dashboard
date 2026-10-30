@@ -314,7 +314,7 @@
         dl('/api/insights/report/monthly.docx' + (month ? `?month=${encodeURIComponent(month)}` : ''), '월간 리포트 다운로드', 'Word') +
         dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX')
         : dl('/api/insights/export.xlsx', '모은 데이터 다운로드', 'XLSX');
-    box.innerHTML = `${extra}<button type="button" class="btn lime" data-act="ins-update">${icon('refresh')}최신 데이터 받기</button>`;
+    box.innerHTML = `${extra}<button type="button" class="btn lime icon-only" data-act="ins-update" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button>`;
   }
 
   /* ───────── 이벤트 ───────── */
@@ -658,7 +658,7 @@
     if (acts.length) list = `<div class="ins-aw">${shown.map(r => actionRow(r, r.key === openKey)).join('')}${f === 'all' ? actionRefs(refs) : ''}</div>`;
     else if (w.hasData) list = `<div class="empty-art">${icon('check')}<span><b>특이사항 없음</b><br>이번 주에는 규칙에 걸린 신호가 없어요. 시장 › 가격 위치에서 흐름을 확인하세요.</span></div>`;
     else list = `<div class="empty-art">${icon('refresh')}<span><b>특이사항 없음</b><br>아직 모은 데이터가 없어서 걸린 신호가 없어요. 오른쪽 위 <b>최신 데이터 받기</b>로 진열대 · 리뷰 · 검색 트렌드를 받으면 이번 주 액션이 계산돼요.</span>
-      <button type="button" class="btn lime small" data-act="ins-update">${icon('refresh')}최신 데이터 받기</button></div>`;
+      <button type="button" class="btn lime small icon-only" data-act="ins-update" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button></div>`;
     const stale = w.stale ? `<div class="note warn mb-16">이번 주(${esc(w.week)}) 진열대 데이터가 아직 없어 ${esc(w.stale.week)} (${esc(w.stale.label)}) 수집 기준으로 계산했어요.</div>` : '';
     const signals = acts.length ? `<details class="ins-fold mt-16" data-fold="signals"${S.open.signals ? ' open' : ''}><summary>규칙에 걸린 신호 보기</summary>
       ${acts.map(a => `<div class="ins-signal"><div class="flex">${badge(a.grade, GRADE_TONE[a.grade])}<b>${esc(a.ruleLabel)}</b></div>
@@ -1444,8 +1444,8 @@
     return qHead('edit', '', '', d.items.length ? ' ' : '') + pageTabs('manage', 'edit') + runStatus() + fold('edit-shelf', `진열대 제품${d.items.length ? ` · ${d.items.length}개` : ''}`, `
       ${chips ? `<div class="flex wrap mb-16">${chips}</div>` : ''}
       <div class="flex wrap mb-16">
-        <button type="button" class="btn small" data-act="ins-update-only" data-items="weee">${icon('refresh')}Weee! 최신 데이터 받기</button>
-        <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon">${icon('refresh')}Amazon 최신 데이터 받기</button>
+        <button type="button" class="btn small" data-act="ins-update-only" data-items="weee" title="Weee! 최신 데이터 받기">${icon('refresh')}Weee!</button>
+        <button type="button" class="btn small" data-act="ins-update-only" data-items="amazon" title="Amazon 최신 데이터 받기">${icon('refresh')}Amazon</button>
         ${d.weeeRaw.length ? `<button type="button" class="btn small ghost" data-act="weee-raw">${icon('doc')}Weee! 원문 보기</button>` : ''}
         ${d.items.length ? `<button type="button" class="btn small" data-act="lines-confirm">${icon('check')}묶음 모두 확인</button>` : ''}
         <span class="small muted">회분 · 가격 · 재고 · 알디콤 · 묶음은 바로 고칠 수 있어요. 회분 수와 묶음은 한 번 고치면 모든 주차에 적용돼요.</span>
@@ -2500,7 +2500,7 @@
       <div class="flex"><input id="comp-site" class="grow" data-ref="site" value="${esc(c.website || '')}" placeholder="https://"><button type="button" class="btn small" data-ref="site-save">저장</button></div>
       <h3 class="ins-h3">분석 기록</h3>${hist ? `<ul class="ins-ul">${hist}</ul>` : '<p class="small muted">아직 기록이 없어요.</p>'}
       ${c.id != null ? `<div class="flex wrap mt-16">
-        <button type="button" class="btn small" data-ref="research">${icon('refresh')}최신 데이터 받기</button>
+        <button type="button" class="btn small icon-only" data-ref="research" aria-label="최신 데이터 받기" title="최신 데이터 받기">${icon('refresh')}</button>
         <button type="button" class="btn small ghost" data-ref="watch">${c.watched ? '주시 해제' : '★ 주시'}</button>
         <button type="button" class="btn small ghost" data-ref="status">${c.status === 'archived' ? '복원' : '보관'}</button></div>` : ''}`}</div>`;
     ui.modal({

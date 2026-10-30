@@ -353,7 +353,7 @@
       const d = S.insight.data;
       const pts = (d.points || []).map(p => `<li>${p.label ? `<span class="perf-insight-label">${esc(p.label)}</span>` : ''}${boldHtml(fxText(p.text))}</li>`).join('');
       body = `<div><p class="perf-insight-head">${boldHtml(fxText(d.headline))}</p>${pts ? `<ul class="perf-insight-lines">${pts}</ul>` : ''}</div>
-        <button type="button" class="btn small ghost" data-act="insight-again" aria-label="AI 인사이트 다시 만들기">${icon('refresh')}</button>`;
+        <button type="button" class="btn small ghost icon-only" data-act="insight-again" aria-label="AI 인사이트 다시 만들기">${icon('refresh')}</button>`;
     } else if (st === 'nokey') {
       body = `<p class="panel-note">AI 연결 안 됨 — 설정 › 연결에서 OpenAI 키를 넣으면 전체 성과 요약을 볼 수 있어요.</p>`;
     } else if (st === 'error') {
@@ -580,7 +580,7 @@
               <button type="button" data-cur="KRW" class="${S.currency === 'KRW' ? 'selected' : ''}" aria-pressed="${S.currency === 'KRW'}">원화</button>
               <button type="button" data-cur="USD" class="${S.currency === 'USD' ? 'selected' : ''}" aria-pressed="${S.currency === 'USD'}">달러</button>
             </div>
-            <button type="button" class="btn small" data-act="fx">${icon('refresh')} 최신 환율 받기</button>
+            <button type="button" class="btn small icon-only" data-act="fx" aria-label="최신 환율 받기" title="최신 환율 받기">${icon('refresh')}</button>
             <span class="perf-fx" data-ref="fx-label"></span>
           </div></div>
         <div class="perf-insight" data-ref="insight" aria-live="polite" hidden></div>
@@ -633,7 +633,7 @@
   }
   function shopHead(d) {
     const tags = d && d.ready && !d.error ? `${d.dummy ? badge('예시', 'orange') : ''}${badge('자사 홈페이지 연동', 'green')}` : '';
-    const again = d && d.ready ? `<button type="button" class="btn small ghost" data-act="shop-refresh">${icon('refresh')} 다시 가져오기</button>` : '';
+    const again = d && d.ready ? `<button type="button" class="btn small ghost icon-only" data-act="shop-refresh" aria-label="다시 가져오기" title="자사 홈페이지에서 다시 가져오기">${icon('refresh')}</button>` : '';
     return `<div class="card-head"><h2>자사 홈페이지 매출<span class="head-cap">단위: 달러 (할인 후 · paid 주문)</span></h2><div class="flex wrap">${tags}${again}</div></div>`;
   }
   function renderShop() {
