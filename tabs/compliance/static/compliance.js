@@ -955,10 +955,10 @@
     const when = `경쟁사 공식 홈페이지 · ${adRefs.generatedAt ? `${esc(adRefs.generatedAt.slice(0, 10))} 수집` : '수집 대기'}`;
     return `<div class="cmp-refs">
   <div class="cmp-refs-head"><b>비슷한 실제 미국 광고</b><span class="cmp-muted">${when} · 우리 규칙으로 판정</span>
-    <button type="button" class="cmp-link-btn" data-act="refs-refresh">지금 다시 모으기</button></div>
+    <button type="button" class="btn small ghost icon-only" data-act="refs-refresh" aria-label="지금 다시 모으기" title="지금 다시 모으기 (1분 안팎)">${icon('refresh')}</button></div>
   ${ads.length ? `<ul class="cmp-refs-list">${ads.map(a => `<li>${badge(review(a.text, opts).verdict)}
     <p lang="en">${esc(a.text)}</p><small>${esc(a.brand)} · 공식 홈페이지 · <a href="${esc(a.url)}" target="_blank" rel="noopener">원문 ↗</a></small></li>`).join('')}</ul>`
-    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "수집된 경쟁사 문구가 없습니다. '지금 다시 모으기'로 수집하세요 (Firecrawl 키 필요)."}</p>`}
+    : `<p class="cmp-muted">${adRefs.failed ? '서버에서 실제 광고 문구를 받지 못했어요.' : "수집된 경쟁사 문구가 없습니다. 오른쪽 ⟳ 버튼(지금 다시 모으기)으로 수집하세요 (Firecrawl 키 필요)."}</p>`}
   ${fda.length ? `<p class="cmp-refs-sub">${icon('alert')} 같은 규칙에 걸려 FDA 경고장을 받은 문구 · 내장 자료 (수집과 별개)</p>
   <ul class="cmp-refs-list is-fda">${fda.map(q => `<li><p lang="en">${esc(q.text)}</p><small>${esc(q.brand)} · FDA 경고장 ${esc(q.issued || '')}${q.ko ? ` · ${esc(q.ko)}` : ''}</small></li>`).join('')}</ul>` : ''}
   <p class="cmp-refs-links">자동으로 모으지 않는 곳 (약관) ·
@@ -1844,8 +1844,7 @@
         if (p.dataset.refsOpen) loadAdRefs().then(() => paintSingle(root));
         paintSingle(root);
       } else if (btn.dataset.act === 'refs-refresh') {
-        btn.disabled = true;
-        btn.textContent = '모으는 중… (1분 안팎)';
+        REBOOT.ui.busy(btn, true);
         api('/api/compliance/ad-refs/refresh').then(d => {
           adRefs = d;
           toast(`실제 광고 문구 ${d.items.length}개를 모았어요${d.errors.length ? ` · 못 읽은 곳 ${d.errors.length}곳` : ''}.`);
@@ -2389,7 +2388,7 @@ ${left ? `<button type="button" class="cmp-btn cmp-hist-more" data-act="hist-mor
       fold('setup', 'FDA 데이터 키 신청', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', fdaKeyHTML(), false) +
       fold('ai-usage', '이번 달 AI 사용량·비용', '컴플라이언스·CS의 Claude 호출 · 팀 API 예산 관리', `
 <p class="cmp-muted">AI를 부를 때마다 서버가 모델·토큰을 기록하고 예상 비용을 계산해요 (단가: Claude API 공식 · 환율은 1달러 ≈ 1,400원으로 어림).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">이번 달 합계가 한도를 넘으면 AI 기능만 멈추고 규칙 판정은 그대로 써요. 실제 청구액은 Claude Console의 Usage에서 확인하세요.</p></details>
-<div class="cmp-actions"><button type="button" class="cmp-btn" data-act="ai-usage">사용량 새로고침</button></div>
+<div class="cmp-actions"><button type="button" class="btn small ghost icon-only" data-act="ai-usage" aria-label="사용량 새로고침" title="사용량 새로고침">${icon('refresh')}</button></div>
 <div data-el="aiusage" aria-live="polite"></div>`, false) +
       `</div>`;
   }
@@ -2581,7 +2580,7 @@ ${v.selfBad.length ? `<h4 class="cmp-h4">기대와 다른 예문</h4><ul class="
     return `
 ${subtabsHTML('monitor', 'auto')}
 <div class="cmp-subpanel" data-sub="auto">
-${monHead('auto', `<button type="button" class="cmp-btn" data-act="monitor-refresh" disabled>${icon('refresh')} 최신 데이터 받기</button>`)}
+${monHead('auto', `<button type="button" class="btn small ghost icon-only" data-act="monitor-refresh" aria-label="최신 데이터 받기" disabled>${icon('refresh')}</button>`)}
 <div data-el="refreshmsg" aria-live="polite"></div>
 <div data-el="server"></div>
 <div class="cmp-folds">` + fold('letters', 'FDA 경고장 직접 업로드', 'fda.gov가 자동 수집을 막을 때 · XLSX 목록 · 본문 붙여넣기', `
