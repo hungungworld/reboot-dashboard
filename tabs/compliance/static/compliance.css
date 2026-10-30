@@ -719,6 +719,10 @@
 .part-compliance .cmp-empty h2 { margin: 0 0 16px; font-size: 24px; line-height: 1.55; letter-spacing: -0.03em; }
 .part-compliance .cmp-empty p { margin: 0; font-size: 12px; color: var(--cmp-muted); }
 .part-compliance .cmp-empty-ico { display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: 30px; border-radius: 50%; background: var(--cmp-accent); color: var(--cmp-accent-ink); font-size: 20px; }
+/* 문구를 넣기 전 (결과 없음): 결과 카드를 왼쪽 높이에 맞춰 늘리지 않고 내용만큼 · 안쪽 박스는 왼쪽 입력칸(.cmp-ed)과 같은 면 (점선 X · 같은 둥글기) — 2026-10-30 */
+.part-compliance .cmp-work .cmp-result-card:has(> [data-el="sum"] .cmp-empty) { align-self: start; min-height: 0; }
+.part-compliance .cmp-result-card .cmp-empty { border: 0; border-radius: 12px; padding: 40px 16px; }
+.part-compliance .cmp-result-card .cmp-empty-ico { margin-bottom: 20px; }
 .part-compliance .cmp-result-head { display: grid; gap: 10px; justify-items: start; }
 .part-compliance .cmp-result-head h2 { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
 .part-compliance .cmp-result-head p { margin: 0; font-size: 12px; color: var(--cmp-muted); line-height: 1.6; }
