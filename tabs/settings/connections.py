@@ -67,15 +67,6 @@ def _openai(key):
     return "정상", f"키 정상 · 모델 '{model}' 사용 가능", detail
 
 
-def _anthropic(key):
-    res = _call("https://api.anthropic.com/v1/models", "Anthropic",
-                headers={"x-api-key": key, "anthropic-version": "2023-06-01"})
-    if res.status_code != 200:
-        raise _http_fail("Anthropic", res)
-    models = [m.get("id") for m in ((_json(res) or {}).get("data") or []) if isinstance(m, dict)]
-    return "정상", f"키 정상 · 쓸 수 있는 모델 {len(models)}개", {"models": len(models)}
-
-
 def _serpapi(key):
     res = _call("https://serpapi.com/account.json", "SerpApi", params={"api_key": key})
     data = _json(res) or {}
@@ -165,7 +156,6 @@ def _gmail(_key):
 
 TESTERS = {
     "OPENAI_API_KEY": _openai,
-    "ANTHROPIC_API_KEY": _anthropic,
     "SERPAPI_KEY": _serpapi,
     "YOUTUBE_API_KEY": _youtube,
     "FIRECRAWL_API_KEY": _firecrawl,

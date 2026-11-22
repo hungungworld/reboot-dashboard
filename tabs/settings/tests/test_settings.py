@@ -188,19 +188,13 @@ def test_connection_test_serpapi_bad_key(auth_client, monkeypatch, calls):
     assert log["status"] == "실패" and "SerpApi" in log["action"]
 
 
-def test_connection_test_openai_and_anthropic(auth_client, monkeypatch, calls):
+def test_connection_test_openai(auth_client, monkeypatch, calls):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test-aaaa")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")   # 내 .env의 모델 설정과 상관없이 아래 가짜 목록 기준
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-bbbb")
     calls["routes"]["api.openai.com/v1/models"] = FakeRes(200, {"data": [{"id": "gpt-4o-mini"}, {"id": "gpt-4o"}]})
-    calls["routes"]["api.anthropic.com/v1/models"] = FakeRes(200, {"data": [{"id": "claude-x"}]})
     out = auth_client.post("/api/settings/connections/OPENAI_API_KEY/test").get_json()
     assert out["status"] == "정상" and out["detail"]["modelAvailable"] is True
     assert calls["seen"][-1]["headers"]["Authorization"] == "Bearer sk-openai-test-aaaa"
-    out = auth_client.post("/api/settings/connections/ANTHROPIC_API_KEY/test").get_json()
-    assert out["status"] == "정상"
-    h = calls["seen"][-1]["headers"]
-    assert h["x-api-key"] == "sk-ant-test-bbbb" and h["anthropic-version"] == "2023-06-01"
     calls["routes"]["api.openai.com/v1/models"] = FakeRes(401, {"error": {"message": "bad"}})
     out = auth_client.post("/api/settings/connections/OPENAI_API_KEY/test").get_json()
     assert out["status"] == "오류" and "401" in out["message"]

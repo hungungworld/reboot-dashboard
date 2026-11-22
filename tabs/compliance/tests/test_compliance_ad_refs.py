@@ -67,30 +67,28 @@ def test_ad_refs_route_returns_empty_before_collect(auth_client):
 def test_rewrites_keeps_three_options_and_known_refs(app, monkeypatch):
     sent = {}
 
-    class Fake:
-        def __init__(self, **kw):
-            self.beta = SimpleNamespace(messages=SimpleNamespace(create=self.create))
+    body = {"note_ko": "", "options": [
+        {"style": "safe", "text": "Restart your day.", "basis_ko": "숙취 주장을 뺌", "refs": ["ad:1", "ad:made-up"]},
+        {"style": "bold", "text": "Big night? Bright morning.", "basis_ko": "말투만 빌림", "refs": ["fda:3"]},
+        {"style": "short", "text": "Restart Your Day", "basis_ko": "슬로건", "refs": []},
+        {"style": "short", "text": "extra", "basis_ko": "", "refs": []}]}
 
-        def create(self, **kw):
-            sent.update(kw)
-            body = {"note_ko": "", "options": [
-                {"style": "safe", "text": "Restart your day.", "basis_ko": "숙취 주장을 뺌", "refs": ["ad:1", "ad:made-up"]},
-                {"style": "bold", "text": "Big night? Bright morning.", "basis_ko": "말투만 빌림", "refs": ["fda:3"]},
-                {"style": "short", "text": "Restart Your Day", "basis_ko": "슬로건", "refs": []},
-                {"style": "short", "text": "extra", "basis_ko": "", "refs": []}]}
-            return SimpleNamespace(stop_reason="end_turn", model="claude-test", content=[SimpleNamespace(type="text", text=json.dumps(body))])
+    def fake_call(messages, response_format, model, max_tokens, timeout, max_retries=1):
+        sent["messages"] = messages
+        msg = SimpleNamespace(content=json.dumps(body), refusal=None)
+        return SimpleNamespace(model="gpt-test", usage=None, choices=[SimpleNamespace(finish_reason="stop", message=msg)])
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setattr(ai_review.anthropic, "Anthropic", Fake)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("server.core.ai._call", fake_call)
     with app.app_context():
         out = ai_review.rewrites("Cure your hangover fast.", refs=[
             {"id": "ad:1", "brand": "Sample", "text": "Stay Chill. Get Hydrated."},
             {"id": "fda:3", "brand": "Double Wood LLC", "text": "NEVER SUFFER ANOTHER HANGOVER"}])
         assert [o["style"] for o in out["options"]] == ["safe", "bold", "short"]
         assert out["options"][0]["refs"] == ["ad:1"]   # 넘기지 않은 근거 id는 지움
-        payload = json.loads(sent["messages"][0]["content"].split("\n", 1)[1])
+        payload = json.loads(sent["messages"][1]["content"].split("\n", 1)[1])
         assert payload["references"][1]["id"] == "fda:3"
-        assert sent["system"][0]["text"] == ai_review.REWRITE_SYSTEM
+        assert sent["messages"][0]["content"].startswith(ai_review.REWRITE_SYSTEM)
 
 
 def test_rewrite_route_without_key(auth_client, monkeypatch):

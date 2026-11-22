@@ -1,4 +1,4 @@
-"""컴플라이언스 AI 2차 판정 (Claude).
+"""컴플라이언스 AI 2차 판정 (OpenAI).
 
 규칙 판정(R1~R17)을 대신하지 않습니다. 당류·열량 표현은 브랜드 가이드 v1.1과 Balance 열량 40 kcal 전제(R11·R12·R16 · 2026-10-26)로 판정합니다. 규칙 결과를 함께 넘겨 '규칙이 놓친 위험'과
 '더 안전한 문장'을 참고용으로 받습니다. 최종 사용 여부는 담당자 승인으로 정합니다.
@@ -8,13 +8,11 @@ Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽
 import json
 import sys
 
-import anthropic
-
-from server.envkeys import get as env
+from server.core import ai
+from server.core.ai import AIError
 
 from . import ai_usage
 
-MODEL = "claude-opus-5-5"
 VERDICTS = ["BLOCK", "REVISE", "COND", "REVIEW", "PASS"]
 MAX_TEXT = 2000
 
@@ -102,7 +100,7 @@ class ReviewError(Exception):
 
 
 def available():
-    return env("ANTHROPIC_API_KEY") != ""
+    return ai.openai_ready()
 
 
 def _rules_text(rules):
@@ -127,7 +125,7 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="",
     if len(text) > MAX_TEXT:
         raise ReviewError(f"문구가 너무 깁니다 ({MAX_TEXT}자 이하).", 400)
     if not available():
-        raise ReviewError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+        raise ReviewError("OpenAI 키가 없습니다 (설정 › 연결 또는 .env의 OPENAI_API_KEY).", 503)
 
     budget = ai_usage.over_budget()
     if budget:
@@ -156,40 +154,12 @@ def review(text, channel="", category="FOOD", rule=None, rules=None, product="",
 
 
 def _ask(system, content, schema, label):
-    """Claude 한 번 호출 → JSON 결과 (+model). 실패는 화면에 보일 ReviewError로."""
-    client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=120.0)
+    """OpenAI 한 번 호출 → JSON 결과 (+model). 실패는 화면에 보일 ReviewError로."""
     try:
-        res = client.beta.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "high", "format": {"type": "json_schema", "schema": schema}},
-            system=system,
-            messages=[{"role": "user", "content": content}],
-        )
-    except anthropic.AuthenticationError:
-        raise ReviewError("ANTHROPIC_API_KEY가 올바르지 않습니다 (설정 › 연결 확인).", 503)
-    except anthropic.PermissionDeniedError:
-        raise ReviewError("이 API 키로는 해당 모델을 쓸 수 없습니다.", 503)
-    except anthropic.RateLimitError:
-        raise ReviewError("요청이 많아 잠시 막혔습니다. 1분 뒤 다시 시도하세요.", 429)
-    except anthropic.APIStatusError as e:
-        raise ReviewError(f"AI 서버 오류 ({e.status_code}). 잠시 뒤 다시 시도하세요.")
-    except anthropic.APIConnectionError:
-        raise ReviewError("AI 서버에 연결하지 못했습니다 (인터넷 확인).")
-    ai_usage.record("compliance", label, res)
-
-    if res.stop_reason == "refusal":
-        raise ReviewError("AI가 이 문구의 판정을 거절했습니다. 규칙 판정과 담당자 검토로 진행하세요.", 422)
-    if res.stop_reason == "max_tokens":
-        raise ReviewError("AI 응답이 길어 잘렸습니다. 문구를 줄여 다시 시도하세요.")
-    body = next((b.text for b in res.content if b.type == "text"), "")
-    try:
-        out = json.loads(body)
-    except ValueError:
-        raise ReviewError("AI 응답을 읽지 못했습니다. 다시 시도하세요.")
-    out["model"] = res.model
+        out, model = ai_usage.ask_json(system, content, schema, part="compliance", label=label, timeout=120)
+    except AIError as e:
+        raise ReviewError(str(e), e.status)
+    out["model"] = model
     return out
 
 
@@ -247,7 +217,7 @@ def rewrites(text, channel="", product="", rule=None, rules=None, refs=None):
     if len(text) > MAX_TEXT:
         raise ReviewError(f"문구가 너무 깁니다 ({MAX_TEXT}자 이하).", 400)
     if not available():
-        raise ReviewError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+        raise ReviewError("OpenAI 키가 없습니다 (설정 › 연결 또는 .env의 OPENAI_API_KEY).", 503)
     budget = ai_usage.over_budget()
     if budget:
         raise ReviewError(budget, 429)
