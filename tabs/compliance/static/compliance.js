@@ -248,7 +248,7 @@
      기기에 언어 팩이 없거나 설정이 꺼져 있으면 실패) → fallbackUrl(Google 번역 · 여는 것은 사람이 결정).
      AI를 먼저 쓰는 이유: 내장 번역은 브랜드명(REBOOT → 재부팅)·미국식 표현('the morning after' = 숙취)을 놓침 (2026-10-24)
      판정은 언제나 영어 원문 기준입니다. CS 파트도 REBOOT.use('compliance').translate로 씁니다.
-     한→영(한국어 카피를 영어로)은 아래 translateToEnglish가 서버(Claude)로 합니다. */
+     한→영(한국어 카피를 영어로)은 아래 translateToEnglish가 서버 AI로 합니다. */
 
   const trCache = new Map();
   let translatorP = null;
@@ -300,7 +300,7 @@
     }
   }
 
-  /** 크롬 내장 번역을 못 쓸 때: 서버 AI(Claude)로 영→한. 서버도 안 되면(키 없음 등) Google 번역 링크 */
+  /** 크롬 내장 번역을 못 쓸 때: 서버 AI로 영→한. 서버도 안 되면(키 없음 등) Google 번역 링크 */
   async function translateByServer(src, fallbackUrl, why) {
     try {
       const res = await api('/api/compliance/translate-ko', { text: src.slice(0, 8000) });
@@ -1386,8 +1386,8 @@
       el('acts').innerHTML = actsHTML(j, s, aiOk && !busy, busy, Number(p.dataset.rwPick || 0));
       aiBtn.disabled = busy || !s.r || !aiOk;
       aiBtn.title = !h ? '서버 상태를 확인하지 못했어요. 새로고침해 주세요 (키는 서버에만 있음)'
-        : !h.ai ? 'AI 연결 안 됨 · 설정 › 연결에서 Claude(Anthropic) 키를 넣어 주세요'
-        : !s.r ? '영어 문구를 입력하면 쓸 수 있어요' : 'Claude가 규칙이 놓친 위험과 더 안전한 문장을 참고용으로 제안해요';
+        : !h.ai ? 'AI 연결 안 됨 · 설정 › 연결에서 OpenAI 키를 넣어 주세요'
+        : !s.r ? '영어 문구를 입력하면 쓸 수 있어요' : 'AI가 규칙이 놓친 위험과 더 안전한 문장을 참고용으로 제안해요';
     });
     paintKpis(root);
   }
@@ -1870,7 +1870,7 @@
     paintSingle(root);
   }
 
-  /** 한→영 자동 번역 (Claude · 서버): 한국어 칸의 문구를 영어로 옮겨 광고 카피 칸에 넣고 바로 심의.
+  /** 한→영 자동 번역 (서버 AI): 한국어 칸의 문구를 영어로 옮겨 광고 카피 칸에 넣고 바로 심의.
       같은 한국어는 다시 번역하지 않고, 영어 칸을 직접 고쳐 두었으면 덮어쓰지 않음 (영어 칸을 비우면 다시 번역) */
   async function runTranslateEn(root, run) {
     const p = root.querySelector('[data-sub="single"]');
@@ -1888,7 +1888,7 @@
     }
     const h = await serverHealth();
     if (!h || !h.ai) {
-      el('trmsg').innerHTML = `<p class="cmp-muted">${!h ? '서버 상태를 확인하지 못해' : 'AI가 연결 안 돼 있어'} 자동 번역을 하지 못했어요. 영어 문구를 직접 입력하세요.${h ? ' (설정 › 연결에서 Claude(Anthropic) 키를 넣어 주세요)' : ''}</p>`;
+      el('trmsg').innerHTML = `<p class="cmp-muted">${!h ? '서버 상태를 확인하지 못해' : 'AI가 연결 안 돼 있어'} 자동 번역을 하지 못했어요. 영어 문구를 직접 입력하세요.${h ? ' (설정 › 연결에서 OpenAI 키를 넣어 주세요)' : ''}</p>`;
       return;
     }
     p.dataset.trBusy = '1';
@@ -2007,7 +2007,7 @@
       help: `
 <p class="cmp-muted"><code>copy</code> 열이 있는 CSV 파일을 올리면 한 줄씩 판정해요 (최대 1MB · ${MAX_ROWS}행 · UTF-8 권장). <b>'규칙 미탐지'는 법적 승인이 아니에요.</b></p>
 <details class="cmp-more"><summary>CSV 열 안내 · 한국어 문구 · 건강기능식품 비교</summary><p class="cmp-muted">
-  <b>한국어 문구</b>는 서버 AI(Claude)가 영어로 옮긴 뒤 <b>영어와 한국어를 둘 다</b> 심의해요 (뜻 그대로 번역 · 1회 소액 과금). 결과에는 한국어 원문 아래에 영어 번역과 걸린 표현이 함께 나와요.<br>
+  <b>한국어 문구</b>는 서버 AI가 영어로 옮긴 뒤 <b>영어와 한국어를 둘 다</b> 심의해요 (뜻 그대로 번역 · 1회 소액 과금). 결과에는 한국어 원문 아래에 영어 번역과 걸린 표현이 함께 나와요.<br>
   <code>channel</code>·<code>product</code> 열이 있으면 줄마다 그 채널·제품으로 심의해요 (값: <code>${Object.keys(DATA.channels).join(' · ')} · all</code> / <code>${(DATA.products || []).map(p => p.id).join(' · ')} · all</code>, 한국어 이름도 됨). 없으면 아래 선택값을 써요.<br>
   <code>category</code> 열(선택): <code>SUPPLEMENT</code>(또는 '건강기능식품')이면 그 줄만 <b>건강기능식품 기준으로 비교</b>해요 → 같은 구조·기능 표현이 일반식품은 수정 필요, 건강기능식품은 <b>조건부</b>. 비우면 일반식품.</p></details>`,
       extra: `
@@ -2130,7 +2130,7 @@ ${results.some(y => y.r.findings.length) ? '<p class="cmp-muted cmp-hint">걸린
           model = res.model || model;
           res.items.forEach((t, k) => { part[k].en = t.text; part[k].note = t.note_ko; });
         }
-        el('trmsg').innerHTML = `<div class="cmp-tr"><span class="cmp-tr-tag">기계 번역 · ${esc(model || 'Claude')}</span>
+        el('trmsg').innerHTML = `<div class="cmp-tr"><span class="cmp-tr-tag">기계 번역 · ${esc(model || 'AI')}</span>
   <p class="cmp-muted">한국어 ${need.length}줄을 뜻 그대로 영어로 옮겨 심의했어요. 판정은 영어·한국어 중 더 엄격한 쪽이에요.</p></div>`;
       } catch (e) {
         if (fallback) need.forEach(x => { x.en = fallback.get(x) || ''; });
@@ -2386,8 +2386,8 @@ ${left ? `<button type="button" class="cmp-btn cmp-hist-more" data-act="hist-mor
 </div>`, false) +
       fold('rules-validate', '규칙 정확도 시험', 'FDA 문장을 놓치지 않는지 · 괜찮은 문장을 막지 않는지 · 처음 보는 문장 점수', validateHTML(), false) +
       fold('setup', 'FDA 데이터 키 신청', '무료 · 경고장 목록과 수입 거부를 매일 자동으로', fdaKeyHTML(), false) +
-      fold('ai-usage', '이번 달 AI 사용량·비용', '컴플라이언스·CS의 Claude 호출 · 팀 API 예산 관리', `
-<p class="cmp-muted">AI를 부를 때마다 서버가 모델·토큰을 기록하고 예상 비용을 계산해요 (단가: Claude API 공식 · 환율은 1달러 ≈ 1,400원으로 어림).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">이번 달 합계가 한도를 넘으면 AI 기능만 멈추고 규칙 판정은 그대로 써요. 실제 청구액은 Claude Console의 Usage에서 확인하세요.</p></details>
+      fold('ai-usage', '이번 달 AI 사용량·비용', '컴플라이언스·CS의 AI 호출 · 팀 API 예산 관리', `
+<p class="cmp-muted">AI를 부를 때마다 서버가 모델·토큰을 기록하고 예상 비용을 계산해요 (단가: OpenAI 공개 단가 · 환율은 1달러 ≈ 1,400원으로 어림).</p><details class="cmp-more"><summary>자세히</summary><p class="cmp-muted">이번 달 합계가 한도를 넘으면 AI 기능만 멈추고 규칙 판정은 그대로 써요. 실제 청구액은 OpenAI 사용량(Usage) 화면에서 확인하세요.</p></details>
 <div class="cmp-actions"><button type="button" class="btn small ghost icon-only" data-act="ai-usage" aria-label="사용량 새로고침" title="사용량 새로고침">${icon('refresh')}</button></div>
 <div data-el="aiusage" aria-live="polite"></div>`, false) +
       `</div>`;
@@ -2704,7 +2704,7 @@ ${monHead('manual')}
   }
 
   const MARK = { new: '<span class="cmp-new">새 항목</span>', changed: '<span class="cmp-new is-changed">변경</span>', same: '', null: '' };
-  // 한글 제목·요약 (서버가 Claude로 만든 참고용 · 원문이 기준)
+  // 한글 제목·요약 (서버 AI가 만든 참고용 · 원문이 기준)
   function koLine(s) { return s ? `<span class="cmp-ko" lang="ko">${esc(s)}</span>` : ''; }
 
   /** 조회 결과 표(브라우저에서 바로 부른 Federal Register·openFDA)에 한글 제목·요약을 나중에 채움 */

@@ -140,7 +140,7 @@ def health():
     return jsonify({
         "ok": True,
         # 컴플라이언스·CS 파트가 보는 값 (예전 server/app.py와 같은 이름)
-        "ai": keys.get("ANTHROPIC_API_KEY", False),
+        "ai": keys.get("OPENAI_API_KEY", False),
         "gmail": _gmail_ready(),
         "gmailQuery": envkeys.has("GMAIL_QUERY"),
         "monitor": {"openfda": True, "regulations": keys.get("REGULATIONS_GOV_API_KEY", False),

@@ -89,26 +89,24 @@ def test_refresh_reports_block_but_keeps_uploaded(auth_client, monkeypatch):
 def test_ai_review_sends_persona(app, monkeypatch):
     sent = {}
 
-    class Fake:
-        def __init__(self, **kw):
-            self.beta = SimpleNamespace(messages=SimpleNamespace(create=self.create))
+    body = {"verdict": "BLOCK", "confidence": "high", "summary": "s", "issues": [], "rewrite": "r"}
 
-        def create(self, **kw):
-            sent.update(kw)
-            body = {"verdict": "BLOCK", "confidence": "high", "summary": "s", "issues": [], "rewrite": "r"}
-            return SimpleNamespace(stop_reason="end_turn", model="claude-test", content=[SimpleNamespace(type="text", text=json.dumps(body))])
+    def fake_call(messages, response_format, model, max_tokens, timeout, max_retries=1):
+        sent["system"] = messages[0]["content"]
+        msg = SimpleNamespace(content=json.dumps(body), refusal=None)
+        return SimpleNamespace(model="gpt-test", usage=None, choices=[SimpleNamespace(finish_reason="stop", message=msg)])
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setattr(ai_review.anthropic, "Anthropic", Fake)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr("server.core.ai._call", fake_call)
     with app.app_context():
         ai_review.review("Prevents hangovers.", persona="미국 광고 전문가 " + "가" * 700)
-        texts = [b["text"] for b in sent["system"]]
-        assert texts[0] == ai_review.SYSTEM and "never makes a verdict less strict" in texts[1]
-        assert len(texts[1]) == len(ai_review.PERSONA_INTRO) + ai_review.MAX_PERSONA   # 600자에서 자름
-        assert "cache_control" in sent["system"][-1]
+        system = sent["system"]
+        assert system.startswith(ai_review.SYSTEM) and "never makes a verdict less strict" in system
+        persona_part = system.split(ai_review.PERSONA_INTRO, 1)[1].split("\n\n", 1)[0]
+        assert len(persona_part) == ai_review.MAX_PERSONA   # 600자에서 자름
         sent.clear()
         ai_review.review("Prevents hangovers.")
-        assert len(sent["system"]) == 2   # 페르소나가 없으면 블록도 없음
+        assert ai_review.PERSONA_INTRO not in sent["system"]   # 페르소나가 없으면 블록도 없음
 
 
 def test_translation_cache_reuses_results(app, monkeypatch):
@@ -224,7 +222,7 @@ def test_ai_usage_records_cost_and_budget_stops(app, monkeypatch):
         assert ai_usage.over_budget() == ""
         ai_usage.record("cs", "CS 답장 초안", res)                 # 12달러 > 10달러
         assert "한도" in ai_usage.over_budget()
-        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
         try:
             ai_review.review("Tastes like lime.")
             raise AssertionError("한도를 넘으면 AI를 부르지 않아야 함")

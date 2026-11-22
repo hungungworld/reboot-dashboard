@@ -1,4 +1,4 @@
-"""한→영 번역 (Claude): 마케터가 한국어로 쓴 광고 문구를 미국용 영어 문구로 옮깁니다.
+"""한→영 번역 (OpenAI): 마케터가 한국어로 쓴 광고 문구를 미국용 영어 문구로 옮깁니다.
 
 뜻을 그대로 옮기는 것이 목적입니다. 효능 표현을 빼거나 더하지 않아야 번역한 뒤의 규칙 점검이 의미가 있습니다.
 판정은 화면의 규칙 점검이 하고, 번역 결과는 참고용입니다.
@@ -10,14 +10,17 @@ import threading
 import time
 from pathlib import Path
 
-import anthropic
 from flask import current_app
 
-from server.envkeys import get as env
+from server.core import ai
+from server.core.ai import AIError
 
 from . import ai_usage
 
-MODEL = "claude-opus-5-5"
+
+def _model():
+    return ai.openai_model()   # 모델이 바뀌면 번역 재사용 목록도 따로 쌓임
+
 MAX_TEXT = 2000
 
 SYSTEM = """You translate Korean marketing copy into natural US English for REBOOT ("Restart Your Day"), a Korean after-party brand of individually wrapped shaped jellies and non-carbonated drinks in 100 ml glass bottles, sold in the US as conventional foods.
@@ -50,11 +53,11 @@ class TranslateError(Exception):
 
 
 def available():
-    return env("ANTHROPIC_API_KEY") != ""
+    return ai.openai_ready()
 
 
 BATCH_MAX = 200          # 한 번에 받는 줄 수 (화면 일괄 심의는 500행까지 → 화면이 나눠 보냄)
-BATCH_CHUNK = 40         # Claude 한 번 호출에 넣는 줄 수
+BATCH_CHUNK = 40         # AI 한 번 호출에 넣는 줄 수
 BATCH_SCHEMA = {
     "type": "object",
     "properties": {"items": {"type": "array", "items": {
@@ -67,41 +70,14 @@ BATCH_SCHEMA = {
 
 
 def _call(system, content, schema, what):
-    """Claude 호출 1회 → JSON. 실패는 화면에 보여 줄 수 있는 TranslateError로."""
+    """AI 호출 1회 → JSON. 실패는 화면에 보여 줄 수 있는 TranslateError로."""
     budget = ai_usage.over_budget()
     if budget:
         raise TranslateError(budget, 429)
-    client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=180.0)
     try:
-        res = client.beta.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
-            system=system,
-            messages=[{"role": "user", "content": content}],
-        )
-    except anthropic.AuthenticationError:
-        raise TranslateError("ANTHROPIC_API_KEY가 올바르지 않습니다 (설정 › 연결 확인).", 503)
-    except anthropic.PermissionDeniedError:
-        raise TranslateError("이 API 키로는 해당 모델을 쓸 수 없습니다.", 503)
-    except anthropic.RateLimitError:
-        raise TranslateError("요청이 많아 잠시 막혔습니다. 1분 뒤 다시 시도하세요.", 429)
-    except anthropic.APIStatusError as e:
-        raise TranslateError(f"AI 서버 오류 ({e.status_code}). 잠시 뒤 다시 시도하세요.")
-    except anthropic.APIConnectionError:
-        raise TranslateError("AI 서버에 연결하지 못했습니다 (인터넷 확인).")
-    ai_usage.record("compliance", f"번역 ({what})", res)
-    if res.stop_reason == "refusal":
-        raise TranslateError(f"AI가 이 {what} 번역을 거절했습니다. 직접 영어로 써서 점검하세요.", 422)
-    if res.stop_reason == "max_tokens":
-        raise TranslateError("AI 응답이 길어 잘렸습니다. 문구를 줄여 다시 시도하세요.")
-    body = next((b.text for b in res.content if b.type == "text"), "")
-    try:
-        return json.loads(body), res.model
-    except ValueError:
-        raise TranslateError("AI 응답을 읽지 못했습니다. 다시 시도하세요.")
+        return ai_usage.ask_json(system, content, schema, part="compliance", label=f"번역 ({what})", timeout=180)
+    except AIError as e:
+        raise TranslateError(str(e), e.status)
 
 
 # ───────── 번역 재사용 (같은 문장은 다시 번역하지 않음 · 비용 0 · 즉시) ─────────
@@ -116,7 +92,7 @@ def _cache_path():
 
 
 def _cache_key(kind, text):
-    return hashlib.sha256(f"{kind}|{MODEL}|{text}".encode("utf-8")).hexdigest()[:32]
+    return hashlib.sha256(f"{kind}|{_model()}|{text}".encode("utf-8")).hexdigest()[:32]
 
 
 def _cache_load():
@@ -165,9 +141,9 @@ def to_english(text):
         raise TranslateError(f"문구가 너무 깁니다 ({MAX_TEXT}자 이하).", 400)
     hit = cache_get("ko-en", text)
     if hit:
-        return dict(hit, model=MODEL, cached=True)
+        return dict(hit, model=_model(), cached=True)
     if not available():
-        raise TranslateError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+        raise TranslateError("OpenAI 키가 없습니다 (설정 › 연결 또는 .env의 OPENAI_API_KEY).", 503)
     out, model = _call(SYSTEM, "Translate this Korean copy into English:\n" + text, SCHEMA, "문구")
     english = str(out.get("text", "")).strip()
     if not english:
@@ -186,13 +162,13 @@ def to_english_batch(texts):
     texts = [str(t or "").strip() for t in texts]
     if any(len(t) > MAX_TEXT for t in texts):
         raise TranslateError(f"{MAX_TEXT}자가 넘는 줄이 있습니다.", 400)
-    result, model = [None] * len(texts), MODEL
+    result, model = [None] * len(texts), _model()
     for i, t in enumerate(texts):   # 전에 번역한 줄은 다시 보내지 않음
         if t:
             result[i] = cache_get("ko-en", t)
     todo = [(i, t) for i, t in enumerate(texts) if t and not result[i]]
     if todo and not available():
-        raise TranslateError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+        raise TranslateError("OpenAI 키가 없습니다 (설정 › 연결 또는 .env의 OPENAI_API_KEY).", 503)
     system = SYSTEM.replace("Return `text`", "Each input line is a separate piece of copy; translate each on its own and return one item per line with its index `i`.\nFor each item return `text`")
     for start in range(0, len(todo), BATCH_CHUNK):
         chunk = todo[start:start + BATCH_CHUNK]
@@ -226,9 +202,9 @@ def to_korean(text):
         raise TranslateError("문구가 너무 깁니다 (8000자 이하).", 400)
     hit = cache_get("en-ko", text)
     if hit:
-        return dict(hit, model=MODEL, cached=True)
+        return dict(hit, model=_model(), cached=True)
     if not available():
-        raise TranslateError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env).", 503)
+        raise TranslateError("OpenAI 키가 없습니다 (설정 › 연결 또는 .env의 OPENAI_API_KEY).", 503)
     out, model = _call(KO_SYSTEM, "Translate into Korean:\n" + text, SCHEMA, "문구")
     korean = str(out.get("text", "")).strip()
     if not korean:
