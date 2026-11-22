@@ -656,7 +656,10 @@
       const s = spend[c.channel.toLowerCase()];
       return s && rate ? fmt.pct(c.revenue * rate / s * 100, 0) : '—';
     };
-    const chRows = d.channels.map(c => `<tr><td>${esc(c.channel)}${c.creators ? ` <span class="muted">· 크리에이터 ${fmt.num(c.creators)}명</span>` : ''}</td>
+    // 두 표 모두 공통 data-table (숫자 오른쪽 정렬 · 줄 구분선) · 단위는 머리글에 · 맨 아래 합계 줄 (2026-11-03 보기 힘들다는 의견)
+    const sum = (list, k) => list.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+    const spendTotal = Object.values(spend).reduce((a, v) => a + (Number(v) || 0), 0);
+    const chRows = d.channels.map(c => `<tr><td>${esc(c.channel)}${c.creators ? `<small class="perf-shop-meta">크리에이터 ${fmt.num(c.creators)}명</small>` : ''}</td>
       <td class="num">${fmt.num(c.orders)}</td><td class="num">${fmt.num(c.units)}</td><td class="num">${esc(fmt.usd(c.revenue))}</td>
       <td class="num">${c.share == null ? '—' : fmt.pct(c.share, 1)}</td><td class="num">${c.commission ? esc(fmt.usd(c.commission)) : '—'}</td>
       <td class="num">${spend[c.channel.toLowerCase()] ? esc(fmt.krw(spend[c.channel.toLowerCase()])) : '—'}</td><td class="num">${roas(c)}</td></tr>`).join('');
@@ -671,13 +674,17 @@
         ${ui.kpi({ label: '크리에이터 수수료', value: fmt.usd(t.commission), icon: 'dollar', foot: '인플루언서 매출 × 수수료율' })}
       </div>
       <div class="perf-shop-tables mt-8">
-        <div><h3 class="perf-shop-sub">채널별 매출</h3><div class="table-wrap"><table class="table">
-          <thead><tr><th>채널</th><th class="num">주문</th><th class="num">판매량</th><th class="num">매출</th><th class="num">비중</th><th class="num">수수료</th><th class="num">광고비 (CSV)</th><th class="num">자사몰 ROAS</th></tr></thead>
-          <tbody>${chRows}</tbody></table></div>
+        <div><h3 class="perf-shop-sub">채널별 매출</h3><div class="table-wrap"><table class="data-table">
+          <thead><tr><th>채널</th><th class="num">주문</th><th class="num">판매량</th><th class="num">매출 ($)</th><th class="num">비중</th><th class="num">수수료 ($)</th><th class="num">광고비 (원 · CSV)</th><th class="num">자사몰 ROAS</th></tr></thead>
+          <tbody>${chRows}</tbody>
+          <tfoot><tr><td>합계</td><td class="num">${fmt.num(t.orders)}</td><td class="num">${fmt.num(t.units)}</td><td class="num">${esc(fmt.usd(t.revenue))}</td>
+            <td class="num">100%</td><td class="num">${t.commission ? esc(fmt.usd(t.commission)) : '—'}</td><td class="num">${spendTotal ? esc(fmt.krw(spendTotal)) : '—'}</td><td class="num">—</td></tr></tfoot></table></div>
           <p class="panel-note mt-8">자사몰 ROAS = 자사몰 매출 × 환율 ÷ 같은 이름 채널의 광고비 (위 CSV · ${rate ? `1$ = ${fmt.num(rate, 0)}원` : '환율 받는 중'}). 광고비가 없는 채널은 —</p></div>
-        <div><h3 class="perf-shop-sub">상품별 매출</h3><div class="table-wrap"><table class="table">
-          <thead><tr><th>상품</th><th class="num">주문</th><th class="num">판매량</th><th class="num">매출</th><th class="num">링크 매출</th></tr></thead>
-          <tbody>${prodRows || '<tr><td colspan="5">이 기간 판매가 없어요.</td></tr>'}</tbody></table></div>
+        <div><h3 class="perf-shop-sub">상품별 매출</h3><div class="table-wrap"><table class="data-table">
+          <thead><tr><th>상품</th><th class="num">주문</th><th class="num">판매량</th><th class="num">매출 ($)</th><th class="num">링크 매출 ($)</th></tr></thead>
+          <tbody>${prodRows || '<tr><td colspan="5">이 기간 판매가 없어요.</td></tr>'}</tbody>
+          ${prodRows ? `<tfoot><tr><td>합계</td><td class="num" title="한 주문에 여러 상품이 있을 수 있어 상품별 주문은 더하지 않아요">—</td><td class="num">${fmt.num(sum(d.products, 'units'))}</td>
+            <td class="num">${esc(fmt.usd(sum(d.products, 'revenue')))}</td><td class="num">${esc(fmt.usd(sum(d.products, 'viaLink')))}</td></tr></tfoot>` : ''}</table></div>
           <p class="panel-note mt-8">링크 매출 = 크리에이터 할인 링크로 팔린 금액</p></div>
       </div>`;
   }

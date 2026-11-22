@@ -2439,20 +2439,15 @@
   function campaignsHtml() {
     return `<div class="cnt-folders" data-ref="folder-chips" role="tablist" aria-label="콘텐츠별 폴더">${folderChipsHtml()}</div>
       <div class="filters cnt-filters">
-        <div class="linetabs" data-ref="filter-chips" role="group" aria-label="진행 상태">${filterChipsHtml()}</div>
         <div class="flex wrap"><label class="search cnt-search">${icon('search')}<input class="input" data-ref="search" type="search" placeholder="캠페인명 · 제품 · 채널 · 콘텐츠 검색" value="${esc(S.query)}" aria-label="캠페인 검색"></label>
           <button type="button" class="btn lime" data-act="new-campaign">${icon('plus')}새 캠페인</button></div>
       </div>
       <div data-ref="grid"></div>`;
   }
 
-  function filterChipsHtml() {
-    const counts = (S.listMeta && S.listMeta.counts) || {};
-    const total = S.listMeta ? S.listMeta.total : '';
-    return ['전체'].concat(DATA.statuses).map(st => `<button type="button" data-act="filter" data-value="${esc(st)}" aria-pressed="${S.filter === st}">${esc(st)} <span class="n">${esc(st === '전체' ? total : counts[st] || 0)}</span></button>`).join('');
-  }
+  // 진행 상태(제작 중 · 검토 중 · 완료) 분류 탭은 없앰 — 늘 전체 목록 (담당 요청 2026-11-03 · 상태는 카드에만 표시)
 
-  // 콘텐츠별 폴더 — 이미지 · 카드뉴스 · 숏폼 영상 · CRM 메시지 (개수는 지금 상태 필터·검색 결과 기준)
+  // 콘텐츠별 폴더 — 이미지 · 카드뉴스 · 숏폼 영상 · CRM 메시지 (개수는 검색 결과 기준)
   const inFolder = (c, id) => c.contentType === id;
   function folderChipsHtml() {
     const list = S.list || [];
@@ -2462,8 +2457,6 @@
   }
 
   function renderCampaignGrid() {
-    const chips = ref('filter-chips');
-    if (chips) chips.innerHTML = filterChipsHtml();
     const folders = ref('folder-chips');
     if (folders) folders.innerHTML = folderChipsHtml();
     const el = ref('grid');
@@ -3500,7 +3493,6 @@
         case 'rename': renameModal(); break;
         case 'new-campaign': newCampaign(); break;
         case 'open-campaign': openCampaign(+b.dataset.id); break;
-        case 'filter': S.filter = b.dataset.value; loadList(); renderCampaignGrid(); break;
         case 'select-version': selectVersion(+b.dataset.id); break;
         case 'use-base': if (v) { selectVersion(v.id); const inp = ref('input'); if (inp && !inp.disabled) { inp.focus(); inp.placeholder = `${v.label} · v${v.seq}을 어떻게 고칠까요? 예: 더 짧게, CTA만 바꿔줘`; } } break;
         case 'base-off': S.baseOff = true; updateComposer(); break;

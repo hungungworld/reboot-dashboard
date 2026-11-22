@@ -47,15 +47,19 @@
 }
 .part-cs .cs-listcol { display: grid; gap: 14px; align-content: start; background: var(--cs-list); border-right: 1px solid var(--cs-rule); padding: 18px 12px; }
 .part-cs .cs-listcol > .cs-field { padding: 0 2px; }
-/* 단계 안 보기 탭 (전체 · 긴급 · 기한 초과) — core .linetabs */
-.part-cs .cs-viewtabs { align-self: end; }
-.part-cs .cs-viewtabs[hidden] { display: none; }
-/* 목록 바탕(--surface-2)에서 기본 회색은 4.4:1 · 개수(흐리게 55%)는 2.1:1이라 글자 대비 4.5:1 이상으로 */
-.part-cs .cs-viewtabs button:not([aria-pressed="true"]) { color: var(--text); }
-.part-cs .cs-viewtabs button .n { opacity: 1; color: var(--text); }
-.part-cs .cs-viewtabs button:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: -3px; }
-/* Gmail 받기 · 답장 설정은 한 줄, 안내 문구는 그 아래 */
-.part-cs .cs-gmailbar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 0 2px; }
+/* 단계 안 보기 (전체 · 부작용 신고 · 기한 지남) — 화면 전환 탭과 구분되게 core .chip (2026-11-03) */
+.part-cs .cs-viewchips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 2px; }
+.part-cs .cs-viewchips[hidden] { display: none; }
+.part-cs .cs-viewchips .chip { font-size: 12.5px; padding: 6px 11px; cursor: pointer; }
+/* 목록 바탕(--surface-2)에서 기본 회색은 대비가 낮아 글자 대비 4.5:1 이상으로 */
+.part-cs .cs-viewchips .chip:not([aria-pressed="true"]) { color: var(--text); }
+.part-cs .cs-viewchips .chip .n { opacity: 1; margin-left: 6px; font-weight: 600; }
+.part-cs .cs-viewchips .chip:focus-visible { outline: 3px solid var(--cs-focus); outline-offset: 2px; }
+/* 정렬: 한 줄 (이름 · 작은 선택 상자) */
+.part-cs .cs-sort { display: flex; align-items: center; gap: 8px; padding: 0 2px; font-size: 12.5px; color: var(--text); }
+.part-cs .cs-sort .cs-input { flex: 1; min-width: 0; }
+/* Gmail 받기 버튼, 안내 문구는 그 아래 (답장 설정은 위쪽 탭으로 옮김) */
+.part-cs .cs-gmailbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 0 2px; }
 .part-cs .cs-gmailbar .cs-btn { width: 100%; white-space: nowrap; }
 .part-cs .cs-gmailbar .cs-muted { font-size: 12px; color: var(--text); grid-column: 1 / -1; }
 .part-cs .cs-gmailbar .cs-muted:empty { display: none; }
@@ -369,11 +373,13 @@
 .part-cs .cs-contacts { display: grid; gap: 8px; margin: 8px 0; }
 .part-cs .cs-contact { align-items: flex-end; }
 /* 받은편지함 목록 화면: 보기 · 정렬 · Gmail 불러오기를 한 줄로 */
-.part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: minmax(0, 1fr) minmax(200px, 280px) auto auto; align-items: end; padding: 18px 16px; }   /* 정렬 칸은 글자 길이만큼만 */
+.part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: minmax(0, 1fr) minmax(200px, 280px) auto auto; align-items: center; padding: 18px 16px; }   /* 정렬 칸은 글자 길이만큼만 */
 .part-cs .cs-inbox[data-view="list"] .cs-listcol > :nth-child(n+4) { grid-column: 1 / -1; }
-/* 버튼은 보기·정렬 칸과 같은 줄·같은 높이, 불러오기 결과 문구는 그 아래 줄 오른쪽 */
+/* 보기 칩 · 정렬 칸 · Gmail 버튼은 한 줄 · 모두 같은 높이(36px) (2026-11-03 높이가 제각각이라 맞춤) · 결과 문구는 그 아래 줄 오른쪽 */
+.part-cs .cs-inbox[data-view="list"] .cs-viewchips .chip { height: 36px; display: inline-flex; align-items: center; padding: 0 12px; box-sizing: border-box; }
+.part-cs .cs-inbox[data-view="list"] .cs-sort .cs-input { height: 36px; min-height: 0; padding: 0 10px; }
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar { display: contents; }
-.part-cs .cs-inbox[data-view="list"] .cs-gmailbar .cs-btn { align-self: end; min-height: 0; padding-top: 0; padding-bottom: 0; height: 40px; }
+.part-cs .cs-inbox[data-view="list"] .cs-gmailbar .cs-btn { min-height: 0; padding-top: 0; padding-bottom: 0; height: 36px; }
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"] { grid-column: 1 / -1; justify-self: end; margin-top: -6px; }
 .part-cs .cs-inbox[data-view="list"] .cs-gmailbar [data-el="gmailmsg"]:empty { display: none; }
 @media (max-width: 720px) { .part-cs .cs-inbox[data-view="list"] .cs-listcol { grid-template-columns: 1fr; } }
@@ -399,7 +405,7 @@
 .part-cs .cs-draft { overflow: hidden; resize: none; }
 .part-cs textarea.cs-draft.is-capped { overflow-y: auto; }
 
-/* ───────── 메일함 구조: 답장 작성기 · ① 문구 검토 · ② CS 검토 · 보내기 줄 (2026-10-26) ───────── */
+/* ───────── 메일함 구조: 답장 작성기 · ① 표현 점검 · ② 내용 검토 · 보내기 줄 (2026-10-26) ───────── */
 /* 목록 옆에 열린 문의: 목록 줄을 한 칸으로 줄임 */
 .part-cs .cs-inbox[data-view="detail"] .cs-mailrow { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 6px 10px; }
 .part-cs .cs-inbox[data-view="detail"] .cs-row-from { grid-column: 2; }
@@ -468,7 +474,7 @@
 .part-cs .cs-cextra > [data-el="ainotes"]:empty { display: none; }
 .part-cs .cs-notepane { padding: 16px 18px; display: grid; gap: 10px; }
 
-/* 문의 처리 단계 탭 (01 답장 쓰기 · 02 문구 검토 · 03 CS 검토 · 04 보내기) — core .linetabs + 파트너 단계 번호 */
+/* 문의 처리 단계 탭 (01 답장 쓰기 · 02 표현 점검 · 03 내용 검토 · 04 보내기) — core .linetabs + 파트너 단계 번호 */
 .part-cs .cs-steps { margin-top: 4px; }
 .part-cs .cs-steps button { padding: 14px 18px 16px 6px; }
 .part-cs .cs-step-no { font-size: 10px; margin-right: 10px; }
@@ -478,7 +484,7 @@
 .part-cs .cs-sendbox p { margin: 0; flex-basis: 100%; }
 .part-cs .cs-btn.cs-btn-dark { background: var(--cs-dark); border-color: var(--cs-dark); color: var(--cs-dark-ink); }
 
-/* 검토 패널: ① 문구 검토 · ② CS 검토 */
+/* 검토 패널: ① 표현 점검 · ② 내용 검토 */
 .part-cs .cs-review { display: grid; gap: 12px; align-content: start; min-width: 0; }
 .part-cs .cs-rcard { border: 1px solid var(--cs-rule); border-radius: var(--radius); background: var(--cs-card); padding: 14px 16px; display: grid; gap: 10px; min-width: 0; }
 .part-cs .cs-rcard.is-locked { background: var(--cs-soft); }

@@ -181,4 +181,7 @@
 .part-performance .perf-shop .card-head .flex { gap: 8px; align-items: center; }
 .part-performance .perf-shop-tables { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
 .part-performance .perf-shop-tables th, .part-performance .perf-shop-tables td { white-space: nowrap; }
+.part-performance .perf-shop-tables td { padding-top: 11px; padding-bottom: 11px; }
+/* 채널 이름 아래 '크리에이터 n명' (한 줄에 다 넣으면 채널 칸이 길어져 숫자가 밀림) */
+.part-performance .perf-shop-meta { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 2px; }
 @media (max-width: 1200px) { .part-performance .perf-shop-tables { grid-template-columns: 1fr; } }

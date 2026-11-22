@@ -1,4 +1,4 @@
-/* 고객 응대(CS) 파트: 메일함(새 문의 → ① 문구 검토 → ② CS 검토 → 보낼 준비 → 보냄) · 분류 · 답장 초안 · 부작용 접수 · 템플릿.
+/* 고객 응대(CS) 파트: 메일함(처리 대기 · 승인 대기 · 처리 완료 — 단계: 신규 → 작성 중 → 승인 대기 → 발송 대기 → 발송 완료) · 분류 · 답장 초안 · 부작용 접수 · 템플릿.
    답변은 자동으로 보내지 않습니다. Gmail은 답장 초안까지만 만들고, 실제 발송은 사람이 합니다.
    다른 파트에는 REBOOT.use('cs')로 stats · classify만 공개합니다. */
 (function (global) {
@@ -69,7 +69,7 @@
   }
 
   /** 템플릿 빈칸 값: 제품 사실(data.js products) → 설정 파트 팩트시트(값이 있으면 우선).
-      확정 안 된 값(내부 제품명 미정 · 맛 임시)은 [확인 필요]로 남겨 문구 검토를 막음 */
+      확정 안 된 값(내부 제품명 미정 · 맛 임시)은 [확인 필요]로 남겨 표현 점검을 막음 */
   const PRODUCT_FACTS = ['ingredients', 'allergens'];
   function facts(inq) {
     let s = {};
@@ -126,7 +126,7 @@
     if (!list.length) return '';
     return `
 <div class="cs-todo-panel" role="note">
-  <p class="cs-todo-title">${icon('alert')} 채워야 할 빈칸 ${list.length}곳 · 모두 채워야 문구 검토를 마칠 수 있어요</p>
+  <p class="cs-todo-title">${icon('alert')} 채워야 할 빈칸 ${list.length}곳 · 모두 채워야 표현 점검을 마칠 수 있어요</p>
   <ol class="cs-todo-list">${list.map((x, i) => `
     <li><button type="button" class="cs-todo-jump" data-act="todo-jump" data-idx="${i}" title="초안에서 이 빈칸을 선택해요">
       <span class="cs-todo-what">${esc(x.what)}</span>
@@ -169,10 +169,10 @@
   }
 
   /* 보내기 전 두 검토 (2026-10-26 메일함 구조)
-     ① 문구 검토 = 자동 심의(사용 불가 표현) + 빈칸 · 작성자가 확인하고 '문구 검토 완료'
-     ② CS 검토 = 지정 담당이 유형별 확인 항목을 보고 승인 (작성자와 다른 사람) → 서버 승인 기록 · 보내기 */
+     ① 표현 점검 = 자동 심의(사용 불가 표현) + 빈칸 · 작성자가 확인하고 '표현 점검 완료'
+     ② 내용 검토 = 지정 담당이 유형별 확인 항목을 보고 승인 (작성자와 다른 사람) → 서버 승인 기록 · 보내기 */
 
-  /** 본문 지문: 문구 검토를 마친 뒤 본문이 바뀌면 문구 검토가 다시 열림 */
+  /** 본문 지문: 표현 점검을 마친 뒤 본문이 바뀌면 표현 점검이 다시 열림 */
   function fingerprint(text) {
     const s = String(text || '');
     let h = 5381;
@@ -182,7 +182,7 @@
   function phraseDone(inq) { return !!(inq.phrase && inq.phrase.fp === fingerprint(inq.draft)); }
   function samePerson(a, b) { return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase(); }
 
-  /** 문의함 단계 (저장된 status 값은 그대로 두고 계산): 새 문의 → 문구 검토 → CS 검토 → 보낼 준비 → 보냄 */
+  /** 문의함 단계 (저장된 status 값은 그대로 두고 계산): 새 문의 → 표현 점검 → 내용 검토 → 보낼 차례 → 보냄 */
   function stageOf(i) {
     if (DONE.includes(i.status)) return 'sent';
     if (i.status === '승인') return 'ready';
@@ -190,7 +190,7 @@
     return i.status === '답변 대기' ? 'new' : 'phrase';
   }
 
-  /** ① 문구 검토를 마치려면 통과해야 하는 조건 */
+  /** ① 표현 점검을 마치려면 통과해야 하는 조건 */
   function phraseGates(inq, r) {
     const todos = pendingTodos(inq.draft);
     return [
@@ -205,14 +205,14 @@
     return (c.common || []).concat(c[inq.type] || []);
   }
 
-  /** ② CS 검토를 승인하려면 통과해야 하는 조건 */
+  /** ② 내용 검토를 승인하려면 통과해야 하는 조건 */
   function csGates(inq, r, approver) {
     const items = csChecks(inq);
     const n = items.filter((_, k) => (inq.csChecks || [])[k]).length;
     const who = String(approver || '').trim();
     const writer = inq.phrase && inq.phrase.by;
     const list = [
-      { id: 'phrase', ok: phraseDone(inq), label: '문구 검토 완료' },
+      { id: 'phrase', ok: phraseDone(inq), label: '표현 점검 완료' },
       { id: 'checks', ok: n === items.length, label: `확인 항목 ${n}/${items.length}` },
       { id: 'approver', ok: !!who && !samePerson(who, writer), label: !who ? '검토자 이름 입력' : `작성자(${writer || '—'})와 다른 사람이 검토` }
     ];
@@ -440,7 +440,7 @@
 
   function aiNotesHTML(inq) {
     return `<div class="cs-ainotes">
-  <p class="cs-ainotes-head">${icon('spark')} ${esc(persona().name || 'AI')}가 다듬은 초안 · ${fmt(inq.aiDraftAt)} · 문구 검토·CS 검토 전 확인할 것</p>
+  <p class="cs-ainotes-head">${icon('spark')} ${esc(persona().name || 'AI')}가 다듬은 초안 · ${fmt(inq.aiDraftAt)} · 표현 점검·내용 검토 전 확인할 것</p>
   <ul>${(inq.aiNotes || []).map(n => `<li>${esc(n)}</li>`).join('')}</ul>
   ${(inq.aiTruncated || []).length ? `<p class="cs-warn">${inq.aiTruncated.map(esc).join('<br>')}</p>` : ''}
   ${inq.prevDraft ? '<button type="button" class="cs-btn cs-btn-sm" data-act="ai-undo">이전 초안으로 되돌리기</button>' : ''}
@@ -492,7 +492,7 @@
         if (x.status === '답변 대기' || x.status === '승인') x.status = '검토 중';
         logTo(x, `AI 초안 다듬기 (${persona().name || '페르소나'})`);
       });
-      toast('AI가 초안을 다듬었어요. 걸린 표현과 [확인 필요]를 확인하고 문구 검토를 다시 하세요.');
+      toast('AI가 초안을 다듬었어요. 걸린 표현과 [확인 필요]를 확인하고 표현 점검을 다시 하세요.');
       renderDetail(ui);
       renderList(ui);
     } catch (e) {
@@ -573,22 +573,31 @@
 
   /* ───────── 화면 ───────── */
 
-  // 하위 메뉴 = 다루는 대상 (문의 · 부작용 · 고객). 답변 템플릿은 문의함 위 '답장 설정' 버튼으로 (2026-10-26)
-  const TABS = [['inbox', '문의함'], ['adverse', '부작용 접수'], ['customers', '고객 기록']];
-  // 문의함 단계 = 메일함 폴더 (core가 왼쪽 메뉴의 문의함 아래에 들여 써서 보여 줌). 한 문의는 한 단계에만 · stageOf()로 계산
-  // 새 문의 → ① 문구 검토 → ② CS 검토 → 보낼 준비 → 보냄 (2026-10-26 메일함 구조)
-  const SUBS = [['new', '새 문의'], ['phrase', '문구 검토'], ['cs', 'CS 검토'], ['ready', '보낼 준비'], ['sent', '보냄']];
+  // 하위 메뉴 = 다루는 대상 (문의 · 부작용 · 고객) + 답장 설정 (기본값 · 페르소나 · 템플릿 · 2026-11-03 숨은 버튼 → 탭)
+  const TABS = [['inbox', '문의함'], ['adverse', '부작용 접수'], ['customers', '고객 기록'], ['templates', '답장 설정']];
+  // 문의함 폴더 = 누가 할 차례인지 (core가 왼쪽 메뉴의 문의함 아래에 들여 써서 보여 줌) · 2026-11-03 5단계 → 3폴더
+  // 처리 대기(신규 · 작성 중 · 발송 대기 = 작성자 차례) · 승인 대기(내용 검토 = 다른 담당자 차례) · 처리 완료(발송)
+  // [값, 이름, 설명] · 한 문의는 한 폴더에만 · 단계(stageOf)는 그대로 계산해서 목록에 표시
+  const SUBS = [['todo', '처리 대기', '내가 처리할 문의 · 신규 · 작성 중 · 발송 대기'],
+    ['approval', '승인 대기', '답장을 쓴 사람이 아닌 담당자가 내용 · 정책 · 말투를 보고 승인할 답장'],
+    ['done', '처리 완료', '고객에게 보낸 답장']];
+  const FOLDER = { new: 'todo', phrase: 'todo', ready: 'todo', cs: 'approval', sent: 'done' };
+  const folderOf = i => FOLDER[stageOf(i)];
+  // 목록에 붙는 단계 표시 (Zendesk · Salesforce류 New · Draft · Pending Approval · Ready to Send · Sent)
+  const STEP_BADGE = { new: '신규', phrase: '작성 중', cs: '승인 대기', ready: '발송 대기', sent: '발송 완료' };
   const STAGE_NAME = {};
   SUBS.forEach(([id, label]) => { STAGE_NAME[id] = label; });
   const STAGE_EMPTY = {
-    new: '새로 온 문의가 없어요.', phrase: '문구 검토할 답장이 없어요.', cs: 'CS 검토를 기다리는 답장이 없어요.',
-    ready: '보낼 답장이 없어요. CS 검토를 승인하면 여기로 와요.', sent: '보낸 답장이 없어요.'
+    todo: '처리할 문의가 없어요.', approval: '승인할 답장이 없어요. 작성자가 표현 점검을 마치면 여기로 와요.',
+    done: '보낸 답장이 없어요.'
   };
   // 문의 하나 처리 단계 (상세 화면 밑줄 탭) · 오른쪽 칸에 한 단계 카드만 보여 줌
   // 단계 이름은 왼쪽 메뉴 · 단계 탭에만, 할 일은 오른쪽 카드에만 (중복 표시 정리 2026-10-26)
-  const STEPS = [['reply', '답장 쓰기'], ['phrase', '문구 검토'], ['cs', 'CS 검토'], ['send', '보내기']];
+  const STEPS = [['reply', '답장 쓰기'], ['phrase', '표현 점검'], ['cs', '내용 검토'], ['send', '보내기']];
   // 단계 안 보기 탭 ('all'은 고객 이력 → 문의 보기 전용이라 탭 없음)
-  const VIEWS = [['open', '전체'], ['urgent', '긴급 (C1)'], ['overdue', '기한 초과']];
+  // [값, 이름, 설명] · 화면 전환 탭과 헷갈리지 않게 필터 칩으로 (2026-11-03)
+  const VIEWS = [['open', '전체', '처리 중인 문의 전체'], ['urgent', '부작용 신고', 'C1 · 1시간 안에 품질·규제 담당에게 넘겨야 해요'],
+    ['overdue', '기한 지남', '답장 기한이 지난 문의']];
   // 답장 설정 밑줄 탭 · 템플릿 유형 탭 (화면을 다시 그려도 유지 · 새로고침하면 기본값)
   let SET_TAB = null;
   let TPL_CODE = null;
@@ -604,17 +613,16 @@
   </div>
   <section class="cs-panel" data-panel="inbox">
     <div class="cs-tabs cs-subtabs" role="tablist" aria-label="처리 단계">
-      ${SUBS.map(([id, label], i) => `<button type="button" role="tab" class="cs-tab" data-sub="${id}" aria-selected="${i === 0}">${label} <span class="count" data-count="${id}"></span></button>`).join('')}
+      ${SUBS.map(([id, label, tip], i) => `<button type="button" role="tab" class="cs-tab" data-sub="${id}" title="${tip}" aria-selected="${i === 0}">${label} <span class="count" data-count="${id}"></span></button>`).join('')}
     </div>
     <div class="cs-subpanel">
     <div class="cs-inbox" data-view="list">
       <div class="cs-listcol">
-        <div class="linetabs cs-viewtabs" data-el="filter" role="group" aria-label="보기"></div>
-        <label class="cs-field"><span>정렬</span><select class="cs-input" data-el="sort">
-          <option value="priority" selected>처리 우선순위 (긴급·기한 순)</option><option value="newest">받은 시간 · 최신순</option><option value="oldest">받은 시간 · 오래된 순</option></select></label>
+        <div class="cs-viewchips" data-el="filter" role="group" aria-label="보기"></div>
+        <label class="cs-sort"><span>정렬</span><select class="cs-input" data-el="sort" title="우선순위 = 부작용 신고 · 기한이 가까운 순">
+          <option value="priority" selected>우선순위</option><option value="newest">최신순</option><option value="oldest">오래된 순</option></select></label>
         <div class="cs-gmailbar">
           <button type="button" class="cs-btn" data-act="gmail-import" title="Gmail 최신 데이터 받기" aria-describedby="cs-gmailmsg" disabled>${icon('mail')} Gmail 받기</button>
-          <button type="button" class="cs-btn" data-act="open-settings" title="담당자 연락처 · 답장 기본값 · 페르소나 · 템플릿">답장 설정</button>
           <span class="cs-muted" id="cs-gmailmsg" data-el="gmailmsg" aria-live="polite"></span>
         </div>
         <div data-el="setupnote"></div>
@@ -631,13 +639,13 @@
   <section class="cs-panel" data-panel="templates" hidden></section>
 </div>`;
 
-    // me = 로그인한 사람 (문구 검토 완료자로 기록) · approver = CS 검토자 칸 기본값
+    // me = 로그인한 사람 (표현 점검 완료자로 기록) · approver = 내용 검토자 칸 기본값
     const me = (REBOOT.user && REBOOT.user().name) || '';
     const ui = { root, selected: null, filter: 'open', sort: 'priority', me, approver: me, adverseDraft: null, ctab: 'reply' };
     const panel = name => root.querySelector(`[data-panel="${name}"]`);
-    ui.sub = 'new';
+    ui.sub = 'todo';
     ui.showTab = name => {
-      if (name === 'outbox') { ui.sub = 'ready'; name = 'inbox'; }   // 예전 '보내기' 탭 → 문의함 › 보낼 준비
+      if (name === 'outbox') { ui.sub = 'todo'; name = 'inbox'; }   // 예전 '보내기' 탭 → 문의함 › 처리 대기 (발송 대기 포함)
       root.querySelectorAll('.cs-tab[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
       root.querySelectorAll('.cs-panel').forEach(p => { p.hidden = p.dataset.panel !== name; });
       if (name === 'inbox') ui.showSub(ui.sub);
@@ -646,9 +654,9 @@
       if (name === 'customers') renderCustomers(ui, panel('customers'));
       paintCounts(ui);
     };
-    // 문의함 단계 바꾸기 (예전 이름 work·ready·sent에서 온 호출도 받음 · 모르는 이름은 새 문의)
+    // 문의함 폴더 바꾸기 (예전 단계 이름 new·phrase·cs·ready·sent·work에서 온 호출도 받음 · 모르는 이름은 처리 대기)
     ui.showSub = name => {
-      ui.sub = STAGE_NAME[name] ? name : 'new';
+      ui.sub = STAGE_NAME[name] ? name : FOLDER[name] || 'todo';
       paintSubs(ui);
       renderList(ui);
       renderDetail(ui);
@@ -712,7 +720,7 @@
           root.querySelector('[data-el="sort"]').value = 'newest';
           ui.custFilter = null;
           ui.filter = 'open';
-          ui.sub = 'new';
+          ui.sub = 'todo';
           paintSubs(ui);
           ui.highlight = new Set(fresh.map(x => x.id));   // 새로 온 메일을 목록에서 잠깐 강조
         }
@@ -727,7 +735,7 @@
       ui.gmail = !!(h && h.gmail);
       gmailBtn.disabled = !ui.gmail;
       gmailMsg.textContent = !h ? '서버 상태를 확인하지 못했어요 (새로고침해 주세요)' : !h.gmail ? 'Gmail 로그인 필요 (설정 › 연결 › Google로 로그인)' : '';
-      if (ui.selected) renderDetail(ui);   // 보낼 준비 문의의 보내기 버튼 상태 갱신
+      if (ui.selected) renderDetail(ui);   // 보낼 차례 문의의 보내기 버튼 상태 갱신
       if (ui.gmail) importGmail(true);
     });
     gmailBtn.addEventListener('click', () => importGmail(false));
@@ -753,10 +761,10 @@
     ui.root.querySelectorAll('.cs-tab[data-sub]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.sub === ui.sub)));
   }
 
-  /** 처리 단계가 바뀐 문의를 따라 단계 메뉴도 옮김 (고객 이력 보기 중이면 그대로) */
+  /** 처리 단계가 바뀐 문의를 따라 폴더 메뉴도 옮김 (고객 이력 보기 중이면 그대로) */
   function follow(ui) {
     const inq = ui.selected && load().find(x => x.id === ui.selected);
-    if (inq && ui.filter !== 'all' && stageOf(inq) !== ui.sub) { ui.sub = stageOf(inq); paintSubs(ui); }
+    if (inq && ui.filter !== 'all' && folderOf(inq) !== ui.sub) { ui.sub = folderOf(inq); paintSubs(ui); }
   }
 
   /** 메일 하나 열기: 읽음 표시 → 검토 화면 */
@@ -772,13 +780,13 @@
     if (box && box.getBoundingClientRect().top < 0) box.scrollIntoView({ block: 'start' });
   }
 
-  /** 왼쪽 메뉴 숫자 (core가 탭 버튼의 .count를 읽어 표시 · 0은 숨김): 단계별 문의 수 (보냄 제외) · 부작용 = 접수 기록 없는 미처리 C1 */
+  /** 왼쪽 메뉴 숫자 (core가 탭 버튼의 .count를 읽어 표시 · 0은 숨김): 폴더별 문의 수 (처리 완료 제외) · 부작용 = 접수 기록 없는 미처리 C1 */
   function paintCounts(ui) {
     const all = load();
     const adv = new Set(loadAdverse().map(a => a.linkedInquiry).filter(Boolean));
-    const by = s => all.filter(i => stageOf(i) === s).length;
+    const by = s => all.filter(i => folderOf(i) === s).length;
     const n = {
-      new: by('new'), phrase: by('phrase'), cs: by('cs'), ready: by('ready'),
+      todo: by('todo'), approval: by('approval'),
       adverse: all.filter(i => isOpen(i) && i.type === 'C1' && !adv.has(i.id)).length
     };
     ui.root.querySelectorAll('[data-count]').forEach(el => {
@@ -791,7 +799,7 @@
       const dv = replyDefaults();
       const empty = (DATA.replyDefaults || []).filter(f => !String(dv[f.key] || '').trim()).length;
       box.innerHTML = empty ? `<button type="button" class="cs-setupnote" data-act="open-settings"
-        title="비어 있으면 초안에 [확인 필요]가 남아 문구 검토가 막혀요">${icon('alert')} 답장 기본값 <b>${empty}개</b> 비어 있음 · 채우기 →</button>` : '';
+        title="비어 있으면 초안에 [확인 필요]가 남아 표현 점검이 막혀요">${icon('alert')} 답장 기본값 <b>${empty}개</b> 비어 있음 · 채우기 →</button>` : '';
     }
   }
 
@@ -800,7 +808,7 @@
     const st = stageOf(i);
     const p = ['cs', 'ready', 'sent'].includes(st) ? ' is-ok' : '';
     const c = ['ready', 'sent'].includes(st) ? ' is-ok' : '';
-    return `<span class="cs-gates-mini" title="문구 검토 · CS 검토">문구<i class="cs-gm${p}"></i>CS<i class="cs-gm${c}"></i></span>`;
+    return `<span class="cs-gates-mini" title="표현 점검 · 내용 검토">표현<i class="cs-gm${p}"></i>내용<i class="cs-gm${c}"></i></span>`;
   }
 
   /* 문의함 목록 */
@@ -814,7 +822,7 @@
     const pass = (i, f) => {
       if (ui.custFilter && emailOf(i.from) !== ui.custFilter) return false;   // 고객 이력 → '문의 보기'
       if (f === 'all') return true;   // 고객 이력 → '문의 보기'는 단계와 상관없이 그 고객 문의 전부
-      if (stageOf(i) !== ui.sub) return false;
+      if (folderOf(i) !== ui.sub) return false;
       if (f === 'urgent') return i.type === 'C1';
       if (f === 'overdue') return isOpen(i) && now > due(i);
       return true;
@@ -827,8 +835,8 @@
     ui.shownIds = shown.map(i => i.id);   // 검토 화면의 이전·다음 메일
     const fbox = ui.root.querySelector('[data-el="filter"]');
     fbox.hidden = ui.filter === 'all';
-    fbox.innerHTML = VIEWS.map(([v, l]) =>
-      `<button type="button" data-filter="${v}" aria-pressed="${v === ui.filter}">${l} <span class="n">${all.filter(i => pass(i, v)).length}</span></button>`).join('');
+    fbox.innerHTML = VIEWS.map(([v, l, tip]) =>
+      `<button type="button" class="chip" data-filter="${v}" title="${tip}" aria-pressed="${v === ui.filter}">${l}<span class="n">${all.filter(i => pass(i, v)).length}</span></button>`).join('');
     const unread = i => !i.readAt && i.status === '답변 대기';
     // 한 페이지 LIST_MAX건 · 단계·필터가 바뀌면 선택한 메일이 있는 페이지(없으면 1쪽)로
     const pageKey = `${ui.sub}|${ui.filter}|${ui.custFilter || ''}`;
@@ -851,7 +859,7 @@
   <span class="cs-avatar" aria-hidden="true">${initials(i.name)}</span>
   <span class="cs-row-from"><span class="cs-item-name">${esc(i.name)}</span>${custMap.has(emailOf(i.from)) ? custChips(custMap.get(emailOf(i.from)), true) : ''}</span>
   <span class="cs-row-main"><span class="cs-row-line"><b class="cs-row-subject">${esc(i.subject)}</b>${subjectKo(i)}<span class="cs-row-snippet"> — ${esc(snippet)}</span></span>
-    <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span>${ui.filter === 'all' ? `<span class="cs-chip">${STAGE_NAME[stageOf(i)]}</span>` : ''}${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}${i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}${gatesMini(i)}</span></span>
+    <span class="cs-item-tags"><span class="cs-type cs-type-${i.type}">${i.type} ${esc(TYPES[i.type].name)}</span><span class="cs-chip cs-stage-${stageOf(i)}">${STEP_BADGE[stageOf(i)]}</span>${i.product ? `<span class="cs-chip cs-chip-dim">${esc(productKo(i.product))}</span>` : ''}${i.source === 'gmail' ? '<span class="cs-chip cs-chip-dim">Gmail</span>' : ''}${gatesMini(i)}</span></span>
   <span class="cs-row-side"><span class="cs-row-time" title="받은 시간">${fmt(i.receivedAt)}</span><span class="cs-due${late ? ' is-late' : ''}">${dueText(i)}</span></span>
 </button></li>`;
     }).join('') + pad + moreBtn : `<li class="cs-muted cs-list-empty">${ui.filter === 'all' ? '해당하는 문의가 없어요.' : STAGE_EMPTY[ui.sub]}</li>`;
@@ -864,7 +872,7 @@
     return shown;
   }
 
-  /* 문의 상세: 받은 메일 · 내부 메모 · 답장 작성기(보내기 줄) | ① 문구 검토 · ② CS 검토 */
+  /* 문의 상세: 받은 메일 · 내부 메모 · 답장 작성기(보내기 줄) | ① 표현 점검 · ② 내용 검토 */
 
   function renderDetail(ui) {
     const box = ui.root.querySelector('[data-el="detail"]');
@@ -939,7 +947,7 @@
         <button type="button" class="cs-ctab" data-act="ctab" data-ctab="note" aria-pressed="${ui.ctab === 'note'}">내부 메모${notes.length ? ` ${notes.length}` : ''}</button>
         <span class="cs-ctabs-side"><span class="cs-chip cs-chip-dim">${inq.aiDraftAt ? `AI · ${esc(persona().name || '페르소나')}` : `${t.code} 템플릿`}</span>
           <button type="button" class="cs-btn cs-btn-sm" data-act="ai-draft" disabled
-            title="${esc(`${persona().name || ''} 페르소나로 문의에 맞게 다시 써요 · 결과는 문구 검토와 CS 검토를 다시 거쳐요`)}">${icon('spark')} AI로 초안 다듬기</button>
+            title="${esc(`${persona().name || ''} 페르소나로 문의에 맞게 다시 써요 · 결과는 표현 점검과 내용 검토를 다시 거쳐요`)}">${icon('spark')} AI로 초안 다듬기</button>
           <button type="button" class="cs-btn cs-btn-sm" data-act="edit-persona" title="답장 설정에서 페르소나 고치기">페르소나 수정</button></span>
       </div>
       <div class="cs-cpane" data-ctab-pane="reply"${ui.ctab === 'note' ? ' hidden' : ''}>
@@ -984,14 +992,14 @@
     });
   }
 
-  /** ① 문구 검토 카드 (입력 칸이 없어 글자를 칠 때마다 다시 그림) */
+  /** ① 표현 점검 카드 (입력 칸이 없어 글자를 칠 때마다 다시 그림) */
   function phraseCardHTML(inq, r) {
     const after = inq.status === '승인' || DONE.includes(inq.status);
     const done = phraseDone(inq);
     const g = phraseGates(inq, r);
     const state = done || after ? '<span class="cs-rstate is-ok">통과</span>'
       : r && r.verdict === 'BLOCK' ? '<span class="cs-rstate is-no">사용 불가 표현</span>' : '<span class="cs-rstate">진행 중</span>';
-    const head = `<header class="cs-rhead"><h4>02 문구 검토</h4>${state}</header>
+    const head = `<header class="cs-rhead"><h4>02 표현 점검</h4>${state}</header>
 <p class="cs-rsub">자동 심의(컴플라이언스 규칙) + 작성자 확인</p>
 <div class="cs-chips"><b>다시 심의</b> ${r ? badge(r.verdict) : '<span class="cs-badge">심의 불가</span>'}</div>`;
     const flags = r && r.findings.length ? `<ul class="cs-flags">${r.findings.map(f => `<li>${badge(f.verdict)}<span><b>${esc(f.name)}</b>
@@ -1001,18 +1009,18 @@
     const legal = r && r.verdict === 'PASS' ? '<p class="cs-muted">걸린 표현 없음은 법적 승인이 아니에요.</p>' : '';
     if (after) return `${head}${flags}${done ? `<p class="cs-muted">${esc(inq.phrase.by)} 확인 · ${fmt(inq.phrase.at)}</p>` : ''}${legal}`;
     if (done) return `${head}${flags}<p class="cs-muted">${esc(inq.phrase.by)} 확인 · ${fmt(inq.phrase.at)} · 본문을 고치면 다시 열려요.</p>${legal}
-<div class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="phrase-undo">문구 검토 다시 열기</button></div>`;
+<div class="cs-actions"><button type="button" class="cs-btn cs-btn-sm" data-act="phrase-undo">표현 점검 다시 열기</button></div>`;
     const revise = r && (r.verdict === 'REVISE' || r.verdict === 'REVIEW');
     return `${head}${flags}${todoPanelHTML(inq.draft)}
 <ul class="cs-gates">${g.map(x => `<li class="${x.ok ? 'is-ok' : 'is-no'}">${x.ok ? '✓' : '✗'} ${esc(x.label)}</li>`).join('')}</ul>
-${revise ? '<p class="cs-muted">수정 필요·검토 필요 표현을 그대로 두면 CS 검토 때 의견을 남겨야 해요.</p>' : ''}${legal}
-<div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark cs-next" data-act="phrase-done" ${g.every(x => x.ok) ? '' : 'disabled'}>문구 검토 완료 → 03 CS 검토</button></div>`;
+${revise ? '<p class="cs-muted">수정 필요·검토 필요 표현을 그대로 두면 내용 검토 때 의견을 남겨야 해요.</p>' : ''}${legal}
+<div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark cs-next" data-act="phrase-done" ${g.every(x => x.ok) ? '' : 'disabled'}>표현 점검 완료 → 03 내용 검토</button></div>`;
   }
 
-  /** ② CS 검토 카드의 고정 부분 (입력 칸이 있어 다시 그리지 않음 · 남은 조건·버튼 상태는 paintCsCard가 바꿈) */
+  /** ② 내용 검토 카드의 고정 부분 (입력 칸이 있어 다시 그리지 않음 · 남은 조건·버튼 상태는 paintCsCard가 바꿈) */
   function csCardHTML(ui, inq, t) {
     const a = inq.approval || {};
-    const head = `<header class="cs-rhead"><h4>03 CS 검토</h4><span class="cs-rstate" data-el="cs-state"></span></header>
+    const head = `<header class="cs-rhead"><h4>03 내용 검토</h4><span class="cs-rstate" data-el="cs-state"></span></header>
 <p class="cs-rsub">검토 ${esc(t.owner)} · 작성자와 다른 사람</p>`;
     if (inq.status === '승인' || DONE.includes(inq.status)) {
       return `${head}
@@ -1024,15 +1032,15 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     }
     return `${head}
 <div class="cs-wait" data-el="cs-wait" hidden>
-  <p>02 문구 검토를 먼저 마쳐 주세요. 마치면 여기서 확인 항목을 체크하고 승인해요.</p>
-  <div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark cs-next" data-act="step" data-step="phrase">02 문구 검토로 가기 →</button></div>
+  <p>02 표현 점검을 먼저 마쳐 주세요. 마치면 여기서 확인 항목을 체크하고 승인해요.</p>
+  <div class="cs-actions"><button type="button" class="cs-btn cs-btn-dark cs-next" data-act="step" data-step="phrase">02 표현 점검으로 가기 →</button></div>
 </div>
-<fieldset class="cs-approve" data-el="csfield" aria-label="CS 검토">
+<fieldset class="cs-approve" data-el="csfield" aria-label="내용 검토">
   <div class="cs-checks">${csChecks(inq).map((x, k) => `<label class="cs-check"><input type="checkbox" data-el="cs-check" data-k="${k}" ${(inq.csChecks || [])[k] ? 'checked' : ''}> ${esc(x)}</label>`).join('')}</div>
   <label class="cs-field"><span>검토자</span><input class="cs-input" data-el="approver" value="${esc(ui.approver)}" placeholder="이름"></label>
   <label class="cs-field"><span>검토 의견</span><textarea class="cs-input" rows="2" data-el="comment" placeholder="수정 필요·검토 필요 판정이거나 돌려보낼 때 필수">${esc(inq.pendingComment || '')}</textarea></label>
   <div data-el="cs-need"></div>
-  <div class="cs-actions"><button type="button" class="cs-btn cs-primary cs-next" data-act="approve" disabled>CS 검토 승인 → 04 보내기</button></div>
+  <div class="cs-actions"><button type="button" class="cs-btn cs-primary cs-next" data-act="approve" disabled>내용 검토 승인 → 04 보내기</button></div>
   <p class="cs-subacts"><button type="button" class="cs-linkbtn" data-act="send-back">작성자에게 돌려보내기</button></p>
 </fieldset>
 <details class="cs-share-wrap"><summary>${icon('mail')} 검토 담당자에게 요청 보내기</summary>${shareBoxHTML(`inq:${inq.id}`, t.code === 'C1' ? 'adverse' : 'review', t.owner)}</details>`;
@@ -1044,12 +1052,12 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
     const after = inq.status === '승인' || DONE.includes(inq.status);
     const waiting = !after && !phraseDone(inq);
     card.classList.toggle('is-locked', waiting);
-    // 문구 검토 전에는 흐린 입력 칸 대신 할 일 한 줄과 02로 가는 버튼만
+    // 표현 점검 전에는 흐린 입력 칸 대신 할 일 한 줄과 02로 가는 버튼만
     const wait = card.querySelector('[data-el="cs-wait"]');
     if (wait) wait.hidden = !waiting;
     card.querySelectorAll('[data-el="csfield"], .cs-share-wrap').forEach(el => { el.hidden = waiting; });
     const st = card.querySelector('[data-el="cs-state"]');
-    if (st) { st.className = `cs-rstate${after ? ' is-ok' : ''}`; st.textContent = after ? '승인' : waiting ? '문구 검토 뒤' : '대기'; }
+    if (st) { st.className = `cs-rstate${after ? ' is-ok' : ''}`; st.textContent = after ? '승인' : waiting ? '표현 점검 뒤' : '대기'; }
     const fs = card.querySelector('[data-el="csfield"]');
     if (!fs) return;
     fs.disabled = waiting;
@@ -1077,7 +1085,7 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
         : `<button type="button" class="cs-btn cs-primary cs-next" data-act="mark-sent" ${c.ok ? '' : 'disabled'}
   title="예시 문의는 받는 주소가 example.com이라 실제로 보내지 않아요">보낸 것으로 표시 (시연)</button>`;
     } else {
-      const left = [st === 'new' || st === 'phrase' ? '02 문구 검토' : '', st !== 'ready' ? '03 CS 검토' : ''].filter(Boolean);
+      const left = [st === 'new' || st === 'phrase' ? '02 표현 점검' : '', st !== 'ready' ? '03 내용 검토' : ''].filter(Boolean);
       act = `<p class="cs-muted">${left.join(' · ')}를 마치면 보낼 수 있어요.</p>
 <button type="button" class="cs-btn" disabled title="두 검토를 마쳐야 보낼 수 있어요">보내기</button>`;
     }
@@ -1096,10 +1104,10 @@ ${inq.status === '승인' ? `<p class="cs-muted">본문을 고치면 승인이 �
 </ul>
 ${todoPanelHTML(inq.draft)}
 <p class="cs-muted">「AI로 초안 다듬기」로 문의에 맞게 다시 쓸 수 있어요. 팀에게만 남길 말은 「내부 메모」에 적어요.</p>
-<div class="cs-actions"><button type="button" class="cs-btn cs-next${ok ? ' cs-btn-dark' : ''}" data-act="step" data-step="phrase">다음: 02 문구 검토 →</button></div>`;
+<div class="cs-actions"><button type="button" class="cs-btn cs-next${ok ? ' cs-btn-dark' : ''}" data-act="step" data-step="phrase">다음: 02 표현 점검 →</button></div>`;
   }
 
-  /** 문의를 열 때 고를 단계 탭: 새 문의·문구 검토 단계는 빈칸이 남았으면 01, 다 채웠으면 02 */
+  /** 문의를 열 때 고를 단계 탭: 새 문의·표현 점검 단계는 빈칸이 남았으면 01, 다 채웠으면 02 */
   function autoStep(inq) {
     const st = stageOf(inq);
     if (st === 'cs') return 'cs';
@@ -1125,7 +1133,7 @@ ${todoPanelHTML(inq.draft)}
     box.querySelectorAll('[data-step-pane]').forEach(p => { p.hidden = p.dataset.stepPane !== ui.step; });
   }
 
-  /** 글을 고칠 때마다: 밑줄 · 단계 탭 · 01 답장 · 02 문구 검토 카드 · 03 CS 검토 남은 조건 · 04 보내기 */
+  /** 글을 고칠 때마다: 밑줄 · 단계 탭 · 01 답장 · 02 표현 점검 카드 · 03 내용 검토 남은 조건 · 04 보내기 */
   function renderCheck(ui) {
     const box = ui.root.querySelector('[data-el="detail"]');
     const inq = load().find(x => x.id === ui.selected);
@@ -1157,7 +1165,7 @@ ${todoPanelHTML(inq.draft)}
           if (inq.status === '승인') { inq.status = '검토 중'; inq.approval = null; logTo(inq, '승인 후 초안 수정 → 승인 취소'); revokeServer(inq); }
           else if (inq.status === '답변 대기') inq.status = '검토 중';
         });
-        follow(ui);   // 문구 검토를 마친 뒤 고치면 문구 검토 단계로 돌아감 (본문 지문이 달라짐)
+        follow(ui);   // 표현 점검을 마친 뒤 고치면 표현 점검 단계로 돌아감 (본문 지문이 달라짐)
         renderCheck(ui);
         renderList(ui);
       } else if (el === 'approver') {
@@ -1256,12 +1264,12 @@ ${todoPanelHTML(inq.draft)}
         patch(id, inq => {
           inq.phrase = { by, at: Date.now(), fp: fingerprint(inq.draft), verdict: r.verdict };
           if (inq.status === '답변 대기') inq.status = '검토 중';
-          logTo(inq, `문구 검토 완료 (${by})`);
+          logTo(inq, `표현 점검 완료 (${by})`);
         });
-        toast('문구 검토를 마쳤어요. CS 검토로 넘겼어요.');
+        toast('표현 점검을 마쳤어요. 내용 검토로 넘겼어요.');
         redraw();
       } else if (act === 'phrase-undo') {
-        patch(id, inq => { inq.phrase = null; logTo(inq, '문구 검토 다시 열기'); });
+        patch(id, inq => { inq.phrase = null; logTo(inq, '표현 점검 다시 열기'); });
         redraw();
       } else if (act === 'approve') {
         const cur = load().find(x => x.id === id);
@@ -1271,11 +1279,11 @@ ${todoPanelHTML(inq.draft)}
         const done = account => {
           patch(id, inq => {
             inq.status = '승인';
-            inq.ownerChecked = true;   // 지정 담당 검토 = CS 검토 (stats.owner_required)
+            inq.ownerChecked = true;   // 지정 담당 검토 = 내용 검토 (stats.owner_required)
             inq.approval = { by: who, account: account || '', at: Date.now(), comment: (inq.pendingComment || '').trim(), verdict: r.verdict, codes: r.codes, checks: csChecks(inq) };
-            logTo(inq, `CS 검토 승인 (${who})`);
+            logTo(inq, `내용 검토 승인 (${who})`);
           });
-          toast('CS 검토를 승인했어요. 이제 보낼 수 있어요.');
+          toast('내용 검토를 승인했어요. 이제 보낼 수 있어요.');
           redraw();
         };
         // Gmail 문의는 서버에도 승인 기록 (보내기 때 본문 지문을 대조) · 더미 문의는 화면에만
@@ -1299,9 +1307,9 @@ ${todoPanelHTML(inq.draft)}
           inq.phrase = null;
           inq.csChecks = [];
           inq.pendingComment = '';
-          logTo(inq, `CS 검토 → 작성자에게 돌려보냄 (${by})`);
+          logTo(inq, `내용 검토 → 작성자에게 돌려보냄 (${by})`);
         });
-        toast('작성자에게 돌려보냈어요. 문구 검토 단계로 옮겼어요.');
+        toast('작성자에게 돌려보냈어요. 표현 점검 단계로 옮겼어요.');
         redraw();
       } else if (act === 'note-add') {
         const ta = box.querySelector('[data-el="note"]');
@@ -1416,7 +1424,7 @@ ${todoPanelHTML(inq.draft)}
         add('', '■ 문구 심의', `- 다시 심의: ${r ? `${LABEL[r.verdict] || r.verdict}${r.codes.length ? ` (${r.codes.join(', ')})` : ''}` : '불가'}`,
           `- 남은 빈칸: ${todos.length ? todos.join(' / ') : '없음'}`,
           t.ownerRequired ? `- 지정 담당(${t.owner}) 검토: ${inq.ownerChecked ? '완료' : '필요'}` : '- 지정 담당 검토: 해당 없음');
-        if (inq.approval) add(`- CS 검토 승인: ${inq.approval.by} · ${fmt(inq.approval.at)}`);
+        if (inq.approval) add(`- 내용 검토 승인: ${inq.approval.by} · ${fmt(inq.approval.at)}`);
       }
       if (adv || kind === 'adverse') add('', '■ 부작용 접수', adv ? adverseLines(adv).join('\n') : '- 아직 부작용 접수 기록 없음 (C1이면 부작용 접수를 먼저 남기세요)');
       add('', `대시보드: ${link} (문의 #${inq.id})`);
@@ -1644,7 +1652,7 @@ ${todoPanelHTML(inq.draft)}
       if (!one && !btn) return;
       ui.custFilter = card(e.target).dataset.email;
       ui.filter = 'all';
-      ui.sub = 'work';
+      ui.sub = 'todo';
       ui.showTab('inbox');
       const shownNow = renderList(ui);
       const pick = one ? shownNow.find(i => i.id === one.dataset.id) : shownNow[0];
@@ -1659,7 +1667,7 @@ ${todoPanelHTML(inq.draft)}
       ? `<div class="cs-mail cs-mail-out"><div class="cs-mail-head"><b>보낸 답장</b> · ${fmt(i.sentAt)}${i.sentTo ? ` → ${esc(i.sentTo)}` : ''}${i.sentMode === 'demo' ? ' <span class="cs-chip cs-chip-dim">시연 표시 · 실제로 보내지 않음</span>' : ''}
           ${i.approval && i.approval.by ? `<span class="cs-muted">승인 ${esc(i.approval.by)}</span>` : ''}</div><pre class="cs-mail-body">${esc(i.sentBody || i.draft)}</pre></div>`
       : i.status === '승인'
-        ? `<div class="cs-mail cs-mail-draft"><div class="cs-mail-head"><b>승인됨 · 아직 안 보냄</b> <span class="cs-muted">문의함 › 보낼 준비에서 보냄</span></div><pre class="cs-mail-body">${esc(i.draft)}</pre></div>`
+        ? `<div class="cs-mail cs-mail-draft"><div class="cs-mail-head"><b>승인됨 · 아직 안 보냄</b> <span class="cs-muted">문의함 › 보낼 차례에서 보냄</span></div><pre class="cs-mail-body">${esc(i.draft)}</pre></div>`
         : `<details class="cs-mail cs-mail-draft"><summary class="cs-mail-head"><b>답장 아직 안 보냄</b> · ${esc(statusText(i.status))} <span class="cs-muted">초안 보기</span></summary><pre class="cs-mail-body">${esc(i.draft)}</pre></details>`;
     return `
 <li class="cs-thread-item">
@@ -1674,19 +1682,19 @@ ${i.body}`, '받은 메일 한국어로 보기')}</div>
 </li>`;
   }
 
-  /* 보내기 — CS 검토까지 승인된 답장만 모아 받는 사람을 확인하고 Gmail로 바로 보냄 (2026-10-24 담당 결정)
+  /* 보내기 — 내용 검토까지 승인된 답장만 모아 받는 사람을 확인하고 Gmail로 바로 보냄 (2026-10-24 담당 결정)
      보내기 전에 한 번 더: 승인 상태 · 지금 초안의 재검사(BLOCK이면 막음) · [확인 필요] 없음. 서버도 같은 조건으로 거절 */
 
   function sendCheck(inq) {
     const r = recheck(inq.draft, inq.product);
-    if (inq.status !== '승인' || !inq.approval) return { ok: false, why: 'CS 검토 승인 전이에요.' };
+    if (inq.status !== '승인' || !inq.approval) return { ok: false, why: '내용 검토 승인 전이에요.' };
     if (!r) return { ok: false, why: '다시 심의할 수 없어요 (새로고침해 주세요).' };
     if (r.verdict === 'BLOCK') return { ok: false, why: '다시 심의 결과가 사용 불가예요. 문의함에서 초안을 고치세요.' };
     if (pendingTodos(inq.draft).length) return { ok: false, why: '[확인 필요] 빈칸이 남아 있어요.' };
     return { ok: true, r };
   }
 
-  /** 보내기 줄 버튼 (문의 상세 · 보낼 준비): 다시 확인 → Gmail 보내기 / 초안 / 시연 표시 */
+  /** 보내기 줄 버튼 (문의 상세 · 보낼 차례): 다시 확인 → Gmail 보내기 / 초안 / 시연 표시 */
   async function outboxAct(ui, btn, redraw) {
     const id = btn.closest('[data-id]') && btn.closest('[data-id]').dataset.id;
     const inq = id && load().find(x => x.id === id);
@@ -1811,7 +1819,7 @@ ${i.body}`, '받은 메일 한국어로 보기')}</div>
       // 문의에서 열었으면 그 문의로 돌아감 (상세 위쪽에 '부작용 접수 완료'가 보임)
       if (record.linkedInquiry && load().some(x => x.id === record.linkedInquiry)) {
         toast(`부작용 접수를 저장했어요${missing.length ? ` · 빠진 필수 항목: ${missing.map(k => FIELD_LABEL[k]).join(', ')}` : record.serious ? ' · 심각 사례 → 부작용 접수에서 처리 순서를 진행하세요' : ''}.`);
-        ui.sub = 'work';
+        ui.sub = 'todo';
         ui.showTab('inbox');
         openInquiry(ui, record.linkedInquiry);
         return;
@@ -1823,7 +1831,7 @@ ${i.body}`, '받은 메일 한국어로 보기')}</div>
     });
 
     const back = p.querySelector('[data-act="adv-inq"]');
-    if (back) back.addEventListener('click', () => { ui.sub = 'work'; ui.showTab('inbox'); openInquiry(ui, pre.linkedInquiry); });
+    if (back) back.addEventListener('click', () => { ui.sub = 'todo'; ui.showTab('inbox'); openInquiry(ui, pre.linkedInquiry); });
 
     renderRecords(p);
     p.querySelector('[data-el="records"]').onclick = e => {
@@ -1980,8 +1988,7 @@ ${i.body}`, '받은 메일 한국어로 보기')}</div>
       ['contacts', '담당자 연락처', String(CONTACTS.length)],
       ['voc', '자주 나오는 불만', '']
     ];
-    p.innerHTML = `<div class="cs-backbar"><button type="button" class="cs-btn cs-btn-sm" data-act="tpl-back">← 문의함</button><b>답장 설정</b></div>
-<div class="linetabs cs-settabs" role="tablist" data-subnav="off" aria-label="답장 설정">${setTabs.map(([id, l, n]) =>
+    p.innerHTML = `<div class="linetabs cs-settabs" role="tablist" data-subnav="off" aria-label="답장 설정">${setTabs.map(([id, l, n]) =>
   `<button type="button" role="tab" data-settab="${id}" aria-selected="${id === SET_TAB}">${l}${n ? ` <span class="n">${n}</span>` : ''}</button>`).join('')}</div>` + contactsHTML() + `
 <section class="cs-setpane cs-defaults" data-setpane="defaults">
     ${dmeta.at ? `<p class="cs-muted">마지막 저장 ${esc(dmeta.by || '')} · ${fmt(dmeta.at)}</p>` : ''}
@@ -2002,7 +2009,7 @@ ${i.body}`, '받은 메일 한국어로 보기')}</div>
       <label class="cs-field cs-wide"><span>설명 <span class="cs-muted" data-el="p-count">${String(P.text || '').length}자 / ${PERSONA_MAX}자</span></span>
         <textarea class="cs-input" rows="6" data-p="text" maxlength="${PERSONA_MAX}" placeholder="말투 · 경력 · 지켜야 할 태도를 한국어로">${esc(P.text || '')}</textarea></label>
     </div>
-    <p class="cs-muted">문의함 → 답장 초안의 <b>[AI로 초안 다듬기]</b>가 이 인물로 써요 (팀 공용). 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버에서 따로 지키고, 결과는 문구 검토와 CS 검토를 다시 거쳐요.</p>
+    <p class="cs-muted">문의함 → 답장 초안의 <b>[AI로 초안 다듬기]</b>가 이 인물로 써요 (팀 공용). 효능 주장 금지·[확인 필요] 유지 같은 안전 규칙은 서버에서 따로 지키고, 결과는 표현 점검과 내용 검토를 다시 거쳐요.</p>
     <div class="cs-actions"><button type="button" class="cs-btn cs-primary" data-act="persona-save">저장</button>
       ${pmeta.at ? '<button type="button" class="cs-btn" data-act="persona-reset">기본값으로 되돌리기</button>' : ''}</div>
 </section>
@@ -2111,7 +2118,7 @@ ${i.body}`, '받은 메일 한국어로 보기')}</div>
   REBOOT.register({
     id: 'cs', icon: '💬', label: '고객 응대', priority: 'P1', order: 65,
     title: '빠르게 답하고, 안전하게 보내기.',
-    subtitle: '문의를 분류하고, 문구 검토와 CS 검토를 거친 답장만 보내요.',
+    subtitle: '문의를 분류하고, 표현 점검과 내용 검토를 거친 답장만 보내요.',
     render,
     summary: () => ({ label: '미처리 문의', value: stats().open })
   });
