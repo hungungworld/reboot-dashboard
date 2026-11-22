@@ -33,9 +33,8 @@ class Service:
 
 
 SERVICES = [
-    Service("OPENAI_API_KEY", "OpenAI", "홈 브리핑 · 인사이트 · 콘텐츠 · 파트너 메일 · 성과분석 AI", "유료 (사용량 과금)",
+    Service("OPENAI_API_KEY", "OpenAI", "홈 브리핑 · 인사이트 · 콘텐츠 · 파트너 메일 · 성과분석 · 컴플라이언스 · CS AI", "유료 (사용량 과금)",
             aliases=("OPENAI_API_KEY", "open_api", "AI_API_KEY")),
-    Service("ANTHROPIC_API_KEY", "Claude (Anthropic)", "컴플라이언스 AI 2차 판정 · CS 답장 초안 · 모니터링 한글 요약", "유료 (사용량 과금)"),
     Service("SERPAPI_KEY", "SerpApi", "Amazon 진열대·리뷰 · Google 검색 트렌드", "월 250회"),
     Service("YOUTUBE_API_KEY", "YouTube Data API", "잠재 고객 (영상 검색·댓글)", "하루 10,000 units"),
     Service("FIRECRAWL_API_KEY", "Firecrawl", "Weee! 진열대", "월 1,000 크레딧"),

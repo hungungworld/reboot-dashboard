@@ -1,4 +1,4 @@
-"""규제 모니터링 항목의 한글 제목·한 줄 요약 (Claude).
+"""규제 모니터링 항목의 한글 제목·한 줄 요약 (OpenAI).
 
 수집한 영어 제목·요약을 사람이 빨리 훑을 수 있게 한글로 붙입니다. 원문을 대신하지 않는 참고용이며,
 원문에 없는 사실은 만들지 않습니다. 같은 항목은 DATA_DIR/cache/compliance-ko.json에 저장해 다시 부르지 않습니다.
@@ -9,14 +9,13 @@ import threading
 import time
 from pathlib import Path
 
-import anthropic
 from flask import current_app
 
-from server.envkeys import get as env
+from server.core import ai
+from server.core.ai import AIError
 
 from . import ai_usage
 
-MODEL = "claude-opus-5-5"
 BATCH = 40
 _lock = threading.Lock()
 
@@ -53,7 +52,7 @@ class KoError(Exception):
 
 
 def available():
-    return env("ANTHROPIC_API_KEY") != ""
+    return ai.openai_ready()
 
 
 def _key(item):
@@ -86,38 +85,18 @@ def _save_cache(cache):
             time.sleep(0.2 * (attempt + 1))
 
 
-def _call(client, batch):
+def _call(batch):
     payload = [{"id": str(i), "source": b.get("source", "")[:80], "title": b.get("title", "")[:300], "summary": b.get("summary", "")[:500]}
                for i, b in enumerate(batch)]
     budget = ai_usage.over_budget()
     if budget:
         raise KoError(budget)
     try:
-        res = client.beta.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
-            system=SYSTEM,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-        )
-    except anthropic.AuthenticationError:
-        raise KoError("ANTHROPIC_API_KEY가 올바르지 않습니다")
-    except anthropic.RateLimitError:
-        raise KoError("요청이 많아 잠시 막혔습니다")
-    except anthropic.APIStatusError as e:
-        raise KoError(f"AI 서버 오류 ({e.status_code})")
-    except anthropic.APIConnectionError:
-        raise KoError("AI 서버에 연결하지 못했습니다")
-    ai_usage.record("compliance", "한글 요약 (모니터링)", res)
-    if res.stop_reason in ("refusal", "max_tokens"):
-        raise KoError(f"AI 응답 중단 ({res.stop_reason})")
-    text = next((b.text for b in res.content if b.type == "text"), "")
-    try:
-        rows = json.loads(text).get("items", [])
-    except ValueError:
-        raise KoError("AI 응답을 읽지 못했습니다")
+        data, _model = ai_usage.ask_json(SYSTEM, json.dumps(payload, ensure_ascii=False), SCHEMA,
+                                         part="compliance", label="한글 요약 (모니터링)", timeout=180)
+    except AIError as e:
+        raise KoError(str(e))
+    rows = data.get("items", [])
     out = {}
     for r in rows:
         try:
@@ -132,16 +111,15 @@ def _call(client, batch):
 def summarize(items):
     """items: [{source, id, title, summary}] → 같은 순서의 [{title_ko, summary_ko} | None]."""
     if not available():
-        raise KoError("ANTHROPIC_API_KEY가 없습니다 (설정 › 연결 또는 .env)")
+        raise KoError("OpenAI 키가 없습니다 (설정 › 연결 또는 .env의 OPENAI_API_KEY)")
     with _lock:
         cache = _load_cache()
     keys = [_key(it) for it in items]
     todo = [i for i, k in enumerate(keys) if k not in cache]
     if todo:
-        client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=180.0)
         for start in range(0, len(todo), BATCH):
             idxs = todo[start:start + BATCH]
-            got = _call(client, [items[i] for i in idxs])
+            got = _call([items[i] for i in idxs])
             for pos, i in enumerate(idxs):
                 if pos in got:
                     cache[keys[i]] = got[pos]

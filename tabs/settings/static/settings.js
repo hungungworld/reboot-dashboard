@@ -19,7 +19,7 @@
     'usage', 'consumer_name', 'price', 'cost', 'evidence', 'notes', 'pack_count', 'price_box', 'sugar', 'calories'];
   const SRC_FIELDS = [['flavors', '맛'], ['ingredients', '성분'], ['allergens', '알레르기 성분'], ['volume', '용량'], ['pack', '포장'],
     ['usage', '섭취법'], ['form', '제형'], ['category', '제품 분류'], ['etc', '기타']];
-  const CORE_KEYS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'SERPAPI_KEY', 'YOUTUBE_API_KEY', 'FIRECRAWL_API_KEY'];
+  const CORE_KEYS = ['OPENAI_API_KEY', 'SERPAPI_KEY', 'YOUTUBE_API_KEY', 'FIRECRAWL_API_KEY'];
   const KINDS = ['수집', 'AI 프롬프트', '승인 · 선정', '기타'];
   const KIND_TONE = { '수집': 'blue', 'AI 프롬프트': 'purple', '승인 · 선정': 'lime', '기타': '' };
   const STATUS_TONE = { '완료': 'green', '검토 대기': 'orange', '실패': 'red' };

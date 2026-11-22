@@ -1,4 +1,4 @@
-"""CS 답장 초안 다듬기 (Claude · 페르소나).
+"""CS 답장 초안 다듬기 (OpenAI · 페르소나).
 
 tabs/cs/static/data.js의 persona(300자 이내)로 템플릿 초안을 고객 문의에 맞게 다시 씁니다.
 결과는 항상 컴플라이언스 재검사와 담당자 최종 승인을 거칩니다. 발송하지 않습니다.
@@ -7,12 +7,10 @@ Flask 통합: 키는 server.envkeys(설정 › 연결 화면 → .env)에서 읽
 import json
 import re
 
-import anthropic
-
-from server.envkeys import get as env
+from server.core import ai
+from server.core.ai import AIError
 from tabs.compliance import ai_usage
 
-MODEL = "claude-opus-5-5"
 BODY_MAX = 6000   # 문의 본문·현재 초안을 AI에 보내는 최대 글자 수 (넘으면 잘랐다고 알려 줌)
 FACT_MAX = 1000   # 제품·정책 값 하나의 최대 글자 수 (환불 정책 같은 긴 값 · 예전 300)
 
@@ -79,7 +77,7 @@ class DraftError(Exception):
 
 
 def available():
-    return env("ANTHROPIC_API_KEY") != ""
+    return ai.openai_ready()
 
 
 def _clip(v, n):
@@ -95,7 +93,7 @@ def draft(persona, inquiry, current, facts=None, banned=None):
     if not _clip(inquiry.get("body"), 20000).strip():
         raise DraftError("문의 본문이 없어요.", 400)
     if not available():
-        raise DraftError("AI 연결 안 됨 · 설정 › 연결에서 Anthropic 키를 넣어 주세요.", 503)
+        raise DraftError("AI 연결 안 됨 · 설정 › 연결에서 OpenAI 키를 넣어 주세요.", 503)
     budget = ai_usage.over_budget()
     if budget:
         raise DraftError(budget, 429)
@@ -129,40 +127,16 @@ def draft(persona, inquiry, current, facts=None, banned=None):
                                          "(what you changed, which placeholders remain, anything to check)."},
         {"type": "text", "text": FEW_SHOT},
     ]
-    client = anthropic.Anthropic(api_key=env("ANTHROPIC_API_KEY"), timeout=120.0)
     try:
-        res = client.beta.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "medium", "format": {"type": "json_schema", "schema": SCHEMA}},
-            system=system,
-            messages=[{"role": "user", "content": "Rewrite the current draft as a reply to this inquiry. Input as JSON:\n"
-                                                  + json.dumps(payload, ensure_ascii=False)}],
-        )
-    except anthropic.AuthenticationError:
-        raise DraftError("Anthropic 키가 올바르지 않아요. 설정 › 연결에서 키를 확인해 주세요.", 503)
-    except anthropic.RateLimitError:
-        raise DraftError("요청이 많아 잠시 막혔어요. 1분 뒤 다시 시도하세요.", 429)
-    except anthropic.APIStatusError as e:
-        raise DraftError(f"AI 서버 오류 ({e.status_code}). 잠시 뒤 다시 시도하세요.")
-    except anthropic.APIConnectionError:
-        raise DraftError("AI 서버에 연결하지 못했어요 (인터넷 확인).")
-    ai_usage.record("cs", "CS 답장 초안", res)
-    if res.stop_reason == "refusal":
-        raise DraftError("AI가 이 문의의 초안 작성을 거절했어요. 템플릿으로 직접 작성하세요.", 422)
-    if res.stop_reason == "max_tokens":
-        raise DraftError("AI 응답이 잘렸어요. 다시 시도하세요.")
-    text = next((b.text for b in res.content if b.type == "text"), "")
-    try:
-        out = json.loads(text)
-    except ValueError:
-        raise DraftError("AI 응답을 읽지 못했어요. 다시 시도하세요.")
+        out, model = ai_usage.ask_json(system, "Rewrite the current draft as a reply to this inquiry. Input as JSON:\n"
+                                       + json.dumps(payload, ensure_ascii=False), SCHEMA,
+                                       part="cs", label="CS 답장 초안", timeout=120, schema_name="cs_draft")
+    except AIError as e:
+        raise DraftError(str(e), e.status)
     body = str(out.get("draft", "")).strip()
     if not body:
         raise DraftError("AI가 빈 초안을 돌려줬어요. 다시 시도하세요.")
     # 영어 이외 빈칸 표기 통일: [확인 필요 …] 형식이 깨지지 않게
     body = re.sub(r"\[\s*확인\s*필요\s*[:：]?\s*(?=[^\]\s])", "[확인 필요: ", body)
-    return {"draft": body, "notes_ko": [str(n)[:200] for n in out.get("notes_ko", [])][:4], "model": res.model,
+    return {"draft": body, "notes_ko": [str(n)[:200] for n in out.get("notes_ko", [])][:4], "model": model,
             "truncated": truncated}

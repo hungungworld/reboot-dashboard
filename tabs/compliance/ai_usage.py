@@ -17,12 +17,15 @@ from flask import current_app
 
 from server.envkeys import get as env
 
-PRICES = {   # model: (input, output, cache_read) · USD / 1M tokens
-    "claude-opus-5-5": (4.00, 20.00, 0.20),
+PRICES = {   # model: (input, output, cache_read) · USD / 1M tokens (OpenAI 공개 단가 기준 · 예상치)
+    "gpt-4o-mini": (0.15, 0.60, 0.075),
+    "gpt-4o": (2.50, 10.00, 1.25),
+    "claude-opus-5-5": (4.00, 20.00, 0.20),   # 예전 기록(2026-10~11월) 계산용
     "claude-sonnet-5-5": (2.00, 10.00, 0.20),
     "claude-haiku-5-5": (0.10, 0.50, 0.01),
 }
-DEFAULT_MODEL = "claude-opus-5-5"
+DEFAULT_MODEL = "gpt-4o-mini"
+PRICE_FALLBACK = "claude-opus-5-5"   # 단가표에 없는 모델은 가장 비싼 단가로 넉넉히 계산
 DEFAULT_BUDGET_USD = 30.0
 KRW_PER_USD = 1400   # 화면 표시용 어림 환율
 _lock = threading.Lock()
@@ -38,19 +41,55 @@ def _month():
 
 def cost_usd(model, usage):
     """usage(dict) → 예상 비용. 모르는 모델(대체 모델 등)은 Opus 단가로 넉넉히 계산."""
-    price_in, price_out, price_read = PRICES.get(model, PRICES[DEFAULT_MODEL])
+    price_in, price_out, price_read = PRICES.get(model, PRICES[PRICE_FALLBACK])
     write = usage.get("cache_creation_input_tokens", 0) or 0
     return (usage.get("input_tokens", 0) * price_in + write * price_in * 1.25
             + (usage.get("cache_read_input_tokens", 0) or 0) * price_read
             + usage.get("output_tokens", 0) * price_out) / 1_000_000
 
 
+def _openai_usage(u):
+    """OpenAI usage(prompt/completion 토큰) → 기록 형식. 캐시된 입력은 따로 셈."""
+    cached = int(getattr(getattr(u, "prompt_tokens_details", None), "cached_tokens", 0) or 0)
+    prompt = int(getattr(u, "prompt_tokens", 0) or 0)
+    return {"input_tokens": max(prompt - cached, 0), "output_tokens": int(getattr(u, "completion_tokens", 0) or 0),
+            "cache_creation_input_tokens": 0, "cache_read_input_tokens": cached}
+
+
+def ask_json(system, content, schema, *, part, label, timeout=120, schema_name="result"):
+    """OpenAI 한 번 호출 → (JSON dict, 모델 이름). 공통 도우미(server.core.ai)를 쓰고 사용량을 기록.
+    실패는 AIError(화면에 보여 줄 문장, HTTP 상태)로 — 호출한 쪽이 자기 Error로 바꿔 던짐."""
+    from server.core import ai
+    if isinstance(system, list):   # [{"type": "text", "text": ...}] 형식도 받음
+        system = "\n\n".join(str(b.get("text", "")) for b in system)
+    model = ai.openai_model()
+    res = ai._call([{"role": "system", "content": system}, {"role": "user", "content": content}],
+                   {"type": "json_schema", "json_schema": {"name": schema_name, "schema": schema, "strict": True}},
+                   model, 16000, timeout, max_retries=1)
+    record(part, label, res)
+    choice = res.choices[0]
+    if choice.finish_reason == "length":
+        raise ai.AIError("AI 응답이 길어 잘렸습니다. 입력을 줄여 다시 시도하세요.")
+    if getattr(choice.message, "refusal", None):
+        raise ai.AIError("AI가 이 요청을 거절했습니다. 내용을 바꿔 다시 시도하세요.", 422)
+    try:
+        data = json.loads(choice.message.content or "")
+    except ValueError:
+        raise ai.AIError("AI 응답을 읽지 못했습니다. 다시 시도하세요.")
+    if not isinstance(data, dict):
+        raise ai.AIError("AI 응답 형식이 올바르지 않습니다. 다시 시도하세요.")
+    return data, str(getattr(res, "model", "") or model)
+
+
 def record(part, feature, res):
-    """Claude 응답 1건의 사용량을 기록. 기록 실패는 기능을 막지 않음."""
+    """AI 응답 1건의 사용량을 기록 (OpenAI · 예전 Claude 형식 모두). 기록 실패는 기능을 막지 않음."""
     try:
         u = getattr(res, "usage", None)
-        usage = {k: int(getattr(u, k, 0) or 0) for k in
-                 ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")}
+        if hasattr(u, "prompt_tokens"):
+            usage = _openai_usage(u)
+        else:
+            usage = {k: int(getattr(u, k, 0) or 0) for k in
+                     ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")}
         model = str(getattr(res, "model", "") or DEFAULT_MODEL)
         row = {"at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "part": part, "feature": feature,
                "model": model, **usage, "usd": round(cost_usd(model, usage), 6)}
